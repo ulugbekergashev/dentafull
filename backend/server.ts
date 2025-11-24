@@ -1,0 +1,482 @@
+import express from 'express';
+import cors from 'cors';
+import { PrismaClient } from '@prisma/client';
+import jwt from 'jsonwebtoken';
+
+const prisma = new PrismaClient();
+const app = express();
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
+
+app.use(cors());
+app.use(express.json());
+
+// --- Middleware ---
+const authenticateToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: 'Token topilmadi (Unauthorized)' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+        if (err) {
+            return res.status(403).json({ error: 'Token yaroqsiz (Forbidden)' });
+        }
+        (req as any).user = user;
+        next();
+    });
+};
+
+// --- Authentication ---
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ success: false, error: 'Login va parol kiritilishi shart' });
+        }
+
+        const cleanUsername = String(username).trim();
+        const cleanPassword = String(password).trim();
+
+        let userPayload = null;
+        let responseData = null;
+
+        // Check for super admin
+        if (cleanUsername === 'superadminulugbek' && cleanPassword === 'superadminpassword') {
+            userPayload = { role: 'SUPER_ADMIN', name: 'Ulugbek (Super Admin)' };
+            responseData = {
+                success: true,
+                role: 'SUPER_ADMIN',
+                name: 'Ulugbek (Super Admin)'
+            };
+        } else {
+            // Check for clinic admin in database
+            const clinic = await prisma.clinic.findUnique({
+                where: { username: cleanUsername },
+                include: { plan: true }
+            });
+
+            if (clinic && clinic.password === cleanPassword) {
+                if (clinic.status !== 'Active') {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Klinika bloklangan yoki kutilmoqda'
+                    });
+                }
+                userPayload = { role: 'CLINIC_ADMIN', name: clinic.adminName, clinicId: clinic.id };
+                responseData = {
+                    success: true,
+                    role: 'CLINIC_ADMIN',
+                    name: clinic.adminName,
+                    clinicId: clinic.id,
+                    clinicName: clinic.name
+                };
+            } else {
+                // Check for doctor
+                const doctor = await prisma.doctor.findUnique({
+                    where: { username: cleanUsername },
+                    include: { clinic: true }
+                });
+
+                if (doctor && doctor.password === cleanPassword) {
+                    if (doctor.status !== 'Active') {
+                        return res.status(403).json({ success: false, error: 'Shifokor bloklangan' });
+                    }
+                    userPayload = { role: 'DOCTOR', name: `${doctor.firstName} ${doctor.lastName}`, clinicId: doctor.clinicId, doctorId: doctor.id };
+                    responseData = {
+                        success: true,
+                        role: 'DOCTOR',
+                        name: `${doctor.firstName} ${doctor.lastName}`,
+                        clinicId: doctor.clinicId,
+                        doctorId: doctor.id
+                    };
+                }
+            }
+        }
+
+        if (userPayload && responseData) {
+            const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '24h' });
+            return res.json({ ...responseData, token });
+        }
+
+        // Invalid credentials
+        return res.status(401).json({
+            success: false,
+            error: 'Login yoki parol noto\'g\'ri'
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Tizimga kirishda xatolik yuz berdi'
+        });
+    }
+});
+
+// --- Patients ---
+app.get('/api/patients', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const patients = await prisma.patient.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { lastVisit: 'desc' }
+        });
+        res.json(patients);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch patients' });
+    }
+});
+
+app.post('/api/patients', authenticateToken, async (req, res) => {
+    try {
+        const patient = await prisma.patient.create({
+            data: req.body
+        });
+        res.json(patient);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create patient' });
+    }
+});
+
+app.put('/api/patients/:id', authenticateToken, async (req, res) => {
+    try {
+        const patient = await prisma.patient.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        res.json(patient);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update patient' });
+    }
+});
+
+app.delete('/api/patients/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.patient.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete patient' });
+    }
+});
+
+// --- Appointments ---
+app.get('/api/appointments', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const appointments = await prisma.appointment.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { date: 'asc' }
+        });
+        res.json(appointments);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch appointments' });
+    }
+});
+
+app.post('/api/appointments', authenticateToken, async (req, res) => {
+    try {
+        const appointment = await prisma.appointment.create({
+            data: req.body
+        });
+        res.json(appointment);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create appointment' });
+    }
+});
+
+app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
+    try {
+        const appointment = await prisma.appointment.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        res.json(appointment);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update appointment' });
+    }
+});
+
+app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.appointment.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete appointment' });
+    }
+});
+
+// --- Transactions ---
+app.get('/api/transactions', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const transactions = await prisma.transaction.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { date: 'desc' }
+        });
+        res.json(transactions);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+});
+
+app.post('/api/transactions', authenticateToken, async (req, res) => {
+    try {
+        const transaction = await prisma.transaction.create({
+            data: req.body
+        });
+        res.json(transaction);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create transaction' });
+    }
+});
+
+// --- Doctors ---
+app.get('/api/doctors', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const doctors = await prisma.doctor.findMany({
+            where: { clinicId: clinicId as string }
+        });
+        res.json(doctors);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch doctors' });
+    }
+});
+
+app.post('/api/doctors', authenticateToken, async (req, res) => {
+    try {
+        const { firstName, lastName, specialty, phone, email, status, clinicId, username, password } = req.body;
+
+        // Check subscription limit
+        const clinic = await prisma.clinic.findUnique({
+            where: { id: clinicId },
+            include: { plan: true }
+        });
+
+        if (!clinic) {
+            return res.status(404).json({ error: 'Klinika topilmadi' });
+        }
+
+        const currentDoctorCount = await prisma.doctor.count({
+            where: { clinicId }
+        });
+
+        if (currentDoctorCount >= clinic.plan.maxDoctors) {
+            return res.status(403).json({
+                error: `Sizning "${clinic.plan.name}" tarifingizda maksimal ${clinic.plan.maxDoctors} ta shifokor qo'shish mumkin. Limitga yetdingiz. Tarifni o'zgartirish uchun biz bilan bog'laning.`
+            });
+        }
+
+        if (username) {
+            const existing = await prisma.doctor.findUnique({ where: { username } });
+            if (existing) {
+                return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
+            }
+        }
+
+        const data: any = {
+            firstName, lastName, specialty, phone, status, clinicId, username, password
+        };
+        if (email) data.email = email;
+
+        const newDoctor = await prisma.doctor.create({ data });
+        res.json(newDoctor);
+    } catch (error: any) {
+        console.error('Doctor creation error:', error);
+        if (error.code === 'P2002') {
+            return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
+        }
+        res.status(500).json({ error: error.message || 'Failed to create doctor' });
+    }
+});
+
+app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
+    try {
+        const { username } = req.body;
+        if (username) {
+            const existing = await prisma.doctor.findUnique({ where: { username } });
+            if (existing && existing.id !== req.params.id) {
+                return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
+            }
+        }
+        const doctor = await prisma.doctor.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        res.json(doctor);
+    } catch (error: any) {
+        console.error('Doctor update error:', error);
+        if (error.code === 'P2002') {
+            return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
+        }
+        res.status(500).json({ error: error.message || 'Failed to update doctor' });
+    }
+});
+
+app.delete('/api/doctors/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.doctor.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Doctor delete error:', error);
+        res.status(500).json({ error: error.message || 'Failed to delete doctor' });
+    }
+});
+
+// --- Services ---
+app.get('/api/services', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const services = await prisma.service.findMany({
+            where: { clinicId: clinicId as string }
+        });
+        res.json(services);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch services' });
+    }
+});
+
+app.post('/api/services', authenticateToken, async (req, res) => {
+    try {
+        const service = await prisma.service.create({
+            data: req.body
+        });
+        res.json(service);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create service' });
+    }
+});
+
+app.put('/api/services/:id', authenticateToken, async (req, res) => {
+    try {
+        const service = await prisma.service.update({
+            where: { id: parseInt(req.params.id) },
+            data: req.body
+        });
+        res.json(service);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update service' });
+    }
+});
+
+// --- Super Admin: Clinics & Plans ---
+app.get('/api/clinics', authenticateToken, async (req, res) => {
+    try {
+        const clinics = await prisma.clinic.findMany({
+            include: { plan: true }
+        });
+        res.json(clinics);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch clinics' });
+    }
+});
+
+app.post('/api/clinics', authenticateToken, async (req, res) => {
+    try {
+        const { name, adminName, username, password, phone, planId, status, subscriptionStartDate, expiryDate, monthlyRevenue } = req.body;
+
+        const clinic = await prisma.clinic.create({
+            data: {
+                name,
+                adminName,
+                username: username.trim(),
+                password: password.trim(),
+                phone,
+                planId,
+                status,
+                subscriptionStartDate,
+                expiryDate,
+                monthlyRevenue
+            }
+        });
+        res.json(clinic);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create clinic' });
+    }
+});
+
+app.put('/api/clinics/:id', authenticateToken, async (req, res) => {
+    try {
+        const clinic = await prisma.clinic.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        res.json(clinic);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update clinic' });
+    }
+});
+
+app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.clinic.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Clinic delete error:', error);
+        res.status(500).json({ error: error.message || 'Failed to delete clinic' });
+    }
+});
+
+app.get('/api/plans', authenticateToken, async (req, res) => {
+    try {
+        const plans = await prisma.subscriptionPlan.findMany();
+        const parsedPlans = plans.map(p => ({
+            ...p,
+            features: JSON.parse(p.features)
+        }));
+        res.json(parsedPlans);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch plans' });
+    }
+});
+
+app.put('/api/plans/:id', authenticateToken, async (req, res) => {
+    try {
+        const data = { ...req.body };
+        if (data.features) {
+            data.features = JSON.stringify(data.features);
+        }
+        const plan = await prisma.subscriptionPlan.update({
+            where: { id: req.params.id },
+            data: data
+        });
+        res.json({ ...plan, features: JSON.parse(plan.features) });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update plan' });
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});

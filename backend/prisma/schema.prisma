@@ -1,0 +1,111 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Doctor {
+  id        String   @id @default(uuid())
+  firstName String
+  lastName  String
+  specialty String
+  phone     String
+  email     String?
+  status    String // 'Active' | 'On Leave'
+  username  String?  @unique
+  password  String?
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id])
+  appointments Appointment[]
+}
+
+model Patient {
+  id             String   @id @default(uuid())
+  firstName      String
+  lastName       String
+  phone          String
+  dob            String
+  lastVisit      String
+  status         String // 'Active' | 'Archived'
+  gender         String // 'Male' | 'Female'
+  medicalHistory String
+  clinicId       String
+  clinic         Clinic   @relation(fields: [clinicId], references: [id])
+  appointments   Appointment[]
+}
+
+model Appointment {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  patientName String
+  doctorId    String
+  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+  doctorName  String
+  type        String
+  date        String
+  time        String
+  duration    Int
+  status      String // 'Confirmed' | 'Pending' | 'Completed' | 'Cancelled' | 'No-Show' | 'Checked-In'
+  notes       String?
+  clinicId    String
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  patientName String
+  date        String
+  amount      Float
+  type        String // 'Cash' | 'Card' | 'Insurance'
+  service     String
+  status      String // 'Paid' | 'Pending' | 'Overdue'
+  clinicId    String
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+}
+
+model Service {
+  id       Int    @id @default(autoincrement())
+  name     String
+  price    Float
+  duration Int
+  clinicId String
+  clinic   Clinic @relation(fields: [clinicId], references: [id])
+}
+
+model SubscriptionPlan {
+  id         String   @id
+  name       String
+  price      Float
+  maxDoctors Int
+  features   String // Stored as JSON string or comma-separated
+  clinics    Clinic[]
+}
+
+model Clinic {
+  id                    String           @id @default(uuid())
+  name                  String
+  adminName             String
+  username              String           @unique
+  password              String?
+  phone                 String
+  status                String // 'Active' | 'Blocked' | 'Pending'
+  planId                String
+  plan                  SubscriptionPlan @relation(fields: [planId], references: [id])
+  subscriptionStartDate String
+  expiryDate            String
+  monthlyRevenue        Float
+  
+  // Relations
+  doctors       Doctor[]
+  patients      Patient[]
+  appointments  Appointment[]
+  transactions  Transaction[]
+  services      Service[]
+}

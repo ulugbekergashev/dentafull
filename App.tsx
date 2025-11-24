@@ -1,0 +1,527 @@
+
+import React, { useState, useEffect } from 'react';
+import {
+  LayoutDashboard, Users, Calendar as CalendarIcon,
+  DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
+  Building2, Shield
+} from 'lucide-react';
+import { Dashboard } from './pages/Dashboard';
+import { Patients } from './pages/Patients';
+import { PatientDetails } from './pages/PatientDetails';
+import { Calendar } from './pages/Calendar';
+import { Finance } from './pages/Finance';
+import { Settings } from './pages/Settings';
+import { SignIn } from './pages/SignIn';
+import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
+import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service } from './types';
+import { ToastContainer, ToastMessage } from './components/Common';
+import { api } from './services/api';
+
+// --- Router Logic ---
+enum Route {
+  DASHBOARD = 'dashboard',
+  PATIENTS = 'patients',
+  PATIENT_DETAILS = 'patient_details',
+  CALENDAR = 'calendar',
+  FINANCE = 'finance',
+  SETTINGS = 'settings',
+  // Super Admin Routes
+  SAAS_DASHBOARD = 'saas_dashboard',
+}
+
+// Navigation for Clinic Admin and Doctors
+const CLINIC_NAVIGATION: NavItem[] = [
+  { id: Route.DASHBOARD, label: 'Boshqaruv Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+  { id: Route.PATIENTS, label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+  { id: Route.CALENDAR, label: 'Kalendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+  { id: Route.FINANCE, label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
+  { id: Route.SETTINGS, label: 'Sozlamalar', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+];
+
+// Navigation for Super Admin
+const SUPER_ADMIN_NAVIGATION: NavItem[] = [
+  { id: Route.SAAS_DASHBOARD, label: 'SaaS Dashboard', icon: Building2, roles: [UserRole.SUPER_ADMIN] },
+  // Reuse settings? Or make specific settings. For now just Dashboard which contains tabs.
+];
+
+const App: React.FC = () => {
+  // --- Global State ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentRoute, setCurrentRoute] = useState<Route>(Route.DASHBOARD);
+  const [userRole, setUserRole] = useState<UserRole>(UserRole.CLINIC_ADMIN);
+  const [userName, setUserName] = useState('');
+  const [clinicId, setClinicId] = useState<string>('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+
+  // Data Store
+  // Data Store
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+
+  // Super Admin Data Store
+  const [clinics, setClinics] = useState<Clinic[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+
+  // Check for stored session on mount
+  useEffect(() => {
+    const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+    if (storedAuth) {
+      try {
+        const { role, name, clinicId: storedClinicId } = JSON.parse(storedAuth);
+        if (role && name) {
+          setUserRole(role);
+          setUserName(name);
+          if (storedClinicId) {
+            setClinicId(storedClinicId);
+          }
+          setIsAuthenticated(true);
+          if (role === UserRole.SUPER_ADMIN) {
+            setCurrentRoute(Route.SAAS_DASHBOARD);
+          } else {
+            setCurrentRoute(Route.DASHBOARD);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse stored auth', e);
+        localStorage.removeItem('dentalflow_auth');
+      }
+    }
+  }, []);
+
+  // Load Data
+  // Load Data
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const loadData = async () => {
+      try {
+        if (userRole === UserRole.SUPER_ADMIN) {
+          const [clns, plns] = await Promise.all([
+            api.clinics.getAll(),
+            api.plans.getAll()
+          ]);
+          setClinics(clns);
+          setPlans(plns);
+        } else if (clinicId) {
+          const [pts, appts, txs, svcs, docs, clns, plns] = await Promise.all([
+            api.patients.getAll(clinicId),
+            api.appointments.getAll(clinicId),
+            api.transactions.getAll(clinicId),
+            api.services.getAll(clinicId),
+            api.doctors.getAll(clinicId),
+            api.clinics.getAll(), // Clinic admin might not need all clinics, but maybe for reference? Or maybe just their own.
+            api.plans.getAll()
+          ]);
+          setPatients(pts);
+          setAppointments(appts);
+          setTransactions(txs);
+          setServices(svcs);
+          setDoctors(docs);
+          setClinics(clns);
+          setPlans(plns);
+        }
+      } catch (error) {
+        console.error('Failed to load data:', error);
+        addToast('error', 'Ma\'lumotlarni yuklashda xatolik yuz berdi.');
+      }
+    };
+    loadData();
+  }, [isAuthenticated, clinicId, userRole]);
+
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Theme toggle
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  // --- Auth Actions ---
+  const handleLogin = (role: UserRole, name: string, clinicIdParam?: string) => {
+    setUserRole(role);
+    setUserName(name);
+    if (clinicIdParam) {
+      setClinicId(clinicIdParam);
+    }
+    setIsAuthenticated(true);
+    // Set default route based on role
+    if (role === UserRole.SUPER_ADMIN) {
+      setCurrentRoute(Route.SAAS_DASHBOARD);
+    } else {
+      setCurrentRoute(Route.DASHBOARD);
+    }
+    addToast('success', `Xush kelibsiz, ${name}!`);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('dentalflow_auth');
+    sessionStorage.removeItem('dentalflow_auth');
+    setIsAuthenticated(false);
+    setUserRole(UserRole.CLINIC_ADMIN);
+    setUserName('');
+    setClinicId('');
+  };
+
+  // --- UI Actions ---
+  const addToast = (type: 'success' | 'error' | 'info', message: string) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, type, message }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  // Patient Actions
+  // Patient Actions
+  const addPatient = async (patient: Omit<Patient, 'id'>) => {
+    try {
+      const newPatient = await api.patients.create({ ...patient, clinicId });
+      setPatients(prev => [newPatient, ...prev]);
+      addToast('success', `Bemor ${patient.firstName} muvaffaqiyatli qo'shildi!`);
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const updatePatient = async (id: string, data: Partial<Patient>) => {
+    try {
+      const updated = await api.patients.update(id, data);
+      setPatients(prev => prev.map(p => p.id === id ? updated : p));
+      addToast('success', 'Bemor ma\'lumotlari yangilandi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const deletePatient = async (id: string) => {
+    try {
+      await api.patients.delete(id);
+      setPatients(prev => prev.filter(p => p.id !== id));
+      addToast('info', 'Bemor o\'chirildi.');
+      if (selectedPatientId === id) setCurrentRoute(Route.PATIENTS);
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  // Appointment Actions
+  // Appointment Actions
+  const addAppointment = async (appt: Omit<Appointment, 'id'>) => {
+    try {
+      const newAppt = await api.appointments.create({ ...appt, clinicId });
+      setAppointments(prev => [...prev, newAppt]);
+      addToast('success', 'Uchrashuv belgilandi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const updateAppointment = async (id: string, data: Partial<Appointment>) => {
+    try {
+      const updated = await api.appointments.update(id, data);
+      setAppointments(prev => prev.map(a => a.id === id ? updated : a));
+      addToast('success', 'Uchrashuv yangilandi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const deleteAppointment = async (id: string) => {
+    try {
+      await api.appointments.delete(id);
+      setAppointments(prev => prev.filter(a => a.id !== id));
+      addToast('info', 'Uchrashuv bekor qilindi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  // Transaction Actions
+  // Transaction Actions
+  const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
+    try {
+      const newTx = await api.transactions.create({ ...tx, clinicId });
+      setTransactions(prev => [newTx, ...prev]);
+      addToast('success', 'To\'lov qabul qilindi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  // Settings Actions
+  // Settings Actions
+  const addService = async (service: { name: string; price: number; duration: number }) => {
+    try {
+      const newService = await api.services.create({ ...service, clinicId });
+      setServices(prev => [...prev, newService]);
+      addToast('success', 'Yangi xizmat qo\'shildi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const updateService = async (index: number, service: { name: string; price: number; duration: number }) => {
+    // Note: index logic might need to change to ID based if backend uses IDs.
+    // Assuming service object has ID now or we pass ID.
+    // The original code used index. I need to check how Settings page calls this.
+    // For now, I'll assume the service object passed has an ID if it's an update, or I need to find the ID from the list.
+    const serviceToUpdate = services[index];
+    if (serviceToUpdate && serviceToUpdate.id) {
+      try {
+        const updated = await api.services.update(serviceToUpdate.id, service);
+        setServices(prev => prev.map(s => s.id === updated.id ? updated : s));
+        addToast('success', 'Xizmat yangilandi.');
+      } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    }
+  };
+
+  const addDoctor = async (doctor: Omit<Doctor, 'id'>) => {
+    try {
+      const newDoc = await api.doctors.create({ ...doctor, clinicId });
+      setDoctors(prev => [...prev, newDoc]);
+      addToast('success', 'Yangi shifokor qo\'shildi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const updateDoctor = async (id: string, data: Partial<Doctor>) => {
+    try {
+      const updated = await api.doctors.update(id, data);
+      setDoctors(prev => prev.map(d => d.id === id ? updated : d));
+      addToast('success', 'Shifokor ma\'lumotlari yangilandi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const deleteDoctor = async (id: string) => {
+    try {
+      await api.doctors.delete(id);
+      setDoctors(prev => prev.filter(d => d.id !== id));
+      addToast('info', 'Shifokor o\'chirildi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  // Super Admin Actions
+  // Super Admin Actions
+  const addClinic = async (clinic: Omit<Clinic, 'id'>) => {
+    try {
+      const newClinic = await api.clinics.create(clinic);
+      setClinics(prev => [...prev, newClinic]);
+      addToast('success', 'Yangi klinika yaratildi!');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const updateClinic = async (id: string, data: Partial<Clinic>) => {
+    try {
+      const updated = await api.clinics.update(id, data);
+      setClinics(prev => prev.map(c => c.id === id ? updated : c));
+      addToast('success', 'Klinika ma\'lumotlari yangilandi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const updatePlan = async (id: string, data: Partial<SubscriptionPlan>) => {
+    try {
+      const updated = await api.plans.update(id, data);
+      setPlans(prev => prev.map(p => p.id === id ? updated : p));
+      addToast('success', 'Tarif rejasi yangilandi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const deleteClinic = async (id: string) => {
+    try {
+      await api.clinics.delete(id);
+      setClinics(prev => prev.filter(c => c.id !== id));
+      addToast('info', 'Klinika o\'chirildi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  // --- Navigation ---
+  const handleNavigate = (route: Route) => {
+    setCurrentRoute(route);
+    setIsSidebarOpen(false);
+  };
+
+  const handlePatientClick = (id: string) => {
+    setSelectedPatientId(id);
+    setCurrentRoute(Route.PATIENT_DETAILS);
+  };
+
+  // Content Renderer
+  const renderContent = () => {
+    if (userRole === UserRole.SUPER_ADMIN) {
+      // Super Admin View
+      return <SuperAdminDashboard
+        clinics={clinics}
+        plans={plans}
+        onAddClinic={addClinic}
+        onUpdateClinic={updateClinic}
+        onUpdatePlan={updatePlan}
+        onDeleteClinic={deleteClinic}
+      />;
+    }
+
+    // Standard Clinic View
+    switch (currentRoute) {
+      case Route.DASHBOARD:
+        return <Dashboard patients={patients} appointments={appointments} transactions={transactions} />;
+      case Route.PATIENTS:
+        return <Patients patients={patients} onPatientClick={handlePatientClick} onAddPatient={addPatient} onDeletePatient={deletePatient} />;
+      case Route.PATIENT_DETAILS:
+        return (
+          <PatientDetails
+            patientId={selectedPatientId}
+            patients={patients}
+            appointments={appointments}
+            transactions={transactions}
+            onBack={() => setCurrentRoute(Route.PATIENTS)}
+            onUpdatePatient={updatePatient}
+            onAddTransaction={addTransaction}
+            onAddAppointment={addAppointment}
+          />
+        );
+      case Route.CALENDAR:
+        return <Calendar
+          appointments={appointments}
+          patients={patients}
+          doctors={doctors}
+          services={services}
+          onAddAppointment={addAppointment}
+          onUpdateAppointment={updateAppointment}
+          onDeleteAppointment={deleteAppointment}
+        />;
+      case Route.FINANCE:
+        return <Finance
+          userRole={userRole}
+          transactions={transactions}
+          appointments={appointments}
+          services={services}
+        />;
+      case Route.SETTINGS:
+        return <Settings
+          userRole={userRole}
+          services={services}
+          doctors={doctors}
+          onAddService={addService}
+          onUpdateService={updateService}
+          onAddDoctor={addDoctor}
+          onUpdateDoctor={updateDoctor}
+          onDeleteDoctor={deleteDoctor}
+          currentClinic={clinics.find(c => c.id === clinicId)}
+          plans={plans}
+        />;
+      default: return <Dashboard patients={patients} appointments={appointments} transactions={transactions} />;
+    }
+  };
+
+  // Select navigation based on role
+  const CURRENT_NAVIGATION = userRole === UserRole.SUPER_ADMIN ? SUPER_ADMIN_NAVIGATION : CLINIC_NAVIGATION;
+  const currentNav = CURRENT_NAVIGATION.find(n => n.id === currentRoute);
+
+  // --- Main Render ---
+  if (!isAuthenticated) {
+    return <SignIn onLogin={handleLogin} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+
+      {/* Mobile Header */}
+      <div className="lg:hidden flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
+        <div className="flex items-center gap-2 font-bold text-xl text-blue-600 dark:text-blue-400">
+          <span className="p-1 rounded bg-blue-600 text-white">DC</span> DentaCRM
+        </div>
+        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600 dark:text-gray-300">
+          {isSidebarOpen ? <X /> : <Menu />}
+        </button>
+      </div>
+
+      {/* Sidebar */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-2 font-bold text-xl text-blue-600 dark:text-blue-400">
+              {userRole === UserRole.SUPER_ADMIN ? (
+                <>
+                  <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white">
+                    <Shield className="w-5 h-5" />
+                  </div>
+                  SuperAdmin
+                </>
+              ) : (
+                <>
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </div>
+                  DentaCRM
+                </>
+              )}
+            </div>
+          </div>
+
+          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+            {CURRENT_NAVIGATION.filter(nav => nav.roles.includes(userRole)).map((item) => (
+              <button
+                key={item.id}
+                onClick={() => handleNavigate(item.id as Route)}
+                className={`flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-colors group
+                  ${(currentRoute === item.id || (currentRoute === Route.PATIENT_DETAILS && item.id === Route.PATIENTS))
+                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                  }`}
+              >
+                <item.icon className={`w-5 h-5 mr-3 ${(currentRoute === item.id || (currentRoute === Route.PATIENT_DETAILS && item.id === Route.PATIENTS)) ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 group-hover:text-gray-500'}`} />
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center overflow-hidden">
+                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs uppercase ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-blue-600'}`}>
+                  {userName ? userName.slice(0, 2) : 'A'}
+                </div>
+                <div className="ml-3 truncate">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate" title={userName}>{userName}</p>
+                  <p className="text-xs text-gray-500 capitalize">{userRole === UserRole.SUPER_ADMIN ? 'SaaS Owner' : userRole === UserRole.CLINIC_ADMIN ? 'Administrator' : 'Shifokor'}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="text-gray-400 hover:text-red-500 ml-2"
+                title="Chiqish"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main className="lg:ml-64 min-h-screen flex flex-col">
+        <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 hidden lg:flex items-center justify-between px-8 sticky top-0 z-20">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+            {userRole === UserRole.SUPER_ADMIN ? 'Super Admin' : (currentRoute === Route.PATIENT_DETAILS ? 'Bemor Profili' : currentNav?.label)}
+          </h2>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+            >
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
+            <span className="font-bold text-xl text-gray-900 dark:text-white">DentaCRM</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {new Date().toLocaleDateString('uz-UZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </span>
+          </div>
+        </header>
+        <div className="flex-1 p-4 sm:p-8 overflow-x-hidden">
+          {renderContent()}
+        </div>
+      </main>
+
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default App;
