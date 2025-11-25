@@ -1,6 +1,6 @@
 import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service } from '../types';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
     const headers: HeadersInit = {
