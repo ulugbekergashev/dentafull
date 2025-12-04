@@ -14,7 +14,7 @@ async function test() {
             headers: { Authorization: `Bearer ${token}` }
         });
         console.log('Response:', res.data);
-    } catch (e) {
+    } catch (e: any) {
         console.error('Error:', e.response ? e.response.data : e.message);
     }
 }

@@ -7,5 +7,18 @@
         "strict": true,
         "skipLibCheck": true,
         "outDir": "./dist"
-    }
+    },
+    "include": [
+        "server.ts",
+        "botManager.ts",
+        "bot.ts",
+        "seed.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "test_*.ts",
+        "debug_*.ts",
+        "check_*.ts"
+    ]
 }
