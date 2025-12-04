@@ -1,21 +1,25 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
-import { UserRole, Transaction, Appointment } from '../types';
+import { UserRole, Transaction, Appointment, Patient } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar } from 'lucide-react';
+import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot } from 'lucide-react';
+import { api } from '../services/api';
 
 interface FinanceProps {
   userRole: UserRole;
   transactions: Transaction[];
   appointments: Appointment[];
   services: { name: string; price: number; duration: number }[];
+  patients: Patient[];
+  onPatientClick: (id: string) => void;
 }
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDebtorModalOpen, setIsDebtorModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Barchasi');
+  const [remindedDebtors, setRemindedDebtors] = useState<Set<string>>(new Set());
 
   // Date Range State
   const [startDate, setStartDate] = useState('');
@@ -60,8 +64,16 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const debtTransactions = transactions.filter(t => t.status === 'Pending' || t.status === 'Overdue');
   const totalDebt = debtTransactions.reduce((acc, t) => acc + t.amount, 0);
 
+  // Create a map of patientName -> patientId from patients list
+  const patientIdMap = new Map<string, string>();
+  patients.forEach(p => {
+    patientIdMap.set(`${p.firstName} ${p.lastName}`, p.id);
+    // Also map just first name or variations if needed, but for now exact match or partial
+    patientIdMap.set(p.firstName, p.id); // Fallback
+  });
+
   // Group debts by patient
-  const debtorMap = new Map<string, { name: string; amount: number; date: string }>();
+  const debtorMap = new Map<string, { name: string; amount: number; date: string; patientId?: string }>();
   debtTransactions.forEach(t => {
     const existing = debtorMap.get(t.patientName);
     if (existing) {
@@ -71,7 +83,12 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
         existing.date = t.date;
       }
     } else {
-      debtorMap.set(t.patientName, { name: t.patientName, amount: t.amount, date: t.date });
+      debtorMap.set(t.patientName, {
+        name: t.patientName,
+        amount: t.amount,
+        date: t.date,
+        patientId: patientIdMap.get(t.patientName) || patients.find(p => `${p.firstName} ${p.lastName}` === t.patientName)?.id
+      });
     }
   });
 
@@ -81,7 +98,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
       name: d.name,
       amount: d.amount,
       days: Math.floor((new Date().getTime() - new Date(d.date).getTime()) / (1000 * 60 * 60 * 24)),
-      phone: '+998 90 XXX XX XX' // We don't have phone in Transaction, would need to join with Patient
+      phone: '+998 90 XXX XX XX',
+      patientId: d.patientId
     }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -351,12 +369,37 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           {DEBTORS.map(d => (
             <div key={d.id} className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg">
               <div>
-                <p className="font-bold text-gray-900 dark:text-white">{d.name}</p>
+                <button
+                  onClick={() => d.patientId && onPatientClick(d.patientId)}
+                  className="font-bold text-gray-900 dark:text-white hover:text-blue-600 hover:underline text-left"
+                >
+                  {d.name}
+                </button>
                 <p className="text-sm text-gray-500">{d.phone}</p>
               </div>
               <div className="text-right">
                 <p className="text-lg font-bold text-red-600">{d.amount.toLocaleString()} UZS</p>
                 <p className="text-xs text-red-500 font-medium">{d.days} kun kechikkan</p>
+                {d.patientId && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className={`mt-2 ${remindedDebtors.has(d.patientId) ? 'bg-green-100 text-green-700 border-green-200' : ''}`}
+                    disabled={remindedDebtors.has(d.patientId)}
+                    onClick={async () => {
+                      try {
+                        await api.patients.remindDebt(d.patientId!, d.amount);
+                        setRemindedDebtors(prev => new Set(prev).add(d.patientId!));
+                        alert('Eslatma yuborildi!');
+                      } catch (e) {
+                        alert('Xatolik: Bemor botga ulanmagan bo\'lishi mumkin');
+                      }
+                    }}
+                  >
+                    <Bot className="w-3 h-3 mr-1" />
+                    {remindedDebtors.has(d.patientId) ? 'Eslatildi' : 'Eslatish'}
+                  </Button>
+                )}
               </div>
             </div>
           ))}

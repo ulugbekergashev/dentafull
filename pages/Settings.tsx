@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UserRole, Doctor, Clinic, SubscriptionPlan } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot } from 'lucide-react';
+import { api } from '../services/api';
 
 interface SettingsProps {
    userRole: UserRole;
@@ -19,7 +20,7 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({
    userRole, services, doctors, onAddService, onUpdateService, onAddDoctor, onUpdateDoctor, onDeleteDoctor, currentClinic, plans
 }) => {
-   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors'>('services');
+   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'bot'>('services');
 
    // Service Modal State
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
@@ -45,6 +46,72 @@ export const Settings: React.FC<SettingsProps> = ({
       email: 'info@dentacrm.uz'
    });
    const [generalSaved, setGeneralSaved] = useState(false);
+
+   // Bot Settings State
+   const [botToken, setBotToken] = useState(currentClinic?.botToken || '');
+   const [botSaved, setBotSaved] = useState(false);
+   const [botUsername, setBotUsername] = useState<string | null>(null);
+
+   // Debug: Log botUsername changes
+   React.useEffect(() => {
+      console.log('🔍 botUsername state changed:', botUsername);
+   }, [botUsername]);
+
+   // Sync botToken with currentClinic
+   React.useEffect(() => {
+      setBotToken(currentClinic?.botToken || '');
+   }, [currentClinic?.botToken]);
+
+   // Fetch bot username when clinic has bot token
+   React.useEffect(() => {
+      const fetchBotUsername = async () => {
+         console.log('Checking bot username...', {
+            clinicId: currentClinic?.id,
+            hasBotToken: !!currentClinic?.botToken,
+            botToken: currentClinic?.botToken?.substring(0, 10) + '...'
+         });
+
+         if (currentClinic?.id && currentClinic?.botToken) {
+            try {
+               const authData = localStorage.getItem('dentalflow_auth');
+               if (!authData) {
+                  console.error('No auth data found');
+                  return;
+               }
+
+               const token = JSON.parse(authData).token;
+               if (!token) {
+                  console.error('No token found in auth data');
+                  return;
+               }
+
+               const response = await fetch(`http://localhost:3001/api/clinics/${currentClinic.id}/bot-username`, {
+                  headers: {
+                     'Authorization': `Bearer ${token}`
+                  }
+               });
+
+               if (!response.ok) {
+                  console.error('Failed to fetch bot username:', response.status, response.statusText);
+                  return;
+               }
+
+               const data = await response.json();
+               console.log('Bot username response:', data);
+               if (data.botUsername) {
+                  setBotUsername(data.botUsername);
+                  console.log('Bot username set:', data.botUsername);
+               }
+            } catch (err) {
+               console.error('Failed to fetch bot username:', err);
+            }
+         } else {
+            console.log('No clinic ID or bot token, clearing username');
+            setBotUsername(null);
+         }
+      };
+      fetchBotUsername();
+   }, [currentClinic?.id, currentClinic?.botToken]);
 
    // Handlers
    const handleOpenServiceModal = (index?: number) => {
@@ -168,6 +235,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   { id: 'general', name: 'Umumiy', icon: User },
                   { id: 'services', name: 'Xizmatlar va Narxlar', icon: DollarSign },
                   { id: 'doctors', name: 'Shifokorlar', icon: Users },
+                  { id: 'bot', name: 'Telegram Bot', icon: Bot },
                ].map((item) => (
                   <button
                      key={item.id}
@@ -307,6 +375,118 @@ export const Settings: React.FC<SettingsProps> = ({
                            </div>
                         ))}
                      </div>
+                  </Card>
+               )}
+
+               {/* Bot Settings Tab */}
+               {activeTab === 'bot' && (
+                  <Card className="p-6">
+                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Telegram Bot Sozlamalari</h3>
+                     <p className="text-sm text-gray-500 mb-6">
+                        Klinikangiz uchun Telegram bot tokenini kiriting. Bot bemorlar va xodimlarga avtomatik xabarlar yuboradi.
+                     </p>
+                     <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        try {
+                           if (!currentClinic?.id) return;
+
+                           const response = await api.clinics.updateSettings(currentClinic.id, {
+                              botToken: botToken || undefined
+                           });
+
+                           if (response.success) {
+                              setBotSaved(true);
+                              setTimeout(() => setBotSaved(false), 3000);
+
+                              // Fetch bot username after saving token
+                              if (botToken) {
+                                 setTimeout(async () => {
+                                    try {
+                                       const usernameResponse = await fetch(`http://localhost:3001/api/clinics/${currentClinic.id}/bot-username`, {
+                                          headers: {
+                                             'Authorization': `Bearer ${JSON.parse(localStorage.getItem('dentalflow_auth') || '{}').token}`
+                                          }
+                                       });
+                                       const data = await usernameResponse.json();
+                                       if (data.botUsername) {
+                                          setBotUsername(data.botUsername);
+                                       }
+                                    } catch (err) {
+                                       console.error('Failed to fetch bot username:', err);
+                                    }
+                                 }, 1000); // Wait 1 second for bot to initialize
+                              } else {
+                                 setBotUsername(null);
+                              }
+                           } else {
+                              alert('Xatolik yuz berdi');
+                           }
+                        } catch (e) {
+                           console.error(e);
+                           alert('Xatolik yuz berdi');
+                        }
+                     }} className="space-y-4">
+                        <Input
+                           label="Bot Token"
+                           value={botToken}
+                           onChange={e => setBotToken(e.target.value)}
+                           placeholder="123456789:AABbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQq"
+                           helperText="@BotFather dan olgan tokenni kiriting"
+                        />
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                           <h4 className="font-medium text-blue-900 dark:text-blue-200 mb-2">📱 Bot yaratish:</h4>
+                           <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
+                              <li>Telegram'da @BotFather ni oching</li>
+                              <li>/newbot buyrug'ini yuboring</li>
+                              <li>Bot nomi va username kiriting</li>
+                              <li>Olingan tokenni yuqoridagi maydonga kiriting</li>
+                           </ol>
+                        </div>
+                        <div className="pt-4 flex items-center gap-4">
+                           <Button type="submit">Botni ulash</Button>
+                           {botSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> Bot muvaffaqiyatli ulandi!</span>}
+                        </div>
+                     </form>
+
+                     {/* Bot Link Section */}
+                     {botToken && (
+                        <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-100 dark:border-green-800 mt-6">
+                           <h4 className="font-medium text-green-900 dark:text-green-200 mb-3">🤖 Sizning botingiz:</h4>
+                           {botUsername ? (
+                              <div className="space-y-3">
+                                 <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-green-200 dark:border-green-700">
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Bot havolasi:</p>
+                                    <a
+                                       href={`https://t.me/${botUsername}`}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       className="text-blue-600 dark:text-blue-400 hover:underline font-medium break-all"
+                                    >
+                                       https://t.me/{botUsername}
+                                    </a>
+                                 </div>
+                                 <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => {
+                                       navigator.clipboard.writeText(`https://t.me/${botUsername}`);
+                                       alert('✅ Bot havolasi nusxalandi!');
+                                    }}
+                                    className="w-full"
+                                 >
+                                    📋 Havolani nusxalash
+                                 </Button>
+                                 <p className="text-xs text-gray-600 dark:text-gray-400">
+                                    💡 Ushbu havolani bemorlar bilan bo'lishing. Ular botga start bosgandan keyin xabar yuborishingiz mumkin.
+                                 </p>
+                              </div>
+                           ) : (
+                              <div className="text-center py-4">
+                                 <p className="text-gray-500 dark:text-gray-400">Bot ma'lumotlari yuklanmoqda...</p>
+                              </div>
+                           )}
+                        </div>
+                     )}
                   </Card>
                )}
             </div>

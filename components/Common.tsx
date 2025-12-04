@@ -114,10 +114,11 @@ export const Badge: React.FC<{ status: string }> = ({ status }) => {
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  helperText?: string;
   containerClassName?: string;
 }
 
-export const Input: React.FC<InputProps> = ({ label, error, className = '', containerClassName = 'w-full', ...props }) => {
+export const Input: React.FC<InputProps> = ({ label, error, helperText, className = '', containerClassName = 'w-full', ...props }) => {
   const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
     if (props.type === 'date' || props.type === 'datetime-local') {
       try {
@@ -140,6 +141,7 @@ export const Input: React.FC<InputProps> = ({ label, error, className = '', cont
         onClick={handleClick}
       />
       {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {!error && helperText && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{helperText}</p>}
     </div>
   );
 };

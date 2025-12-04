@@ -11,22 +11,25 @@ datasource db {
 }
 
 model Doctor {
-  id        String   @id @default(uuid())
-  firstName String
-  lastName  String
-  specialty String
-  phone     String
-  email     String?
-  status    String // 'Active' | 'On Leave'
-  username  String?  @unique
-  password  String?
-  clinicId  String
-  clinic    Clinic   @relation(fields: [clinicId], references: [id])
-  appointments Appointment[]
+  id             String   @id @default(uuid())
+  firstName      String
+  lastName       String
+  specialty      String
+  phone          String
+  email          String?
+  status         String // 'Active' | 'On Leave'
+  username       String?  @unique
+  password       String?
+  telegramChatId String?
+  clinicId       String
+  clinic         Clinic   @relation(fields: [clinicId], references: [id])
+  appointments   Appointment[]
+  
+  @@unique([clinicId, telegramChatId])
 }
 
 model Patient {
-  id             String   @id @default(uuid())
+  id             String        @id @default(uuid())
   firstName      String
   lastName       String
   phone          String
@@ -35,9 +38,13 @@ model Patient {
   status         String // 'Active' | 'Archived'
   gender         String // 'Male' | 'Female'
   medicalHistory String
+  telegramChatId String?
   clinicId       String
-  clinic         Clinic   @relation(fields: [clinicId], references: [id])
+  clinic         Clinic        @relation(fields: [clinicId], references: [id])
   appointments   Appointment[]
+  
+  @@unique([clinicId, telegramChatId])
+  @@index([phone]) // Optimize phone lookup
 }
 
 model Appointment {
@@ -96,16 +103,20 @@ model Clinic {
   password              String?
   phone                 String
   status                String // 'Active' | 'Blocked' | 'Pending'
+  telegramChatId        String?
+  botToken              String? // Token for the clinic's own bot
   planId                String
   plan                  SubscriptionPlan @relation(fields: [planId], references: [id])
   subscriptionStartDate String
   expiryDate            String
   monthlyRevenue        Float
-  
+
   // Relations
-  doctors       Doctor[]
-  patients      Patient[]
-  appointments  Appointment[]
-  transactions  Transaction[]
-  services      Service[]
+  doctors      Doctor[]
+  patients     Patient[]
+  appointments Appointment[]
+  transactions Transaction[]
+  services     Service[]
+
+  @@index([botToken]) // Optimize bot startup
 }

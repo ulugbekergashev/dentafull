@@ -37,6 +37,7 @@ export interface Patient {
   gender: 'Male' | 'Female';
   medicalHistory: string;
   clinicId: string;
+  telegramChatId?: string;
 }
 
 export interface Appointment {
@@ -109,4 +110,5 @@ export interface Clinic {
   subscriptionStartDate: string; // Added field
   expiryDate: string;
   monthlyRevenue: number; // For SaaS analytics
+  botToken?: string; // Telegram bot token
 }

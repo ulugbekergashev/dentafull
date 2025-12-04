@@ -243,6 +243,21 @@ const App: React.FC = () => {
     } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
   };
 
+  const updateTransaction = async (id: string, data: Partial<Transaction>) => {
+    try {
+      console.log('Updating transaction:', id, data);
+      // Only send the fields we want to update
+      const updateData = { status: data.status };
+      const updated = await api.transactions.update(id, updateData);
+      setTransactions(prev => prev.map(t => t.id === id ? updated : t));
+      addToast('success', 'To\'lov holati yangilandi.');
+    } catch (e: any) {
+      console.error('Transaction update error:', e);
+      const errorMsg = e?.message || 'Xatolik yuz berdi';
+      addToast('error', errorMsg);
+    }
+  };
+
   // Settings Actions
   // Settings Actions
   const addService = async (service: { name: string; price: number; duration: number }) => {
@@ -364,9 +379,12 @@ const App: React.FC = () => {
             patients={patients}
             appointments={appointments}
             transactions={transactions}
+            doctors={doctors}
+            services={services}
             onBack={() => setCurrentRoute(Route.PATIENTS)}
             onUpdatePatient={updatePatient}
             onAddTransaction={addTransaction}
+            onUpdateTransaction={updateTransaction}
             onAddAppointment={addAppointment}
           />
         );
@@ -386,6 +404,8 @@ const App: React.FC = () => {
           transactions={transactions}
           appointments={appointments}
           services={services}
+          patients={patients}
+          onPatientClick={handlePatientClick}
         />;
       case Route.SETTINGS:
         return <Settings

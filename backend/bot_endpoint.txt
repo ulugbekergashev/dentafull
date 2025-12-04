@@ -1,0 +1,27 @@
+// Add this endpoint before app.listen() in server.ts
+
+// --- Bot Settings ---
+app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
+    try {
+        const { botToken } = req.body;
+        const clinicId = req.params.id;
+
+        // Update clinic with new bot token
+        const clinic = await prisma.clinic.update({
+            where: { id: clinicId },
+            data: { botToken: botToken || null }
+        });
+
+        // Restart bot if token is provided, otherwise remove it
+        if (botToken) {
+            botManager.startBot(clinicId, botToken);
+        } else {
+            botManager.removeBot(clinicId);
+        }
+
+        res.json({ success: true, clinic });
+    } catch (error: any) {
+        console.error('Bot settings update error:', error);
+        res.status(500).json({ error: error.message || 'Failed to update bot settings' });
+    }
+});

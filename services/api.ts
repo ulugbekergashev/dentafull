@@ -42,7 +42,6 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
 export const api = {
     auth: {
         login: async (username: string, password: string) => {
-            // Special handling for auth - don't throw on error responses
             const response = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -66,6 +65,16 @@ export const api = {
         delete: (id: string) => fetchJson<{ success: true }>(`/patients/${id}`, {
             method: 'DELETE',
         }),
+        remindDebt: (id: string, amount?: number) => fetchJson<{ success: true }>(`/patients/${id}/remind-debt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount }),
+        }),
+        sendMessage: (id: string, message: string) => fetchJson<{ success: true }>(`/patients/${id}/send-message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message }),
+        }),
     },
     appointments: {
         getAll: (clinicId: string) => fetchJson<Appointment[]>(`/appointments?clinicId=${clinicId}`),
@@ -82,6 +91,9 @@ export const api = {
         delete: (id: string) => fetchJson<{ success: true }>(`/appointments/${id}`, {
             method: 'DELETE',
         }),
+        remind: (id: string) => fetchJson<{ success: true }>(`/appointments/${id}/remind`, {
+            method: 'POST',
+        }),
     },
     transactions: {
         getAll: (clinicId: string) => fetchJson<Transaction[]>(`/transactions?clinicId=${clinicId}`),
@@ -90,6 +102,15 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         }),
+        update: (id: string, data: Partial<Transaction>) => {
+            const url = `/transactions/${id}`;
+            console.log('Transaction update URL:', url, 'Data:', data);
+            return fetchJson<Transaction>(url, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
     },
     doctors: {
         getAll: (clinicId: string) => fetchJson<Doctor[]>(`/doctors?clinicId=${clinicId}`),
@@ -108,7 +129,7 @@ export const api = {
         }),
     },
     services: {
-        getAll: (clinicId: string) => fetchJson<Service[]>(`/services?clinicId=${clinicId}`), // Assuming Service type exists or matches structure
+        getAll: (clinicId: string) => fetchJson<Service[]>(`/services?clinicId=${clinicId}`),
         create: (data: Omit<Service, 'id'>) => fetchJson<Service>('/services', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -134,6 +155,11 @@ export const api = {
         }),
         delete: (id: string) => fetchJson<{ success: true }>(`/clinics/${id}`, {
             method: 'DELETE',
+        }),
+        updateSettings: (id: string, data: { botToken?: string }) => fetchJson<{ success: true; clinic: Clinic }>(`/clinics/${id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
         }),
     },
     plans: {

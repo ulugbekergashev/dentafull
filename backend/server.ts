@@ -1,4 +1,6 @@
 import express from 'express';
+import cron from 'node-cron';
+import { botManager } from './botManager';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
@@ -16,14 +18,23 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
+    console.log('🔐 Auth check:', {
+        hasAuthHeader: !!authHeader,
+        tokenPreview: token?.substring(0, 20) + '...',
+        path: req.path
+    });
+
     if (!token) {
+        console.log('❌ No token provided');
         return res.status(401).json({ error: 'Token topilmadi (Unauthorized)' });
     }
 
     jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
         if (err) {
+            console.log('❌ Token verification failed:', err.message);
             return res.status(403).json({ error: 'Token yaroqsiz (Forbidden)' });
         }
+        console.log('✅ Token verified for user:', user);
         (req as any).user = user;
         next();
     });
@@ -72,7 +83,8 @@ app.post('/api/auth/login', async (req, res) => {
                     role: 'CLINIC_ADMIN',
                     name: clinic.adminName,
                     clinicId: clinic.id,
-                    clinicName: clinic.name
+                    clinicName: clinic.name,
+                    botUsername: clinic.botToken ? (await botManager.getBotUsername(clinic.id)) : null
                 };
             } else {
                 // Check for doctor
@@ -220,6 +232,114 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// Manual Appointment Reminder
+app.post('/api/appointments/:id/remind', authenticateToken, async (req, res) => {
+    try {
+        const appointment = await prisma.appointment.findUnique({
+            where: { id: req.params.id },
+            include: { patient: { include: { clinic: true } }, doctor: true }
+        });
+
+        if (!appointment || !appointment.patient) {
+            return res.status(404).json({ error: 'Appointment or patient not found' });
+        }
+
+        // Check if bot is configured for this clinic
+        if (!appointment.patient.clinic.botToken) {
+            return res.status(400).json({ error: 'Bot not configured' });
+        }
+
+        if (!appointment.patient.telegramChatId) {
+            return res.status(400).json({ error: 'Patient telegram not linked' });
+        }
+
+        const date = new Date(appointment.date).toLocaleDateString('uz-UZ');
+        const time = appointment.time;
+        const doctorName = appointment.doctor ? `${appointment.doctor.firstName} ${appointment.doctor.lastName}` : 'Shifokor';
+
+        const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName},\nSizning ${date} kuni soat ${time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
+
+        await botManager.notifyClinicUser(appointment.clinicId, appointment.patient.telegramChatId, message);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Reminder error:', error);
+        res.status(500).json({ error: 'Failed to send reminder' });
+    }
+});
+
+// Manual Debt Reminder
+app.post('/api/patients/:id/remind-debt', authenticateToken, async (req, res) => {
+    try {
+        const { amount } = req.body;
+        const patient = await prisma.patient.findUnique({
+            where: { id: req.params.id },
+            include: { clinic: true }
+        });
+
+        if (!patient) {
+            return res.status(404).json({ error: 'Patient not found' });
+        }
+
+        // Check if bot is configured for this clinic
+        if (!patient.clinic.botToken) {
+            return res.status(400).json({ error: 'Bot not configured' });
+        }
+
+        if (!patient.telegramChatId) {
+            return res.status(400).json({ error: 'Patient telegram not linked' });
+        }
+
+        const debtMessage = amount
+            ? `sizning ${amount.toLocaleString()} so'm qarzdorligingiz mavjud.`
+            : `sizning qarzdorligingiz mavjud.`;
+
+        const message = `💰 To'lov eslatmasi!\n\nHurmatli ${patient.firstName}, ${debtMessage}\n\nIltimos, to'lovni amalga oshiring.`;
+
+        await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Debt reminder error:', error);
+        res.status(500).json({ error: 'Failed to send debt reminder' });
+    }
+});
+
+// Manual Custom Message
+app.post('/api/patients/:id/send-message', authenticateToken, async (req, res) => {
+    try {
+        const { message } = req.body;
+        const patient = await prisma.patient.findUnique({
+            where: { id: req.params.id },
+            include: { clinic: true }
+        });
+
+        if (!patient) {
+            return res.status(404).json({ error: 'Patient not found' });
+        }
+
+        // Check if bot is configured for this clinic
+        if (!patient.clinic.botToken) {
+            return res.status(400).json({ error: 'Bot not configured' });
+        }
+
+        if (!patient.telegramChatId) {
+            return res.status(400).json({ error: 'Patient telegram not linked' });
+        }
+
+        if (!message) {
+            return res.status(400).json({ error: 'Message content is required' });
+        }
+
+        await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Send message error:', error);
+        res.status(500).json({ error: 'Failed to send message' });
+    }
+});
+
 // --- Transactions ---
 app.get('/api/transactions', authenticateToken, async (req, res) => {
     try {
@@ -246,6 +366,21 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
         res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: 'Failed to create transaction' });
+    }
+});
+
+app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
+    try {
+        console.log('Updating transaction:', req.params.id, req.body);
+        const transaction = await prisma.transaction.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        console.log('Transaction updated successfully:', transaction);
+        res.json(transaction);
+    } catch (error) {
+        console.error('Transaction update error:', error);
+        res.status(500).json({ error: 'Failed to update transaction' });
     }
 });
 
@@ -474,6 +609,46 @@ app.put('/api/plans/:id', authenticateToken, async (req, res) => {
         res.json({ ...plan, features: JSON.parse(plan.features) });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update plan' });
+    }
+});
+
+// --- Bot Settings ---
+app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
+    try {
+        const { botToken } = req.body;
+        const clinicId = req.params.id;
+
+        // Update clinic with new bot token
+        const clinic = await prisma.clinic.update({
+            where: { id: clinicId },
+            data: { botToken: botToken || null }
+        });
+
+        // Restart bot if token is provided, otherwise remove it
+        if (botToken) {
+            botManager.startBot(clinicId, botToken);
+        } else {
+            botManager.removeBot(clinicId);
+        }
+
+        res.json({ success: true, clinic });
+    } catch (error: any) {
+        console.error('Bot settings update error:', error);
+        res.status(500).json({ error: error.message || 'Failed to update bot settings' });
+    }
+});
+
+// Get bot username for clinic (public endpoint - no auth needed)
+app.get('/api/clinics/:id/bot-username', async (req, res) => {
+    try {
+        const clinicId = req.params.id;
+        console.log(`Requesting bot username for clinic: ${clinicId}`);
+        const username = await botManager.getBotUsername(clinicId);
+        console.log(`Found username: ${username}`);
+        res.json({ botUsername: username });
+    } catch (error: any) {
+        console.error('Get bot username error:', error);
+        res.status(500).json({ error: error.message || 'Failed to get bot username' });
     }
 });
 
