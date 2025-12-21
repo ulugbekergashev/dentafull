@@ -111,4 +111,5 @@ export interface Clinic {
   expiryDate: string;
   monthlyRevenue: number; // For SaaS analytics
   botToken?: string; // Telegram bot token
+  customPrice?: number; // Optional custom pricing for special offers
 }

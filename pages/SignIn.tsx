@@ -5,7 +5,7 @@ import { AlertCircle, Lock, User } from 'lucide-react';
 import { api } from '../services/api';
 
 interface SignInProps {
-  onLogin: (role: UserRole, name: string, clinicId?: string) => void;
+  onLogin: (role: UserRole, name: string, clinicId?: string, doctorId?: string) => void;
 }
 
 export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
@@ -29,6 +29,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
           role: response.role,
           name: response.name,
           clinicId: response.clinicId,
+          doctorId: response.doctorId,
           username: username,
           token: response.token
         };
@@ -39,7 +40,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
           sessionStorage.setItem('dentalflow_auth', JSON.stringify(authData));
         }
 
-        onLogin(response.role as UserRole, response.name, response.clinicId);
+        onLogin(response.role as UserRole, response.name, response.clinicId, response.doctorId);
       } else {
         setError(response.error || 'Login yoki parol noto\'g\'ri');
       }

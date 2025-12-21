@@ -181,7 +181,15 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input label="Telefon" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
-            <Input label="Tug'ilgan sana" type="date" name="dob" value={formData.dob} onChange={handleInputChange} required />
+            <Input
+              label="Tug'ilgan sana"
+              type="date"
+              name="dob"
+              value={formData.dob}
+              onChange={handleInputChange}
+              required
+              helperText="Sanani qo'lda kiritish uchun maydonga bosing"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jins</label>

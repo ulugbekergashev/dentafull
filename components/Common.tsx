@@ -120,15 +120,6 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 export const Input: React.FC<InputProps> = ({ label, error, helperText, className = '', containerClassName = 'w-full', ...props }) => {
   const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
-    if (props.type === 'date' || props.type === 'datetime-local') {
-      try {
-        if ('showPicker' in e.currentTarget) {
-          (e.currentTarget as any).showPicker();
-        }
-      } catch (err) {
-        // Ignore
-      }
-    }
     props.onClick?.(e);
   };
 

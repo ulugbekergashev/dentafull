@@ -13,9 +13,10 @@ interface FinanceProps {
   services: { name: string; price: number; duration: number }[];
   patients: Patient[];
   onPatientClick: (id: string) => void;
+  doctorId: string;
 }
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDebtorModalOpen, setIsDebtorModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Barchasi');
@@ -25,19 +26,20 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  if (userRole === UserRole.DOCTOR) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-center p-6">
-        <div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-full mb-4">
-          <DollarSign className="w-8 h-8 text-red-600 dark:text-red-400" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Ruxsat yo'q</h2>
-        <p className="text-gray-500 dark:text-gray-400 max-w-md">
-          Sizda moliyaviy ma'lumotlarni ko'rish huquqi yo'q. Iltimos, administrator bilan bog'laning.
-        </p>
-      </div>
-    );
-  }
+  // Filter data for doctors - only show their appointments and transactions
+  const filteredAppointmentsByDoctor = userRole === UserRole.DOCTOR && doctorId
+    ? appointments.filter(a => a.doctorId === doctorId)
+    : appointments;
+
+  const filteredTransactionsByDoctor = userRole === UserRole.DOCTOR && doctorId
+    ? transactions.filter(t => {
+      // Match transaction to doctor's appointments
+      const matchingAppt = filteredAppointmentsByDoctor.find(a =>
+        a.patientName === t.patientName && a.type === t.service
+      );
+      return matchingAppt !== undefined;
+    })
+    : transactions;
 
   // --- Filter Logic ---
   const isDateInRange = (dateStr: string) => {
@@ -51,14 +53,14 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
     return true;
   };
 
-  const filteredTransactions = transactions.filter(t => {
+  const filteredTransactions = filteredTransactionsByDoctor.filter(t => {
     const matchesStatus = filterStatus === 'Barchasi' || t.status === filterStatus;
     const matchesDate = isDateInRange(t.date);
     return matchesStatus && matchesDate;
   });
 
   // Filter appointments for Lost Revenue calculation to match the selected timeframe
-  const filteredAppointments = appointments.filter(a => isDateInRange(a.date));
+  const filteredAppointments = filteredAppointmentsByDoctor.filter(a => isDateInRange(a.date));
 
   // Calculate debtors from transactions
   const debtTransactions = transactions.filter(t => t.status === 'Pending' || t.status === 'Overdue');
@@ -138,14 +140,121 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const lostCustomersCount = uniqueNoShowPatients - recoveredCount;
 
   const handleExport = () => {
-    // Simulate CSV generation
-    const headers = "Sana,Bemor,Xizmat,Turi,Summa,Status\n";
-    const rows = filteredTransactions.map(t => `${t.date},${t.patientName},${t.service},${t.type},${t.amount},${t.status}`).join("\n");
-    const csvContent = "data:text/csv;charset=utf-8," + headers + rows;
-    const encodedUri = encodeURI(csvContent);
+    // Comprehensive Financial Report with 20+ metrics
+    const now = new Date();
+    const reportDate = now.toLocaleDateString('uz-UZ');
+    const reportTime = now.toLocaleTimeString('uz-UZ');
+
+    // Calculate all metrics
+    const totalTransactions = filteredTransactions.length;
+    const paidTransactions = filteredTransactions.filter(t => t.status === 'Paid');
+    const pendingTransactions = filteredTransactions.filter(t => t.status === 'Pending');
+    const overdueTransactions = filteredTransactions.filter(t => t.status === 'Overdue');
+
+    const cashPayments = filteredTransactions.filter(t => t.type === 'Cash');
+    const cardPayments = filteredTransactions.filter(t => t.type === 'Card');
+    const insurancePayments = filteredTransactions.filter(t => t.type === 'Insurance');
+
+    const cashRevenue = cashPayments.reduce((sum, t) => sum + t.amount, 0);
+    const cardRevenue = cardPayments.reduce((sum, t) => sum + t.amount, 0);
+    const insuranceRevenue = insurancePayments.reduce((sum, t) => sum + t.amount, 0);
+
+    const paidRevenue = paidTransactions.reduce((sum, t) => sum + t.amount, 0);
+    const pendingRevenue = pendingTransactions.reduce((sum, t) => sum + t.amount, 0);
+    const overdueRevenue = overdueTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+    const avgTransactionAmount = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+    const avgPaidAmount = paidTransactions.length > 0 ? paidRevenue / paidTransactions.length : 0;
+
+    // Service breakdown
+    const serviceRevenue = new Map<string, number>();
+    filteredTransactions.forEach(t => {
+      serviceRevenue.set(t.service, (serviceRevenue.get(t.service) || 0) + t.amount);
+    });
+    const topService = Array.from(serviceRevenue.entries()).sort((a, b) => b[1] - a[1])[0];
+
+    // Patient analysis
+    const uniquePatients = new Set(filteredTransactions.map(t => t.patientName)).size;
+    const avgRevenuePerPatient = uniquePatients > 0 ? totalRevenue / uniquePatients : 0;
+
+    // Build CSV content
+    let csvContent = "MOLIYA HISOBOTI\n";
+    csvContent += `Sana: ${reportDate}\n`;
+    csvContent += `Vaqt: ${reportTime}\n`;
+    csvContent += `Davr: ${startDate || 'Boshlanish'} - ${endDate || 'Tugash'}\n`;
+    csvContent += "\n";
+
+    // Summary Metrics
+    csvContent += "UMUMIY KO'RSATKICHLAR\n";
+    csvContent += "Ko'rsatkich,Qiymat\n";
+    csvContent += `1. Jami Daromad,${totalRevenue.toLocaleString()} UZS\n`;
+    csvContent += `2. To'langan Daromad,${paidRevenue.toLocaleString()} UZS\n`;
+    csvContent += `3. Kutilayotgan To'lovlar,${pendingRevenue.toLocaleString()} UZS\n`;
+    csvContent += `4. Qarzdorlik,${overdueRevenue.toLocaleString()} UZS\n`;
+    csvContent += `5. Jami Tranzaksiyalar,${totalTransactions} ta\n`;
+    csvContent += `6. To'langan Tranzaksiyalar,${paidTransactions.length} ta\n`;
+    csvContent += `7. Kutilayotgan Tranzaksiyalar,${pendingTransactions.length} ta\n`;
+    csvContent += `8. Qarzdor Tranzaksiyalar,${overdueTransactions.length} ta\n`;
+    csvContent += `9. O'rtacha Chek,${Math.round(avgTransactionAmount).toLocaleString()} UZS\n`;
+    csvContent += `10. O'rtacha To'langan Chek,${Math.round(avgPaidAmount).toLocaleString()} UZS\n`;
+    csvContent += "\n";
+
+    // Payment Methods
+    csvContent += "TO'LOV USULLARI\n";
+    csvContent += "Usul,Soni,Summa\n";
+    csvContent += `Naqd,${cashPayments.length} ta,${cashRevenue.toLocaleString()} UZS\n`;
+    csvContent += `Karta,${cardPayments.length} ta,${cardRevenue.toLocaleString()} UZS\n`;
+    csvContent += `Sug'urta,${insurancePayments.length} ta,${insuranceRevenue.toLocaleString()} UZS\n`;
+    csvContent += "\n";
+
+    // Patient Metrics
+    csvContent += "BEMOR STATISTIKASI\n";
+    csvContent += "Ko'rsatkich,Qiymat\n";
+    csvContent += `11. Unikal Bemorlar,${uniquePatients} ta\n`;
+    csvContent += `12. Bemor Boshiga O'rtacha Daromad,${Math.round(avgRevenuePerPatient).toLocaleString()} UZS\n`;
+    csvContent += `13. Jami Qarzdorlar,${DEBTORS.length} ta\n`;
+    csvContent += `14. Jami Qarzdorlik,${totalDebt.toLocaleString()} UZS\n`;
+    csvContent += "\n";
+
+    // Loss Analysis
+    csvContent += "YO'QOTISHLAR TAHLILI\n";
+    csvContent += "Ko'rsatkich,Qiymat\n";
+    csvContent += `15. Yo'qotilgan Daromad (No-Show),${lostRevenue.toLocaleString()} UZS\n`;
+    csvContent += `16. Kelmagan Qabullar,${noShowAppointments.length} ta\n`;
+    csvContent += `17. Kelmagan Unikal Bemorlar,${uniqueNoShowPatients} ta\n`;
+    csvContent += `18. Qaytarilgan Mijozlar,${recoveredCount} ta\n`;
+    csvContent += `19. Yo'qotilgan Mijozlar,${lostCustomersCount} ta\n`;
+    csvContent += `20. Qaytarish Darajasi,${uniqueNoShowPatients > 0 ? Math.round((recoveredCount / uniqueNoShowPatients) * 100) : 0}%\n`;
+    csvContent += "\n";
+
+    // Top Service
+    csvContent += "ENG DAROMADLI XIZMAT\n";
+    csvContent += `Xizmat,Daromad\n`;
+    csvContent += `${topService ? topService[0] : 'N/A'},${topService ? topService[1].toLocaleString() : 0} UZS\n`;
+    csvContent += "\n";
+
+    // Detailed Transactions
+    csvContent += "BATAFSIL TRANZAKSIYALAR\n";
+    csvContent += "Sana,Bemor,Xizmat,To'lov Usuli,Summa,Status\n";
+    filteredTransactions.forEach(t => {
+      csvContent += `${t.date},${t.patientName},${t.service},${t.type},${t.amount},${t.status}\n`;
+    });
+    csvContent += "\n";
+
+    // Debtors List
+    csvContent += "QARZDORLAR RO'YXATI\n";
+    csvContent += "Bemor,Summa,Kechikkan Kunlar\n";
+    DEBTORS.forEach(d => {
+      csvContent += `${d.name},${d.amount.toLocaleString()} UZS,${d.days} kun\n`;
+    });
+
+    // Create and download file
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "moliya_hisoboti.csv");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `moliya_hisoboti_${reportDate.replace(/\//g, '-')}.csv`);
+    link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

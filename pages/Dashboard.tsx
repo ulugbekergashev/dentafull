@@ -8,17 +8,42 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { Patient, Appointment, Transaction } from '../types';
+import { Patient, Appointment, Transaction, UserRole } from '../types';
 
 interface DashboardProps {
   patients: Patient[];
   appointments: Appointment[];
   transactions: Transaction[];
+  userRole: UserRole;
+  doctorId: string;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, userRole, doctorId }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Filter data for doctors - only show their appointments and transactions
+  const filteredAppointmentsByDoctor = useMemo(() => {
+    if (userRole === UserRole.DOCTOR && doctorId) {
+      return appointments.filter(a => a.doctorId === doctorId);
+    }
+    return appointments;
+  }, [appointments, userRole, doctorId]);
+
+  const filteredTransactionsByDoctor = useMemo(() => {
+    if (userRole === UserRole.DOCTOR && doctorId) {
+      // Filter transactions based on appointments that belong to this doctor
+      const doctorAppointmentIds = new Set(filteredAppointmentsByDoctor.map(a => a.id));
+      return transactions.filter(t => {
+        // Match transaction to appointment by patient name and service
+        const matchingAppt = filteredAppointmentsByDoctor.find(a =>
+          a.patientName === t.patientName && a.type === t.service
+        );
+        return matchingAppt !== undefined;
+      });
+    }
+    return transactions;
+  }, [transactions, filteredAppointmentsByDoctor, userRole, doctorId]);
 
   // --- Filter Logic ---
   const isDateInRange = (dateStr: string) => {
@@ -32,9 +57,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     return true;
   };
 
-  // Filter Data
-  const filteredAppointments = useMemo(() => appointments.filter(a => isDateInRange(a.date)), [appointments, startDate, endDate]);
-  const filteredTransactions = useMemo(() => transactions.filter(t => isDateInRange(t.date)), [transactions, startDate, endDate]);
+  // Filter Data by date range
+  const filteredAppointments = useMemo(() => filteredAppointmentsByDoctor.filter(a => isDateInRange(a.date)), [filteredAppointmentsByDoctor, startDate, endDate]);
+  const filteredTransactions = useMemo(() => filteredTransactionsByDoctor.filter(t => isDateInRange(t.date)), [filteredTransactionsByDoctor, startDate, endDate]);
 
   // Stats Calculation
   const totalPatients = patients.length; // Patient count usually stays total DB count
@@ -97,7 +122,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Boshqaruv Paneli</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Klinika faoliyati bo'yicha umumiy hisobot</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {userRole === UserRole.DOCTOR ? 'Shaxsiy statistika' : 'Klinika faoliyati bo\'yicha umumiy hisobot'}
+          </p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <Input
@@ -112,7 +139,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            containerClassName="w-full sm:w-40"
+            containerClassName="w-full sm:w-auto"
             className="cursor-pointer"
             placeholder="Tugash"
           />
@@ -120,29 +147,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Jami Bemorlar</p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalPatients.toLocaleString()}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {userRole === UserRole.CLINIC_ADMIN && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Jami Bemorlar</p>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalPatients.toLocaleString()}</h3>
+              </div>
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
+                <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
             </div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
-              <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="mt-4 flex items-center text-sm">
+              <span className="text-green-600 flex items-center font-medium">
+                <TrendingUp className="w-4 h-4 mr-1" /> +{activePatients}
+              </span>
+              <span className="text-gray-500 ml-2">faol bemorlar</span>
             </div>
-          </div>
-          <div className="mt-4 flex items-center text-sm">
-            <span className="text-green-600 flex items-center font-medium">
-              <TrendingUp className="w-4 h-4 mr-1" /> +{activePatients}
-            </span>
-            <span className="text-gray-500 ml-2">faol bemorlar</span>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Qabullar</p>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                {userRole === UserRole.DOCTOR ? 'Mening Qabullarim' : 'Qabullar'}
+              </p>
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{periodAppointmentsCount}</h3>
             </div>
             <div className="p-3 bg-purple-50 dark:bg-purple-900/30 rounded-full">
@@ -163,22 +194,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </div>
         </Card>
 
+        <Card className="p-6 bg-gradient-to-br from-green-500 to-green-600 text-white border-none">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-sm font-medium">
+                {userRole === UserRole.DOCTOR ? 'Mening Daromadim' : 'Jami Daromad'}
+              </p>
+              <h3 className="text-2xl font-bold mt-1">{totalRevenue.toLocaleString()} UZS</h3>
+            </div>
+            <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
+              <DollarSign className="w-6 h-6 text-white" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center text-sm text-green-100">
+            {startDate || endDate ? 'Tanlangan davr uchun' : 'Barcha vaqt uchun'}
+          </div>
+        </Card>
+
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Jami Daromad</p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalRevenue.toLocaleString()} UZS</h3>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                {userRole === UserRole.DOCTOR ? 'Yakunlangan' : 'Samaradorlik'}
+              </p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {periodAppointmentsCount > 0
+                  ? `${Math.round((filteredAppointments.filter(a => a.status === 'Completed').length / periodAppointmentsCount) * 100)}%`
+                  : '0%'
+                }
+              </h3>
             </div>
-            <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-full">
-              <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
+              <CheckCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
-          <div className="mt-4 flex items-center text-sm">
-            {startDate || endDate ? (
-              <span className="text-gray-500 text-xs">Tanlangan davr uchun</span>
-            ) : (
-              <span className="text-gray-500 text-xs">Jami vaqt davomida</span>
-            )}
+          <div className="mt-4 text-sm text-gray-500">
+            {filteredAppointments.filter(a => a.status === 'Completed').length} / {periodAppointmentsCount} qabul
           </div>
         </Card>
       </div>
@@ -283,22 +334,89 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <Card className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">So'nggi Faoliyat</h3>
           <div className="space-y-6">
-            {[
-              { icon: Users, color: 'bg-blue-100 text-blue-600', text: 'Yangi bemor ro\'yxatga olindi', time: '10 daq oldin' },
-              { icon: DollarSign, color: 'bg-green-100 text-green-600', text: 'To\'lov qabul qilindi: 150,000 UZS', time: '45 daq oldin' },
-              { icon: CheckCircle, color: 'bg-purple-100 text-purple-600', text: 'Dr. Sobirov kanal davolashni yakunladi', time: '1 soat oldin' },
-              { icon: Clock, color: 'bg-yellow-100 text-yellow-600', text: 'Qabul vaqti o\'zgartirildi', time: '2 soat oldin' },
-            ].map((item, i) => (
-              <div key={i} className="flex gap-3">
-                <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${item.color}`}>
-                  <item.icon className="w-4 h-4" />
+            {(() => {
+              // Combine recent activities from all sources
+              const activities: Array<{ type: string; text: string; time: Date; icon: any; color: string }> = [];
+
+              // Recent patients (last 5)
+              patients.slice(-5).reverse().forEach(patient => {
+                const createdDate = new Date(patient.lastVisit);
+                activities.push({
+                  type: 'patient',
+                  text: `Yangi bemor ro'yxatga olindi: ${patient.firstName} ${patient.lastName}`,
+                  time: createdDate,
+                  icon: Users,
+                  color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                });
+              });
+
+              // Recent transactions (last 5)
+              filteredTransactions.slice(-5).reverse().forEach(tx => {
+                const txDate = new Date(tx.date);
+                activities.push({
+                  type: 'transaction',
+                  text: `To'lov qabul qilindi: ${tx.amount.toLocaleString()} UZS - ${tx.service}`,
+                  time: txDate,
+                  icon: DollarSign,
+                  color: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                });
+              });
+
+              // Recent completed appointments (last 5)
+              filteredAppointments
+                .filter(a => a.status === 'Completed')
+                .slice(-5)
+                .reverse()
+                .forEach(appt => {
+                  const apptDate = new Date(`${appt.date} ${appt.time}`);
+                  activities.push({
+                    type: 'appointment',
+                    text: `${appt.doctorName} ${appt.type} yakunladi`,
+                    time: apptDate,
+                    icon: CheckCircle,
+                    color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
+                  });
+                });
+
+              // Sort by time (most recent first) and take top 5
+              const sortedActivities = activities
+                .sort((a, b) => b.time.getTime() - a.time.getTime())
+                .slice(0, 5);
+
+              // Helper function to format time ago
+              const getTimeAgo = (date: Date) => {
+                const now = new Date();
+                const diffMs = now.getTime() - date.getTime();
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+
+                if (diffMins < 1) return 'Hozirgina';
+                if (diffMins < 60) return `${diffMins} daq oldin`;
+                if (diffHours < 24) return `${diffHours} soat oldin`;
+                return `${diffDays} kun oldin`;
+              };
+
+              if (sortedActivities.length === 0) {
+                return (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    Hozircha faoliyat yo'q
+                  </div>
+                );
+              }
+
+              return sortedActivities.map((item, i) => (
+                <div key={i} className="flex gap-3">
+                  <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${item.color}`}>
+                    <item.icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{item.text}</p>
+                    <p className="text-xs text-gray-500">{getTimeAgo(item.time)}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{item.text}</p>
-                  <p className="text-xs text-gray-500">{item.time}</p>
-                </div>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </Card>
       </div>

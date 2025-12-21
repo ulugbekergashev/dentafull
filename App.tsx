@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield
+  Building2, Shield, Activity
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
@@ -13,6 +13,7 @@ import { Finance } from './pages/Finance';
 import { Settings } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
+import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
 import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { api } from './services/api';
@@ -25,6 +26,7 @@ enum Route {
   CALENDAR = 'calendar',
   FINANCE = 'finance',
   SETTINGS = 'settings',
+  DOCTORS_ANALYTICS = 'doctors_analytics',
   // Super Admin Routes
   SAAS_DASHBOARD = 'saas_dashboard',
 }
@@ -34,8 +36,9 @@ const CLINIC_NAVIGATION: NavItem[] = [
   { id: Route.DASHBOARD, label: 'Boshqaruv Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
   { id: Route.PATIENTS, label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
   { id: Route.CALENDAR, label: 'Kalendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
-  { id: Route.FINANCE, label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
-  { id: Route.SETTINGS, label: 'Sozlamalar', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+  { id: Route.FINANCE, label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
+  { id: Route.DOCTORS_ANALYTICS, label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
+  { id: Route.SETTINGS, label: 'Sozlamalar', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
 ];
 
 // Navigation for Super Admin
@@ -51,6 +54,7 @@ const App: React.FC = () => {
   const [userRole, setUserRole] = useState<UserRole>(UserRole.CLINIC_ADMIN);
   const [userName, setUserName] = useState('');
   const [clinicId, setClinicId] = useState<string>('');
+  const [doctorId, setDoctorId] = useState<string>(''); // For doctor role
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -72,12 +76,15 @@ const App: React.FC = () => {
     const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
     if (storedAuth) {
       try {
-        const { role, name, clinicId: storedClinicId } = JSON.parse(storedAuth);
+        const { role, name, clinicId: storedClinicId, doctorId: storedDoctorId } = JSON.parse(storedAuth);
         if (role && name) {
           setUserRole(role);
           setUserName(name);
           if (storedClinicId) {
             setClinicId(storedClinicId);
+          }
+          if (storedDoctorId) {
+            setDoctorId(storedDoctorId);
           }
           setIsAuthenticated(true);
           if (role === UserRole.SUPER_ADMIN) {
@@ -145,11 +152,14 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   // --- Auth Actions ---
-  const handleLogin = (role: UserRole, name: string, clinicIdParam?: string) => {
+  const handleLogin = (role: UserRole, name: string, clinicIdParam?: string, doctorIdParam?: string) => {
     setUserRole(role);
     setUserName(name);
     if (clinicIdParam) {
       setClinicId(clinicIdParam);
+    }
+    if (doctorIdParam) {
+      setDoctorId(doctorIdParam);
     }
     setIsAuthenticated(true);
     // Set default route based on role
@@ -168,6 +178,7 @@ const App: React.FC = () => {
     setUserRole(UserRole.CLINIC_ADMIN);
     setUserName('');
     setClinicId('');
+    setDoctorId('');
   };
 
   // --- UI Actions ---
@@ -397,6 +408,14 @@ const App: React.FC = () => {
           onAddAppointment={addAppointment}
           onUpdateAppointment={updateAppointment}
           onDeleteAppointment={deleteAppointment}
+          userRole={userRole}
+          doctorId={doctorId}
+        />;
+      case Route.DOCTORS_ANALYTICS:
+        return <DoctorsAnalytics
+          doctors={doctors}
+          appointments={appointments}
+          services={services}
         />;
       case Route.FINANCE:
         return <Finance
@@ -406,6 +425,7 @@ const App: React.FC = () => {
           services={services}
           patients={patients}
           onPatientClick={handlePatientClick}
+          doctorId={doctorId}
         />;
       case Route.SETTINGS:
         return <Settings
@@ -420,7 +440,7 @@ const App: React.FC = () => {
           currentClinic={clinics.find(c => c.id === clinicId)}
           plans={plans}
         />;
-      default: return <Dashboard patients={patients} appointments={appointments} transactions={transactions} />;
+      default: return <Dashboard patients={patients} appointments={appointments} transactions={transactions} userRole={userRole} doctorId={doctorId} />;
     }
   };
 

@@ -26,7 +26,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       username: '',
       password: '',
       phone: '',
-      planId: plans.length > 0 ? plans[0].id : ''
+      planId: plans.length > 0 ? plans[0].id : '',
+      useCustomPrice: false,
+      customPrice: 0
    });
 
    // Success modal for credentials
@@ -82,7 +84,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          status: 'Active',
          subscriptionStartDate: startDate,
          expiryDate: expiryDate,
-         monthlyRevenue: 0
+         monthlyRevenue: 0,
+         customPrice: newClinicForm.useCustomPrice ? newClinicForm.customPrice : undefined
       });
 
       setCreatedClinicCreds({
@@ -92,7 +95,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       });
 
       setIsAddClinicModalOpen(false);
-      setNewClinicForm({ name: '', adminName: '', username: '', password: '', phone: '', planId: plans.length > 0 ? plans[0].id : '' });
+      setNewClinicForm({ name: '', adminName: '', username: '', password: '', phone: '', planId: plans.length > 0 ? plans[0].id : '', useCustomPrice: false, customPrice: 0 });
    };
 
    const generatePassword = () => {
@@ -371,12 +374,47 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </div>
                </div>
 
-               <Select
-                  label="Tarif Rejasi"
-                  options={plans.map(p => ({ value: p.id, label: `${p.name} - ${p.price.toLocaleString()} UZS` }))}
-                  value={newClinicForm.planId}
-                  onChange={e => setNewClinicForm({ ...newClinicForm, planId: e.target.value })}
-               />
+               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
+                  <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                     <CreditCard className="w-4 h-4" /> Tarif va Narx
+                  </h4>
+
+                  <Select
+                     label="Tarif Rejasi"
+                     options={plans.map(p => ({ value: p.id, label: `${p.name} - ${p.price.toLocaleString()} UZS` }))}
+                     value={newClinicForm.planId}
+                     onChange={e => setNewClinicForm({ ...newClinicForm, planId: e.target.value })}
+                  />
+
+                  <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                     <input
+                        type="checkbox"
+                        id="useCustomPrice"
+                        checked={newClinicForm.useCustomPrice}
+                        onChange={(e) => setNewClinicForm({ ...newClinicForm, useCustomPrice: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                     />
+                     <label htmlFor="useCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">
+                        Maxsus narx belgilash (alohida taklif)
+                     </label>
+                  </div>
+
+                  {newClinicForm.useCustomPrice && (
+                     <div className="animate-fade-in">
+                        <Input
+                           label="Maxsus Oylik Narx (UZS)"
+                           type="number"
+                           value={newClinicForm.customPrice}
+                           onChange={e => setNewClinicForm({ ...newClinicForm, customPrice: parseInt(e.target.value) || 0 })}
+                           required
+                           placeholder="Masalan: 800000"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                           💡 Bu narx standart tarif narxi o'rniga ishlatiladi
+                        </p>
+                     </div>
+                  )}
+               </div>
 
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsAddClinicModalOpen(false)}>Bekor qilish</Button>

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Modal, Input, Select, Badge } from '../components/Common';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send } from 'lucide-react';
-import { Appointment, Patient, Doctor } from '../types';
+import { Appointment, Patient, Doctor, UserRole } from '../types';
 import { api } from '../services/api';
 
 interface CalendarProps {
@@ -13,15 +13,22 @@ interface CalendarProps {
   onAddAppointment: (appt: Omit<Appointment, 'id'>) => void;
   onUpdateAppointment: (id: string, data: Partial<Appointment>) => void;
   onDeleteAppointment: (id: string) => void;
+  userRole: UserRole;
+  doctorId: string;
 }
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, patients, doctors, services, onAddAppointment, onUpdateAppointment, onDeleteAppointment
+  appointments, patients, doctors, services, onAddAppointment, onUpdateAppointment, onDeleteAppointment, userRole, doctorId
 }) => {
+  // Filter appointments for doctors
+  const filteredAppointments = userRole === UserRole.DOCTOR && doctorId
+    ? appointments.filter(a => a.doctorId === doctorId)
+    : appointments;
   // State
-  const [currentDate, setCurrentDate] = useState(new Date()); // Start of the visible week (Monday)
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [view, setView] = useState<'day' | 'week'>('week');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [remindedAppts, setRemindedAppts] = useState<Set<string>>(new Set());
@@ -43,6 +50,23 @@ export const Calendar: React.FC<CalendarProps> = ({
     notes: ''
   });
 
+  // Handle Resize for Responsive View
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setView('day');
+      } else {
+        setView('week');
+      }
+    };
+
+    // Initial check
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Open Add Modal with default values selected if available
   const openAddModal = () => {
     setFormData({
@@ -59,16 +83,21 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   // Helper: Get start of current week (Monday)
   const getStartOfWeek = (date: Date) => {
-    const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-    const monday = new Date(date.setDate(diff));
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+    const monday = new Date(d.setDate(diff));
     return monday;
   };
 
-  // Helper: Get 7 days array
-  const getWeekDays = (startDate: Date) => {
+  // Helper: Get days to display
+  const getDisplayDays = (date: Date, currentView: 'day' | 'week') => {
+    if (currentView === 'day') {
+      return [new Date(date)];
+    }
+
     const days = [];
-    const start = getStartOfWeek(new Date(startDate));
+    const start = getStartOfWeek(new Date(date));
     for (let i = 0; i < 7; i++) {
       const day = new Date(start);
       day.setDate(start.getDate() + i);
@@ -77,18 +106,26 @@ export const Calendar: React.FC<CalendarProps> = ({
     return days;
   };
 
-  const weekDays = getWeekDays(currentDate);
+  const displayDays = getDisplayDays(currentDate, view);
 
   // Handlers
-  const handlePrevWeek = () => {
+  const handlePrev = () => {
     const newDate = new Date(currentDate);
-    newDate.setDate(newDate.getDate() - 7);
+    if (view === 'week') {
+      newDate.setDate(newDate.getDate() - 7);
+    } else {
+      newDate.setDate(newDate.getDate() - 1);
+    }
     setCurrentDate(newDate);
   };
 
-  const handleNextWeek = () => {
+  const handleNext = () => {
     const newDate = new Date(currentDate);
-    newDate.setDate(newDate.getDate() + 7);
+    if (view === 'week') {
+      newDate.setDate(newDate.getDate() + 7);
+    } else {
+      newDate.setDate(newDate.getDate() + 1);
+    }
     setCurrentDate(newDate);
   };
 
@@ -217,116 +254,144 @@ export const Calendar: React.FC<CalendarProps> = ({
   };
 
   const dayNames = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
+  const gridColsClass = view === 'week' ? 'grid-cols-8' : 'grid-cols-[60px_1fr]';
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col animate-fade-in">
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 w-full sm:w-auto">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Jadval</h1>
-          <div className="flex items-center bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700">
-            <button onClick={handlePrevWeek} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronLeft className="w-4 h-4" /></button>
+          <div className="flex items-center bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 flex-1 sm:flex-none justify-between sm:justify-start">
+            <button onClick={handlePrev} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronLeft className="w-4 h-4" /></button>
             <span className="px-4 text-sm font-medium min-w-[140px] text-center">
-              {weekDays[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekDays[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {view === 'week'
+                ? `${displayDays[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${displayDays[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                : displayDays[0].toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+              }
             </span>
-            <button onClick={handleNextWeek} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronRight className="w-4 h-4" /></button>
+            <button onClick={handleNext} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronRight className="w-4 h-4" /></button>
+          </div>
+          {/* View Toggle for Desktop/Tablet */}
+          <div className="hidden md:flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <button
+              onClick={() => setView('day')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'day' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+            >
+              Kun
+            </button>
+            <button
+              onClick={() => setView('week')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'week' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+            >
+              Hafta
+            </button>
           </div>
         </div>
-        <Button onClick={openAddModal}><Plus className="w-4 h-4 mr-2" /> Yangi Qabul</Button>
+        <Button onClick={openAddModal} className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-2" /> Yangi Qabul</Button>
       </div>
 
       {/* Calendar Grid */}
-      <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
-        {/* Header Row */}
-        <div className="grid grid-cols-8 border-b border-gray-200 dark:border-gray-700">
-          <div className="p-4 border-r border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50"></div>
-          {weekDays.map((day, i) => {
-            const isToday = day.toDateString() === new Date().toDateString();
-            return (
-              <div key={i} className={`p-4 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
-                <p className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-900 dark:text-white'}`}>{dayNames[day.getDay()]}</p>
-                <p className={`text-xs ${isToday ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>{day.getDate()}</p>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto relative">
-          {/* Grid Background */}
-          <div className="grid grid-cols-8 h-[1200px]">
-
-            {/* Time Column */}
-            <div className="border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-              {HOURS.map(hour => (
-                <React.Fragment key={hour}>
-                  <div className="h-12 border-b border-gray-100 dark:border-gray-700/50 text-xs text-gray-400 p-2 text-right">{hour}:00</div>
-                  <div className="h-12 border-b border-gray-100 dark:border-gray-700/50"></div>
-                </React.Fragment>
-              ))}
+      <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col relative">
+        <div className="flex-1 overflow-auto">
+          <div className={`h-full relative ${view === 'week' ? 'min-w-[1000px]' : 'w-full'}`}>
+            {/* Header Row */}
+            <div className={`grid ${gridColsClass} border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 bg-white dark:bg-gray-800`}>
+              <div className="p-4 border-r border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-40"></div>
+              {displayDays.map((day, i) => {
+                const isToday = day.toDateString() === new Date().toDateString();
+                return (
+                  <div key={i} className={`p-4 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                    <p className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-900 dark:text-white'}`}>{dayNames[day.getDay()]}</p>
+                    <p className={`text-xs ${isToday ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>{day.getDate()}</p>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Days Columns */}
-            {weekDays.map((day, i) => (
-              <div key={i} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
+            {/* Body */}
+            <div className={`grid ${gridColsClass} h-[1200px]`}>
+              {/* Time Column */}
+              <div className="border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-20">
                 {HOURS.map(hour => (
                   <React.Fragment key={hour}>
-                    <div className="h-12 border-b border-gray-50 dark:border-gray-800/50"></div>
-                    <div className="h-12 border-b border-gray-50 dark:border-gray-800/50"></div>
+                    <div className="h-12 border-b border-gray-100 dark:border-gray-700/50 text-xs text-gray-400 p-2 text-right">{hour}:00</div>
+                    <div className="h-12 border-b border-gray-100 dark:border-gray-700/50"></div>
                   </React.Fragment>
                 ))}
               </div>
-            ))}
 
-            {/* Appointments Overlay */}
-            {appointments.map(app => {
-              const appDate = new Date(app.date);
-              // Find which column this appointment belongs to (0-6)
-              const dayIndex = weekDays.findIndex(d => d.toDateString() === appDate.toDateString());
-
-              if (dayIndex === -1) return null; // Not in this week
-
-              const [h, m] = app.time.split(':').map(Number);
-              if (isNaN(h)) return null;
-
-              const topOffset = ((h - 8) * 96) + (m >= 30 ? 48 : 0) + (m % 30 / 30 * 48);
-              const height = (app.duration / 30) * 48;
-
-              // Status Colors
-              const colors = {
-                'Confirmed': 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/60 dark:border-blue-700 dark:text-blue-200',
-                'Checked-In': 'bg-indigo-100 border-indigo-300 text-indigo-700 dark:bg-indigo-900/60 dark:border-indigo-700 dark:text-indigo-200',
-                'Completed': 'bg-green-100 border-green-300 text-green-700 dark:bg-green-900/60 dark:border-green-700 dark:text-green-200',
-                'Pending': 'bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/60 dark:border-yellow-700 dark:text-yellow-200',
-                'Cancelled': 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900/60 dark:border-red-700 dark:text-red-300',
-                'No-Show': 'bg-gray-200 border-gray-400 text-gray-600 dark:bg-gray-700 dark:border-gray-500 dark:text-gray-400 opacity-75'
-              }[app.status] || 'bg-gray-100';
-
-              return (
-                <div
-                  key={app.id}
-                  onClick={() => setSelectedAppointment(app)}
-                  className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all ${colors} z-10`}
-                  style={{
-                    top: `${topOffset}px`,
-                    left: `calc(${(dayIndex + 1) * (100 / 8)}% + 2px)`,
-                    width: `calc(${100 / 8}% - 4px)`,
-                    height: `${height - 4}px`,
-                  }}
-                >
-                  <div className="font-bold truncate">{app.patientName}</div>
-                  <div className="truncate opacity-75">{app.type}</div>
-                  {height > 40 && (
-                    <div className="flex items-center mt-1 gap-1 text-[10px]">
-                      <div className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[9px]">{app.doctorName[0]}</div>
-                      {app.time}
-                    </div>
-                  )}
+              {/* Days Columns */}
+              {displayDays.map((day, i) => (
+                <div key={i} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
+                  {HOURS.map(hour => (
+                    <React.Fragment key={hour}>
+                      <div className="h-12 border-b border-gray-50 dark:border-gray-800/50"></div>
+                      <div className="h-12 border-b border-gray-50 dark:border-gray-800/50"></div>
+                    </React.Fragment>
+                  ))}
                 </div>
-              );
-            })}
+              ))}
 
+              {/* Appointments Overlay */}
+              {appointments.map(app => {
+                const appDate = new Date(app.date);
+                // Find which column this appointment belongs to
+                const dayIndex = displayDays.findIndex(d => d.toDateString() === appDate.toDateString());
+
+                if (dayIndex === -1) return null; // Not in this view
+
+                const [h, m] = app.time.split(':').map(Number);
+                if (isNaN(h)) return null;
+
+                const topOffset = ((h - 8) * 96) + (m >= 30 ? 48 : 0) + (m % 30 / 30 * 48);
+                const height = (app.duration / 30) * 48;
+
+                // Status Colors
+                const colors = {
+                  'Confirmed': 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/60 dark:border-blue-700 dark:text-blue-200',
+                  'Checked-In': 'bg-indigo-100 border-indigo-300 text-indigo-700 dark:bg-indigo-900/60 dark:border-indigo-700 dark:text-indigo-200',
+                  'Completed': 'bg-green-100 border-green-300 text-green-700 dark:bg-green-900/60 dark:border-green-700 dark:text-green-200',
+                  'Pending': 'bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/60 dark:border-yellow-700 dark:text-yellow-200',
+                  'Cancelled': 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900/60 dark:border-red-700 dark:text-red-300',
+                  'No-Show': 'bg-gray-200 border-gray-400 text-gray-600 dark:bg-gray-700 dark:border-gray-500 dark:text-gray-400 opacity-75'
+                }[app.status] || 'bg-gray-100';
+
+                // Calculate position based on view
+                const left = view === 'week'
+                  ? `calc(${(dayIndex + 1) * (100 / 8)}% + 2px)`
+                  : `62px`;
+
+                const width = view === 'week'
+                  ? `calc(${100 / 8}% - 4px)`
+                  : `calc(100% - 64px)`;
+
+                return (
+                  <div
+                    key={app.id}
+                    onClick={() => setSelectedAppointment(app)}
+                    className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all ${colors} z-10`}
+                    style={{
+                      top: `${topOffset}px`,
+                      left: left,
+                      width: width,
+                      height: `${height - 4}px`,
+                    }}
+                  >
+                    <div className="font-bold truncate">{app.patientName}</div>
+                    <div className="truncate opacity-75">{app.type}</div>
+                    {height > 40 && (
+                      <div className="flex items-center mt-1 gap-1 text-[10px]">
+                        <div className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[9px]">{app.doctorName[0]}</div>
+                        {app.time}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+            </div>
           </div>
         </div>
       </div>
