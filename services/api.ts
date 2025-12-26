@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, ICD10Code, PatientDiagnosis } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -168,6 +168,18 @@ export const api = {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
+        }),
+    },
+    diagnoses: {
+        searchCodes: (query: string) => fetchJson<ICD10Code[]>(`/icd10?query=${query}`),
+        add: (data: Omit<PatientDiagnosis, 'id' | 'icd10'>) => fetchJson<PatientDiagnosis>('/diagnoses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        getByPatient: (patientId: string) => fetchJson<PatientDiagnosis[]>(`/diagnoses?patientId=${patientId}`),
+        delete: (id: string) => fetchJson<{ success: true }>(`/diagnoses/${id}`, {
+            method: 'DELETE',
         }),
     },
 };

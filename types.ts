@@ -113,3 +113,20 @@ export interface Clinic {
   botToken?: string; // Telegram bot token
   customPrice?: number; // Optional custom pricing for special offers
 }
+
+export interface ICD10Code {
+  code: string;
+  name: string;
+  description?: string;
+}
+
+export interface PatientDiagnosis {
+  id: string;
+  patientId: string;
+  code: string;
+  icd10?: ICD10Code;
+  date: string;
+  notes?: string;
+  status: 'Active' | 'Resolved' | 'Chronic';
+  clinicId: string;
+}

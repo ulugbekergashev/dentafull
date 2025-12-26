@@ -652,6 +652,84 @@ app.get('/api/clinics/:id/bot-username', async (req, res) => {
     }
 });
 
+// --- ICD-10 & Diagnoses ---
+app.get('/api/icd10', authenticateToken, async (req, res) => {
+    try {
+        const { query } = req.query;
+        if (!query) {
+            return res.json([]);
+        }
+
+        const codes = await prisma.iCD10Code.findMany({
+            where: {
+                OR: [
+                    { code: { contains: query as string, mode: 'insensitive' } },
+                    { name: { contains: query as string, mode: 'insensitive' } },
+                    { category: { contains: query as string, mode: 'insensitive' } }
+                ]
+            },
+            take: 50
+        });
+        res.json(codes);
+    } catch (error) {
+        console.error('ICD-10 search error:', error);
+        res.status(500).json({ error: 'Failed to search ICD-10 codes' });
+    }
+});
+
+app.post('/api/diagnoses', authenticateToken, async (req, res) => {
+    try {
+        const { patientId, code, date, notes, status, clinicId } = req.body;
+
+        const diagnosis = await prisma.patientDiagnosis.create({
+            data: {
+                patientId,
+                code,
+                date,
+                notes,
+                status,
+                clinicId
+            },
+            include: { icd10: true }
+        });
+        res.json(diagnosis);
+    } catch (error) {
+        console.error('Create diagnosis error:', error);
+        res.status(500).json({ error: 'Failed to create diagnosis' });
+    }
+});
+
+app.get('/api/diagnoses', authenticateToken, async (req, res) => {
+    try {
+        const { patientId } = req.query;
+        if (!patientId) {
+            return res.status(400).json({ error: 'patientId is required' });
+        }
+
+        const diagnoses = await prisma.patientDiagnosis.findMany({
+            where: { patientId: patientId as string },
+            include: { icd10: true },
+            orderBy: { date: 'desc' }
+        });
+        res.json(diagnoses);
+    } catch (error) {
+        console.error('Get diagnoses error:', error);
+        res.status(500).json({ error: 'Failed to fetch diagnoses' });
+    }
+});
+
+app.delete('/api/diagnoses/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.patientDiagnosis.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete diagnosis error:', error);
+        res.status(500).json({ error: 'Failed to delete diagnosis' });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });

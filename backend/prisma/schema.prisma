@@ -42,6 +42,7 @@ model Patient {
   clinicId       String
   clinic         Clinic        @relation(fields: [clinicId], references: [id])
   appointments   Appointment[]
+  diagnoses      PatientDiagnosis[]
   
   @@unique([clinicId, telegramChatId])
   @@index([phone]) // Optimize phone lookup
@@ -117,6 +118,28 @@ model Clinic {
   appointments Appointment[]
   transactions Transaction[]
   services     Service[]
+  diagnoses    PatientDiagnosis[]
 
   @@index([botToken]) // Optimize bot startup
+}
+
+model ICD10Code {
+  code        String             @id
+  name        String
+  category    String?            // New field for grouping
+  description String?
+  diagnoses   PatientDiagnosis[]
+}
+
+model PatientDiagnosis {
+  id          String    @id @default(uuid())
+  patientId   String
+  patient     Patient   @relation(fields: [patientId], references: [id])
+  code        String
+  icd10       ICD10Code @relation(fields: [code], references: [code])
+  date        String
+  notes       String?
+  status      String // 'Active' | 'Resolved' | 'Chronic'
+  clinicId    String
+  clinic      Clinic    @relation(fields: [clinicId], references: [id])
 }

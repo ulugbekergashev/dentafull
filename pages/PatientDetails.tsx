@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis } from '../types';
 import { api } from '../services/api';
 
 interface PatientDetailsProps {
@@ -23,7 +23,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    patientId, patients, appointments, transactions, doctors, services,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment
 }) => {
-   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments'>('overview');
+   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'diagnoses'>('overview');
    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
    const [noteText, setNoteText] = useState('');
@@ -50,6 +50,69 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       duration: 60,
       notes: ''
    });
+
+   // Diagnosis State
+   const [diagnoses, setDiagnoses] = useState<PatientDiagnosis[]>([]);
+   const [isDiagnosisModalOpen, setIsDiagnosisModalOpen] = useState(false);
+   const [icd10Query, setIcd10Query] = useState('');
+   const [icd10Results, setIcd10Results] = useState<ICD10Code[]>([]);
+   const [selectedCode, setSelectedCode] = useState<ICD10Code | null>(null);
+   const [diagnosisNote, setDiagnosisNote] = useState('');
+
+   useEffect(() => {
+      if (patientId) {
+         api.diagnoses.getByPatient(patientId).then(setDiagnoses).catch(console.error);
+      }
+   }, [patientId]);
+
+   const handleSearchICD10 = async (query: string) => {
+      setIcd10Query(query);
+      if (query.length > 1) {
+         try {
+            const results = await api.diagnoses.searchCodes(query);
+            setIcd10Results(results);
+         } catch (e) {
+            console.error(e);
+         }
+      } else {
+         setIcd10Results([]);
+      }
+   };
+
+   const handleAddDiagnosis = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedCode || !patient) return;
+
+      try {
+         const newDiagnosis = await api.diagnoses.add({
+            patientId: patient.id,
+            code: selectedCode.code,
+            date: new Date().toISOString().split('T')[0],
+            notes: diagnosisNote,
+            status: 'Active',
+            clinicId: patient.clinicId
+         });
+         setDiagnoses([newDiagnosis, ...diagnoses]);
+         setIsDiagnosisModalOpen(false);
+         setSelectedCode(null);
+         setDiagnosisNote('');
+         setIcd10Query('');
+         setIcd10Results([]);
+         alert('Tashxis qo\'shildi!');
+      } catch (e) {
+         alert('Xatolik yuz berdi');
+      }
+   };
+
+   const handleDeleteDiagnosis = async (id: string) => {
+      if (!confirm('Tashxisni o\'chirishni xohlaysizmi?')) return;
+      try {
+         await api.diagnoses.delete(id);
+         setDiagnoses(diagnoses.filter(d => d.id !== id));
+      } catch (e) {
+         alert('Xatolik yuz berdi');
+      }
+   };
 
 
    if (!patient) {
@@ -238,6 +301,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <nav className="-mb-px flex space-x-8 overflow-x-auto">
                {[
                   { id: 'overview', label: 'Umumiy', icon: User },
+                  { id: 'diagnoses', label: 'Diagnostika', icon: Activity },
                   { id: 'chart', label: 'Tish Kartasi', icon: Activity },
                   { id: 'appointments', label: 'Qabullar', icon: Calendar },
                   { id: 'payments', label: 'To\'lovlar', icon: CreditCard },
@@ -326,6 +390,48 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         </div>
                      )}
                   </Card>
+               </div>
+            )}
+
+            {/* Diagnoses Tab */}
+            {activeTab === 'diagnoses' && (
+               <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bemor Tashxislari</h3>
+                     <Button onClick={() => setIsDiagnosisModalOpen(true)}>+ Tashxis Qo'shish</Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                     {diagnoses.length > 0 ? (
+                        diagnoses.map(diagnosis => (
+                           <Card key={diagnosis.id} className="p-4">
+                              <div className="flex justify-between items-start">
+                                 <div>
+                                    <div className="flex items-center gap-2">
+                                       <span className="font-bold text-lg text-gray-900 dark:text-white">{diagnosis.code}</span>
+                                       <span className="text-gray-600 dark:text-gray-300">{diagnosis.icd10?.name}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                       Sana: {diagnosis.date} • Status: <span className="font-medium text-blue-600">{diagnosis.status}</span>
+                                    </p>
+                                    {diagnosis.notes && (
+                                       <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 bg-gray-50 dark:bg-gray-800 p-2 rounded">
+                                          Izoh: {diagnosis.notes}
+                                       </p>
+                                    )}
+                                 </div>
+                                 <Button variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteDiagnosis(diagnosis.id)}>
+                                    O'chirish
+                                 </Button>
+                              </div>
+                           </Card>
+                        ))
+                     ) : (
+                        <div className="text-center py-10 text-gray-500">
+                           Hozircha tashxislar yo'q.
+                        </div>
+                     )}
+                  </div>
                </div>
             )}
 
@@ -587,6 +693,87 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsApptModalOpen(false)}>Bekor qilish</Button>
                   <Button type="submit">Band qilish</Button>
+               </div>
+            </form>
+         </Modal>
+
+         {/* Diagnosis Modal */}
+         <Modal isOpen={isDiagnosisModalOpen} onClose={() => setIsDiagnosisModalOpen(false)} title="Tashxis Qo'shish (MKB-10)">
+            <form onSubmit={handleAddDiagnosis} className="space-y-4">
+               {!selectedCode ? (
+                  <div className="space-y-4">
+                     {icd10Query ? (
+                        // Show codes within a selected category
+                        <div>
+                           <div className="flex items-center gap-2 mb-4">
+                              <Button variant="secondary" size="sm" onClick={() => { setIcd10Query(''); setIcd10Results([]); }}>
+                                 <ArrowLeft className="w-4 h-4" /> Ortga
+                              </Button>
+                              <h4 className="font-bold text-gray-900 dark:text-white">{icd10Query}</h4>
+                           </div>
+                           <div className="space-y-2 max-h-60 overflow-y-auto">
+                              {icd10Results.map(code => (
+                                 <div
+                                    key={code.code}
+                                    className="p-3 border rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-colors"
+                                    onClick={() => setSelectedCode(code)}
+                                 >
+                                    <div className="font-bold text-blue-600 dark:text-blue-400">{code.code}</div>
+                                    <div className="text-sm text-gray-700 dark:text-gray-300">{code.name}</div>
+                                 </div>
+                              ))}
+                           </div>
+                        </div>
+                     ) : (
+                        // Show Categories
+                        <div className="space-y-2">
+                           <p className="text-sm text-gray-500 mb-2">Kategoriyani tanlang:</p>
+                           {[
+                              "Og'iz bo'shlig'i kasalliklari",
+                              "Milk va periodontal kasalliklar",
+                              "Og'iz bo'shlig'i shilliq qavati va boshqa kasalliklar",
+                              "Jag' va temporomandibulyar bo'g'im kasalliklari",
+                              "Tish protezlari va davolash bilan bog'liq asoratlar"
+                           ].map(category => (
+                              <div
+                                 key={category}
+                                 className="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer flex justify-between items-center group"
+                                 onClick={() => handleSearchICD10(category)}
+                              >
+                                 <span className="font-medium text-gray-900 dark:text-white">{category}</span>
+                                 <ArrowLeft className="w-4 h-4 rotate-180 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                              </div>
+                           ))}
+                        </div>
+                     )}
+                  </div>
+               ) : (
+                  // Selected Code Confirmation
+                  <div className="space-y-4">
+                     <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+                        <div>
+                           <p className="font-bold text-blue-800 dark:text-blue-200">{selectedCode.code}</p>
+                           <p className="text-sm text-blue-700 dark:text-blue-300">{selectedCode.name}</p>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedCode(null)}>O'zgartirish</Button>
+                     </div>
+
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Izoh</label>
+                        <textarea
+                           className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                           rows={3}
+                           placeholder="Qo'shimcha izoh..."
+                           value={diagnosisNote}
+                           onChange={(e) => setDiagnosisNote(e.target.value)}
+                        />
+                     </div>
+                  </div>
+               )}
+
+               <div className="flex justify-end gap-2 pt-4 border-t dark:border-gray-700">
+                  <Button type="button" variant="secondary" onClick={() => { setIsDiagnosisModalOpen(false); setSelectedCode(null); setIcd10Query(''); }}>Yopish</Button>
+                  {selectedCode && <Button type="submit">Saqlash</Button>}
                </div>
             </form>
          </Modal>
