@@ -36,8 +36,13 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                 const data = await response.json();
                 setPhotos(data);
             } else {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Fetch photos error details:', errorData);
+                const text = await response.text();
+                try {
+                    const errorData = JSON.parse(text);
+                    console.error('Fetch photos error details:', errorData);
+                } catch (e) {
+                    console.error('Fetch photos non-JSON error:', text);
+                }
             }
         } catch (error) {
             console.error('Failed to fetch photos:', error);
@@ -74,9 +79,15 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                 await fetchPhotos();
                 handleCloseModal();
             } else {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Server error details:', errorData);
-                alert(`Failed to upload photo: ${errorData.details || errorData.error || 'Unknown error'}`);
+                const text = await response.text();
+                try {
+                    const errorData = JSON.parse(text);
+                    console.error('Server error details:', errorData);
+                    alert(`Failed to upload photo: ${errorData.details || errorData.error || 'Unknown error'}`);
+                } catch (e) {
+                    console.error('Server non-JSON error:', text);
+                    alert(`Failed to upload photo: Server returned non-JSON response. Check console for details.`);
+                }
             }
         } catch (error) {
             console.error('Upload error:', error);
