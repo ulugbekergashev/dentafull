@@ -799,50 +799,237 @@ app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), 
 
 app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
     try {
-        const photos = await prisma.patientPhoto.findMany({
-            where: { patientId: req.params.id },
+        res.status(500).json({ error: 'Failed to update clinic' });
+    }
+});
+
+app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.clinic.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Clinic delete error:', error);
+        res.status(500).json({ error: error.message || 'Failed to delete clinic' });
+    }
+});
+
+app.get('/api/plans', authenticateToken, async (req, res) => {
+    try {
+        const plans = await prisma.subscriptionPlan.findMany();
+        const parsedPlans = plans.map(p => ({
+            ...p,
+            features: JSON.parse(p.features)
+        }));
+        res.json(parsedPlans);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch plans' });
+    }
+});
+
+app.put('/api/plans/:id', authenticateToken, async (req, res) => {
+    try {
+        const data = { ...req.body };
+        if (data.features) {
+            data.features = JSON.stringify(data.features);
+        }
+        const plan = await prisma.subscriptionPlan.update({
+            where: { id: req.params.id },
+            data: data
+        });
+        res.json({ ...plan, features: JSON.parse(plan.features) });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update plan' });
+    }
+});
+
+// --- Bot Settings ---
+app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
+    try {
+        const { botToken } = req.body;
+        const clinicId = req.params.id;
+
+        // Update clinic with new bot token
+        const clinic = await prisma.clinic.update({
+            where: { id: clinicId },
+            data: { botToken: botToken || null }
+        });
+
+        // Restart bot if token is provided, otherwise remove it
+        if (botToken) {
+            botManager.startBot(clinicId, botToken);
+        } else {
+            botManager.removeBot(clinicId);
+        }
+
+        res.json({ success: true, clinic });
+    } catch (error: any) {
+        console.error('Bot settings update error:', error);
+        res.status(500).json({ error: error.message || 'Failed to update bot settings' });
+    }
+});
+
+// Get bot username for clinic (public endpoint - no auth needed)
+app.get('/api/clinics/:id/bot-username', async (req, res) => {
+    try {
+        const clinicId = req.params.id;
+        console.log(`Requesting bot username for clinic: ${clinicId}`);
+        const username = await botManager.getBotUsername(clinicId);
+        console.log(`Found username: ${username}`);
+        res.json({ botUsername: username });
+    } catch (error: any) {
+        console.error('Get bot username error:', error);
+        res.status(500).json({ error: error.message || 'Failed to get bot username' });
+    }
+});
+
+// --- ICD-10 & Diagnoses ---
+app.get('/api/icd10', authenticateToken, async (req, res) => {
+    try {
+        const { query } = req.query;
+        if (!query) {
+            return res.json([]);
+        }
+
+        const codes = await prisma.iCD10Code.findMany({
+            where: {
+                OR: [
+                    { code: { contains: query as string } },
+                    { name: { contains: query as string } },
+                    { category: { contains: query as string } }
+                ]
+            },
+            take: 50
+        });
+        res.json(codes);
+    } catch (error) {
+        console.error('ICD-10 search error:', error);
+        res.status(500).json({ error: 'Failed to search ICD-10 codes' });
+    }
+});
+
+app.post('/api/diagnoses', authenticateToken, async (req, res) => {
+    try {
+        const { patientId, code, date, notes, status, clinicId } = req.body;
+
+        const diagnosis = await prisma.patientDiagnosis.create({
+            data: {
+                patientId,
+                code,
+                date,
+                notes,
+                status,
+                clinicId
+            },
+            include: { icd10: true }
+        });
+        res.json(diagnosis);
+    } catch (error) {
+        console.error('Create diagnosis error:', error);
+        res.status(500).json({ error: 'Failed to create diagnosis' });
+    }
+});
+
+app.get('/api/diagnoses', authenticateToken, async (req, res) => {
+    try {
+        const { patientId } = req.query;
+        if (!patientId) {
+            return res.status(400).json({ error: 'patientId is required' });
+        }
+
+        const diagnoses = await prisma.patientDiagnosis.findMany({
+            where: { patientId: patientId as string },
+            include: { icd10: true },
             orderBy: { date: 'desc' }
         });
-        res.json(photos);
+        res.json(diagnoses);
     } catch (error) {
-        console.error('Get photos error:', error);
-        res.status(500).json({ error: 'Failed to fetch photos' });
+        console.error('Get diagnoses error:', error);
+        res.status(500).json({ error: 'Failed to fetch diagnoses' });
     }
 });
 
-app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
+app.delete('/api/diagnoses/:id', authenticateToken, async (req, res) => {
     try {
-        const photo = await prisma.patientPhoto.findUnique({
+        await prisma.patientDiagnosis.delete({
             where: { id: req.params.id }
         });
-
-        if (!photo) {
-            return res.status(404).json({ error: 'Photo not found' });
-        }
-
-        // Extract public_id from Cloudinary URL and delete from Cloudinary
-        const urlParts = photo.url.split('/');
-        const publicIdWithExt = urlParts[urlParts.length - 1];
-        const publicId = `patient-photos/${publicIdWithExt.split('.')[0]}`;
-
-        try {
-            await cloudinary.uploader.destroy(publicId);
-        } catch (cloudinaryError) {
-            console.error('Cloudinary deletion error:', cloudinaryError);
-            // Continue with database deletion even if Cloudinary fails
-        }
-
-        await prisma.patientPhoto.delete({
-            where: { id: req.params.id }
-        });
-
         res.json({ success: true });
     } catch (error) {
-        console.error('Delete photo error:', error);
-        res.status(500).json({ error: 'Failed to delete photo' });
+        console.error('Delete diagnosis error:', error);
+        res.status(500).json({ error: 'Failed to delete diagnosis' });
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+// --- Patient Photos ---
+app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const { description, category } = req.body;
+        const patientId = req.params.id;
+
+        const photo = await prisma.patientPhoto.create({
+            data: {
+                patientId,
+                url: (req.file as any).path, // Cloudinary URL
+                description,
+                category: category || 'Other'
+            }
+        });
+
+        res.json(photo);
+    } catch (error: any) {
+        console.error('Upload photo error:', error);
+        res.status(500).json({
+            error: 'Failed to upload photo',
+            details: error.message || 'Unknown error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
 });
+
+app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
+    try {
+        const photos = await prisma.patientPhoto.findMany({
+            where: { patientId: req.params.id },
+
+            app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
+                try {
+                    const photo = await prisma.patientPhoto.findUnique({
+                        where: { id: req.params.id }
+                    });
+
+                    if (!photo) {
+                        return res.status(404).json({ error: 'Photo not found' });
+                    }
+
+                    // Delete from Cloudinary
+                    if (photo.url.includes('cloudinary')) {
+                        const publicId = photo.url.split('/').pop()?.split('.')[0];
+                        if (publicId) {
+                            await cloudinary.uploader.destroy(`patient-photos/${publicId}`);
+                        }
+                    }
+
+                    await prisma.patientPhoto.delete({
+                        where: { id: req.params.id }
+                    });
+
+                    res.json({ success: true });
+                } catch (error: any) {
+                    console.error('Delete photo error:', error);
+                    res.status(500).json({
+                        error: 'Failed to delete photo',
+                        details: error.message || 'Unknown error',
+                        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                    });
+                }
+            });
+
+            app.listen(PORT, () => {
+                console.log(`Server is running on port ${PORT}`);
+            });
