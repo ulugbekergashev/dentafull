@@ -35,6 +35,9 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
             if (response.ok) {
                 const data = await response.json();
                 setPhotos(data);
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Fetch photos error details:', errorData);
             }
         } catch (error) {
             console.error('Failed to fetch photos:', error);

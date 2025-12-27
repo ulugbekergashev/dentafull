@@ -996,40 +996,52 @@ app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
     try {
         const photos = await prisma.patientPhoto.findMany({
             where: { patientId: req.params.id },
+            orderBy: { date: 'desc' }
+        });
+        res.json(photos);
+    } catch (error: any) {
+        console.error('Get photos error:', error);
+        res.status(500).json({
+            error: 'Failed to fetch photos',
+            details: error.message || 'Unknown error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+});
 
-            app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
-                try {
-                    const photo = await prisma.patientPhoto.findUnique({
-                        where: { id: req.params.id }
-                    });
+app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
+    try {
+        const photo = await prisma.patientPhoto.findUnique({
+            where: { id: req.params.id }
+        });
 
-                    if (!photo) {
-                        return res.status(404).json({ error: 'Photo not found' });
-                    }
+        if (!photo) {
+            return res.status(404).json({ error: 'Photo not found' });
+        }
 
-                    // Delete from Cloudinary
-                    if (photo.url.includes('cloudinary')) {
-                        const publicId = photo.url.split('/').pop()?.split('.')[0];
-                        if (publicId) {
-                            await cloudinary.uploader.destroy(`patient-photos/${publicId}`);
-                        }
-                    }
+        // Delete from Cloudinary
+        if (photo.url.includes('cloudinary')) {
+            const publicId = photo.url.split('/').pop()?.split('.')[0];
+            if (publicId) {
+                await cloudinary.uploader.destroy(`patient-photos/${publicId}`);
+            }
+        }
 
-                    await prisma.patientPhoto.delete({
-                        where: { id: req.params.id }
-                    });
+        await prisma.patientPhoto.delete({
+            where: { id: req.params.id }
+        });
 
-                    res.json({ success: true });
-                } catch (error: any) {
-                    console.error('Delete photo error:', error);
-                    res.status(500).json({
-                        error: 'Failed to delete photo',
-                        details: error.message || 'Unknown error',
-                        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-                    });
-                }
-            });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Delete photo error:', error);
+        res.status(500).json({
+            error: 'Failed to delete photo',
+            details: error.message || 'Unknown error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+});
 
-            app.listen(PORT, () => {
-                console.log(`Server is running on port ${PORT}`);
-            });
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
