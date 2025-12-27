@@ -7,7 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "ts-node server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "switch:dev": "node scripts/set-provider.js sqlite",
+    "switch:prod": "node scripts/set-provider.js postgresql"
   },
   "keywords": [],
   "author": "",
