@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UserRole, Doctor, Clinic, SubscriptionPlan } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot } from 'lucide-react';
-import { api } from '../services/api';
+import { api, API_URL } from '../services/api';
 
 interface SettingsProps {
    userRole: UserRole;
@@ -85,7 +85,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   return;
                }
 
-               const response = await fetch(`http://localhost:3001/api/clinics/${currentClinic.id}/bot-username`, {
+               const response = await fetch(`${API_URL}/clinics/${currentClinic.id}/bot-username`, {
                   headers: {
                      'Authorization': `Bearer ${token}`
                   }
@@ -402,7 +402,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               if (botToken) {
                                  setTimeout(async () => {
                                     try {
-                                       const usernameResponse = await fetch(`http://localhost:3001/api/clinics/${currentClinic.id}/bot-username`, {
+                                       const usernameResponse = await fetch(`${API_URL}/clinics/${currentClinic.id}/bot-username`, {
                                           headers: {
                                              'Authorization': `Bearer ${JSON.parse(localStorage.getItem('dentalflow_auth') || '{}').token}`
                                           }

@@ -1,10 +1,16 @@
 import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, ICD10Code, PatientDiagnosis } from '../types';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
-const isProduction = window.location.hostname === 'dentafull.vercel.app';
+const isProduction = window.location.hostname.includes('vercel.app');
 export const API_URL = isProduction
     ? 'https://dentafull-production.up.railway.app/api'
     : (import.meta.env.VITE_API_URL || 'http://localhost:3001/api');
+
+console.log('🔌 API Configuration:', {
+    hostname: window.location.hostname,
+    isProduction,
+    API_URL
+});
 
 async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
     const headers: HeadersInit = {
