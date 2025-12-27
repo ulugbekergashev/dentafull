@@ -62,6 +62,28 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
         formData.append('photo', selectedFile);
         formData.append('description', description);
         formData.append('category', category);
+
+        try {
+            const response = await fetch(`${API_URL}/patients/${patientId}/photos`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData
+            });
+
+            if (response.ok) {
+                await fetchPhotos();
+                handleCloseModal();
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Server error details:', errorData);
+                alert(`Failed to upload photo: ${errorData.details || errorData.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Error uploading photo');
+        } finally {
+            setUploading(false);
+        }
     };
 
     const handleDelete = async (photoId: string) => {
