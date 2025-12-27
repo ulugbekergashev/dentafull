@@ -4,6 +4,28 @@ import { botManager } from './botManager';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir);
+}
+
+// Configure Multer
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({ storage: storage });
 
 const prisma = new PrismaClient();
 const app = express();
@@ -12,6 +34,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_202
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 // --- Middleware ---
 const authenticateToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -663,9 +686,9 @@ app.get('/api/icd10', authenticateToken, async (req, res) => {
         const codes = await prisma.iCD10Code.findMany({
             where: {
                 OR: [
-                    { code: { contains: query as string, mode: 'insensitive' } },
-                    { name: { contains: query as string, mode: 'insensitive' } },
-                    { category: { contains: query as string, mode: 'insensitive' } }
+                    { code: { contains: query as string } },
+                    { name: { contains: query as string } },
+                    { category: { contains: query as string } }
                 ]
             },
             take: 50
@@ -727,6 +750,72 @@ app.delete('/api/diagnoses/:id', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Delete diagnosis error:', error);
         res.status(500).json({ error: 'Failed to delete diagnosis' });
+    }
+});
+
+// --- Patient Photos ---
+app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const { description, category } = req.body;
+        const patientId = req.params.id;
+
+        const photo = await prisma.patientPhoto.create({
+            data: {
+                patientId,
+                url: `/uploads/${req.file.filename}`,
+                description,
+                category: category || 'Other'
+            }
+        });
+
+        res.json(photo);
+    } catch (error) {
+        console.error('Upload photo error:', error);
+        res.status(500).json({ error: 'Failed to upload photo' });
+    }
+});
+
+app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
+    try {
+        const photos = await prisma.patientPhoto.findMany({
+            where: { patientId: req.params.id },
+            orderBy: { date: 'desc' }
+        });
+        res.json(photos);
+    } catch (error) {
+        console.error('Get photos error:', error);
+        res.status(500).json({ error: 'Failed to fetch photos' });
+    }
+});
+
+app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
+    try {
+        const photo = await prisma.patientPhoto.findUnique({
+            where: { id: req.params.id }
+        });
+
+        if (!photo) {
+            return res.status(404).json({ error: 'Photo not found' });
+        }
+
+        // Delete file from filesystem
+        const filePath = path.join(__dirname, photo.url.substring(1)); // Remove leading slash
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+
+        await prisma.patientPhoto.delete({
+            where: { id: req.params.id }
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete photo error:', error);
+        res.status(500).json({ error: 'Failed to delete photo' });
     }
 });
 

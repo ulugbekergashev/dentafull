@@ -21,3 +21,6 @@ prisma/migrations/*_migration.sql
 
 # Build
 dist/
+
+# Uploads
+uploads/

@@ -46,6 +46,18 @@ model Patient {
   
   @@unique([clinicId, telegramChatId])
   @@index([phone]) // Optimize phone lookup
+  photos         PatientPhoto[]
+}
+
+model PatientPhoto {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  url         String   // Path to the file
+  description String?
+  category    String   // 'Before', 'After', 'X-Ray', 'Other'
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
 }
 
 model Appointment {

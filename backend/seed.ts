@@ -72,19 +72,43 @@ const MOCK_CLINICS = [
 ];
 
 async function main() {
+  const forceSeed = process.env.FORCE_SEED === 'true';
+
+  // Check if database is already seeded
+  const existingClinics = await prisma.clinic.count();
+  const existingUsers = await prisma.doctor.count();
+
+  if (existingClinics > 0 || existingUsers > 0) {
+    if (!forceSeed) {
+      console.log('Database is not empty. Skipping seed to prevent data loss.');
+      console.log('To force seed (and WIPE ALL DATA), run with FORCE_SEED=true');
+      return;
+    } else {
+      console.warn('WARNING: FORCE_SEED is set. Wiping all data...');
+    }
+  }
+
   console.log('Seeding database...');
 
-  // Clear existing data
-  await prisma.service.deleteMany({});
-  await prisma.transaction.deleteMany({});
-  await prisma.appointment.deleteMany({});
-  await prisma.patient.deleteMany({});
-  await prisma.doctor.deleteMany({});
-  await prisma.clinic.deleteMany({});
-  await prisma.subscriptionPlan.deleteMany({});
+  // Clear existing data (only if forced or empty - effectively only if we are here)
+  if (forceSeed) {
+    await prisma.service.deleteMany({});
+    await prisma.transaction.deleteMany({});
+    await prisma.appointment.deleteMany({});
+    await prisma.patient.deleteMany({});
+    await prisma.doctor.deleteMany({});
+    await prisma.clinic.deleteMany({});
+    await prisma.subscriptionPlan.deleteMany({});
+  }
 
   // Seed subscription plans
   for (const plan of SUBSCRIPTION_PLANS) {
+    // Upsert to avoid duplicates if partial data exists (though we return early above usually)
+    // But for safety let's use upsert or just create if we wiped.
+    // Since we only proceed if empty or forced-wiped, create is fine, but upsert is safer generally.
+    // However, keeping it simple as per plan: just gate the whole thing.
+    // But wait, if I don't wipe, I shouldn't try to create duplicates.
+    // The logic above returns if not empty. So here we are either empty or wiped.
     await prisma.subscriptionPlan.create({
       data: plan,
     });

@@ -130,3 +130,13 @@ export interface PatientDiagnosis {
   status: 'Active' | 'Resolved' | 'Chronic';
   clinicId: string;
 }
+
+export interface PatientPhoto {
+  id: string;
+  patientId: string;
+  url: string;
+  description?: string;
+  category: string;
+  date: string;
+  createdAt: string;
+}

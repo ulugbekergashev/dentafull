@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
+import { PatientPhotos } from '../components/PatientPhotos';
 import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis } from '../types';
 import { api } from '../services/api';
 
@@ -58,6 +59,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [icd10Results, setIcd10Results] = useState<ICD10Code[]>([]);
    const [selectedCode, setSelectedCode] = useState<ICD10Code | null>(null);
    const [diagnosisNote, setDiagnosisNote] = useState('');
+   const [token, setToken] = useState('');
+
+   useEffect(() => {
+      const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+      if (storedAuth) {
+         try {
+            const { token } = JSON.parse(storedAuth);
+            setToken(token);
+         } catch (e) {
+            console.error('Failed to parse auth token');
+         }
+      }
+   }, []);
 
    useEffect(() => {
       if (patientId) {
@@ -303,6 +317,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   { id: 'overview', label: 'Umumiy', icon: User },
                   { id: 'diagnoses', label: 'Diagnostika', icon: Activity },
                   { id: 'chart', label: 'Tish Kartasi', icon: Activity },
+                  { id: 'photos', label: 'Rasmlar', icon: FileText },
                   { id: 'appointments', label: 'Qabullar', icon: Calendar },
                   { id: 'payments', label: 'To\'lovlar', icon: CreditCard },
                ].map(tab => (
@@ -447,6 +462,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   </div>
                   <TeethChart initialData={[]} />
                </div>
+            )}
+
+            {/* Photos Tab */}
+            {activeTab === 'photos' && (
+               <PatientPhotos patientId={patient.id} clinicId={patient.clinicId} token={token} />
             )}
 
             {/* Appointments Tab */}
