@@ -32,7 +32,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
 
-app.use(cors());
+// CORS configuration
+app.use(cors({
+    origin: [
+        'http://localhost:3000',
+        'https://dentafull.vercel.app',
+        'https://dentafull-production.up.railway.app'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
