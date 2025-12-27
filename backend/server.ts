@@ -7,21 +7,25 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir);
-}
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dj2qs9kgk',
+    api_key: process.env.CLOUDINARY_API_KEY || '628899167499441',
+    api_secret: process.env.CLOUDINARY_API_SECRET || 'RiLepq8hhEn2QlX0DqkeAmbNl0c'
+});
 
-// Configure Multer
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
+// Configure Multer with Cloudinary Storage
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: async (req, file) => {
+        return {
+            folder: 'patient-photos',
+            allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+            public_id: `${Date.now()}-${Math.round(Math.random() * 1E9)}`
+        };
     }
 });
 
@@ -776,7 +780,7 @@ app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), 
         const photo = await prisma.patientPhoto.create({
             data: {
                 patientId,
-                url: `/uploads/${req.file.filename}`,
+                url: (req.file as any).path, // Cloudinary URL
                 description,
                 category: category || 'Other'
             }
@@ -812,10 +816,16 @@ app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Photo not found' });
         }
 
-        // Delete file from filesystem
-        const filePath = path.join(__dirname, photo.url.substring(1)); // Remove leading slash
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
+        // Extract public_id from Cloudinary URL and delete from Cloudinary
+        const urlParts = photo.url.split('/');
+        const publicIdWithExt = urlParts[urlParts.length - 1];
+        const publicId = `patient-photos/${publicIdWithExt.split('.')[0]}`;
+
+        try {
+            await cloudinary.uploader.destroy(publicId);
+        } catch (cloudinaryError) {
+            console.error('Cloudinary deletion error:', cloudinaryError);
+            // Continue with database deletion even if Cloudinary fails
         }
 
         await prisma.patientPhoto.delete({
