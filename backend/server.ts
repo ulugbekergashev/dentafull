@@ -797,11 +797,7 @@ app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), 
     }
 });
 
-app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
-    try {
-        res.status(500).json({ error: 'Failed to update clinic' });
-    }
-});
+
 
 app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
     try {
@@ -1040,6 +1036,16 @@ app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
+});
+
+// Global error handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('Unhandled error:', err);
+    res.status(500).json({
+        error: 'Internal Server Error',
+        details: err.message || 'Unknown error',
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
 });
 
 app.listen(PORT, () => {
