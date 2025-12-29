@@ -31,6 +31,11 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 
+const prisma = new PrismaClient();
+const app = express();
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
+
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
@@ -1034,7 +1039,7 @@ app.get('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
         });
 
         // Parse conditions JSON
-        const parsedTeeth = teeth.map(t => ({
+        const parsedTeeth = teeth.map((t: any) => ({
             ...t,
             conditions: JSON.parse(t.conditions)
         }));
