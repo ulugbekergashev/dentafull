@@ -31,40 +31,12 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 
-const prisma = new PrismaClient();
-const app = express();
-const PORT = process.env.PORT || 3001;
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
-
-// CORS configuration
-// CORS configuration
-app.use(cors({
-    origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-
-        const allowedOrigins = [
-            'http://localhost:3000',
-            'http://localhost:5173',
-            'https://dentafull.vercel.app',
-            'https://dentafull-production.up.railway.app'
-        ];
-
-        // Allow Vercel preview deployments
-        if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
-            callback(null, true);
-        } else {
-            console.log('Blocked by CORS:', origin);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
-}));
-app.options('*', cors()); // Enable pre-flight for all routes
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
+
+app.get('/', (req, res) => {
+    res.send('Dental CRM Backend is running!');
+});
 
 // --- Middleware ---
 const authenticateToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
