@@ -22,7 +22,8 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
     phone: '',
     dob: '',
     gender: 'Male',
-    medicalHistory: ''
+    medicalHistory: '',
+    address: ''
   });
 
   const filteredPatients = patients.filter(p => {
@@ -52,7 +53,8 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
       phone: '',
       dob: '',
       gender: 'Male',
-      medicalHistory: ''
+      medicalHistory: '',
+      address: ''
     });
   };
 
@@ -212,12 +214,13 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
               placeholder="Allergiya, surunkali kasalliklar..."
             ></textarea>
           </div>
+          <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder="Toshkent sh., Chilonzor t..." />
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>Bekor qilish</Button>
             <Button type="submit">Saqlash</Button>
           </div>
         </form>
       </Modal>
-    </div>
+    </div >
   );
 };

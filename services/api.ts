@@ -192,4 +192,12 @@ export const api = {
             method: 'DELETE',
         }),
     },
+    teeth: {
+        getAll: (patientId: string) => fetchJson<any[]>(`/patients/${patientId}/teeth`),
+        save: (patientId: string, data: { number: number; conditions: any[]; notes: string }) => fetchJson<any>(`/patients/${patientId}/teeth`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+    },
 };

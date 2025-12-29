@@ -1038,6 +1038,61 @@ app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Tooth Data ---
+app.get('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
+    try {
+        const teeth = await prisma.toothData.findMany({
+            where: { patientId: req.params.id }
+        });
+
+        // Parse conditions JSON
+        const parsedTeeth = teeth.map(t => ({
+            ...t,
+            conditions: JSON.parse(t.conditions)
+        }));
+
+        res.json(parsedTeeth);
+    } catch (error) {
+        console.error('Get teeth error:', error);
+        res.status(500).json({ error: 'Failed to fetch tooth data' });
+    }
+});
+
+app.post('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
+    try {
+        const patientId = req.params.id;
+        const { number, conditions, notes } = req.body;
+
+        // Upsert tooth data
+        const tooth = await prisma.toothData.upsert({
+            where: {
+                patientId_number: {
+                    patientId,
+                    number
+                }
+            },
+            update: {
+                conditions: JSON.stringify(conditions),
+                notes
+            },
+            create: {
+                patientId,
+                number,
+                conditions: JSON.stringify(conditions),
+                notes
+            }
+        });
+
+        res.json({
+            ...tooth,
+            conditions: JSON.parse(tooth.conditions)
+        });
+    } catch (error) {
+        console.error('Save tooth error:', error);
+        res.status(500).json({ error: 'Failed to save tooth data' });
+    }
+});
+
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('Unhandled error:', err);

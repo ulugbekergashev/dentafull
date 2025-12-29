@@ -41,6 +41,7 @@ export interface Patient {
   status: 'Active' | 'Archived';
   gender: 'Male' | 'Female';
   medicalHistory: string;
+  address?: string;
   clinicId: string;
   telegramChatId?: string;
 }

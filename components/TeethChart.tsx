@@ -235,7 +235,13 @@ const RealisticTooth: React.FC<{
   );
 };
 
-export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOnly = false }) => {
+interface TeethChartProps {
+  initialData?: ToothData[];
+  readOnly?: boolean;
+  onSave?: (data: { number: number; conditions: ToothStatus[]; notes: string }) => void;
+}
+
+export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOnly = false, onSave }) => {
   const [toothType, setToothType] = useState<'permanent' | 'primary'>('permanent');
 
   const [teethData, setTeethData] = useState<Record<number, { conditions: ToothStatus[]; notes: string }>>(() => {
@@ -251,6 +257,21 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
     });
     return map;
   });
+
+  // Update local state when initialData changes
+  React.useEffect(() => {
+    if (initialData.length > 0) {
+      setTeethData(prev => {
+        const next = { ...prev };
+        initialData.forEach(d => {
+          if (next[d.number]) {
+            next[d.number] = { conditions: d.conditions || [], notes: d.notes || '' };
+          }
+        });
+        return next;
+      });
+    }
+  }, [initialData]);
 
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
   const [tempConditions, setTempConditions] = useState<ToothStatus[]>([]);
@@ -288,10 +309,16 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
 
   const saveChanges = () => {
     if (selectedTooth) {
+      const newData = { conditions: tempConditions, notes: tempNotes };
       setTeethData(prev => ({
         ...prev,
-        [selectedTooth]: { conditions: tempConditions, notes: tempNotes }
+        [selectedTooth]: newData
       }));
+
+      if (onSave) {
+        onSave({ number: selectedTooth, ...newData });
+      }
+
       setSelectedTooth(null);
     }
   };

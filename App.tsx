@@ -258,7 +258,7 @@ const App: React.FC = () => {
     try {
       console.log('Updating transaction:', id, data);
       // Only send the fields we want to update
-      const updateData = { status: data.status };
+      const updateData = { ...data };
       const updated = await api.transactions.update(id, updateData);
       setTransactions(prev => prev.map(t => t.id === id ? updated : t));
       addToast('success', 'To\'lov holati yangilandi.');

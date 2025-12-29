@@ -61,6 +61,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [diagnosisNote, setDiagnosisNote] = useState('');
    const [token, setToken] = useState('');
 
+   // Tooth Data State
+   const [teethData, setTeethData] = useState<any[]>([]);
+
+   // Payment Edit State
+   const [isPaymentEditModalOpen, setIsPaymentEditModalOpen] = useState(false);
+   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+   const [editPaymentAmount, setEditPaymentAmount] = useState('');
+
    useEffect(() => {
       const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
       if (storedAuth) {
@@ -76,6 +84,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    useEffect(() => {
       if (patientId) {
          api.diagnoses.getByPatient(patientId).then(setDiagnoses).catch(console.error);
+         api.teeth.getAll(patientId).then(setTeethData).catch(console.error);
       }
    }, [patientId]);
 
@@ -126,6 +135,36 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       } catch (e) {
          alert('Xatolik yuz berdi');
       }
+   };
+
+   const handleSaveTeeth = async (data: { number: number; conditions: any[]; notes: string }) => {
+      if (!patientId) return;
+      try {
+         await api.teeth.save(patientId, data);
+         // Update local state if needed, but TeethChart handles its own state mostly
+         // We could refresh all teeth data here to be safe
+         const updatedTeeth = await api.teeth.getAll(patientId);
+         setTeethData(updatedTeeth);
+      } catch (e) {
+         console.error('Failed to save tooth data', e);
+         alert('Tish ma\'lumotlarini saqlashda xatolik yuz berdi');
+      }
+   };
+
+   const handleEditPaymentOpen = (transaction: Transaction) => {
+      setEditingTransaction(transaction);
+      setEditPaymentAmount(transaction.amount.toString());
+      setIsPaymentEditModalOpen(true);
+   };
+
+   const handleEditPaymentSave = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editingTransaction) return;
+
+      onUpdateTransaction(editingTransaction.id, { amount: Number(editPaymentAmount) });
+      setIsPaymentEditModalOpen(false);
+      setEditingTransaction(null);
+      setEditPaymentAmount('');
    };
 
 
@@ -287,7 +326,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <Phone className="w-4 h-4" /> {patient.phone}
                      </div>
                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                        <MapPin className="w-4 h-4" /> Tashkent, Uzbekistan
+                        <MapPin className="w-4 h-4" /> {patient.address || 'Manzil kiritilmagan'}
                      </div>
                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                         <Clock className="w-4 h-4" /> Oxirgi tashrif: {patient.lastVisit}
@@ -457,10 +496,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">Odontogramma</h3>
                      <div className="flex gap-2">
                         <Button variant="secondary" size="sm" onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Chop etish</Button>
-                        <Button size="sm" onClick={() => alert('Faqat vizual saqlandi (Mock)')}>O'zgarishlarni Saqlash</Button>
                      </div>
                   </div>
-                  <TeethChart initialData={[]} />
+                  <TeethChart initialData={teethData} onSave={handleSaveTeeth} />
                </div>
             )}
 
@@ -530,14 +568,23 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               <td className="p-4 text-gray-900 dark:text-white font-medium">{t.amount.toLocaleString()} UZS</td>
                               <td className="p-4"><Badge status={t.status} /></td>
                               <td className="p-4">
-                                 {t.status === 'Pending' && (
+                                 <div className="flex gap-2">
+                                    {t.status === 'Pending' && (
+                                       <Button
+                                          size="sm"
+                                          onClick={() => onUpdateTransaction(t.id, { status: 'Paid' })}
+                                       >
+                                          To'landi
+                                       </Button>
+                                    )}
                                     <Button
                                        size="sm"
-                                       onClick={() => onUpdateTransaction(t.id, { status: 'Paid' })}
+                                       variant="secondary"
+                                       onClick={() => handleEditPaymentOpen(t)}
                                     >
-                                       To'landi
+                                       <Edit className="w-4 h-4" />
                                     </Button>
-                                 )}
+                                 </div>
                               </td>
                            </tr>
                         ))}
@@ -606,6 +653,30 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                </div>
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsPaymentModalOpen(false)}>Bekor qilish</Button>
+                  <Button type="submit">Saqlash</Button>
+               </div>
+            </form>
+         </Modal>
+
+         {/* Payment Edit Modal */}
+         <Modal isOpen={isPaymentEditModalOpen} onClose={() => setIsPaymentEditModalOpen(false)} title="To'lovni Tahrirlash">
+            <form onSubmit={handleEditPaymentSave} className="space-y-4">
+               <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-4">
+                  <p className="text-sm text-gray-500">Xizmat:</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{editingTransaction?.service}</p>
+                  <p className="text-sm text-gray-500 mt-2">Sana:</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{editingTransaction?.date}</p>
+               </div>
+               <Input
+                  label="Summa"
+                  type="number"
+                  value={editPaymentAmount}
+                  onChange={e => setEditPaymentAmount(e.target.value)}
+                  placeholder="0.00"
+                  required
+               />
+               <div className="flex justify-end gap-2 pt-4">
+                  <Button type="button" variant="secondary" onClick={() => setIsPaymentEditModalOpen(false)}>Bekor qilish</Button>
                   <Button type="submit">Saqlash</Button>
                </div>
             </form>

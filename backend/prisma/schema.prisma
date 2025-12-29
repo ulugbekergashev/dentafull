@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model Doctor {
@@ -38,6 +38,7 @@ model Patient {
   status         String // 'Active' | 'Archived'
   gender         String // 'Male' | 'Female'
   medicalHistory String
+  address        String? // Optional address
   telegramChatId String?
   clinicId       String
   clinic         Clinic        @relation(fields: [clinicId], references: [id])
@@ -47,6 +48,19 @@ model Patient {
   @@unique([clinicId, telegramChatId])
   @@index([phone]) // Optimize phone lookup
   photos         PatientPhoto[]
+  teeth          ToothData[]
+}
+
+model ToothData {
+  id          Int      @id @default(autoincrement())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id])
+  number      Int
+  conditions  String   // JSON string of ToothStatus[]
+  notes       String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([patientId, number])
 }
 
 model PatientPhoto {
