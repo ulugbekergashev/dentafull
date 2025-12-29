@@ -183,7 +183,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
     onAddAppointment({
       patientId: patient.id,
-      patientName: `${patient.firstName} ${patient.lastName}`,
+      patientName: `${patient.lastName} ${patient.firstName}`,
       doctorId: doctor.id,
       doctorName: `Dr. ${doctor.lastName}`,
       type: formData.type || 'Konsultatsiya',
@@ -401,7 +401,7 @@ export const Calendar: React.FC<CalendarProps> = ({
         <form onSubmit={handleAddSubmit} className="space-y-4">
           <Select
             label="Bemor"
-            options={patients.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))}
+            options={patients.map(p => ({ value: p.id, label: `${p.lastName} ${p.firstName}` }))}
             value={formData.patientId}
             onChange={(e) => setFormData({ ...formData, patientId: e.target.value })}
           />

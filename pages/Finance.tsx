@@ -69,7 +69,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   // Create a map of patientName -> patientId from patients list
   const patientIdMap = new Map<string, string>();
   patients.forEach(p => {
-    patientIdMap.set(`${p.firstName} ${p.lastName}`, p.id);
+    patientIdMap.set(`${p.lastName} ${p.firstName}`, p.id);
     // Also map just first name or variations if needed, but for now exact match or partial
     patientIdMap.set(p.firstName, p.id); // Fallback
   });
@@ -89,7 +89,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
         name: t.patientName,
         amount: t.amount,
         date: t.date,
-        patientId: patientIdMap.get(t.patientName) || patients.find(p => `${p.firstName} ${p.lastName}` === t.patientName)?.id
+        patientId: patientIdMap.get(t.patientName) || patients.find(p => `${p.lastName} ${p.firstName}` === t.patientName)?.id
       });
     }
   });

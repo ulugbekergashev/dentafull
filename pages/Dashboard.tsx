@@ -343,7 +343,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 const createdDate = new Date(patient.lastVisit);
                 activities.push({
                   type: 'patient',
-                  text: `Yangi bemor ro'yxatga olindi: ${patient.firstName} ${patient.lastName}`,
+                  text: `Yangi bemor ro'yxatga olindi: ${patient.lastName} ${patient.firstName}`,
                   time: createdDate,
                   icon: Users,
                   color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'

@@ -14,21 +14,57 @@ const TOOTH_NUMBERS = {
   lower: [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38]
 };
 
+const PRIMARY_TOOTH_NUMBERS = {
+  upper: [55, 54, 53, 52, 51, 61, 62, 63, 64, 65],
+  lower: [85, 84, 83, 82, 81, 71, 72, 73, 74, 75]
+};
+
+// Convert tooth number to Roman numeral for primary teeth
+const toRomanNumeral = (num: number): string => {
+  const lastDigit = num % 10;
+  const romanNumerals = ['', 'I', 'II', 'III', 'IV', 'V'];
+  return romanNumerals[lastDigit] || num.toString();
+};
+
 const STATUS_LABELS: Record<string, string> = {
   [ToothStatus.HEALTHY]: 'Sog\'lom',
   [ToothStatus.CAVITY]: 'Karis',
-  [ToothStatus.FILLED]: 'Plomba',
+  [ToothStatus.FILLED]: 'Plombalangan',
   [ToothStatus.MISSING]: 'Yo\'q (Missing)',
   [ToothStatus.CROWN]: 'Qoplama (Crown)',
+  [ToothStatus.PULPITIS]: 'Pulpit',
+  [ToothStatus.PERIODONTITIS]: 'Periodontit',
+  [ToothStatus.ABSCESS]: 'Absses',
+  [ToothStatus.PHLEGMON]: 'Flegmona',
+  [ToothStatus.OSTEOMYELITIS]: 'Osteomiyelit',
 };
+
+// Physical states can combine with diseases
+const PHYSICAL_STATES = [ToothStatus.FILLED, ToothStatus.MISSING, ToothStatus.CROWN];
+
+// Disease states are mutually exclusive (severity levels)
+const DISEASE_STATES = [
+  ToothStatus.CAVITY,
+  ToothStatus.PULPITIS,
+  ToothStatus.PERIODONTITIS,
+  ToothStatus.ABSCESS,
+  ToothStatus.PHLEGMON,
+  ToothStatus.OSTEOMYELITIS
+];
 
 // --- Ultra-Realistic 3D Render Style Tooth ---
 const RealisticTooth: React.FC<{
   number: number;
-  status: ToothStatus;
+  conditions: ToothStatus[];
   isUpper: boolean;
+  isPrimary?: boolean;
   onClick: () => void;
-}> = ({ number, status, isUpper, onClick }) => {
+}> = ({ number, conditions, isUpper, isPrimary = false, onClick }) => {
+  const hasCondition = (cond: ToothStatus) => conditions.includes(cond);
+  const isHealthy = conditions.length === 0;
+
+  // Display Roman numerals for primary teeth
+  const displayNumber = isPrimary ? toRomanNumeral(number) : number.toString();
 
   // Transforms for Upper/Lower jaws (Flip vertically)
   const transform = isUpper ? "rotate(180 50 60)" : "";
@@ -39,11 +75,11 @@ const RealisticTooth: React.FC<{
       className="flex flex-col items-center cursor-pointer group relative transition-transform hover:-translate-y-1"
     >
       {/* Tooth Number */}
-      <span className={`mb-1 text-[10px] sm:text-xs font-bold font-mono ${status !== ToothStatus.HEALTHY ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}>
-        {number}
+      <span className={`mb-1 text-[10px] sm:text-xs font-bold font-mono ${!isHealthy ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}>
+        {displayNumber}
       </span>
 
-      <div className="w-8 h-12 sm:w-14 sm:h-20 relative filter drop-shadow-lg transition-all duration-300">
+      <div className={`${isPrimary ? 'w-6 h-10 sm:w-10 sm:h-16' : 'w-8 h-12 sm:w-14 sm:h-20'} relative filter drop-shadow-lg transition-all duration-300`}>
         <svg viewBox="0 0 100 120" className="w-full h-full overflow-visible">
           <defs>
             {/* 1. 3D Glossy Enamel Filter (The "NanoBanana" Look) */}
@@ -92,7 +128,7 @@ const RealisticTooth: React.FC<{
           </defs>
 
           <g transform={transform}>
-            {status === ToothStatus.MISSING ? (
+            {hasCondition(ToothStatus.MISSING) ? (
               // Missing Tooth Outline
               <path
                 d="M20,40 Q15,60 15,80 Q15,110 30,115 Q45,120 50,100 Q55,120 70,115 Q85,110 85,80 Q85,60 80,40 Q70,10 50,10 Q30,10 20,40 Z"
@@ -113,13 +149,13 @@ const RealisticTooth: React.FC<{
                 <path
                   d="M15,45 Q15,20 25,10 Q35,2 50,2 Q65,2 75,10 Q85,20 85,45 Q88,65 80,75 Q70,85 50,82 Q30,85 20,75 Q12,65 15,45 Z"
                   fill="url(#crownGradient)"
-                  filter={status === ToothStatus.CROWN ? "url(#goldMaterial)" : "url(#glossy3D)"}
-                  stroke={status === ToothStatus.CROWN ? "none" : "#d1d5db"}
+                  filter={hasCondition(ToothStatus.CROWN) ? "url(#goldMaterial)" : "url(#glossy3D)"}
+                  stroke={hasCondition(ToothStatus.CROWN) ? "none" : "#d1d5db"}
                   strokeWidth="0.5"
                 />
 
-                {/* Surface Details (Fissures) - only visible if healthy/cavity/filled */}
-                {status !== ToothStatus.CROWN && (
+                {/* Surface Details (Fissures) - only visible if not crown */}
+                {!hasCondition(ToothStatus.CROWN) && (
                   <path
                     d="M35,25 Q50,35 65,25 M50,25 L50,45 M40,35 Q50,50 60,35"
                     fill="none"
@@ -133,7 +169,7 @@ const RealisticTooth: React.FC<{
                 {/* --- STATUS OVERLAYS --- */}
 
                 {/* Crown Overlay (Gold Color Override) */}
-                {status === ToothStatus.CROWN && (
+                {hasCondition(ToothStatus.CROWN) && (
                   <path
                     d="M15,45 Q15,20 25,10 Q35,2 50,2 Q65,2 75,10 Q85,20 85,45 Q88,65 80,75 Q70,85 50,82 Q30,85 20,75 Q12,65 15,45 Z"
                     fill="url(#goldGradient)"
@@ -143,7 +179,7 @@ const RealisticTooth: React.FC<{
                 )}
 
                 {/* Cavity (Decay) - Realistic Dark Spot */}
-                {status === ToothStatus.CAVITY && (
+                {hasCondition(ToothStatus.CAVITY) && (
                   <g filter="url(#glossy3D)">
                     <ellipse cx="45" cy="40" rx="10" ry="8" fill="#3f0808" opacity="0.9" />
                     <ellipse cx="45" cy="40" rx="6" ry="5" fill="#000" opacity="0.4" />
@@ -151,13 +187,43 @@ const RealisticTooth: React.FC<{
                 )}
 
                 {/* Filling (Amalgam) - Metallic Patch */}
-                {status === ToothStatus.FILLED && (
+                {hasCondition(ToothStatus.FILLED) && (
                   <path
                     d="M35,25 Q50,40 65,25 L60,40 Q50,55 40,40 Z"
                     fill="#6b7280"
                     stroke="#374151"
                     strokeWidth="0.5"
                     filter="url(#glossy3D)"
+                  />
+                )}
+
+                {/* Pulpitis - Red Glow/Center */}
+                {hasCondition(ToothStatus.PULPITIS) && (
+                  <circle cx="50" cy="50" r="15" fill="#ef4444" opacity="0.6" filter="url(#glossy3D)" />
+                )}
+
+                {/* Periodontitis - Gum line redness */}
+                {hasCondition(ToothStatus.PERIODONTITIS) && (
+                  <path d="M20,80 Q50,90 80,80 L80,100 Q50,110 20,100 Z" fill="#7f1d1d" opacity="0.7" filter="url(#glossy3D)" />
+                )}
+
+                {/* Abscess - Circle at root */}
+                {hasCondition(ToothStatus.ABSCESS) && (
+                  <circle cx="50" cy="100" r="12" fill="#f97316" opacity="0.8" filter="url(#glossy3D)" />
+                )}
+
+                {/* Phlegmon - Diffuse Purple */}
+                {hasCondition(ToothStatus.PHLEGMON) && (
+                  <rect x="20" y="20" width="60" height="80" fill="#7e22ce" opacity="0.4" rx="10" filter="url(#glossy3D)" />
+                )}
+
+                {/* Osteomyelitis - Dark overlay */}
+                {hasCondition(ToothStatus.OSTEOMYELITIS) && (
+                  <path
+                    d="M15,45 Q15,20 25,10 Q35,2 50,2 Q65,2 75,10 Q85,20 85,45 Q88,65 80,75 Q70,85 50,82 Q30,85 20,75 Q12,65 15,45 Z"
+                    fill="#334155"
+                    opacity="0.6"
+                    style={{ mixBlendMode: 'multiply' }}
                   />
                 )}
               </>
@@ -170,35 +236,61 @@ const RealisticTooth: React.FC<{
 };
 
 export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOnly = false }) => {
-  const [teethData, setTeethData] = useState<Record<number, { status: ToothStatus; notes: string }>>(() => {
-    const map: Record<number, { status: ToothStatus; notes: string }> = {};
-    [...TOOTH_NUMBERS.upper, ...TOOTH_NUMBERS.lower].forEach(n => {
-      map[n] = { status: ToothStatus.HEALTHY, notes: '' };
+  const [toothType, setToothType] = useState<'permanent' | 'primary'>('permanent');
+
+  const [teethData, setTeethData] = useState<Record<number, { conditions: ToothStatus[]; notes: string }>>(() => {
+    const map: Record<number, { conditions: ToothStatus[]; notes: string }> = {};
+    // Initialize both permanent and primary teeth
+    [...TOOTH_NUMBERS.upper, ...TOOTH_NUMBERS.lower, ...PRIMARY_TOOTH_NUMBERS.upper, ...PRIMARY_TOOTH_NUMBERS.lower].forEach(n => {
+      map[n] = { conditions: [], notes: '' };
     });
     initialData.forEach(d => {
       if (map[d.number]) {
-        map[d.number] = { status: d.status, notes: d.notes || '' };
+        map[d.number] = { conditions: d.conditions || [], notes: d.notes || '' };
       }
     });
     return map;
   });
 
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
-  const [tempStatus, setTempStatus] = useState<ToothStatus>(ToothStatus.HEALTHY);
+  const [tempConditions, setTempConditions] = useState<ToothStatus[]>([]);
   const [tempNotes, setTempNotes] = useState('');
 
   const handleToothClick = (num: number) => {
     if (readOnly) return;
     setSelectedTooth(num);
-    setTempStatus(teethData[num].status);
+    setTempConditions([...teethData[num].conditions]);
     setTempNotes(teethData[num].notes);
+  };
+
+  const toggleCondition = (condition: ToothStatus) => {
+    setTempConditions(prev => {
+      const isSelected = prev.includes(condition);
+
+      if (isSelected) {
+        // Remove condition
+        return prev.filter(c => c !== condition);
+      } else {
+        // Add condition with validation
+        const isDiseaseState = DISEASE_STATES.includes(condition);
+
+        if (isDiseaseState) {
+          // Remove any existing disease state before adding new one
+          const withoutDiseases = prev.filter(c => !DISEASE_STATES.includes(c));
+          return [...withoutDiseases, condition];
+        } else {
+          // Physical state - just add it
+          return [...prev, condition];
+        }
+      }
+    });
   };
 
   const saveChanges = () => {
     if (selectedTooth) {
       setTeethData(prev => ({
         ...prev,
-        [selectedTooth]: { status: tempStatus, notes: tempNotes }
+        [selectedTooth]: { conditions: tempConditions, notes: tempNotes }
       }));
       setSelectedTooth(null);
     }
@@ -208,13 +300,42 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
   return (
     <div className="p-4 sm:p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
 
+      {/* Tooth Type Toggle */}
+      <div className="flex justify-center mb-6">
+        <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 p-1 bg-gray-100 dark:bg-gray-700">
+          <button
+            onClick={() => setToothType('permanent')}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${toothType === 'permanent'
+              ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+          >
+            Doimiy tishlar (32)
+          </button>
+          <button
+            onClick={() => setToothType('primary')}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${toothType === 'primary'
+              ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+          >
+            Sut tishlari (20)
+          </button>
+        </div>
+      </div>
+
       {/* Legend */}
       <div className="flex flex-wrap justify-center gap-3 sm:gap-6 mb-10 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 select-none">
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-300 shadow-sm"></div> Sog'lom</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3f0808] border border-red-900"></div> Karis</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-500 border border-gray-600"></div> Plomba</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-500 border border-gray-600"></div> Plombalangan</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-yellow-500 border border-yellow-600"></div> Qoplama</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full border-2 border-dashed border-gray-400 opacity-50"></div> Yo'q</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-500 border border-red-600"></div> Pulpit</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-700 border border-red-800"></div> Periodontit</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-500 border border-orange-600"></div> Absses</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-700 border border-purple-800"></div> Flegmona</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-800 border border-slate-900"></div> Osteomiyelit</div>
       </div>
 
       {/* Chart Container */}
@@ -224,12 +345,13 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
         <div className="relative min-w-max px-4">
           <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0">Yuqori Jag'</div>
           <div className="flex gap-1 sm:gap-2 justify-center">
-            {TOOTH_NUMBERS.upper.map(num => (
+            {(toothType === 'permanent' ? TOOTH_NUMBERS.upper : PRIMARY_TOOTH_NUMBERS.upper).map(num => (
               <RealisticTooth
                 key={num}
                 number={num}
-                status={teethData[num]?.status || ToothStatus.HEALTHY}
+                conditions={teethData[num]?.conditions || []}
                 isUpper={true}
+                isPrimary={toothType === 'primary'}
                 onClick={() => handleToothClick(num)}
               />
             ))}
@@ -241,12 +363,13 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
           <div className="w-full border-t-2 border-dashed border-gray-200 dark:border-gray-700 mb-8"></div>
           <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0">Pastki Jag'</div>
           <div className="flex gap-1 sm:gap-2 justify-center">
-            {TOOTH_NUMBERS.lower.map(num => (
+            {(toothType === 'permanent' ? TOOTH_NUMBERS.lower : PRIMARY_TOOTH_NUMBERS.lower).map(num => (
               <RealisticTooth
                 key={num}
                 number={num}
-                status={teethData[num]?.status || ToothStatus.HEALTHY}
+                conditions={teethData[num]?.conditions || []}
                 isUpper={false}
+                isPrimary={toothType === 'primary'}
                 onClick={() => handleToothClick(num)}
               />
             ))}
@@ -259,7 +382,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
         <Modal
           isOpen={!!selectedTooth}
           onClose={() => setSelectedTooth(null)}
-          title={`Tish №${selectedTooth} holati`}
+          title={`Tish №${toothType === 'primary' ? toRomanNumeral(selectedTooth) : selectedTooth} holati`}
         >
           <div className="flex flex-col md:flex-row gap-8">
 
@@ -268,14 +391,17 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
               <div className="scale-[2.5] transform mb-8 mt-4">
                 <RealisticTooth
                   number={selectedTooth}
-                  status={tempStatus}
-                  isUpper={TOOTH_NUMBERS.upper.includes(selectedTooth)}
+                  conditions={tempConditions}
+                  isUpper={TOOTH_NUMBERS.upper.includes(selectedTooth) || PRIMARY_TOOTH_NUMBERS.upper.includes(selectedTooth)}
+                  isPrimary={toothType === 'primary'}
                   onClick={() => { }}
                 />
               </div>
               <div className="text-center mt-6 w-full border-t border-gray-100 dark:border-gray-700 pt-4">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tanlangan Holat</span>
-                <p className="font-bold text-xl text-gray-900 dark:text-white mt-1">{STATUS_LABELS[tempStatus]}</p>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tanlangan Holatlar</span>
+                <p className="font-bold text-sm text-gray-900 dark:text-white mt-1">
+                  {tempConditions.length === 0 ? "Sog'lom" : tempConditions.map(c => STATUS_LABELS[c]).join(', ')}
+                </p>
               </div>
             </div>
 
@@ -285,27 +411,57 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                   Tish holatini o'zgartirish
                 </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {Object.values(ToothStatus).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setTempStatus(s)}
-                      className={`px-3 py-3 text-sm rounded-xl border transition-all duration-200 flex items-center gap-3 text-left shadow-sm
-                         ${tempStatus === s
-                          ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200 dark:ring-blue-900'
-                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                        }`}
-                    >
-                      <div className={`w-3 h-3 rounded-full flex-shrink-0 ring-1 ring-white/20
-                         ${s === ToothStatus.HEALTHY ? 'bg-gray-200' : ''}
-                         ${s === ToothStatus.CAVITY ? 'bg-[#3f0808]' : ''}
-                         ${s === ToothStatus.FILLED ? 'bg-gray-500' : ''}
-                         ${s === ToothStatus.CROWN ? 'bg-yellow-400' : ''}
-                         ${s === ToothStatus.MISSING ? 'border border-dashed border-gray-400 bg-transparent' : ''}
-                       `}></div>
-                      <span className="font-medium">{STATUS_LABELS[s]}</span>
-                    </button>
-                  ))}
+
+                {/* Physical States Group */}
+                <div className="mb-4">
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Jismoniy Holat</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PHYSICAL_STATES.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => toggleCondition(s)}
+                        className={`px-3 py-2 text-sm rounded-lg border transition-all duration-200 flex items-center gap-2 text-left
+                           ${tempConditions.includes(s)
+                            ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200 dark:ring-blue-900'
+                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                      >
+                        <div className={`w-3 h-3 rounded flex-shrink-0 border-2 flex items-center justify-center
+                           ${tempConditions.includes(s) ? 'border-white bg-white' : 'border-gray-400'}`}>
+                          {tempConditions.includes(s) && <div className="w-1.5 h-1.5 bg-blue-600 rounded-sm"></div>}
+                        </div>
+                        <span className="font-medium text-xs">{STATUS_LABELS[s]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Disease States Group */}
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Kasallik Darajasi (Faqat bittasini tanlang)</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {DISEASE_STATES.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => toggleCondition(s)}
+                        className={`px-3 py-2 text-sm rounded-lg border transition-all duration-200 flex items-center gap-2 text-left
+                           ${tempConditions.includes(s)
+                            ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200 dark:ring-blue-900'
+                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                      >
+                        <div className={`w-3 h-3 rounded-full flex-shrink-0 ring-1 ring-white/20
+                           ${s === ToothStatus.CAVITY ? 'bg-[#3f0808]' : ''}
+                           ${s === ToothStatus.PULPITIS ? 'bg-red-500' : ''}
+                           ${s === ToothStatus.PERIODONTITIS ? 'bg-red-700' : ''}
+                           ${s === ToothStatus.ABSCESS ? 'bg-orange-500' : ''}
+                           ${s === ToothStatus.PHLEGMON ? 'bg-purple-700' : ''}
+                           ${s === ToothStatus.OSTEOMYELITIS ? 'bg-slate-800' : ''}
+                         `}></div>
+                        <span className="font-medium text-xs">{STATUS_LABELS[s]}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

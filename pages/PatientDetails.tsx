@@ -151,7 +151,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const handlePaymentSave = (e: React.FormEvent) => {
       e.preventDefault();
       onAddTransaction({
-         patientName: `${patient.firstName} ${patient.lastName}`,
+         patientName: `${patient.lastName} ${patient.firstName}`,
          date: new Date().toISOString().split('T')[0],
          amount: Number(paymentData.amount),
          service: paymentData.service,
@@ -231,7 +231,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       onAddAppointment({
          patientId: patient.id,
-         patientName: `${patient.firstName} ${patient.lastName}`,
+         patientName: `${patient.lastName} ${patient.firstName}`,
          doctorId: doctor.id,
          doctorName: `Dr. ${doctor.firstName} ${doctor.lastName}`,
          type: apptData.type,
@@ -639,19 +639,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            const day = dateObj.getDate();
                            const month = monthNames[dateObj.getMonth()];
 
-                           setMessageText(`🏥 Qabul eslatmasi\n\nHurmatli ${patient.firstName} ${patient.lastName}!\n\nSizni ertaga, ${day}-${month} (${dayName}) kuni soat ${appt.time} da ${appt.doctorName} qabuliga kutamiz.\n\n📍 Manzil: Klinikamiz\n⏰ Vaqt: ${appt.time}\n👨‍⚕️ Shifokor: ${appt.doctorName}\n\nIltimos, vaqtida kelishingizni so'raymiz.\n\nSavol bo'lsa, biz bilan bog'laning.`);
+                           setMessageText(`🏥 Qabul eslatmasi\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSizni ertaga, ${day}-${month} (${dayName}) kuni soat ${appt.time} da ${appt.doctorName} qabuliga kutamiz.\n\n📍 Manzil: Klinikamiz\n⏰ Vaqt: ${appt.time}\n👨‍⚕️ Shifokor: ${appt.doctorName}\n\nIltimos, vaqtida kelishingizni so'raymiz.\n\nSavol bo'lsa, biz bilan bog'laning.`);
                         } else {
-                           setMessageText(`🏥 Qabul eslatmasi\n\nHurmatli ${patient.firstName} ${patient.lastName}!\n\nSizni ertaga klinikamizga qabulga kutamiz.\n\nIltimos, aniq vaqtni aniqlash uchun biz bilan bog'laning.`);
+                           setMessageText(`🏥 Qabul eslatmasi\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSizni ertaga klinikamizga qabulga kutamiz.\n\nIltimos, aniq vaqtni aniqlash uchun biz bilan bog'laning.`);
                         }
                      } else if (type === 'Debt') {
                         const debt = patientTransactions.filter(t => t.status === 'Pending' || t.status === 'Overdue').reduce((acc, t) => acc + t.amount, 0);
                         if (debt > 0) {
-                           setMessageText(`💳 To'lov eslatmasi\n\nHurmatli ${patient.firstName} ${patient.lastName}!\n\nSizning ${debt.toLocaleString()} UZS miqdorida qarzdorligingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.\n\n📞 To'lov bo'yicha savol bo'lsa, biz bilan bog'laning.`);
+                           setMessageText(`💳 To'lov eslatmasi\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSizning ${debt.toLocaleString()} UZS miqdorida qarzdorligingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.\n\n📞 To'lov bo'yicha savol bo'lsa, biz bilan bog'laning.`);
                         } else {
-                           setMessageText(`✅ To'lovlar\n\nHurmatli ${patient.firstName} ${patient.lastName}!\n\nSizning qarzdorligingiz yo'q.\n\nRahmat!`);
+                           setMessageText(`✅ To'lovlar\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSizning qarzdorligingiz yo'q.\n\nRahmat!`);
                         }
                      } else if (type === 'Missed') {
-                        setMessageText(`⚠️ Qoldirilgan qabul\n\nHurmatli ${patient.firstName} ${patient.lastName}!\n\nSiz bugungi qabulga kelmadingiz.\n\nIltimos, yangi vaqt belgilash uchun biz bilan bog'laning.\n\n📞 Telefon: [klinika telefoni]`);
+                        setMessageText(`⚠️ Qoldirilgan qabul\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSiz bugungi qabulga kelmadingiz.\n\nIltimos, yangi vaqt belgilash uchun biz bilan bog'laning.\n\n📞 Telefon: [klinika telefoni]`);
                      }
                   }}
                   options={[

@@ -10,7 +10,12 @@ export enum ToothStatus {
   CAVITY = 'Cavity',
   FILLED = 'Filled',
   MISSING = 'Missing',
-  CROWN = 'Crown'
+  CROWN = 'Crown',
+  PULPITIS = 'Pulpitis',
+  PERIODONTITIS = 'Periodontitis',
+  ABSCESS = 'Abscess',
+  PHLEGMON = 'Phlegmon',
+  OSTEOMYELITIS = 'Osteomyelitis'
 }
 
 export interface Doctor {
@@ -77,7 +82,7 @@ export interface Service {
 export interface ToothData {
   id: number;
   number: number; // 1-32
-  status: ToothStatus;
+  conditions: ToothStatus[]; // Changed from single status to array
   notes?: string;
 }
 

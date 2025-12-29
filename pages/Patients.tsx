@@ -127,7 +127,7 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
                       </div>
                       <div className="ml-3">
                         <div className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          {patient.firstName} {patient.lastName}
+                          {patient.lastName} {patient.firstName}
                         </div>
                         <div className="text-xs text-gray-500">ID: {patient.id}</div>
                       </div>
