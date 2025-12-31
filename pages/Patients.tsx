@@ -178,8 +178,8 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Yangi Bemor Qo'shish">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Ism" name="firstName" value={formData.firstName} onChange={handleInputChange} required />
             <Input label="Familiya" name="lastName" value={formData.lastName} onChange={handleInputChange} required />
+            <Input label="Ism" name="firstName" value={formData.firstName} onChange={handleInputChange} required />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input label="Telefon" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
@@ -193,6 +193,7 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
               helperText="Sanani qo'lda kiritish uchun maydonga bosing"
             />
           </div>
+          <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder="Toshkent sh., Chilonzor t..." />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jins</label>
             <div className="flex gap-4">
@@ -214,7 +215,6 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
               placeholder="Allergiya, surunkali kasalliklar..."
             ></textarea>
           </div>
-          <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder="Toshkent sh., Chilonzor t..." />
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>Bekor qilish</Button>
             <Button type="submit">Saqlash</Button>

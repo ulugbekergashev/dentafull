@@ -314,7 +314,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <div className="space-y-1">
                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{patient.firstName} {patient.lastName}</h2>
                      <p className="text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                        <span className="capitalize">{patient.gender === 'Male' ? 'Erkak' : 'Ayol'}</span> • {patient.dob ? (new Date().getFullYear() - new Date(patient.dob).getFullYear()) : 'N/A'} yosh
+                        <span className="capitalize">{patient.gender === 'Male' ? 'Erkak' : 'Ayol'}</span> • {patient.dob ? (new Date().getFullYear() - new Date(patient.dob).getFullYear()) : 'N/A'} yosh{patient.dob && ` (${new Date(patient.dob).toLocaleDateString('uz-UZ')})`}
                      </p>
                      <div className="pt-2">
                         <Badge status={patient.status} />

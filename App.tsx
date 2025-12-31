@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
@@ -58,6 +58,8 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Data Store
   // Data Store
@@ -106,6 +108,8 @@ const App: React.FC = () => {
     if (!isAuthenticated) return;
 
     const loadData = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
         if (userRole === UserRole.SUPER_ADMIN) {
           const [clns, plns] = await Promise.all([
@@ -134,7 +138,9 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error('Failed to load data:', error);
-        addToast('error', 'Ma\'lumotlarni yuklashda xatolik yuz berdi.');
+        setError('Ma\'lumotlarni yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+      } finally {
+        setIsLoading(false);
       }
     };
     loadData();
@@ -179,6 +185,44 @@ const App: React.FC = () => {
     setUserName('');
     setClinicId('');
     setDoctorId('');
+  };
+
+  const retryLoadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      if (userRole === UserRole.SUPER_ADMIN) {
+        const [clns, plns] = await Promise.all([
+          api.clinics.getAll(),
+          api.plans.getAll()
+        ]);
+        setClinics(clns);
+        setPlans(plns);
+      } else if (clinicId) {
+        const [pts, appts, txs, svcs, docs, clns, plns] = await Promise.all([
+          api.patients.getAll(clinicId),
+          api.appointments.getAll(clinicId),
+          api.transactions.getAll(clinicId),
+          api.services.getAll(clinicId),
+          api.doctors.getAll(clinicId),
+          api.clinics.getAll(),
+          api.plans.getAll()
+        ]);
+        setPatients(pts);
+        setAppointments(appts);
+        setTransactions(txs);
+        setServices(svcs);
+        setDoctors(docs);
+        setClinics(clns);
+        setPlans(plns);
+      }
+      addToast('success', 'Ma\'lumotlar muvaffaqiyatli yuklandi!');
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      setError('Ma\'lumotlarni yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // --- UI Actions ---
@@ -451,6 +495,53 @@ const App: React.FC = () => {
   // --- Main Render ---
   if (!isAuthenticated) {
     return <SignIn onLogin={handleLogin} />;
+  }
+
+  // Loading Screen
+  if (isLoading && !error) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-blue-600 dark:text-blue-400 animate-spin mx-auto mb-4" />
+          <p className="text-lg font-medium text-gray-700 dark:text-gray-300">Ma'lumotlar yuklanmoqda...</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Iltimos, kuting</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error Screen
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
+          <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Xatolik yuz berdi</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
+          <div className="space-y-3">
+            <button
+              onClick={retryLoadData}
+              disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors"
+            >
+              <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? 'Yuklanmoqda...' : 'Qayta yuklash'}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="w-full px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
+            >
+              Chiqish
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-6">
+            Ma'lumotlaringiz xavfsiz. Bu faqat ulanish muammosi.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
