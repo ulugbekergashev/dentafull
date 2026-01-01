@@ -1106,6 +1106,210 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     });
 });
 
+// ============================================
+// AUTOMATED REMINDER SYSTEM
+// ============================================
+
+/**
+ * Helper function: Send birthday greetings to patients
+ */
+async function sendBirthdayReminders() {
+    try {
+        console.log('🎂 Running birthday reminder job...');
+
+        // Get today's date in DD.MM format (matching dob format in database)
+        const today = new Date();
+        const todayFormatted = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+        // Find all patients whose birthday is today and have Telegram connected
+        const patients = await prisma.patient.findMany({
+            where: {
+                telegramChatId: { not: null },
+                status: 'Active'
+            },
+            include: {
+                clinic: true
+            }
+        });
+
+        let sentCount = 0;
+        for (const patient of patients) {
+            // Extract DD.MM from patient's dob (format: DD.MM.YYYY)
+            const dobParts = patient.dob.split('.');
+            if (dobParts.length >= 2) {
+                const patientBirthday = `${dobParts[0]}.${dobParts[1]}`;
+
+                if (patientBirthday === todayFormatted) {
+                    const message = `🎉 Tug'ilgan kuningiz bilan!\n\nHurmatli ${patient.firstName}, sizni tug'ilgan kuningiz bilan chin dildan tabriklaymiz! Sog'lig'ingiz mustahkam bo'lsin! 🎂`;
+
+                    await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId!, message);
+                    sentCount++;
+                    console.log(`✅ Birthday greeting sent to ${patient.firstName} ${patient.lastName}`);
+                }
+            }
+        }
+
+        console.log(`🎂 Birthday reminder job completed. Sent ${sentCount} greetings.`);
+    } catch (error) {
+        console.error('❌ Birthday reminder job error:', error);
+    }
+}
+
+/**
+ * Helper function: Send appointment reminders 24 hours in advance
+ */
+async function sendAppointmentReminders() {
+    try {
+        console.log('🔔 Running appointment reminder job...');
+
+        // Get tomorrow's date in DD.MM.YYYY format
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowFormatted = `${String(tomorrow.getDate()).padStart(2, '0')}.${String(tomorrow.getMonth() + 1).padStart(2, '0')}.${tomorrow.getFullYear()}`;
+
+        // Find all appointments for tomorrow with confirmed/pending status
+        const appointments = await prisma.appointment.findMany({
+            where: {
+                date: tomorrowFormatted,
+                status: { in: ['Confirmed', 'Pending'] }
+            },
+            include: {
+                patient: {
+                    include: {
+                        clinic: true
+                    }
+                },
+                doctor: true
+            }
+        });
+
+        let sentCount = 0;
+        for (const appointment of appointments) {
+            if (appointment.patient.telegramChatId) {
+                const doctorName = `${appointment.doctor.firstName} ${appointment.doctor.lastName}`;
+                const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName}, sizning ertaga ${appointment.date} kuni soat ${appointment.time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
+
+                await botManager.notifyClinicUser(appointment.patient.clinicId, appointment.patient.telegramChatId!, message);
+                sentCount++;
+                console.log(`✅ Appointment reminder sent to ${appointment.patient.firstName} ${appointment.patient.lastName}`);
+            }
+        }
+
+        console.log(`🔔 Appointment reminder job completed. Sent ${sentCount} reminders.`);
+    } catch (error) {
+        console.error('❌ Appointment reminder job error:', error);
+    }
+}
+
+/**
+ * Helper function: Send follow-up messages to patients who didn't show up
+ */
+async function sendNoShowFollowups() {
+    try {
+        console.log('❗️ Running no-show follow-up job...');
+
+        // Get today's date in DD.MM.YYYY format
+        const today = new Date();
+        const todayFormatted = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+
+        // Find all appointments for today with No-Show status
+        const appointments = await prisma.appointment.findMany({
+            where: {
+                date: todayFormatted,
+                status: 'No-Show'
+            },
+            include: {
+                patient: {
+                    include: {
+                        clinic: true
+                    }
+                }
+            }
+        });
+
+        let sentCount = 0;
+        for (const appointment of appointments) {
+            if (appointment.patient.telegramChatId) {
+                const clinicPhone = appointment.patient.clinic.phone;
+                const message = `❗️ Siz bugun ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinicPhone}`;
+
+                await botManager.notifyClinicUser(appointment.patient.clinicId, appointment.patient.telegramChatId!, message);
+                sentCount++;
+                console.log(`✅ No-show follow-up sent to ${appointment.patient.firstName} ${appointment.patient.lastName}`);
+            }
+        }
+
+        console.log(`❗️ No-show follow-up job completed. Sent ${sentCount} messages.`);
+    } catch (error) {
+        console.error('❌ No-show follow-up job error:', error);
+    }
+}
+
+// ============================================
+// CRON JOBS - Automated Reminders Schedule
+// ============================================
+
+// Birthday reminders - Every day at 9:00 AM
+cron.schedule('0 9 * * *', () => {
+    console.log('⏰ Cron: Birthday reminder job triggered');
+    sendBirthdayReminders();
+}, {
+    timezone: "Asia/Tashkent"
+});
+
+// Appointment reminders - Every day at 10:00 AM (24 hours before)
+cron.schedule('0 10 * * *', () => {
+    console.log('⏰ Cron: Appointment reminder job triggered');
+    sendAppointmentReminders();
+}, {
+    timezone: "Asia/Tashkent"
+});
+
+// No-show follow-ups - Every day at 8:00 PM
+cron.schedule('0 20 * * *', () => {
+    console.log('⏰ Cron: No-show follow-up job triggered');
+    sendNoShowFollowups();
+}, {
+    timezone: "Asia/Tashkent"
+});
+
+console.log('✅ Automated reminder cron jobs initialized');
+
+// ============================================
+// TEST ENDPOINTS (for manual testing)
+// ============================================
+
+app.post('/api/test/send-birthday-reminders', authenticateToken, async (req, res) => {
+    try {
+        await sendBirthdayReminders();
+        res.json({ success: true, message: 'Birthday reminders sent' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/test/send-appointment-reminders', authenticateToken, async (req, res) => {
+    try {
+        await sendAppointmentReminders();
+        res.json({ success: true, message: 'Appointment reminders sent' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/test/send-noshow-followups', authenticateToken, async (req, res) => {
+    try {
+        await sendNoShowFollowups();
+        res.json({ success: true, message: 'No-show follow-ups sent' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// START SERVER
+// ============================================
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
