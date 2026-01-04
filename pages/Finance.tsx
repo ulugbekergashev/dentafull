@@ -474,6 +474,21 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
 
       {/* Debtors Modal */}
       <Modal isOpen={isDebtorModalOpen} onClose={() => setIsDebtorModalOpen(false)} title="Qarzdorlar Ro'yxati">
+        <div className="flex justify-end mb-4">
+          <Button onClick={async () => {
+            if (!confirm('Barcha qarzdorlarga eslatma yuborilsinmi?')) return;
+            try {
+              const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
+              const response = await api.batch.remindDebts(user.clinicId, []);
+              alert(response.message || 'Eslatmalar yuborildi');
+            } catch (e) {
+              alert('Xatolik yuz berdi');
+            }
+          }}>
+            <Bot className="w-4 h-4 mr-2" />
+            Barchasiga Eslatish
+          </Button>
+        </div>
         <div className="space-y-4">
           {DEBTORS.map(d => (
             <div key={d.id} className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg">
