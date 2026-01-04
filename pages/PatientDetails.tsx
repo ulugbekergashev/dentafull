@@ -715,7 +715,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            setMessageText(`🏥 Qabul eslatmasi\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSizni ertaga klinikamizga qabulga kutamiz.\n\nIltimos, aniq vaqtni aniqlash uchun biz bilan bog'laning.`);
                         }
                      } else if (type === 'Debt') {
-                        const debt = patientTransactions.filter(t => t.status === 'Pending' || t.status === 'Overdue').reduce((acc, t) => acc + t.amount, 0);
+                        const debt = patientTransactions.filter(t => t.status === 'Pending').reduce((acc, t) => acc + t.amount, 0);
                         if (debt > 0) {
                            setMessageText(`💳 To'lov eslatmasi\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSizning ${debt.toLocaleString()} UZS miqdorida qarzdorligingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.\n\n📞 To'lov bo'yicha savol bo'lsa, biz bilan bog'laning.`);
                         } else {

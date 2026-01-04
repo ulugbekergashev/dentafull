@@ -62,8 +62,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   // Filter appointments for Lost Revenue calculation to match the selected timeframe
   const filteredAppointments = filteredAppointmentsByDoctor.filter(a => isDateInRange(a.date));
 
-  // Calculate debtors from transactions
-  const debtTransactions = transactions.filter(t => t.status === 'Pending' || t.status === 'Overdue');
+  // Calculate debtors from transactions (only Pending, not Overdue since it's not used)
+  const debtTransactions = transactions.filter(t => t.status === 'Pending');
   const totalDebt = debtTransactions.reduce((acc, t) => acc + t.amount, 0);
 
   // Create a map of patientName -> patientId from patients list

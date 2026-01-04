@@ -1187,16 +1187,34 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
 
         console.log(`💰 Manual trigger: Sending debt reminders for clinic ${clinicId}...`);
 
-        // 1. Find all overdue/pending transactions for this clinic
+        // DEBUG: Check all transactions first
+        const allTransactions = await prisma.transaction.findMany({
+            where: { clinicId: clinicId as string },
+            select: { patientName: true, status: true, amount: true }
+        });
+        console.log(`📊 DEBUG: Total transactions for clinic: ${allTransactions.length}`);
+        const statusCounts: Record<string, number> = {};
+        allTransactions.forEach(t => {
+            statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
+        });
+        console.log(`📊 DEBUG: Transactions by status:`, statusCounts);
+
+        // 1. Find all pending (unpaid) transactions for this clinic
         const overdueTransactions = await prisma.transaction.findMany({
             where: {
                 clinicId: clinicId as string,
-                status: { in: ['Overdue', 'Pending'] }
+                status: 'Pending'
             },
-            select: { patientName: true }
+            select: { patientName: true, status: true }
         });
 
+        console.log(`📊 DEBUG: Found ${overdueTransactions.length} Pending transactions`);
+        if (overdueTransactions.length > 0) {
+            console.log(`📊 DEBUG: Sample transactions:`, overdueTransactions.slice(0, 3));
+        }
+
         if (overdueTransactions.length === 0) {
+            console.log(`📊 DEBUG: No pending transactions found for clinic ${clinicId}`);
             return res.json({ success: true, count: 0, message: 'Qarzdorliklar topilmadi' });
         }
 
@@ -1265,6 +1283,50 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
         });
     } catch (error: any) {
         console.error('Batch debt reminder error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// DEBUG ENDPOINT
+// ============================================
+
+app.get('/api/debug/transactions', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+
+        const allTransactions = await prisma.transaction.findMany({
+            where: clinicId ? { clinicId: clinicId as string } : {},
+            select: {
+                id: true,
+                patientName: true,
+                status: true,
+                amount: true,
+                date: true
+            }
+        });
+
+        const byStatus: Record<string, number> = {};
+        allTransactions.forEach(t => {
+            byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+        });
+
+        const pendingOrOverdue = allTransactions.filter(t =>
+            t.status === 'Pending' || t.status === 'Overdue'
+        );
+
+        res.json({
+            total: allTransactions.length,
+            byStatus,
+            pendingOrOverdueCount: pendingOrOverdue.length,
+            pendingOrOverdue: pendingOrOverdue.map(t => ({
+                name: t.patientName,
+                amount: t.amount,
+                status: t.status,
+                date: t.date
+            }))
+        });
+    } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 });
