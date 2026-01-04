@@ -479,7 +479,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
             if (!confirm('Barcha qarzdorlarga eslatma yuborilsinmi?')) return;
             try {
               const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
-              const response = await api.batch.remindDebts(user.clinicId, []);
+              const response = await api.batch.remindDebts(user.clinicId, DEBTORS.map(d => ({ name: d.name, amount: d.amount })));
               alert(response.message || 'Eslatmalar yuborildi');
             } catch (e) {
               alert('Xatolik yuz berdi');

@@ -1178,51 +1178,59 @@ app.post('/api/batch/remind-appointments', authenticateToken, async (req, res) =
 
 // Batch: Send debt reminders
 // Batch: Send debt reminders
+// Batch: Send debt reminders
 app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const { clinicId, debtors } = req.body; // Accept debtors list from frontend
+
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
 
         console.log(`💰 Manual trigger: Sending debt reminders for clinic ${clinicId}...`);
 
-        // DEBUG: Check all transactions first
-        const allTransactions = await prisma.transaction.findMany({
-            where: { clinicId: clinicId as string },
-            select: { patientName: true, status: true, amount: true }
-        });
-        console.log(`📊 DEBUG: Total transactions for clinic: ${allTransactions.length}`);
-        const statusCounts: Record<string, number> = {};
-        allTransactions.forEach(t => {
-            statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
-        });
-        console.log(`📊 DEBUG: Transactions by status:`, statusCounts);
+        let debtorList = debtors;
 
-        // 1. Find all pending (unpaid) transactions for this clinic
-        const overdueTransactions = await prisma.transaction.findMany({
-            where: {
-                clinicId: clinicId as string,
-                status: 'Pending'
-            },
-            select: { patientName: true, status: true }
-        });
+        // Fallback: If no debtors provided, try to find them in DB (legacy behavior)
+        if (!debtorList || debtorList.length === 0) {
+            console.log('⚠️ No debtors provided from frontend, falling back to DB query...');
+            // DEBUG: Check all transactions first
+            const allTransactions = await prisma.transaction.findMany({
+                where: { clinicId: clinicId as string },
+                select: { patientName: true, status: true, amount: true }
+            });
+            console.log(`📊 DEBUG: Total transactions for clinic: ${allTransactions.length}`);
 
-        console.log(`📊 DEBUG: Found ${overdueTransactions.length} Pending transactions`);
-        if (overdueTransactions.length > 0) {
-            console.log(`📊 DEBUG: Sample transactions:`, overdueTransactions.slice(0, 3));
+            // 1. Find all pending (unpaid) transactions for this clinic
+            const overdueTransactions = await prisma.transaction.findMany({
+                where: {
+                    clinicId: clinicId as string,
+                    status: 'Pending'
+                },
+                select: { patientName: true, amount: true }
+            });
+
+            // Group by name
+            const debtorMap = new Map();
+            overdueTransactions.forEach(t => {
+                const existing = debtorMap.get(t.patientName);
+                if (existing) {
+                    existing.amount += t.amount;
+                } else {
+                    debtorMap.set(t.patientName, { name: t.patientName, amount: t.amount });
+                }
+            });
+            debtorList = Array.from(debtorMap.values());
         }
 
-        if (overdueTransactions.length === 0) {
-            console.log(`📊 DEBUG: No pending transactions found for clinic ${clinicId}`);
+        if (debtorList.length === 0) {
+            console.log(`📊 DEBUG: No debtors found.`);
             return res.json({ success: true, count: 0, message: 'Qarzdorliklar topilmadi' });
         }
 
-        // 2. Extract unique patient names
-        const debtorNames = [...new Set(overdueTransactions.map(t => t.patientName))];
-        console.log(`Found ${debtorNames.length} debtors by name:`, debtorNames);
+        console.log(`Found ${debtorList.length} debtors to process.`);
 
-        // 3. Fetch all patients with Telegram for this clinic (for in-memory matching)
+        // Fetch all patients with Telegram for this clinic (for in-memory matching)
         const patients = await prisma.patient.findMany({
             where: {
                 clinicId: clinicId as string,
@@ -1236,28 +1244,26 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
         let foundPatientsCount = 0;
         const details: string[] = [];
 
-        // 4. Match and send
-        for (const name of debtorNames) {
+        // Match and send
+        for (const debtor of debtorList) {
+            const name = debtor.name;
+            const amount = debtor.amount;
             const cleanName = name.toLowerCase().trim();
 
             // Find patient in memory
-            // Strategy: Check if patient's first+last or last+first contains the debtor name parts
             const patient = patients.find(p => {
                 const pFirst = p.firstName.toLowerCase();
                 const pLast = p.lastName.toLowerCase();
                 const pFull1 = `${pFirst} ${pLast}`;
                 const pFull2 = `${pLast} ${pFirst}`;
 
-                // Check if the debtor name (from transaction) matches this patient
-                // We check if the transaction name is contained in the patient's full name
-                // OR if the patient's name parts are contained in the transaction name
                 return pFull1.includes(cleanName) || pFull2.includes(cleanName) ||
                     (cleanName.includes(pFirst) && cleanName.includes(pLast));
             });
 
             if (patient && patient.telegramChatId) {
                 foundPatientsCount++;
-                const message = `💰 Hurmatli ${patient.firstName}, sizning klinikada to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.`;
+                const message = `💰 Hurmatli ${patient.firstName}, sizning klinikada ${amount.toLocaleString()} UZS miqdorida to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.`;
 
                 try {
                     await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
@@ -1277,9 +1283,9 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
         res.json({
             success: true,
             count: sentCount,
-            foundDebtors: debtorNames.length,
+            foundDebtors: debtorList.length,
             foundPatients: foundPatientsCount,
-            message: `${debtorNames.length} ta qarzdor topildi. ${foundPatientsCount} ta bemor bazadan aniqlandi. ${sentCount} ta xabar yuborildi.`
+            message: `${debtorList.length} ta qarzdor ro'yxatda. ${foundPatientsCount} ta bemor bazadan aniqlandi. ${sentCount} ta xabar yuborildi.`
         });
     } catch (error: any) {
         console.error('Batch debt reminder error:', error);
