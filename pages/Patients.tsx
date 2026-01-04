@@ -79,8 +79,8 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
               if (confirm('Barcha qarzdor bemorlarga eslatma yuborilsinmi?')) {
                 try {
                   const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
-                  await api.batch.remindDebts(user.clinicId, []); // Empty array as backend finds them
-                  alert('Qarzdorlarga eslatma yuborish boshlandi!');
+                  const response = await api.batch.remindDebts(user.clinicId, []);
+                  alert(response.message || 'Eslatmalar yuborildi');
                 } catch (e) {
                   alert('Xatolik yuz berdi');
                 }

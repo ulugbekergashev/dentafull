@@ -206,7 +206,7 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ clinicId }),
         }),
-        remindDebts: (clinicId: string, patientIds: string[]) => fetchJson<{ success: true; count: number }>('/batch/remind-debts?clinicId=' + clinicId, {
+        remindDebts: (clinicId: string, patientIds: string[]) => fetchJson<{ success: true; count: number; message?: string }>('/batch/remind-debts?clinicId=' + clinicId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ patientIds }),

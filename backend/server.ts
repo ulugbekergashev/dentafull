@@ -1177,6 +1177,7 @@ app.post('/api/batch/remind-appointments', authenticateToken, async (req, res) =
 });
 
 // Batch: Send debt reminders
+// Batch: Send debt reminders
 app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
     try {
         const { clinicId } = req.query;
@@ -1196,43 +1197,72 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
         });
 
         if (overdueTransactions.length === 0) {
-            return res.json({ success: true, count: 0, message: 'Qarzdorlar topilmadi' });
+            return res.json({ success: true, count: 0, message: 'Qarzdorliklar topilmadi' });
         }
 
         // 2. Extract unique patient names
         const debtorNames = [...new Set(overdueTransactions.map(t => t.patientName))];
         console.log(`Found ${debtorNames.length} debtors by name:`, debtorNames);
 
-        let sentCount = 0;
+        // 3. Fetch all patients with Telegram for this clinic (for in-memory matching)
+        const patients = await prisma.patient.findMany({
+            where: {
+                clinicId: clinicId as string,
+                telegramChatId: { not: null }
+            }
+        });
 
-        // 3. Find patients by name and send reminders
+        console.log(`Loaded ${patients.length} patients with Telegram for matching.`);
+
+        let sentCount = 0;
+        let foundPatientsCount = 0;
+        const details: string[] = [];
+
+        // 4. Match and send
         for (const name of debtorNames) {
-            // Try to find patient with this name
-            const patient = await prisma.patient.findFirst({
-                where: {
-                    clinicId: clinicId as string,
-                    OR: [
-                        { firstName: { contains: name.split(' ')[1] || name } },
-                        { lastName: { contains: name.split(' ')[0] || name } }
-                    ],
-                    telegramChatId: { not: null }
-                }
+            const cleanName = name.toLowerCase().trim();
+
+            // Find patient in memory
+            // Strategy: Check if patient's first+last or last+first contains the debtor name parts
+            const patient = patients.find(p => {
+                const pFirst = p.firstName.toLowerCase();
+                const pLast = p.lastName.toLowerCase();
+                const pFull1 = `${pFirst} ${pLast}`;
+                const pFull2 = `${pLast} ${pFirst}`;
+
+                // Check if the debtor name (from transaction) matches this patient
+                // We check if the transaction name is contained in the patient's full name
+                // OR if the patient's name parts are contained in the transaction name
+                return pFull1.includes(cleanName) || pFull2.includes(cleanName) ||
+                    (cleanName.includes(pFirst) && cleanName.includes(pLast));
             });
 
-            if (patient && patient.telegramChatId && patient.clinicId) {
+            if (patient && patient.telegramChatId) {
+                foundPatientsCount++;
                 const message = `💰 Hurmatli ${patient.firstName}, sizning klinikada to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.`;
 
                 try {
                     await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
                     sentCount++;
-                    console.log(`✅ Debt reminder sent to ${patient.firstName} ${patient.lastName}`);
+                    console.log(`✅ Debt reminder sent to ${patient.firstName} ${patient.lastName} (matched "${name}")`);
+                    details.push(`Sent: ${patient.firstName} ${patient.lastName}`);
                 } catch (e) {
                     console.error(`Failed to send to ${patient.firstName}:`, e);
+                    details.push(`Failed: ${patient.firstName} ${patient.lastName}`);
                 }
+            } else {
+                console.log(`⚠️ Could not find patient record for debtor name: "${name}"`);
+                details.push(`Not found: ${name}`);
             }
         }
 
-        res.json({ success: true, count: sentCount });
+        res.json({
+            success: true,
+            count: sentCount,
+            foundDebtors: debtorNames.length,
+            foundPatients: foundPatientsCount,
+            message: `${debtorNames.length} ta qarzdor topildi. ${foundPatientsCount} ta bemor bazadan aniqlandi. ${sentCount} ta xabar yuborildi.`
+        });
     } catch (error: any) {
         console.error('Batch debt reminder error:', error);
         res.status(500).json({ error: error.message });
