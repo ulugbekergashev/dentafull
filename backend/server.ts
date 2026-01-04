@@ -1187,11 +1187,11 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
 
         console.log(`💰 Manual trigger: Sending debt reminders for clinic ${clinicId}...`);
 
-        // 1. Find all overdue transactions for this clinic
+        // 1. Find all overdue/pending transactions for this clinic
         const overdueTransactions = await prisma.transaction.findMany({
             where: {
                 clinicId: clinicId as string,
-                status: 'Overdue'
+                status: { in: ['Overdue', 'Pending'] }
             },
             select: { patientName: true }
         });
