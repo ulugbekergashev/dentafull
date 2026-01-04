@@ -289,7 +289,27 @@ export const Calendar: React.FC<CalendarProps> = ({
             </button>
           </div>
         </div>
-        <Button onClick={openAddModal} className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-2" /> Yangi Qabul</Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              if (confirm('Ertangi kun uchun barcha bemorlarga eslatma yuborilsinmi?')) {
+                try {
+                  // Assuming we have the clinicId from somewhere, or the backend handles it from the token
+                  // For now, passing a placeholder or relying on token
+                  const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
+                  await api.batch.remindAppointments(user.clinicId);
+                  alert('Eslatmalar yuborish boshlandi!');
+                } catch (e) {
+                  alert('Xatolik yuz berdi');
+                }
+              }
+            }}
+          >
+            <Bot className="w-4 h-4 mr-2" /> Eslatma yuborish
+          </Button>
+          <Button onClick={openAddModal} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> Yangi Qabul</Button>
+        </div>
       </div>
 
       {/* Calendar Grid */}

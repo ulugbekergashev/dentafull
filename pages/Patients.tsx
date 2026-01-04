@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
 import { Search, Plus, MoreHorizontal, Eye, Trash2 } from 'lucide-react';
 import { Patient } from '../types';
+import { api } from '../services/api';
 
 interface PatientsProps {
   patients: Patient[];
@@ -71,9 +72,27 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bemorlar</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">Bemorlar ro'yxati va tarixi</p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" /> Bemor qo'shish
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              if (confirm('Barcha qarzdor bemorlarga eslatma yuborilsinmi?')) {
+                try {
+                  const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
+                  await api.batch.remindDebts(user.clinicId, []); // Empty array as backend finds them
+                  alert('Qarzdorlarga eslatma yuborish boshlandi!');
+                } catch (e) {
+                  alert('Xatolik yuz berdi');
+                }
+              }
+            }}
+          >
+            <MoreHorizontal className="w-4 h-4 mr-2" /> Qarzdorlarga eslatma
+          </Button>
+          <Button onClick={() => setIsAddModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Bemor qo'shish
+          </Button>
+        </div>
       </div>
 
       {/* Filters & Search */}

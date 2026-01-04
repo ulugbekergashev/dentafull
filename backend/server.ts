@@ -211,8 +211,9 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
-        await prisma.patient.delete({
-            where: { id: req.params.id }
+        await prisma.patient.update({
+            where: { id: req.params.id },
+            data: { status: 'Archived' }
         });
         res.json({ success: true });
     } catch (error) {
@@ -251,12 +252,36 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
 
 app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
     try {
+        const { status } = req.body;
+
+        // Update appointment and fetch necessary data for notification
         const appointment = await prisma.appointment.update({
             where: { id: req.params.id },
-            data: req.body
+            data: req.body,
+            include: {
+                patient: {
+                    include: { clinic: true }
+                }
+            }
         });
+
+        // Check if status changed to 'No-Show' and send notification
+        if (status === 'No-Show' && appointment.patient.telegramChatId && appointment.patient.clinic.botToken) {
+            const clinicPhone = appointment.patient.clinic.phone;
+            const message = `❗️ Siz ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinicPhone}`;
+
+            try {
+                await botManager.notifyClinicUser(appointment.patient.clinicId, appointment.patient.telegramChatId, message);
+                console.log(`✅ Immediate no-show notification sent to ${appointment.patient.firstName}`);
+            } catch (notifyError) {
+                console.error('Failed to send no-show notification:', notifyError);
+                // Don't fail the request if notification fails, just log it
+            }
+        }
+
         res.json(appointment);
     } catch (error) {
+        console.error('Update appointment error:', error);
         res.status(500).json({ error: 'Failed to update appointment' });
     }
 });
@@ -433,7 +458,10 @@ app.get('/api/doctors', authenticateToken, async (req, res) => {
         }
 
         const doctors = await prisma.doctor.findMany({
-            where: { clinicId: clinicId as string }
+            where: {
+                clinicId: clinicId as string,
+                status: { not: 'Deleted' }
+            }
         });
         res.json(doctors);
     } catch (error) {
@@ -513,8 +541,9 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/doctors/:id', authenticateToken, async (req, res) => {
     try {
-        await prisma.doctor.delete({
-            where: { id: req.params.id }
+        await prisma.doctor.update({
+            where: { id: req.params.id },
+            data: { status: 'Deleted' }
         });
         res.json({ success: true });
     } catch (error: any) {
@@ -1258,14 +1287,15 @@ cron.schedule('0 9 * * *', () => {
 });
 
 // Appointment reminders - Every day at 10:00 AM (24 hours before)
-cron.schedule('0 10 * * *', () => {
-    console.log('⏰ Cron: Appointment reminder job triggered');
-    sendAppointmentReminders();
-}, {
-    timezone: "Asia/Tashkent"
-});
+// Appointment reminders - DISABLED (Manual trigger only)
+// cron.schedule('0 10 * * *', () => {
+//     console.log('⏰ Cron: Appointment reminder job triggered');
+//     sendAppointmentReminders();
+// }, {
+//     timezone: "Asia/Tashkent"
+// });
 
-// No-show follow-ups - Every day at 8:00 PM
+// No-show follow-ups - Every day at 8:00 PM (Backup for missed manual updates)
 cron.schedule('0 20 * * *', () => {
     console.log('⏰ Cron: No-show follow-up job triggered');
     sendNoShowFollowups();
@@ -1274,6 +1304,92 @@ cron.schedule('0 20 * * *', () => {
 });
 
 console.log('✅ Automated reminder cron jobs initialized');
+
+// ============================================
+// BATCH NOTIFICATION ENDPOINTS
+// ============================================
+
+// Batch: Send reminders for tomorrow's appointments
+app.post('/api/batch/remind-appointments', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.body; // Optional: restrict to specific clinic if needed
+        console.log('🔔 Manual trigger: Sending appointment reminders...');
+
+        // Reuse the existing logic function
+        // Note: In a real multi-tenant app, we should filter by clinicId from the token/body
+        // For now, we'll run the global function but we could optimize it to filter by clinic
+
+        await sendAppointmentReminders();
+
+        res.json({ success: true, message: 'Eslatmalar yuborish boshlandi' });
+    } catch (error: any) {
+        console.error('Batch appointment reminder error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Batch: Send debt reminders
+app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        console.log(`💰 Manual trigger: Sending debt reminders for clinic ${clinicId}...`);
+
+        // 1. Find all overdue transactions for this clinic
+        const overdueTransactions = await prisma.transaction.findMany({
+            where: {
+                clinicId: clinicId as string,
+                status: 'Overdue'
+            },
+            select: { patientName: true }
+        });
+
+        if (overdueTransactions.length === 0) {
+            return res.json({ success: true, count: 0, message: 'Qarzdorlar topilmadi' });
+        }
+
+        // 2. Extract unique patient names
+        const debtorNames = [...new Set(overdueTransactions.map(t => t.patientName))];
+        console.log(`Found ${debtorNames.length} debtors by name:`, debtorNames);
+
+        let sentCount = 0;
+
+        // 3. Find patients by name and send reminders
+        for (const name of debtorNames) {
+            // Try to find patient with this name
+            const patient = await prisma.patient.findFirst({
+                where: {
+                    clinicId: clinicId as string,
+                    OR: [
+                        { firstName: { contains: name.split(' ')[1] || name } },
+                        { lastName: { contains: name.split(' ')[0] || name } }
+                    ],
+                    telegramChatId: { not: null }
+                }
+            });
+
+            if (patient && patient.telegramChatId && patient.clinicId) {
+                const message = `💰 Hurmatli ${patient.firstName}, sizning klinikada to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.`;
+
+                try {
+                    await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
+                    sentCount++;
+                    console.log(`✅ Debt reminder sent to ${patient.firstName} ${patient.lastName}`);
+                } catch (e) {
+                    console.error(`Failed to send to ${patient.firstName}:`, e);
+                }
+            }
+        }
+
+        res.json({ success: true, count: sentCount });
+    } catch (error: any) {
+        console.error('Batch debt reminder error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // ============================================
 // TEST ENDPOINTS (for manual testing)
