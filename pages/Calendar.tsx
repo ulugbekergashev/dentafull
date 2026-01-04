@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Modal, Input, Select, Badge } from '../components/Common';
-import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole } from '../types';
 import { api } from '../services/api';
 
@@ -400,7 +400,12 @@ export const Calendar: React.FC<CalendarProps> = ({
                       height: `${height - 4}px`,
                     }}
                   >
-                    <div className="font-bold truncate">{app.patientName}</div>
+                    <div className="font-bold truncate pr-4">{app.patientName}</div>
+                    {app.reminderSent && (
+                      <div className="absolute top-1 right-1">
+                        <Bell className="w-3 h-3 text-blue-600 dark:text-blue-400 fill-current" />
+                      </div>
+                    )}
                     <div className="truncate opacity-75">{app.type}</div>
                     {height > 40 && (
                       <div className="flex items-center mt-1 gap-1 text-[10px]">

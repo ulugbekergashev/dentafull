@@ -87,6 +87,7 @@ model Appointment {
   time        String
   duration    Int
   status      String // 'Confirmed' | 'Pending' | 'Completed' | 'Cancelled' | 'No-Show' | 'Checked-In'
+  reminderSent Boolean @default(false)
   notes       String?
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])

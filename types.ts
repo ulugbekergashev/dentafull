@@ -57,6 +57,7 @@ export interface Appointment {
   time: string; // HH:MM
   duration: number; // minutes
   status: 'Confirmed' | 'Pending' | 'Completed' | 'Cancelled' | 'No-Show' | 'Checked-In';
+  reminderSent?: boolean;
   notes?: string;
   clinicId: string;
 }

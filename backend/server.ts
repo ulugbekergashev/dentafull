@@ -829,375 +829,6 @@ app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), 
     }
 });
 
-
-
-app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
-    try {
-        await prisma.clinic.delete({
-            where: { id: req.params.id }
-        });
-        res.json({ success: true });
-    } catch (error: any) {
-        console.error('Clinic delete error:', error);
-        res.status(500).json({ error: error.message || 'Failed to delete clinic' });
-    }
-});
-
-app.get('/api/plans', authenticateToken, async (req, res) => {
-    try {
-        const plans = await prisma.subscriptionPlan.findMany();
-        const parsedPlans = plans.map(p => ({
-            ...p,
-            features: JSON.parse(p.features)
-        }));
-        res.json(parsedPlans);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch plans' });
-    }
-});
-
-app.put('/api/plans/:id', authenticateToken, async (req, res) => {
-    try {
-        const data = { ...req.body };
-        if (data.features) {
-            data.features = JSON.stringify(data.features);
-        }
-        const plan = await prisma.subscriptionPlan.update({
-            where: { id: req.params.id },
-            data: data
-        });
-        res.json({ ...plan, features: JSON.parse(plan.features) });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to update plan' });
-    }
-});
-
-// --- Bot Settings ---
-app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
-    try {
-        const { botToken } = req.body;
-        const clinicId = req.params.id;
-
-        // Update clinic with new bot token
-        const clinic = await prisma.clinic.update({
-            where: { id: clinicId },
-            data: { botToken: botToken || null }
-        });
-
-        // Restart bot if token is provided, otherwise remove it
-        if (botToken) {
-            botManager.startBot(clinicId, botToken);
-        } else {
-            botManager.removeBot(clinicId);
-        }
-
-        res.json({ success: true, clinic });
-    } catch (error: any) {
-        console.error('Bot settings update error:', error);
-        res.status(500).json({ error: error.message || 'Failed to update bot settings' });
-    }
-});
-
-// Get bot username for clinic (public endpoint - no auth needed)
-app.get('/api/clinics/:id/bot-username', async (req, res) => {
-    try {
-        const clinicId = req.params.id;
-        console.log(`Requesting bot username for clinic: ${clinicId}`);
-        const username = await botManager.getBotUsername(clinicId);
-        console.log(`Found username: ${username}`);
-        res.json({ botUsername: username });
-    } catch (error: any) {
-        console.error('Get bot username error:', error);
-        res.status(500).json({ error: error.message || 'Failed to get bot username' });
-    }
-});
-
-// --- ICD-10 & Diagnoses ---
-app.get('/api/icd10', authenticateToken, async (req, res) => {
-    try {
-        const { query } = req.query;
-        if (!query) {
-            return res.json([]);
-        }
-
-        const codes = await prisma.iCD10Code.findMany({
-            where: {
-                OR: [
-                    { code: { contains: query as string } },
-                    { name: { contains: query as string } },
-                    { category: { contains: query as string } }
-                ]
-            },
-            take: 50
-        });
-        res.json(codes);
-    } catch (error) {
-        console.error('ICD-10 search error:', error);
-        res.status(500).json({ error: 'Failed to search ICD-10 codes' });
-    }
-});
-
-app.post('/api/diagnoses', authenticateToken, async (req, res) => {
-    try {
-        const { patientId, code, date, notes, status, clinicId } = req.body;
-
-        const diagnosis = await prisma.patientDiagnosis.create({
-            data: {
-                patientId,
-                code,
-                date,
-                notes,
-                status,
-                clinicId
-            },
-            include: { icd10: true }
-        });
-        res.json(diagnosis);
-    } catch (error) {
-        console.error('Create diagnosis error:', error);
-        res.status(500).json({ error: 'Failed to create diagnosis' });
-    }
-});
-
-app.get('/api/diagnoses', authenticateToken, async (req, res) => {
-    try {
-        const { patientId } = req.query;
-        if (!patientId) {
-            return res.status(400).json({ error: 'patientId is required' });
-        }
-
-        const diagnoses = await prisma.patientDiagnosis.findMany({
-            where: { patientId: patientId as string },
-            include: { icd10: true },
-            orderBy: { date: 'desc' }
-        });
-        res.json(diagnoses);
-    } catch (error) {
-        console.error('Get diagnoses error:', error);
-        res.status(500).json({ error: 'Failed to fetch diagnoses' });
-    }
-});
-
-app.delete('/api/diagnoses/:id', authenticateToken, async (req, res) => {
-    try {
-        await prisma.patientDiagnosis.delete({
-            where: { id: req.params.id }
-        });
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Delete diagnosis error:', error);
-        res.status(500).json({ error: 'Failed to delete diagnosis' });
-    }
-});
-
-// --- Patient Photos ---
-app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded' });
-        }
-
-        const { description, category } = req.body;
-        const patientId = req.params.id;
-
-        const photo = await prisma.patientPhoto.create({
-            data: {
-                patientId,
-                url: (req.file as any).path, // Cloudinary URL
-                description,
-                category: category || 'Other'
-            }
-        });
-
-        res.json(photo);
-    } catch (error: any) {
-        console.error('Upload photo error:', error);
-        res.status(500).json({
-            error: 'Failed to upload photo',
-            details: error.message || 'Unknown error',
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
-    }
-});
-
-app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
-    try {
-        const photos = await prisma.patientPhoto.findMany({
-            where: { patientId: req.params.id },
-            orderBy: { date: 'desc' }
-        });
-        res.json(photos);
-    } catch (error: any) {
-        console.error('Get photos error:', error);
-        res.status(500).json({
-            error: 'Failed to fetch photos',
-            details: error.message || 'Unknown error',
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
-    }
-});
-
-app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
-    try {
-        const photo = await prisma.patientPhoto.findUnique({
-            where: { id: req.params.id }
-        });
-
-        if (!photo) {
-            return res.status(404).json({ error: 'Photo not found' });
-        }
-
-        // Delete from Cloudinary
-        if (photo.url.includes('cloudinary')) {
-            const publicId = photo.url.split('/').pop()?.split('.')[0];
-            if (publicId) {
-                await cloudinary.uploader.destroy(`patient-photos/${publicId}`);
-            }
-        }
-
-        await prisma.patientPhoto.delete({
-            where: { id: req.params.id }
-        });
-
-        res.json({ success: true });
-    } catch (error: any) {
-        console.error('Delete photo error:', error);
-        res.status(500).json({
-            error: 'Failed to delete photo',
-            details: error.message || 'Unknown error',
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
-    }
-});
-
-// --- Tooth Data ---
-app.get('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
-    try {
-        const teeth = await prisma.toothData.findMany({
-            where: { patientId: req.params.id }
-        });
-
-        // Parse conditions JSON
-        const parsedTeeth = teeth.map((t: any) => ({
-            ...t,
-            conditions: JSON.parse(t.conditions)
-        }));
-
-        res.json(parsedTeeth);
-    } catch (error) {
-        console.error('Get teeth error:', error);
-        res.status(500).json({ error: 'Failed to fetch tooth data' });
-    }
-});
-
-app.post('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
-    try {
-        const patientId = req.params.id;
-        const { number, conditions, notes } = req.body;
-
-        // Upsert tooth data
-        const tooth = await prisma.toothData.upsert({
-            where: {
-                patientId_number: {
-                    patientId,
-                    number
-                }
-            },
-            update: {
-                conditions: JSON.stringify(conditions),
-                notes
-            },
-            create: {
-                patientId,
-                number,
-                conditions: JSON.stringify(conditions),
-                notes
-            }
-        });
-
-        res.json({
-            ...tooth,
-            conditions: JSON.parse(tooth.conditions)
-        });
-    } catch (error) {
-        console.error('Save tooth error:', error);
-        res.status(500).json({ error: 'Failed to save tooth data' });
-    }
-});
-
-// Global error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('Unhandled error:', err);
-    res.status(500).json({
-        error: 'Internal Server Error',
-        details: err.message || 'Unknown error',
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
-});
-
-
-
-app.get('/api/diagnoses', authenticateToken, async (req, res) => {
-    try {
-        const { patientId } = req.query;
-        if (!patientId) {
-            return res.status(400).json({ error: 'patientId is required' });
-        }
-
-        const diagnoses = await prisma.patientDiagnosis.findMany({
-            where: { patientId: patientId as string },
-            include: { icd10: true },
-            orderBy: { date: 'desc' }
-        });
-        res.json(diagnoses);
-    } catch (error) {
-        console.error('Get diagnoses error:', error);
-        res.status(500).json({ error: 'Failed to fetch diagnoses' });
-    }
-});
-
-app.delete('/api/diagnoses/:id', authenticateToken, async (req, res) => {
-    try {
-        await prisma.patientDiagnosis.delete({
-            where: { id: req.params.id }
-        });
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Delete diagnosis error:', error);
-        res.status(500).json({ error: 'Failed to delete diagnosis' });
-    }
-});
-
-// --- Patient Photos ---
-app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded' });
-        }
-
-        const { description, category } = req.body;
-        const patientId = req.params.id;
-
-        const photo = await prisma.patientPhoto.create({
-            data: {
-                patientId,
-                url: (req.file as any).path, // Cloudinary URL
-                description,
-                category: category || 'Other'
-            }
-        });
-
-        res.json(photo);
-    } catch (error: any) {
-        console.error('Upload photo error:', error);
-        res.status(500).json({
-            error: 'Failed to upload photo',
-            details: error.message || 'Unknown error',
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
-    }
-});
-
 app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
     try {
         const photos = await prisma.patientPhoto.findMany({
@@ -1395,14 +1026,24 @@ async function sendAppointmentReminders() {
         console.log(`Found ${appointments.length} appointments for tomorrow.`);
 
         let sentCount = 0;
+        let withTelegramCount = 0;
+
         for (const appointment of appointments) {
             // Only send if patient has Telegram connected
             if (appointment.patient.telegramChatId) {
+                withTelegramCount++;
                 const doctorName = `${appointment.doctor.firstName} ${appointment.doctor.lastName}`;
                 const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName}, sizning ertaga ${appointment.date} kuni soat ${appointment.time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
 
                 try {
                     await botManager.notifyClinicUser(appointment.patient.clinicId, appointment.patient.telegramChatId, message);
+
+                    // Mark as reminded
+                    await prisma.appointment.update({
+                        where: { id: appointment.id },
+                        data: { reminderSent: true }
+                    });
+
                     sentCount++;
                     console.log(`✅ Appointment reminder sent to ${appointment.patient.firstName} ${appointment.patient.lastName}`);
                 } catch (e) {
@@ -1414,10 +1055,15 @@ async function sendAppointmentReminders() {
         }
 
         console.log(`🔔 Appointment reminder job completed. Sent ${sentCount} reminders.`);
-        return sentCount;
+        return {
+            date: tomorrowFormatted,
+            found: appointments.length,
+            withTelegram: withTelegramCount,
+            sent: sentCount
+        };
     } catch (error) {
         console.error('❌ Appointment reminder job error:', error);
-        return 0;
+        return { date: '', found: 0, withTelegram: 0, sent: 0, error: error };
     }
 }
 
@@ -1506,11 +1152,109 @@ app.post('/api/batch/remind-appointments', authenticateToken, async (req, res) =
         const { clinicId } = req.body;
         console.log('🔔 Manual trigger: Sending appointment reminders...');
 
-        const count = await sendAppointmentReminders();
+        const result = await sendAppointmentReminders();
 
-        res.json({ success: true, count, message: `${count} ta eslatma yuborildi` });
+        res.json({
+            success: true,
+            count: result.sent,
+            message: `${result.date} sanasi uchun ${result.found} ta qabul topildi. ${result.withTelegram} tasida Telegram bor. ${result.sent} ta xabar yuborildi.`
+        });
     } catch (error: any) {
         console.error('Batch appointment reminder error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Batch: Send debt reminders
+app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        console.log(`💰 Manual trigger: Sending debt reminders for clinic ${clinicId}...`);
+
+        // 1. Find all overdue transactions for this clinic
+        const overdueTransactions = await prisma.transaction.findMany({
+            where: {
+                clinicId: clinicId as string,
+                status: 'Overdue'
+            },
+            select: { patientName: true }
+        });
+
+        if (overdueTransactions.length === 0) {
+            return res.json({ success: true, count: 0, message: 'Qarzdorlar topilmadi' });
+        }
+
+        // 2. Extract unique patient names
+        const debtorNames = [...new Set(overdueTransactions.map(t => t.patientName))];
+        console.log(`Found ${debtorNames.length} debtors by name:`, debtorNames);
+
+        let sentCount = 0;
+
+        // 3. Find patients by name and send reminders
+        for (const name of debtorNames) {
+            // Try to find patient with this name
+            const patient = await prisma.patient.findFirst({
+                where: {
+                    clinicId: clinicId as string,
+                    OR: [
+                        { firstName: { contains: name.split(' ')[1] || name } },
+                        { lastName: { contains: name.split(' ')[0] || name } }
+                    ],
+                    telegramChatId: { not: null }
+                }
+            });
+
+            if (patient && patient.telegramChatId && patient.clinicId) {
+                const message = `💰 Hurmatli ${patient.firstName}, sizning klinikada to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.`;
+
+                try {
+                    await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
+                    sentCount++;
+                    console.log(`✅ Debt reminder sent to ${patient.firstName} ${patient.lastName}`);
+                } catch (e) {
+                    console.error(`Failed to send to ${patient.firstName}:`, e);
+                }
+            }
+        }
+
+        res.json({ success: true, count: sentCount });
+    } catch (error: any) {
+        console.error('Batch debt reminder error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// TEST ENDPOINTS (for manual testing)
+// ============================================
+
+app.post('/api/test/send-birthday-reminders', authenticateToken, async (req, res) => {
+    try {
+        await sendBirthdayReminders();
+        res.json({ success: true, message: 'Birthday reminders sent' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/test/send-appointment-reminders', authenticateToken, async (req, res) => {
+    try {
+        await sendAppointmentReminders();
+        res.json({ success: true, message: 'Appointment reminders sent' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/test/send-noshow-followups', authenticateToken, async (req, res) => {
+    try {
+        await sendNoShowFollowups();
+        res.json({ success: true, message: 'No-show follow-ups sent' });
+    } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
 });
