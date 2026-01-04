@@ -478,17 +478,20 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           <Button onClick={async () => {
             if (!confirm('Barcha qarzdorlarga eslatma yuborilsinmi?')) return;
             try {
-              const userStr = localStorage.getItem('dentalflow_user');
-              if (!userStr) {
-                alert('Iltimos, tizimga qayta kiring');
-                return;
-              }
-              const user = JSON.parse(userStr);
-              if (!user.clinicId) {
+              const getAuthData = () => {
+                const local = localStorage.getItem('dentalflow_auth');
+                if (local) return JSON.parse(local);
+                const session = sessionStorage.getItem('dentalflow_auth');
+                if (session) return JSON.parse(session);
+                return null;
+              };
+
+              const auth = getAuthData();
+              if (!auth || !auth.clinicId) {
                 alert('Klinika ma\'lumotlari topilmadi. Iltimos, qayta kiring.');
                 return;
               }
-              const response = await api.batch.remindDebts(user.clinicId, DEBTORS.map(d => ({ name: d.name, amount: d.amount })));
+              const response = await api.batch.remindDebts(auth.clinicId, DEBTORS.map(d => ({ name: d.name, amount: d.amount })));
               alert(response.message || 'Eslatmalar yuborildi');
             } catch (e) {
               alert('Xatolik yuz berdi');
