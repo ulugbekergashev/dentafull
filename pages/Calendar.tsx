@@ -298,8 +298,9 @@ export const Calendar: React.FC<CalendarProps> = ({
                   // Assuming we have the clinicId from somewhere, or the backend handles it from the token
                   // For now, passing a placeholder or relying on token
                   const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
-                  await api.batch.remindAppointments(user.clinicId);
-                  alert('Eslatmalar yuborish boshlandi!');
+                  const response = await api.batch.remindAppointments(user.clinicId);
+                  // @ts-ignore
+                  alert(response.message || 'Eslatmalar yuborish boshlandi!');
                 } catch (e) {
                   alert('Xatolik yuz berdi');
                 }
