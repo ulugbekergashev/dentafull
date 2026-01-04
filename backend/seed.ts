@@ -49,6 +49,7 @@ const SERVICES_LIST = [
 
 const SUBSCRIPTION_PLANS = [
   { id: 'trial', name: 'Bepul Sinov (14 kun)', price: 0, maxDoctors: 1, features: JSON.stringify(['Barcha funksiyalar', '14 kunlik muddat', 'Cheklangan shifokorlar']) },
+  { id: 'individual', name: 'Individual', price: 250000, maxDoctors: 1, features: JSON.stringify(['Yakka tartibda ishlash', 'Bemorlar bazasi', 'Moliya', '14 kunlik sinov']) },
   { id: 'basic', name: 'Start', price: 500000, maxDoctors: 3, features: JSON.stringify(['Bemorlar bazasi', 'Jadval', 'Oddiy hisobotlar']) },
   { id: 'pro', name: 'Pro', price: 1200000, maxDoctors: 10, features: JSON.stringify(['Barcha Start funksiyalari', 'Moliya moduli', 'SMS xabarnomalar']) },
   { id: 'business', name: 'Business', price: 2500000, maxDoctors: 50, features: JSON.stringify(['Barcha Pro funksiyalari', 'API integratsiya', 'Shaxsiy menejer', 'Call-center moduli']) },

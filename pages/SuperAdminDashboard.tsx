@@ -67,9 +67,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
       // Auto generate expiry date
       const date = new Date();
-      // 14 days for Trial, 30 days for others
-      const isTrial = newClinicForm.planId === 'trial';
-      date.setDate(date.getDate() + (isTrial ? 14 : 30));
+      // Universal 14-day trial for ALL plans
+      date.setDate(date.getDate() + 14);
 
       const expiryDate = date.toISOString().split('T')[0];
       const startDate = new Date().toISOString().split('T')[0];
