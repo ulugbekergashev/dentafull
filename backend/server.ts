@@ -955,11 +955,11 @@ async function sendBirthdayReminders() {
     try {
         console.log('🎂 Running birthday reminder job...');
 
-        // Get today's date in DD.MM format (matching dob format in database)
+        // Get today's date in MM-DD format for matching
         const today = new Date();
-        const todayFormatted = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const todayMonthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-        // Find all patients whose birthday is today and have Telegram connected
+        // Find all patients with Telegram connected
         const patients = await prisma.patient.findMany({
             where: {
                 telegramChatId: { not: null },
@@ -972,18 +972,29 @@ async function sendBirthdayReminders() {
 
         let sentCount = 0;
         for (const patient of patients) {
-            // Extract DD.MM from patient's dob (format: DD.MM.YYYY)
-            const dobParts = patient.dob.split('.');
-            if (dobParts.length >= 2) {
-                const patientBirthday = `${dobParts[0]}.${dobParts[1]}`;
+            // Handle both YYYY-MM-DD (standard) and DD.MM.YYYY (legacy) formats
+            let patientMonthDay = '';
 
-                if (patientBirthday === todayFormatted) {
-                    const message = `🎉 Tug'ilgan kuningiz bilan!\n\nHurmatli ${patient.firstName}, sizni tug'ilgan kuningiz bilan chin dildan tabriklaymiz! Sog'lig'ingiz mustahkam bo'lsin! 🎂`;
-
-                    await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId!, message);
-                    sentCount++;
-                    console.log(`✅ Birthday greeting sent to ${patient.firstName} ${patient.lastName}`);
+            if (patient.dob.includes('-')) {
+                // Format: YYYY-MM-DD
+                const parts = patient.dob.split('-');
+                if (parts.length === 3) {
+                    patientMonthDay = `${parts[1]}-${parts[2]}`;
                 }
+            } else if (patient.dob.includes('.')) {
+                // Format: DD.MM.YYYY
+                const parts = patient.dob.split('.');
+                if (parts.length >= 2) {
+                    patientMonthDay = `${parts[1]}-${parts[0]}`; // Convert to MM-DD
+                }
+            }
+
+            if (patientMonthDay === todayMonthDay) {
+                const message = `🎉 Tug'ilgan kuningiz bilan!\n\nHurmatli ${patient.firstName}, sizni tug'ilgan kuningiz bilan chin dildan tabriklaymiz! Sog'lig'ingiz mustahkam bo'lsin! 🎂`;
+
+                await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId!, message);
+                sentCount++;
+                console.log(`✅ Birthday greeting sent to ${patient.firstName} ${patient.lastName}`);
             }
         }
 
@@ -1000,10 +1011,10 @@ async function sendAppointmentReminders() {
     try {
         console.log('🔔 Running appointment reminder job...');
 
-        // Get tomorrow's date in DD.MM.YYYY format
+        // Get tomorrow's date in YYYY-MM-DD format (database standard)
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowFormatted = `${String(tomorrow.getDate()).padStart(2, '0')}.${String(tomorrow.getMonth() + 1).padStart(2, '0')}.${tomorrow.getFullYear()}`;
+        const tomorrowFormatted = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
 
         console.log(`Checking appointments for date: ${tomorrowFormatted}`);
 
@@ -1074,9 +1085,9 @@ async function sendNoShowFollowups() {
     try {
         console.log('❗️ Running no-show follow-up job...');
 
-        // Get today's date in DD.MM.YYYY format
+        // Get today's date in YYYY-MM-DD format
         const today = new Date();
-        const todayFormatted = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+        const todayFormatted = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
         // Find all appointments for today with No-Show status
         const appointments = await prisma.appointment.findMany({
