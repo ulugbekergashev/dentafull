@@ -47,27 +47,27 @@ export const SERVICES_LIST = [
 // --- Super Admin Mocks ---
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
-  { id: 'trial', name: 'Bepul Sinov (14 kun)', price: 0, maxDoctors: 1, features: ['Barcha funksiyalar', '14 kunlik muddat', 'Cheklangan shifokorlar'] },
+  { id: 'individual', name: 'Individual', price: 250000, maxDoctors: 1, features: ['Yakka tartibda ishlash', 'Bemorlar bazasi', 'Moliya', '14 kunlik sinov'] },
   { id: 'basic', name: 'Start', price: 500000, maxDoctors: 3, features: ['Bemorlar bazasi', 'Jadval', 'Oddiy hisobotlar'] },
   { id: 'pro', name: 'Pro', price: 1200000, maxDoctors: 10, features: ['Barcha Start funksiyalari', 'Moliya moduli', 'SMS xabarnomalar'] },
   { id: 'business', name: 'Business', price: 2500000, maxDoctors: 50, features: ['Barcha Pro funksiyalari', 'API integratsiya', 'Shaxsiy menejer', 'Call-center moduli'] },
 ];
 
 export const MOCK_CLINICS: Clinic[] = [
-  { 
-    id: 'c1', name: 'Demo Klinika', adminName: 'Demo Admin', username: 'demoklinikaadmin', phone: '+998 90 000 00 01', 
-    status: 'Active', planId: 'pro', subscriptionStartDate: getRelativeDate(-5), expiryDate: getRelativeDate(25), monthlyRevenue: 15000000 
+  {
+    id: 'c1', name: 'Demo Klinika', adminName: 'Demo Admin', username: 'demoklinikaadmin', phone: '+998 90 000 00 01',
+    status: 'Active', planId: 'pro', subscriptionStartDate: getRelativeDate(-5), expiryDate: getRelativeDate(25), monthlyRevenue: 15000000
   },
-  { 
-    id: 'c2', name: 'Smile Dental', adminName: 'Sarvar K.', username: 'smile_admin', phone: '+998 90 123 11 11', 
-    status: 'Active', planId: 'business', subscriptionStartDate: getRelativeDate(-20), expiryDate: getRelativeDate(10), monthlyRevenue: 45000000 
+  {
+    id: 'c2', name: 'Smile Dental', adminName: 'Sarvar K.', username: 'smile_admin', phone: '+998 90 123 11 11',
+    status: 'Active', planId: 'business', subscriptionStartDate: getRelativeDate(-20), expiryDate: getRelativeDate(10), monthlyRevenue: 45000000
   },
-  { 
-    id: 'c3', name: 'Happy Teeth', adminName: 'Lola M.', username: 'happy_admin', phone: '+998 93 444 55 66', 
-    status: 'Blocked', planId: 'basic', subscriptionStartDate: getRelativeDate(-32), expiryDate: getRelativeDate(-2), monthlyRevenue: 2000000 
+  {
+    id: 'c3', name: 'Happy Teeth', adminName: 'Lola M.', username: 'happy_admin', phone: '+998 93 444 55 66',
+    status: 'Blocked', planId: 'basic', subscriptionStartDate: getRelativeDate(-32), expiryDate: getRelativeDate(-2), monthlyRevenue: 2000000
   },
-  { 
-    id: 'c4', name: 'New Life Stom', adminName: 'Bekzod A.', username: 'newlife_admin', phone: '+998 99 888 77 66', 
-    status: 'Active', planId: 'trial', subscriptionStartDate: getRelativeDate(-3), expiryDate: getRelativeDate(11), monthlyRevenue: 500000 
+  {
+    id: 'c4', name: 'New Life Stom', adminName: 'Bekzod A.', username: 'newlife_admin', phone: '+998 99 888 77 66',
+    status: 'Active', planId: 'individual', subscriptionStartDate: getRelativeDate(-3), expiryDate: getRelativeDate(11), monthlyRevenue: 500000
   },
 ];
