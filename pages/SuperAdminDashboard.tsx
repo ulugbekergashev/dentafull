@@ -46,6 +46,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const [passwordChangeClinic, setPasswordChangeClinic] = useState<Clinic | null>(null);
    const [newPassword, setNewPassword] = useState('');
 
+   // --- Search, Filter, Pagination State ---
+   const [searchQuery, setSearchQuery] = useState('');
+   const [filterStatus, setFilterStatus] = useState<'All' | 'Active' | 'Blocked' | 'Expiring'>('All');
+   const [currentPage, setCurrentPage] = useState(1);
+   const itemsPerPage = 10;
+
    // Sync edit data when selectedClinic changes
    useEffect(() => {
       if (selectedClinic) {
@@ -62,6 +68,42 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const totalRevenue = clinics.reduce((acc, c) => acc + (plans.find(p => p.id === c.planId)?.price || 0), 0);
    const activeClinics = clinics.filter(c => c.status === 'Active').length;
    const totalClinics = clinics.length;
+
+   // Analytics Calculations
+   const expiringSoonCount = clinics.filter(c => {
+      const days = getDaysRemaining(c.expiryDate);
+      return days <= 3 && days > 0;
+   }).length;
+
+   const newClinicsThisMonth = clinics.filter(c => {
+      const start = new Date(c.subscriptionStartDate);
+      const now = new Date();
+      return start.getMonth() === now.getMonth() && start.getFullYear() === now.getFullYear();
+   }).length;
+
+   // Filter & Pagination Logic
+   const filteredClinics = clinics.filter(clinic => {
+      const matchesSearch =
+         clinic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+         clinic.adminName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+         clinic.phone.includes(searchQuery);
+
+      const daysLeft = getDaysRemaining(clinic.expiryDate);
+      const isExpiring = daysLeft <= 3 && daysLeft > 0;
+
+      if (filterStatus === 'All') return matchesSearch;
+      if (filterStatus === 'Active') return matchesSearch && clinic.status === 'Active';
+      if (filterStatus === 'Blocked') return matchesSearch && clinic.status === 'Blocked';
+      if (filterStatus === 'Expiring') return matchesSearch && isExpiring;
+
+      return matchesSearch;
+   });
+
+   const totalPages = Math.ceil(filteredClinics.length / itemsPerPage);
+   const paginatedClinics = filteredClinics.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+   );
 
    const handleAddClinicSubmit = (e: React.FormEvent) => {
       e.preventDefault();
@@ -240,17 +282,65 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </div>
                   </div>
                </Card>
+
+               {/* New Analytics Cards */}
+               <Card className="p-6">
+                  <div className="flex justify-between items-start">
+                     <div>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">Muddati Tugayotgan</p>
+                        <h3 className="text-3xl font-bold mt-2 text-orange-600">{expiringSoonCount}</h3>
+                        <p className="text-xs text-gray-500 mt-2">3 kun ichida tugaydiganlar</p>
+                     </div>
+                     <div className="p-3 bg-orange-50 dark:bg-orange-900/30 rounded-full">
+                        <Clock className="w-6 h-6 text-orange-600" />
+                     </div>
+                  </div>
+               </Card>
+
+               <Card className="p-6">
+                  <div className="flex justify-between items-start">
+                     <div>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">Yangi (Bu oy)</p>
+                        <h3 className="text-3xl font-bold mt-2 text-blue-600">{newClinicsThisMonth}</h3>
+                        <p className="text-xs text-gray-500 mt-2">O'tgan oyga nisbatan +{newClinicsThisMonth > 0 ? '100%' : '0%'}</p>
+                     </div>
+                     <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
+                        <Users className="w-6 h-6 text-blue-600" />
+                     </div>
+                  </div>
+               </Card>
             </div>
          )}
 
          {/* CLINICS TAB */}
          {activeTab === 'clinics' && (
             <Card className="p-6">
-               <div className="flex justify-between items-center mb-6">
+               <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white">Klinikalar Ro'yxati</h3>
-                  <Button onClick={() => setIsAddClinicModalOpen(true)}>
-                     <Plus className="w-4 h-4 mr-2" /> Klinika Qo'shish
-                  </Button>
+
+                  <div className="flex flex-1 w-full md:w-auto gap-3">
+                     <div className="relative flex-1 md:w-64">
+                        <Input
+                           placeholder="Qidirish..."
+                           value={searchQuery}
+                           onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                           className="w-full"
+                        />
+                     </div>
+                     <select
+                        className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
+                        value={filterStatus}
+                        onChange={(e) => { setFilterStatus(e.target.value as any); setCurrentPage(1); }}
+                     >
+                        <option value="All">Barchasi</option>
+                        <option value="Active">Faol</option>
+                        <option value="Blocked">Bloklangan</option>
+                        <option value="Expiring">Tugayotganlar</option>
+                     </select>
+                     <Button onClick={() => setIsAddClinicModalOpen(true)}>
+                        <Plus className="w-4 h-4 mr-2" /> Qo'shish
+                     </Button>
+                  </div>
                </div>
 
                <div className="overflow-x-auto">
@@ -265,60 +355,94 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {clinics.map(clinic => {
-                           const daysLeft = getDaysRemaining(clinic.expiryDate);
-                           const isExpiring = daysLeft <= 3 && daysLeft > 0;
-                           const isExpired = daysLeft <= 0;
+                        {paginatedClinics.length === 0 ? (
+                           <tr>
+                              <td colSpan={5} className="p-8 text-center text-gray-500">
+                                 Ma'lumot topilmadi
+                              </td>
+                           </tr>
+                        ) : (
+                           paginatedClinics.map(clinic => {
+                              const daysLeft = getDaysRemaining(clinic.expiryDate);
+                              const isExpiring = daysLeft <= 3 && daysLeft > 0;
+                              const isExpired = daysLeft <= 0;
 
-                           return (
-                              <tr
-                                 key={clinic.id}
-                                 className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer group"
-                                 onClick={() => setSelectedClinic(clinic)}
-                              >
-                                 <td className="p-4">
-                                    <div className="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">{clinic.name}</div>
-                                    <div className="text-xs text-gray-500">{clinic.adminName}</div>
-                                 </td>
-                                 <td className="p-4">
-                                    <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase
+                              return (
+                                 <tr
+                                    key={clinic.id}
+                                    className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer group"
+                                    onClick={() => setSelectedClinic(clinic)}
+                                 >
+                                    <td className="p-4">
+                                       <div className="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">{clinic.name}</div>
+                                       <div className="text-xs text-gray-500">{clinic.adminName}</div>
+                                    </td>
+                                    <td className="p-4">
+                                       <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase
                                     ${clinic.planId === 'trial'
-                                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
-                                          : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
-                                       }
+                                             ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                                             : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                                          }
                                   `}>
-                                       {plans.find(p => p.id === clinic.planId)?.name}
-                                    </span>
-                                 </td>
-                                 <td className="p-4">
-                                    <div className="flex items-center gap-2">
-                                       <Calendar className="w-3 h-3 text-gray-400" />
-                                       <span className="text-gray-700 dark:text-gray-300 text-xs">
-                                          {clinic.subscriptionStartDate} <ArrowRight className="inline w-3 h-3 mx-1" /> {clinic.expiryDate}
+                                          {plans.find(p => p.id === clinic.planId)?.name}
                                        </span>
-                                    </div>
-                                    <div className={`text-xs mt-1 font-medium ${isExpired ? 'text-red-500' : isExpiring ? 'text-orange-500' : 'text-green-500'}`}>
-                                       {isExpired ? 'Muddati tugagan' : `${daysLeft} kun qoldi`}
-                                    </div>
-                                 </td>
-                                 <td className="p-4">
-                                    <Badge status={clinic.status === 'Active' ? 'active' : 'blocked'} />
-                                 </td>
-                                 <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                    <Button
-                                       size="sm"
-                                       variant="secondary"
-                                       onClick={() => setSelectedClinic(clinic)}
-                                    >
-                                       Boshqarish
-                                    </Button>
-                                 </td>
-                              </tr>
-                           );
-                        })}
+                                    </td>
+                                    <td className="p-4">
+                                       <div className="flex items-center gap-2">
+                                          <Calendar className="w-3 h-3 text-gray-400" />
+                                          <span className="text-gray-700 dark:text-gray-300 text-xs">
+                                             {clinic.subscriptionStartDate} <ArrowRight className="inline w-3 h-3 mx-1" /> {clinic.expiryDate}
+                                          </span>
+                                       </div>
+                                       <div className={`text-xs mt-1 font-medium ${isExpired ? 'text-red-500' : isExpiring ? 'text-orange-500' : 'text-green-500'}`}>
+                                          {isExpired ? 'Muddati tugagan' : `${daysLeft} kun qoldi`}
+                                       </div>
+                                    </td>
+                                    <td className="p-4">
+                                       <Badge status={clinic.status === 'Active' ? 'active' : 'blocked'} />
+                                    </td>
+                                    <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                       <Button
+                                          size="sm"
+                                          variant="secondary"
+                                          onClick={() => setSelectedClinic(clinic)}
+                                       >
+                                          Boshqarish
+                                       </Button>
+                                    </td>
+                                 </tr>
+                              );
+                           })}
                      </tbody>
                   </table>
                </div>
+
+               {/* Pagination Controls */}
+               {totalPages > 1 && (
+                  <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                     <div className="text-sm text-gray-500">
+                        Jami: {filteredClinics.length} ta klinika (Sahifa {currentPage} / {totalPages})
+                     </div>
+                     <div className="flex gap-2">
+                        <Button
+                           variant="secondary"
+                           size="sm"
+                           onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                           disabled={currentPage === 1}
+                        >
+                           Ortga
+                        </Button>
+                        <Button
+                           variant="secondary"
+                           size="sm"
+                           onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                           disabled={currentPage === totalPages}
+                        >
+                           Oldinga
+                        </Button>
+                     </div>
+                  </div>
+               )}
             </Card>
          )}
 
