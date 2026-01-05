@@ -46,6 +46,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const [passwordChangeClinic, setPasswordChangeClinic] = useState<Clinic | null>(null);
    const [newPassword, setNewPassword] = useState('');
 
+   // Helper to calculate days remaining
+   const getDaysRemaining = (expiry: string) => {
+      const today = new Date();
+      const exp = new Date(expiry);
+      const diff = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      return diff;
+   };
+
    // --- Search, Filter, Pagination State ---
    const [searchQuery, setSearchQuery] = useState('');
    const [filterStatus, setFilterStatus] = useState<'All' | 'Active' | 'Blocked' | 'Expiring'>('All');
@@ -177,13 +185,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       }
    };
 
-   // Helper to calculate days remaining
-   const getDaysRemaining = (expiry: string) => {
-      const today = new Date();
-      const exp = new Date(expiry);
-      const diff = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      return diff;
-   };
+
 
    const getProgressPercentage = (start: string, end: string) => {
       const startDate = new Date(start).getTime();
