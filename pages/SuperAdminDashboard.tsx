@@ -28,7 +28,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       phone: '',
       planId: plans.length > 0 ? plans[0].id : '',
       useCustomPrice: false,
-      customPrice: 0
+      customPrice: 0,
+      doctorCount: 1
    });
 
    // Success modal for credentials
@@ -94,7 +95,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       });
 
       setIsAddClinicModalOpen(false);
-      setNewClinicForm({ name: '', adminName: '', username: '', password: '', phone: '', planId: plans.length > 0 ? plans[0].id : '', useCustomPrice: false, customPrice: 0 });
+      setNewClinicForm({ name: '', adminName: '', username: '', password: '', phone: '', planId: plans.length > 0 ? plans[0].id : '', useCustomPrice: false, customPrice: 0, doctorCount: 1 });
    };
 
    const generatePassword = () => {
@@ -324,34 +325,65 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          {/* PLANS TAB */}
          {activeTab === 'plans' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               {plans.map(plan => (
-                  <Card key={plan.id} className="p-6 relative overflow-hidden flex flex-col">
-                     <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <ShieldCheck className="w-24 h-24" />
-                     </div>
-                     <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{plan.name}</h3>
-                     <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-6">
-                        {plan.price.toLocaleString()} <span className="text-sm text-gray-500 font-normal">UZS/oy</span>
-                     </div>
+               {plans.map(plan => {
+                  const isStart = plan.id === 'basic'; // 'basic' is START
+                  const isPro = plan.id === 'pro';
+                  const isBusiness = plan.id === 'business';
 
-                     <div className="space-y-3 flex-1">
-                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                           <Users className="w-4 h-4 text-blue-500" />
-                           <span>{plan.maxDoctors} tagacha shifokor</span>
+                  return (
+                     <Card key={plan.id} className="p-6 relative overflow-hidden flex flex-col">
+                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                           <ShieldCheck className="w-24 h-24" />
                         </div>
-                        {plan.features.map((feat, i) => (
-                           <div key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                              <CheckCircle className="w-4 h-4 text-green-500" />
-                              <span>{feat}</span>
-                           </div>
-                        ))}
-                     </div>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{plan.name}</h3>
+                        <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-6">
+                           {plan.price.toLocaleString()} <span className="text-sm text-gray-500 font-normal">UZS/oy</span>
+                        </div>
 
-                     <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-                        <Button variant="secondary" className="w-full" onClick={() => alert('Tarifni tahrirlash hozircha mavjud emas')}>Tahrirlash</Button>
-                     </div>
-                  </Card>
-               ))}
+                        <div className="space-y-3 flex-1">
+                           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                              <Users className="w-4 h-4 text-blue-500" />
+                              <span>{plan.maxDoctors} tagacha shifokor</span>
+                           </div>
+                           {plan.features.map((feat, i) => (
+                              <div key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                 <CheckCircle className="w-4 h-4 text-green-500" />
+                                 <span>{feat}</span>
+                              </div>
+                           ))}
+
+                           {/* Discount Details for START and PRO */}
+                           {(isStart || isPro) && (
+                              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-2 text-sm">
+                                 <div className="flex justify-between">
+                                    <span className="text-gray-500">3 oy (-10%)</span>
+                                    <span className="font-medium">{(plan.price * 0.9).toLocaleString()} / oy</span>
+                                 </div>
+                                 <div className="flex justify-between">
+                                    <span className="text-gray-500">6 oy (-15%)</span>
+                                    <span className="font-medium">{(plan.price * 0.85).toLocaleString()} / oy</span>
+                                 </div>
+                                 <div className="flex justify-between">
+                                    <span className="text-gray-500">12 oy (-25%)</span>
+                                    <span className="font-medium">{(plan.price * 0.75).toLocaleString()} / oy</span>
+                                 </div>
+                              </div>
+                           )}
+
+                           {/* Business Plan Note */}
+                           {isBusiness && (
+                              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
+                                 <p>10 tadan ortiq shifokor — har bir qo‘shimcha shifokor uchun <strong>50 000 so‘m / oy</strong></p>
+                              </div>
+                           )}
+                        </div>
+
+                        <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+                           <Button variant="secondary" className="w-full" onClick={() => alert('Tarifni tahrirlash hozircha mavjud emas')}>Tahrirlash</Button>
+                        </div>
+                     </Card>
+                  );
+               })}
             </div>
          )}
 
@@ -382,8 +414,41 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      label="Tarif Rejasi"
                      options={plans.map(p => ({ value: p.id, label: `${p.name} - ${p.price.toLocaleString()} UZS` }))}
                      value={newClinicForm.planId}
-                     onChange={e => setNewClinicForm({ ...newClinicForm, planId: e.target.value })}
+                     onChange={e => {
+                        const planId = e.target.value;
+                        setNewClinicForm({
+                           ...newClinicForm,
+                           planId,
+                           // Reset custom price if switching away from business, or set logic
+                           useCustomPrice: planId === 'business',
+                           customPrice: planId === 'business' ? 590000 : 0
+                        });
+                     }}
                   />
+
+                  {newClinicForm.planId === 'business' && (
+                     <div className="animate-fade-in">
+                        <Input
+                           label="Shifokorlar Soni"
+                           type="number"
+                           value={newClinicForm.doctorCount}
+                           onChange={e => {
+                              const count = parseInt(e.target.value) || 1;
+                              const basePrice = 590000;
+                              const extraPrice = 50000;
+                              const included = 10;
+                              const price = count <= included ? basePrice : basePrice + (count - included) * extraPrice;
+
+                              setNewClinicForm({
+                                 ...newClinicForm,
+                                 doctorCount: count,
+                                 customPrice: price
+                              });
+                           }}
+                           min={1}
+                        />
+                     </div>
+                  )}
 
                   <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                      <input
