@@ -412,7 +412,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     </td>
                                  </tr>
                               );
-                           })}
+                           }))}
                      </tbody>
                   </table>
                </div>
