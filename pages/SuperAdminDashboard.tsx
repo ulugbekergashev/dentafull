@@ -204,7 +204,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          {/* Header */}
          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SaaS Boshqaruv Paneli</h1>
+               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SaaS Boshqaruv Paneli (v2.0)</h1>
                <p className="text-sm text-gray-500 dark:text-gray-400">Super Admin uchun boshqaruv markazi</p>
             </div>
             <div className="flex bg-white dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
