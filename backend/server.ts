@@ -626,7 +626,8 @@ app.post('/api/clinics', authenticateToken, async (req, res) => {
                 status,
                 subscriptionStartDate,
                 expiryDate,
-                monthlyRevenue
+                monthlyRevenue,
+                subscriptionType: req.body.subscriptionType || 'Paid'
             }
         });
         res.json(clinic);

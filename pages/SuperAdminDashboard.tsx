@@ -29,7 +29,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       planId: plans.length > 0 ? plans[0].id : '',
       useCustomPrice: false,
       customPrice: 0,
-      doctorCount: 1
+      doctorCount: 1,
+      subscriptionType: 'Paid' as 'Paid' | 'Trial'
    });
 
    // Success modal for credentials
@@ -37,7 +38,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
    // Detail/Edit Modal State
    const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
-   const [editClinicData, setEditClinicData] = useState<{ status: string; expiryDate: string; planId: string } | null>(null);
+   const [editClinicData, setEditClinicData] = useState<{ status: string; expiryDate: string; planId: string; subscriptionType: 'Paid' | 'Trial' } | null>(null);
 
    // Delete Confirmation Modal
    const [deleteConfirmClinic, setDeleteConfirmClinic] = useState<Clinic | null>(null);
@@ -66,7 +67,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          setEditClinicData({
             status: selectedClinic.status,
             expiryDate: selectedClinic.expiryDate,
-            planId: selectedClinic.planId
+            planId: selectedClinic.planId,
+            subscriptionType: selectedClinic.subscriptionType
          });
       } else {
          setEditClinicData(null);
@@ -118,8 +120,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
       // Auto generate expiry date
       const date = new Date();
-      // Universal 14-day trial for ALL plans
-      date.setDate(date.getDate() + 14);
+
+      if (newClinicForm.subscriptionType === 'Trial') {
+         date.setDate(date.getDate() + 14);
+      } else {
+         date.setMonth(date.getMonth() + 1); // Default 1 month for paid
+      }
 
       const expiryDate = date.toISOString().split('T')[0];
       const startDate = new Date().toISOString().split('T')[0];
@@ -135,7 +141,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          subscriptionStartDate: startDate,
          expiryDate: expiryDate,
          monthlyRevenue: 0,
-         customPrice: newClinicForm.useCustomPrice ? newClinicForm.customPrice : undefined
+         customPrice: newClinicForm.useCustomPrice ? newClinicForm.customPrice : undefined,
+         subscriptionType: newClinicForm.subscriptionType
       });
 
       setCreatedClinicCreds({
@@ -145,7 +152,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       });
 
       setIsAddClinicModalOpen(false);
-      setNewClinicForm({ name: '', adminName: '', username: '', password: '', phone: '', planId: plans.length > 0 ? plans[0].id : '', useCustomPrice: false, customPrice: 0, doctorCount: 1 });
+      setNewClinicForm({ name: '', adminName: '', username: '', password: '', phone: '', planId: plans.length > 0 ? plans[0].id : '', useCustomPrice: false, customPrice: 0, doctorCount: 1, subscriptionType: 'Paid' });
    };
 
    const generatePassword = () => {
@@ -179,7 +186,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          onUpdateClinic(selectedClinic.id, {
             status: editClinicData.status as 'Active' | 'Blocked',
             expiryDate: editClinicData.expiryDate,
-            planId: editClinicData.planId
+            planId: editClinicData.planId,
+            subscriptionType: editClinicData.subscriptionType
          });
          setSelectedClinic(null);
       }
@@ -388,6 +396,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                   `}>
                                           {plans.find(p => p.id === clinic.planId)?.name}
                                        </span>
+                                       {clinic.subscriptionType === 'Trial' && (
+                                          <span className="ml-2 px-2 py-1 rounded-md text-xs font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                             TRIAL
+                                          </span>
+                                       )}
                                     </td>
                                     <td className="p-4">
                                        <div className="flex items-center gap-2">
@@ -536,6 +549,29 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <CreditCard className="w-4 h-4" /> Tarif va Narx
                   </h4>
 
+                  <div className="flex gap-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                     <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                           type="radio"
+                           name="subscriptionType"
+                           checked={newClinicForm.subscriptionType === 'Paid'}
+                           onChange={() => setNewClinicForm({ ...newClinicForm, subscriptionType: 'Paid' })}
+                           className="text-blue-600"
+                        />
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">To'liq Obuna (Paid)</span>
+                     </label>
+                     <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                           type="radio"
+                           name="subscriptionType"
+                           checked={newClinicForm.subscriptionType === 'Trial'}
+                           onChange={() => setNewClinicForm({ ...newClinicForm, subscriptionType: 'Trial' })}
+                           className="text-blue-600"
+                        />
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">Sinov Davri (14 kun)</span>
+                     </label>
+                  </div>
+
                   <Select
                      label="Tarif Rejasi"
                      options={plans.map(p => ({ value: p.id, label: `${p.name} - ${p.price.toLocaleString()} UZS` }))}
@@ -624,7 +660,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </div>
                      <div className="text-right">
                         <div className="text-xs text-gray-500">Joriy Holat</div>
-                        <Badge status={editClinicData.status === 'Active' ? 'active' : 'blocked'} />
+                        <div className="flex gap-2 justify-end">
+                           <Badge status={editClinicData.status === 'Active' ? 'active' : 'blocked'} />
+                           {editClinicData.subscriptionType === 'Trial' && (
+                              <span className="px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">TRIAL</span>
+                           )}
+                        </div>
                      </div>
                   </div>
 
@@ -671,6 +712,32 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onChange={(e) => setEditClinicData({ ...editClinicData, planId: e.target.value })}
                            options={plans.map(p => ({ value: p.id, label: p.name }))}
                         />
+                     </div>
+
+                     <div className="pt-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Obuna Turi</label>
+                        <div className="flex gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                           <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                 type="radio"
+                                 name="editSubscriptionType"
+                                 checked={editClinicData.subscriptionType === 'Paid'}
+                                 onChange={() => setEditClinicData({ ...editClinicData, subscriptionType: 'Paid' })}
+                                 className="text-blue-600"
+                              />
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">To'liq Obuna (Paid)</span>
+                           </label>
+                           <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                 type="radio"
+                                 name="editSubscriptionType"
+                                 checked={editClinicData.subscriptionType === 'Trial'}
+                                 onChange={() => setEditClinicData({ ...editClinicData, subscriptionType: 'Trial' })}
+                                 className="text-blue-600"
+                              />
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">Sinov Davri (Trial)</span>
+                           </label>
+                        </div>
                      </div>
                   </div>
 
@@ -728,7 +795,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </div>
                </div>
             </Modal>
-         )}
+         )
+         }
 
          {/* Credentials Success Modal */}
          <Modal isOpen={!!createdClinicCreds} onClose={() => setCreatedClinicCreds(null)} title="Klinika Muvaffaqiyatli Yaratildi!">
@@ -836,6 +904,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                </div>
             </div>
          </Modal>
-      </div>
+      </div >
    );
 };

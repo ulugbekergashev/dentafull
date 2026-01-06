@@ -119,6 +119,7 @@ export interface Clinic {
   monthlyRevenue: number; // For SaaS analytics
   botToken?: string; // Telegram bot token
   customPrice?: number; // Optional custom pricing for special offers
+  subscriptionType: 'Paid' | 'Trial';
 }
 
 export interface ICD10Code {

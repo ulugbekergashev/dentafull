@@ -138,6 +138,7 @@ model Clinic {
   subscriptionStartDate String
   expiryDate            String
   monthlyRevenue        Float
+  subscriptionType      String           @default("Paid") // 'Paid' | 'Trial'
 
   // Relations
   doctors      Doctor[]
