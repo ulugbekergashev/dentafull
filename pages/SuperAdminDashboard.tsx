@@ -181,6 +181,25 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       });
    };
 
+   const handleSubscriptionTypeChange = (newType: 'Paid' | 'Trial') => {
+      if (!selectedClinic || !editClinicData) return;
+
+      const startDate = new Date(selectedClinic.subscriptionStartDate);
+      const newExpiryDate = new Date(startDate);
+
+      if (newType === 'Trial') {
+         newExpiryDate.setDate(newExpiryDate.getDate() + 14); // 14 days for trial
+      } else {
+         newExpiryDate.setMonth(newExpiryDate.getMonth() + 1); // 1 month for paid
+      }
+
+      setEditClinicData({
+         ...editClinicData,
+         subscriptionType: newType,
+         expiryDate: newExpiryDate.toISOString().split('T')[0]
+      });
+   };
+
    const handleSaveChanges = () => {
       if (selectedClinic && editClinicData) {
          onUpdateClinic(selectedClinic.id, {
@@ -722,7 +741,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  type="radio"
                                  name="editSubscriptionType"
                                  checked={editClinicData.subscriptionType === 'Paid'}
-                                 onChange={() => setEditClinicData({ ...editClinicData, subscriptionType: 'Paid' })}
+                                 onChange={() => handleSubscriptionTypeChange('Paid')}
                                  className="text-blue-600"
                               />
                               <span className="text-sm font-medium text-gray-900 dark:text-white">To'liq Obuna (Paid)</span>
@@ -732,7 +751,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  type="radio"
                                  name="editSubscriptionType"
                                  checked={editClinicData.subscriptionType === 'Trial'}
-                                 onChange={() => setEditClinicData({ ...editClinicData, subscriptionType: 'Trial' })}
+                                 onChange={() => handleSubscriptionTypeChange('Trial')}
                                  className="text-blue-600"
                               />
                               <span className="text-sm font-medium text-gray-900 dark:text-white">Sinov Davri (Trial)</span>
