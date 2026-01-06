@@ -9,7 +9,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "switch:dev": "node scripts/set-provider.js sqlite",
-    "switch:prod": "node scripts/set-provider.js postgresql"
+    "switch:prod": "node scripts/set-provider.js postgresql",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
