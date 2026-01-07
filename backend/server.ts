@@ -185,7 +185,7 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
 
         const patients = await prisma.patient.findMany({
             where: { clinicId: clinicId as string },
-            orderBy: { lastVisit: 'desc' }
+            orderBy: { id: 'desc' } // Newest patients first
         });
         res.json(patients);
     } catch (error) {
