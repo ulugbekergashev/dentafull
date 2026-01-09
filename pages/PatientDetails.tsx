@@ -34,7 +34,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Edit Form State
    const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
    // Payment Form State
-   const [paymentData, setPaymentData] = useState({ amount: '', service: '', type: 'Cash', status: 'Paid' });
+   const [paymentData, setPaymentData] = useState({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
 
    // Message Modal State
    const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
@@ -189,16 +189,27 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    const handlePaymentSave = (e: React.FormEvent) => {
       e.preventDefault();
+
+      // Validate doctor selection
+      if (!paymentData.doctorId) {
+         alert('Iltimos, shifokorni tanlang!');
+         return;
+      }
+
+      const doctor = doctors.find(d => d.id === paymentData.doctorId);
+
       onAddTransaction({
          patientName: `${patient.lastName} ${patient.firstName}`,
          date: new Date().toISOString().split('T')[0],
          amount: Number(paymentData.amount),
          service: paymentData.service,
          type: paymentData.type as any,
-         status: paymentData.status as any
+         status: paymentData.status as any,
+         doctorId: paymentData.doctorId,
+         doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
       });
       setIsPaymentModalOpen(false);
-      setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid' });
+      setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
    };
 
    const handleSendMessage = async (e: React.FormEvent) => {
@@ -613,6 +624,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          {/* Payment Modal */}
          <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="To'lov Qabul Qilish">
             <form onSubmit={handlePaymentSave} className="space-y-4">
+               <Select
+                  label="Shifokor"
+                  value={paymentData.doctorId}
+                  onChange={e => setPaymentData({ ...paymentData, doctorId: e.target.value })}
+                  options={[
+                     { value: '', label: 'Shifokorni tanlang' },
+                     ...doctors.map(d => ({ value: d.id, label: `Dr. ${d.firstName} ${d.lastName}` }))
+                  ]}
+                  required
+               />
                <Select
                   label="Xizmat Nomi"
                   value={paymentData.service}

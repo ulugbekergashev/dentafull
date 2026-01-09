@@ -101,6 +101,8 @@ model Transaction {
   type        String // 'Cash' | 'Card' | 'Insurance'
   service     String
   status      String // 'Paid' | 'Pending' | 'Overdue'
+  doctorId    String?  // Optional - for backward compatibility
+  doctorName  String?  // Optional - for backward compatibility
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])
 }

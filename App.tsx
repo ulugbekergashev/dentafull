@@ -460,6 +460,7 @@ const App: React.FC = () => {
           doctors={doctors}
           appointments={appointments}
           services={services}
+          transactions={transactions}
         />;
       case Route.FINANCE:
         return <Finance

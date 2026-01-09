@@ -18,7 +18,7 @@ async function check() {
 
         console.log(`Total clinics from API: ${clinicsRes.data.length}`);
         clinicsRes.data.forEach(c => {
-            console.log(`- ${c.name} (ID: ${c.id})`);
+            console.log(`- ${c.name} (ID: ${c.id}) [Type: ${c.subscriptionType}]`);
         });
     } catch (e) {
         console.error('Error:', e.response ? e.response.data : e.message);

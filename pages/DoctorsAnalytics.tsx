@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Doctor, Appointment, Service } from '../types';
+import { Doctor, Appointment, Service, Transaction } from '../types';
 import { Card } from '../components/Common';
 import { DollarSign, Calendar, Award, Users } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
@@ -8,11 +8,12 @@ interface DoctorsAnalyticsProps {
     doctors: Doctor[];
     appointments: Appointment[];
     services: Service[];
+    transactions: Transaction[];
 }
 
 type DateRange = 'month' | '3months' | '6months' | 'year' | 'all' | 'custom';
 
-export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services }) => {
+export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions }) => {
     const [dateRange, setDateRange] = useState<DateRange>('month');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
@@ -52,17 +53,67 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
         });
     }, [appointments, dateRange, customStartDate, customEndDate]);
 
+    // Filter transactions by date range
+    const filteredTransactions = useMemo(() => {
+        if (dateRange === 'all') return transactions;
+
+        const now = new Date();
+        let startDate = new Date();
+        let endDate = now;
+
+        if (dateRange === 'custom') {
+            if (!customStartDate || !customEndDate) return transactions;
+            startDate = new Date(customStartDate);
+            endDate = new Date(customEndDate);
+        } else {
+            switch (dateRange) {
+                case 'month':
+                    startDate.setMonth(now.getMonth() - 1);
+                    break;
+                case '3months':
+                    startDate.setMonth(now.getMonth() - 3);
+                    break;
+                case '6months':
+                    startDate.setMonth(now.getMonth() - 6);
+                    break;
+                case 'year':
+                    startDate.setFullYear(now.getFullYear() - 1);
+                    break;
+            }
+        }
+
+        return transactions.filter(tx => {
+            const txDate = new Date(tx.date);
+            return txDate >= startDate && txDate <= endDate;
+        });
+    }, [transactions, dateRange, customStartDate, customEndDate]);
+
     // Calculate Metrics
     const analyticsData = useMemo(() => {
         return doctors.map(doctor => {
             const doctorAppts = filteredAppointments.filter(a => a.doctorId === doctor.id);
             const completedAppts = doctorAppts.filter(a => a.status === 'Completed');
 
-            // Revenue Calculation
-            const revenue = completedAppts.reduce((sum, appt) => {
-                const service = services.find(s => s.name === appt.type);
-                return sum + (service?.price || 0);
-            }, 0);
+            // Revenue Calculation - Use doctorId directly if available (new transactions)
+            // Fallback to appointment matching for old transactions without doctorId
+            const doctorTransactions = filteredTransactions.filter(tx => {
+                // If transaction has doctorId, use it directly (preferred method)
+                if (tx.doctorId) {
+                    return tx.doctorId === doctor.id;
+                }
+
+                // Fallback: Match transaction to doctor's appointments by patient name and service
+                // (for backward compatibility with old transactions)
+                const matchingAppt = doctorAppts.find(appt =>
+                    appt.patientName === tx.patientName && appt.type === tx.service
+                );
+                return matchingAppt !== undefined;
+            });
+
+            // Calculate revenue from actual paid transactions only
+            const revenue = doctorTransactions
+                .filter(tx => tx.status === 'Paid')
+                .reduce((sum, tx) => sum + tx.amount, 0);
 
             // Unique Patients
             const uniquePatients = new Set(doctorAppts.map(a => a.patientId)).size;
@@ -82,8 +133,10 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 }
             });
 
-            // Average revenue per appointment
-            const avgRevenue = completedAppts.length > 0 ? revenue / completedAppts.length : 0;
+            // Average revenue per appointment (based on actual transactions)
+            const avgRevenue = doctorTransactions.filter(tx => tx.status === 'Paid').length > 0
+                ? revenue / doctorTransactions.filter(tx => tx.status === 'Paid').length
+                : 0;
 
             // Day of week analysis
             const dayCount: Record<number, number> = {};
@@ -108,7 +161,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 name: `Dr. ${doctor.lastName}` // For charts
             };
         }).sort((a, b) => b.revenue - a.revenue);
-    }, [doctors, filteredAppointments, services]);
+    }, [doctors, filteredAppointments, filteredTransactions]);
 
     const totalRevenue = analyticsData.reduce((sum, d) => sum + d.revenue, 0);
     const totalAppointments = analyticsData.reduce((sum, d) => sum + d.totalAppts, 0);
@@ -172,7 +225,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-blue-100 text-sm font-medium mb-1">Jami Tushum</p>
-                            <h3 className="text-3xl font-bold">${totalRevenue.toLocaleString()}</h3>
+                            <h3 className="text-3xl font-bold">{totalRevenue.toLocaleString()} UZS</h3>
                         </div>
                         <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
                             <DollarSign className="w-8 h-8 text-white" />
@@ -212,7 +265,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                 {topPerformer ? `Dr. ${topPerformer.lastName}` : '-'}
                             </h3>
                             <p className="text-xs text-green-500 font-medium mt-1">
-                                {topPerformer ? `$${topPerformer.revenue.toLocaleString()}` : ''}
+                                {topPerformer ? `${topPerformer.revenue.toLocaleString()} UZS` : ''}
                             </p>
                         </div>
                         <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl">
@@ -234,7 +287,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                             <YAxis dataKey="name" type="category" stroke="#9ca3af" fontSize={12} width={80} />
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                                formatter={(value: number) => `$${value.toLocaleString()}`}
+                                formatter={(value: number) => `${value.toLocaleString()} UZS`}
                             />
                             <Bar dataKey="revenue" radius={[0, 8, 8, 0]}>
                                 {analyticsData.map((entry, index) => (
@@ -297,7 +350,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                             <YAxis stroke="#9ca3af" fontSize={12} />
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                                formatter={(value: number) => `$${value.toFixed(2)}`}
+                                formatter={(value: number) => `${value.toLocaleString()} UZS`}
                             />
                             <Bar dataKey="avgRevenue" name="O'rtacha" fill="#f59e0b" radius={[8, 8, 0, 0]} />
                         </BarChart>
@@ -353,10 +406,10 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                         <div className="text-xs text-gray-500">{doc.topServiceCount} marta</div>
                                     </td>
                                     <td className="p-4 text-right font-bold text-green-600 dark:text-green-400">
-                                        ${doc.revenue.toLocaleString()}
+                                        {doc.revenue.toLocaleString()} UZS
                                     </td>
                                     <td className="p-4 text-right text-sm text-gray-700 dark:text-gray-300">
-                                        ${doc.avgRevenue.toFixed(2)}
+                                        {Math.round(doc.avgRevenue).toLocaleString()} UZS
                                     </td>
                                     <td className="p-4 text-center">
                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">

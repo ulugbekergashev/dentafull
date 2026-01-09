@@ -447,6 +447,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Sana</th>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Bemor</th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Shifokor</th>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Xizmat</th>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Usul</th>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Summa</th>
@@ -458,6 +459,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 <tr key={t.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                   <td className="px-6 py-4">{t.date}</td>
                   <td className="px-6 py-4 font-medium">{t.patientName}</td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{t.doctorName || '-'}</td>
                   <td className="px-6 py-4">{t.service}</td>
                   <td className="px-6 py-4">{t.type}</td>
                   <td className="px-6 py-4 font-medium">{t.amount.toLocaleString()} UZS</td>
@@ -465,7 +467,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 </tr>
               ))}
               {filteredTransactions.length === 0 && (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">Tranzaksiyalar topilmadi.</td></tr>
+                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">Tranzaksiyalar topilmadi.</td></tr>
               )}
             </tbody>
           </table>

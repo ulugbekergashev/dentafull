@@ -71,6 +71,8 @@ export interface Transaction {
   service: string;
   status: 'Paid' | 'Pending' | 'Overdue';
   clinicId: string;
+  doctorId?: string;      // Optional - for backward compatibility
+  doctorName?: string;    // Optional - for backward compatibility
 }
 
 export interface Service {
