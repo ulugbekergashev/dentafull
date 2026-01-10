@@ -203,10 +203,21 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       // Check if current plan is individual
       const isIndividualPlan = currentClinic?.planId === 'individual';
 
+      // Debug logging
+      console.log('🔍 Payment Modal Debug:', {
+         currentClinic: currentClinic,
+         planId: currentClinic?.planId,
+         isIndividualPlan,
+         doctorsCount: doctors.length,
+         firstDoctorId: doctors[0]?.id
+      });
+
       // Auto-select first doctor for individual plans
       if (isIndividualPlan && doctors.length > 0) {
+         console.log('✅ Auto-selecting doctor:', doctors[0].id);
          setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id });
       } else {
+         console.log('❌ Not auto-selecting. IsIndividual:', isIndividualPlan, 'DoctorCount:', doctors.length);
          setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
       }
 
