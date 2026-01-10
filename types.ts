@@ -73,6 +73,7 @@ export interface Transaction {
   clinicId: string;
   doctorId?: string;      // Optional - for backward compatibility
   doctorName?: string;    // Optional - for backward compatibility
+  patientId?: string;     // Optional - for backward compatibility
 }
 
 export interface Service {

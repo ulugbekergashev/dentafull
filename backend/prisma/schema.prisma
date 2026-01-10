@@ -49,6 +49,7 @@ model Patient {
   @@index([phone]) // Optimize phone lookup
   photos         PatientPhoto[]
   teeth          ToothData[]
+  transactions   Transaction[]
 }
 
 model ToothData {
@@ -103,6 +104,8 @@ model Transaction {
   status      String // 'Paid' | 'Pending' | 'Overdue'
   doctorId    String?  // Optional - for backward compatibility
   doctorName  String?  // Optional - for backward compatibility
+  patientId   String?  // Optional initially to support existing data
+  patient     Patient? @relation(fields: [patientId], references: [id])
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])
 }

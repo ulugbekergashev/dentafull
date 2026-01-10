@@ -3,7 +3,7 @@ import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPi
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan } from '../types';
 import { api } from '../services/api';
 
 interface PatientDetailsProps {
@@ -13,6 +13,8 @@ interface PatientDetailsProps {
    transactions: Transaction[];
    doctors: Doctor[];
    services: Service[];
+   currentClinic?: Clinic;
+   plans?: SubscriptionPlan[];
    onBack: () => void;
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
    onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
@@ -21,7 +23,7 @@ interface PatientDetailsProps {
 }
 
 export const PatientDetails: React.FC<PatientDetailsProps> = ({
-   patientId, patients, appointments, transactions, doctors, services,
+   patientId, patients, appointments, transactions, doctors, services, currentClinic, plans,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment
 }) => {
    const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'diagnoses'>('overview');
@@ -174,7 +176,17 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    // Filter related data
    const patientAppointments = appointments.filter(a => a.patientId === patient.id);
-   const patientTransactions = transactions.filter(t => t.patientName.includes(patient.firstName)); // Simple match for demo
+   const patientTransactions = transactions.filter(t => {
+      // Priority 1: Match by ID (new data)
+      if (t.patientId) {
+         return t.patientId === patient.id;
+      }
+      // Priority 2: Strict Name Match (legacy data)
+      // Check both "LastName FirstName" and "FirstName LastName" formats
+      const fullName = `${patient.lastName} ${patient.firstName}`;
+      const fullNameReverse = `${patient.firstName} ${patient.lastName}`;
+      return t.patientName === fullName || t.patientName === fullNameReverse;
+   });
 
    const handleEditOpen = () => {
       setEditFormData(patient);
@@ -187,25 +199,45 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setIsEditModalOpen(false);
    };
 
+   const handlePaymentModalOpen = () => {
+      // Check if current plan is individual
+      const isIndividualPlan = currentClinic?.planId === 'individual';
+
+      // Auto-select first doctor for individual plans
+      if (isIndividualPlan && doctors.length > 0) {
+         setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id });
+      } else {
+         setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
+      }
+
+      setIsPaymentModalOpen(true);
+   };
+
    const handlePaymentSave = (e: React.FormEvent) => {
       e.preventDefault();
 
-      // Validate doctor selection
+      // Check if current plan is individual
+      const isIndividualPlan = currentClinic?.planId === 'individual';
+
+      // Validate doctor selection - required for multi-doctor plans, optional for individual with no doctors
       if (!paymentData.doctorId) {
-         alert('Iltimos, shifokorni tanlang!');
-         return;
+         if (!isIndividualPlan || (isIndividualPlan && doctors.length > 0)) {
+            alert('Iltimos, shifokorni tanlang!');
+            return;
+         }
       }
 
       const doctor = doctors.find(d => d.id === paymentData.doctorId);
 
       onAddTransaction({
+         patientId: patient.id,
          patientName: `${patient.lastName} ${patient.firstName}`,
          date: new Date().toISOString().split('T')[0],
          amount: Number(paymentData.amount),
          service: paymentData.service,
          type: paymentData.type as any,
          status: paymentData.status as any,
-         doctorId: paymentData.doctorId,
+         doctorId: paymentData.doctorId || '',
          doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
       });
       setIsPaymentModalOpen(false);
@@ -557,7 +589,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            {patientTransactions.reduce((acc, t) => acc + t.amount, 0).toLocaleString()} UZS
                         </p>
                      </div>
-                     <Button size="sm" onClick={() => setIsPaymentModalOpen(true)}>To'lov Qilish</Button>
+                     <Button size="sm" onClick={handlePaymentModalOpen}>To'lov Qilish</Button>
                   </div>
                   <table className="w-full text-left text-sm">
                      <thead className="bg-gray-50 dark:bg-gray-800">

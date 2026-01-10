@@ -436,6 +436,8 @@ const App: React.FC = () => {
             transactions={transactions}
             doctors={doctors}
             services={services}
+            currentClinic={clinics.find(c => c.id === clinicId)}
+            plans={plans}
             onBack={() => setCurrentRoute(Route.PATIENTS)}
             onUpdatePatient={updatePatient}
             onAddTransaction={addTransaction}
