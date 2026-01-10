@@ -667,16 +667,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          {/* Payment Modal */}
          <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="To'lov Qabul Qilish">
             <form onSubmit={handlePaymentSave} className="space-y-4">
-               <Select
-                  label="Shifokor"
-                  value={paymentData.doctorId}
-                  onChange={e => setPaymentData({ ...paymentData, doctorId: e.target.value })}
-                  options={[
-                     { value: '', label: 'Shifokorni tanlang' },
-                     ...doctors.map(d => ({ value: d.id, label: `Dr. ${d.firstName} ${d.lastName}` }))
-                  ]}
-                  required
-               />
+               {/* Only show doctor field for non-individual plans OR individual plans with doctors */}
+               {!(currentClinic?.planId === 'individual' && doctors.length === 0) && (
+                  <Select
+                     label="Shifokor"
+                     value={paymentData.doctorId}
+                     onChange={e => setPaymentData({ ...paymentData, doctorId: e.target.value })}
+                     options={[
+                        { value: '', label: 'Shifokorni tanlang' },
+                        ...doctors.map(d => ({ value: d.id, label: `Dr. ${d.firstName} ${d.lastName}` }))
+                     ]}
+                     required
+                  />
+               )}
                <Select
                   label="Xizmat Nomi"
                   value={paymentData.service}
