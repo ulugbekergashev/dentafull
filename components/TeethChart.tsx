@@ -28,7 +28,7 @@ const toRomanNumeral = (num: number): string => {
 
 const STATUS_LABELS: Record<string, string> = {
   [ToothStatus.HEALTHY]: 'Sog\'lom',
-  [ToothStatus.CAVITY]: 'Karis',
+  [ToothStatus.CAVITY]: 'Karies',
   [ToothStatus.FILLED]: 'Plombalangan',
   [ToothStatus.MISSING]: 'Yo\'q (Missing)',
   [ToothStatus.CROWN]: 'Qoplama (Crown)',
@@ -354,7 +354,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
       {/* Legend */}
       <div className="flex flex-wrap justify-center gap-3 sm:gap-6 mb-10 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 select-none">
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-300 shadow-sm"></div> Sog'lom</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3f0808] border border-red-900"></div> Karis</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3f0808] border border-red-900"></div> Karies</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-500 border border-gray-600"></div> Plombalangan</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-yellow-500 border border-yellow-600"></div> Qoplama</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full border-2 border-dashed border-gray-400 opacity-50"></div> Yo'q</div>

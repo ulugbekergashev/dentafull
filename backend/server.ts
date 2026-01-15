@@ -30,14 +30,7 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage: storage });
-// TEMPORARY FIX: Hardcoding the database URL to ensure connection to the correct DB
-const prisma = new PrismaClient({
-    datasources: {
-        db: {
-            url: 'postgresql://postgres:aleGfSHPFhpJTYnTMpPghOJGGHKIZmXi@switchyard.proxy.rlwy.net:56686/railway'
-        }
-    }
-});
+const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';

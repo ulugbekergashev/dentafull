@@ -676,6 +676,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <div>
                         <h3 className="text-xl font-bold text-gray-900 dark:text-white">{selectedClinic.name}</h3>
                         <p className="text-gray-500 text-sm">@{selectedClinic.username}</p>
+                        <p className="text-gray-500 text-sm">{selectedClinic.phone}</p>
                      </div>
                      <div className="text-right">
                         <div className="text-xs text-gray-500">Joriy Holat</div>

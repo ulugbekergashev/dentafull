@@ -61,7 +61,7 @@ const STATUS_TRANSLATIONS: Record<string, string> = {
   'checked-in': 'Keldi',
   'overdue': 'Qarzdor',
   'healthy': 'Sog\'lom',
-  'cavity': 'Karis',
+  'cavity': 'Karies',
   'filled': 'Plomba',
   'missing': 'Yo\'q',
   'crown': 'Qoplama'
