@@ -50,6 +50,7 @@ model Patient {
   photos         PatientPhoto[]
   teeth          ToothData[]
   transactions   Transaction[]
+  inventoryLogs  InventoryLog[]
 }
 
 model ToothData {
@@ -146,12 +147,13 @@ model Clinic {
   subscriptionType      String           @default("Paid") // 'Paid' | 'Trial'
 
   // Relations
-  doctors      Doctor[]
-  patients     Patient[]
-  appointments Appointment[]
-  transactions Transaction[]
-  services     Service[]
-  diagnoses    PatientDiagnosis[]
+  doctors       Doctor[]
+  patients      Patient[]
+  appointments  Appointment[]
+  transactions  Transaction[]
+  services      Service[]
+  diagnoses     PatientDiagnosis[]
+  inventoryItems InventoryItem[]
 
   @@index([botToken]) // Optimize bot startup
 }
@@ -175,4 +177,33 @@ model PatientDiagnosis {
   status      String // 'Active' | 'Resolved' | 'Chronic'
   clinicId    String
   clinic      Clinic    @relation(fields: [clinicId], references: [id])
+}
+
+model InventoryItem {
+  id          String         @id @default(uuid())
+  name        String
+  unit        String         // e.g., 'pcs', 'mg', 'ml'
+  quantity    Float          @default(0)
+  minQuantity Float          @default(0) // Minimum stock level for alerts
+  clinicId    String
+  clinic      Clinic         @relation(fields: [clinicId], references: [id])
+  logs        InventoryLog[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model InventoryLog {
+  id        String        @id @default(uuid())
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id])
+  change    Float         // Positive for IN, negative for OUT
+  type      String        // 'IN' | 'OUT'
+  note      String?
+  date      DateTime      @default(now())
+  userName  String        // Who made the change
+  patientId String?
+  patient   Patient?      @relation(fields: [patientId], references: [id])
+  
+  @@index([itemId])
+  @@index([patientId])
 }

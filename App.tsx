@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
@@ -14,7 +14,8 @@ import { Settings } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
-import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service } from './types';
+import { Inventory } from './pages/Inventory';
+import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, InventoryItem } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { api } from './services/api';
 
@@ -27,6 +28,7 @@ enum Route {
   FINANCE = 'finance',
   SETTINGS = 'settings',
   DOCTORS_ANALYTICS = 'doctors_analytics',
+  INVENTORY = 'inventory',
   // Super Admin Routes
   SAAS_DASHBOARD = 'saas_dashboard',
 }
@@ -38,6 +40,7 @@ const CLINIC_NAVIGATION: NavItem[] = [
   { id: Route.CALENDAR, label: 'Kalendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
   { id: Route.FINANCE, label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
   { id: Route.DOCTORS_ANALYTICS, label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
+  { id: Route.INVENTORY, label: 'Ombor', icon: Package, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
   { id: Route.SETTINGS, label: 'Sozlamalar', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
 ];
 
@@ -68,6 +71,7 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
   // Super Admin Data Store
   const [clinics, setClinics] = useState<Clinic[]>([]);
@@ -119,14 +123,15 @@ const App: React.FC = () => {
           setClinics(clns);
           setPlans(plns);
         } else if (clinicId) {
-          const [pts, appts, txs, svcs, docs, clns, plns] = await Promise.all([
+          const [pts, appts, txs, svcs, docs, clns, plns, invItems] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
             api.services.getAll(clinicId),
             api.doctors.getAll(clinicId),
             api.clinics.getAll(), // Clinic admin might not need all clinics, but maybe for reference? Or maybe just their own.
-            api.plans.getAll()
+            api.plans.getAll(),
+            api.inventory.getAll(clinicId)
           ]);
           setPatients(pts);
           setAppointments(appts);
@@ -135,6 +140,7 @@ const App: React.FC = () => {
           setDoctors(docs);
           setClinics(clns);
           setPlans(plns);
+          setInventoryItems(invItems);
         }
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -199,14 +205,15 @@ const App: React.FC = () => {
         setClinics(clns);
         setPlans(plns);
       } else if (clinicId) {
-        const [pts, appts, txs, svcs, docs, clns, plns] = await Promise.all([
+        const [pts, appts, txs, svcs, docs, clns, plns, invItems] = await Promise.all([
           api.patients.getAll(clinicId),
           api.appointments.getAll(clinicId),
           api.transactions.getAll(clinicId),
           api.services.getAll(clinicId),
           api.doctors.getAll(clinicId),
           api.clinics.getAll(),
-          api.plans.getAll()
+          api.plans.getAll(),
+          api.inventory.getAll(clinicId)
         ]);
         setPatients(pts);
         setAppointments(appts);
@@ -215,6 +222,7 @@ const App: React.FC = () => {
         setDoctors(docs);
         setClinics(clns);
         setPlans(plns);
+        setInventoryItems(invItems);
       }
       addToast('success', 'Ma\'lumotlar muvaffaqiyatli yuklandi!');
     } catch (error) {
@@ -396,6 +404,31 @@ const App: React.FC = () => {
     } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
   };
 
+  // Inventory Actions
+  const addInventoryItem = async (item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const newItem = await api.inventory.create({ ...item, clinicId });
+      setInventoryItems(prev => [...prev, newItem]);
+      addToast('success', 'Material qo\'shildi!');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const updateInventoryStock = async (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string }) => {
+    try {
+      const updated = await api.inventory.updateStock(id, data);
+      setInventoryItems(prev => prev.map(item => item.id === id ? updated : item));
+      addToast('success', 'Miqdor yangilandi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const deleteInventoryItem = async (id: string) => {
+    try {
+      await api.inventory.delete(id);
+      setInventoryItems(prev => prev.filter(item => item.id !== id));
+      addToast('info', 'Material o\'chirildi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
   // --- Navigation ---
   const handleNavigate = (route: Route) => {
     setCurrentRoute(route);
@@ -486,6 +519,14 @@ const App: React.FC = () => {
           onDeleteDoctor={deleteDoctor}
           currentClinic={clinics.find(c => c.id === clinicId)}
           plans={plans}
+        />;
+      case Route.INVENTORY:
+        return <Inventory
+          items={inventoryItems}
+          userName={userName}
+          onAddItem={addInventoryItem}
+          onUpdateStock={updateInventoryStock}
+          onDeleteItem={deleteInventoryItem}
         />;
       default: return <Dashboard patients={patients} appointments={appointments} transactions={transactions} userRole={userRole} doctorId={doctorId} />;
     }

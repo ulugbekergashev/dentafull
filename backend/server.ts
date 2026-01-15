@@ -935,6 +935,152 @@ app.post('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Inventory Management ---
+app.get('/api/inventory', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const items = await prisma.inventoryItem.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { name: 'asc' }
+        });
+        res.json(items);
+    } catch (error) {
+        console.error('Get inventory error:', error);
+        res.status(500).json({ error: 'Failed to fetch inventory items' });
+    }
+});
+
+app.post('/api/inventory', authenticateToken, async (req, res) => {
+    try {
+        const { name, unit, quantity, minQuantity, clinicId } = req.body;
+
+        const item = await prisma.inventoryItem.create({
+            data: {
+                name,
+                unit,
+                quantity: parseFloat(quantity) || 0,
+                minQuantity: parseFloat(minQuantity) || 0,
+                clinicId
+            }
+        });
+        res.json(item);
+    } catch (error) {
+        console.error('Create inventory item error:', error);
+        res.status(500).json({ error: 'Failed to create inventory item' });
+    }
+});
+
+app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
+    try {
+        const { change, type, note, userName, patientId } = req.body;
+        const itemId = req.params.id;
+
+        // Get current item
+        const currentItem = await prisma.inventoryItem.findUnique({
+            where: { id: itemId }
+        });
+
+        if (!currentItem) {
+            return res.status(404).json({ error: 'Item not found' });
+        }
+
+        // Calculate new quantity
+        const changeAmount = parseFloat(change);
+        const actualChange = type === 'OUT' ? -Math.abs(changeAmount) : Math.abs(changeAmount);
+        const newQuantity = currentItem.quantity + actualChange;
+
+        if (newQuantity < 0) {
+            return res.status(400).json({ error: 'Insufficient stock' });
+        }
+
+        // Update item and create log in a transaction
+        const [updatedItem] = await prisma.$transaction([
+            prisma.inventoryItem.update({
+                where: { id: itemId },
+                data: { quantity: newQuantity }
+            }),
+            prisma.inventoryLog.create({
+                data: {
+                    itemId,
+                    change: actualChange,
+                    type,
+                    note,
+                    userName,
+                    patientId: patientId || null
+                }
+            })
+        ]);
+
+        res.json(updatedItem);
+    } catch (error: any) {
+        console.error('Update inventory stock error:', error);
+        res.status(500).json({ error: error.message || 'Failed to update stock' });
+    }
+});
+
+app.get('/api/inventory/logs', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId, patientId } = req.query;
+
+        if (!clinicId) {
+            return res.status(400).json({ error: 'Clinic ID is required' });
+        }
+
+        const where: any = {
+            item: {
+                clinicId: clinicId as string
+            }
+        };
+
+        if (patientId) {
+            where.patientId = patientId as string;
+        }
+
+        const logs = await prisma.inventoryLog.findMany({
+            where,
+            include: {
+                item: true,
+                patient: {
+                    select: {
+                        firstName: true,
+                        lastName: true
+                    }
+                }
+            },
+            orderBy: {
+                date: 'desc'
+            }
+        });
+
+        res.json(logs);
+    } catch (error) {
+        console.error('Get inventory logs error:', error);
+        res.status(500).json({ error: 'Failed to fetch inventory logs' });
+    }
+});
+
+app.delete('/api/inventory/:id', authenticateToken, async (req, res) => {
+    try {
+        // Delete logs first, then item (cascade should handle this but being explicit)
+        await prisma.inventoryLog.deleteMany({
+            where: { itemId: req.params.id }
+        });
+
+        await prisma.inventoryItem.delete({
+            where: { id: req.params.id }
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete inventory item error:', error);
+        res.status(500).json({ error: 'Failed to delete inventory item' });
+    }
+});
+
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('Unhandled error:', err);

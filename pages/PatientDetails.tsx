@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send } from 'lucide-react';
+import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 
@@ -27,7 +27,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    patientId, patients, appointments, transactions, doctors, services, currentClinic, plans,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment
 }) => {
-   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'diagnoses'>('overview');
+   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'diagnoses' | 'materials'>('overview');
    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
@@ -81,6 +81,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
    const [editPaymentAmount, setEditPaymentAmount] = useState('');
 
+   // Material Usage State
+   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+   const [materialLogs, setMaterialLogs] = useState<InventoryLog[]>([]);
+   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
+   const [materialData, setMaterialData] = useState({ itemId: '', quantity: '', note: '' });
+
    useEffect(() => {
       const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
       if (storedAuth) {
@@ -97,8 +103,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       if (patientId) {
          api.diagnoses.getByPatient(patientId).then(setDiagnoses).catch(console.error);
          api.teeth.getAll(patientId).then(setTeethData).catch(console.error);
+
+         // Fetch inventory data
+         if (currentClinic) {
+            api.inventory.getAll(currentClinic.id).then(setInventoryItems).catch(console.error);
+            api.inventory.getLogs(currentClinic.id, patientId).then(setMaterialLogs).catch(console.error);
+         }
       }
-   }, [patientId]);
+   }, [patientId, currentClinic]);
 
    const handleSearchICD10 = async (query: string) => {
       setIcd10Query(query);
@@ -211,6 +223,34 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setIsPaymentEditModalOpen(false);
       setEditingTransaction(null);
       setEditPaymentAmount('');
+   };
+
+   const handleMaterialSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!materialData.itemId || !patientId || !currentClinic) return;
+
+      try {
+         await api.inventory.updateStock(materialData.itemId, {
+            change: Number(materialData.quantity),
+            type: 'OUT',
+            note: materialData.note || `Bemor: ${patient?.firstName} ${patient?.lastName}`,
+            userName: 'Doctor', // Ideally get from auth context
+            patientId: patientId
+         });
+
+         // Refresh logs and items
+         const updatedLogs = await api.inventory.getLogs(currentClinic.id, patientId);
+         setMaterialLogs(updatedLogs);
+         const updatedItems = await api.inventory.getAll(currentClinic.id);
+         setInventoryItems(updatedItems);
+
+         setIsMaterialModalOpen(false);
+         setMaterialData({ itemId: '', quantity: '', note: '' });
+         alert('Material sarflandi!');
+      } catch (e) {
+         console.error('Failed to use material', e);
+         alert('Xatolik yuz berdi');
+      }
    };
 
 
@@ -461,6 +501,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      { id: 'photos', label: 'Rasmlar', icon: FileText },
                      { id: 'appointments', label: 'Qabullar', icon: Calendar },
                      { id: 'payments', label: 'To\'lovlar', icon: CreditCard },
+                     { id: 'materials', label: 'Materiallar', icon: Package },
                   ].map(tab => (
                      <button
                         key={tab.id}
@@ -736,6 +777,42 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      {patientTransactions.length === 0 && <div className="p-8 text-center text-gray-500">To'lovlar tarixi topilmadi.</div>}
                   </Card>
                )}
+
+               {/* Materials Tab */}
+               {activeTab === 'materials' && (
+                  <Card className="overflow-hidden">
+                     <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <h3 className="font-bold text-gray-900 dark:text-white">Ishlatilgan Materiallar</h3>
+                        <Button size="sm" onClick={() => setIsMaterialModalOpen(true)}>+ Material Ishlatish</Button>
+                     </div>
+                     <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-800">
+                           <tr>
+                              <th className="p-4 font-medium text-gray-500">Sana</th>
+                              <th className="p-4 font-medium text-gray-500">Material</th>
+                              <th className="p-4 font-medium text-gray-500">Miqdor</th>
+                              <th className="p-4 font-medium text-gray-500">Izoh</th>
+                              <th className="p-4 font-medium text-gray-500">Foydalanuvchi</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                           {materialLogs.map(log => (
+                              <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                 <td className="p-4 text-gray-900 dark:text-white">{new Date(log.date).toLocaleDateString('uz-UZ')}</td>
+                                 <td className="p-4 text-gray-900 dark:text-white font-medium">
+                                    {log.item?.name}
+                                    <span className="text-xs text-gray-500 ml-1">({log.item?.unit})</span>
+                                 </td>
+                                 <td className="p-4 text-red-600 font-medium">{Math.abs(log.change)}</td>
+                                 <td className="p-4 text-gray-600 dark:text-gray-300">{log.note || '-'}</td>
+                                 <td className="p-4 text-gray-600 dark:text-gray-300">{log.userName}</td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                     {materialLogs.length === 0 && <div className="p-8 text-center text-gray-500">Hozircha material ishlatilmagan.</div>}
+                  </Card>
+               )}
             </div>
 
             {/* Edit Modal */}
@@ -753,6 +830,43 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                </form>
             </Modal>
 
+
+            {/* Material Usage Modal */}
+            <Modal isOpen={isMaterialModalOpen} onClose={() => setIsMaterialModalOpen(false)} title="Material Ishlatish">
+               <form onSubmit={handleMaterialSubmit} className="space-y-4">
+                  <Select
+                     label="Material"
+                     value={materialData.itemId}
+                     onChange={e => setMaterialData({ ...materialData, itemId: e.target.value })}
+                     options={[
+                        { value: '', label: 'Materialni tanlang' },
+                        ...inventoryItems.map(item => ({
+                           value: item.id,
+                           label: `${item.name} (${item.quantity} ${item.unit} mavjud)`
+                        }))
+                     ]}
+                     required
+                  />
+                  <Input
+                     label="Miqdor"
+                     type="number"
+                     value={materialData.quantity}
+                     onChange={e => setMaterialData({ ...materialData, quantity: e.target.value })}
+                     placeholder="0"
+                     required
+                  />
+                  <Input
+                     label="Izoh"
+                     value={materialData.note}
+                     onChange={e => setMaterialData({ ...materialData, note: e.target.value })}
+                     placeholder="Qo'shimcha izoh..."
+                  />
+                  <div className="flex justify-end gap-2 pt-4">
+                     <Button type="button" variant="secondary" onClick={() => setIsMaterialModalOpen(false)}>Bekor qilish</Button>
+                     <Button type="submit">Saqlash</Button>
+                  </div>
+               </form>
+            </Modal>
 
             {/* Payment Modal */}
             <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="To'lov Qabul Qilish">

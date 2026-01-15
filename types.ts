@@ -151,3 +151,26 @@ export interface PatientPhoto {
   date: string;
   createdAt: string;
 }
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  minQuantity: number;
+  clinicId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InventoryLog {
+  id: string;
+  itemId: string;
+  change: number;
+  type: 'IN' | 'OUT';
+  note?: string;
+  date: string;
+  userName: string;
+  patientId?: string;
+  patientName?: string;
+}

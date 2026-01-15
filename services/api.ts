@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, ICD10Code, PatientDiagnosis } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, ICD10Code, PatientDiagnosis, InventoryItem } from '../types';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app');
@@ -211,5 +211,22 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ clinicId, debtors }),
         }),
+    },
+    inventory: {
+        getAll: (clinicId: string) => fetchJson<InventoryItem[]>(`/inventory?clinicId=${clinicId}`),
+        create: (data: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => fetchJson<InventoryItem>('/inventory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        updateStock: (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string; patientId?: string }) => fetchJson<InventoryItem>(`/inventory/${id}/stock`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        delete: (id: string) => fetchJson<{ success: true }>(`/inventory/${id}`, {
+            method: 'DELETE',
+        }),
+        getLogs: (clinicId: string, patientId?: string) => fetchJson<InventoryLog[]>(`/inventory/logs?clinicId=${clinicId}${patientId ? `&patientId=${patientId}` : ''}`),
     }
 };
