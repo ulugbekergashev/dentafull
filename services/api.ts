@@ -228,5 +228,6 @@ export const api = {
             method: 'DELETE',
         }),
         getLogs: (clinicId: string, patientId?: string) => fetchJson<InventoryLog[]>(`/inventory/logs?clinicId=${clinicId}${patientId ? `&patientId=${patientId}` : ''}`),
+        getAnalytics: (clinicId: string, startDate?: string, endDate?: string) => fetchJson<any[]>(`/inventory/analytics?clinicId=${clinicId}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`),
     }
 };

@@ -471,7 +471,7 @@ app.get('/api/doctors', authenticateToken, async (req, res) => {
 
 app.post('/api/doctors', authenticateToken, async (req, res) => {
     try {
-        const { firstName, lastName, specialty, phone, email, status, clinicId, username, password } = req.body;
+        const { firstName, lastName, specialty, phone, email, status, clinicId, username, password, percentage } = req.body;
 
         // Check subscription limit
         const clinic = await prisma.clinic.findUnique({
@@ -501,7 +501,8 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
         }
 
         const data: any = {
-            firstName, lastName, specialty, phone, status, clinicId, username, password
+            firstName, lastName, specialty, phone, status, clinicId, username, password,
+            percentage: percentage || 0
         };
         if (email) data.email = email;
 
@@ -753,12 +754,21 @@ app.post('/api/diagnoses', authenticateToken, async (req, res) => {
 
         const diagnosis = await prisma.patientDiagnosis.create({
             data: {
-                patientId,
-                code,
+                patient: { connect: { id: patientId } },
+                clinic: { connect: { id: clinicId } },
                 date,
                 notes,
                 status,
-                clinicId
+                icd10: {
+                    connectOrCreate: {
+                        where: { code: code },
+                        create: {
+                            code: code,
+                            name: req.body.name || code,
+                            description: req.body.description || ''
+                        }
+                    }
+                }
             },
             include: { icd10: true }
         });
@@ -951,6 +961,61 @@ app.get('/api/inventory', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Get inventory error:', error);
         res.status(500).json({ error: 'Failed to fetch inventory items' });
+    }
+});
+
+// Inventory Analytics - Get material usage within date range
+app.get('/api/inventory/analytics', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId, startDate, endDate } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        // Build where clause
+        const where: any = {
+            item: { clinicId: clinicId as string },
+            type: 'OUT' // Only count outgoing usage
+        };
+
+        // Add date filtering if provided
+        if (startDate && endDate) {
+            where.date = {
+                gte: new Date(startDate as string),
+                lte: new Date(endDate as string)
+            };
+        }
+
+        // Get all OUT logs grouped by item
+        const logs = await prisma.inventoryLog.findMany({
+            where,
+            include: {
+                item: true
+            },
+            orderBy: { date: 'desc' }
+        });
+
+        // Group by item and calculate totals
+        const analytics = logs.reduce((acc: any, log) => {
+            const itemId = log.itemId;
+            if (!acc[itemId]) {
+                acc[itemId] = {
+                    itemId,
+                    itemName: log.item.name,
+                    unit: log.item.unit,
+                    totalUsed: 0,
+                    usageCount: 0
+                };
+            }
+            acc[itemId].totalUsed += Math.abs(log.change);
+            acc[itemId].usageCount += 1;
+            return acc;
+        }, {});
+
+        res.json(Object.values(analytics));
+    } catch (error) {
+        console.error('Get inventory analytics error:', error);
+        res.status(500).json({ error: 'Failed to fetch inventory analytics' });
     }
 });
 

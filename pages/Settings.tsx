@@ -25,12 +25,12 @@ export const Settings: React.FC<SettingsProps> = ({
    // Service Modal State
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
    const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
-   const [serviceForm, setServiceForm] = useState({ name: '', price: '', duration: '' });
+   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', duration: '' });
 
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
    const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
-   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '' });
+   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '', percentage: '' });
 
    // Upgrade Plan Modal State
    const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
@@ -118,10 +118,10 @@ export const Settings: React.FC<SettingsProps> = ({
       if (index !== undefined) {
          setEditingServiceIndex(index);
          const s = services[index];
-         setServiceForm({ name: s.name, price: s.price.toString(), duration: s.duration.toString() });
+         setServiceForm({ name: s.name, price: s.price.toString(), cost: (s.cost || 0).toString(), duration: s.duration.toString() });
       } else {
          setEditingServiceIndex(null);
-         setServiceForm({ name: '', price: '', duration: '' });
+         setServiceForm({ name: '', price: '', cost: '', duration: '' });
       }
       setIsServiceModalOpen(true);
    };
@@ -131,6 +131,7 @@ export const Settings: React.FC<SettingsProps> = ({
       const data = {
          name: serviceForm.name,
          price: Number(serviceForm.price),
+         cost: Number(serviceForm.cost) || 0,
          duration: Number(serviceForm.duration)
       };
 
@@ -163,11 +164,12 @@ export const Settings: React.FC<SettingsProps> = ({
             specialty: doctor.specialty,
             phone: doctor.phone,
             username: doctor.username || '',
-            password: ''
+            password: '',
+            percentage: (doctor.percentage || 0).toString()
          });
       } else {
          setEditingDoctorId(null);
-         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '' });
+         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '', percentage: '' });
       }
       setIsDoctorModalOpen(true);
    };
@@ -179,10 +181,12 @@ export const Settings: React.FC<SettingsProps> = ({
          if (!updateData.password) {
             delete updateData.password;
          }
+         updateData.percentage = Number(updateData.percentage) || 0;
          onUpdateDoctor(editingDoctorId, updateData);
       } else {
          onAddDoctor({
             ...doctorForm,
+            percentage: Number(doctorForm.percentage) || 0,
             status: 'Active'
          });
       }
@@ -496,8 +500,11 @@ export const Settings: React.FC<SettingsProps> = ({
          <Modal isOpen={isServiceModalOpen} onClose={() => setIsServiceModalOpen(false)} title={editingServiceIndex !== null ? "Xizmatni Tahrirlash" : "Yangi Xizmat Qo'shish"}>
             <form onSubmit={handleServiceSubmit} className="space-y-4">
                <Input label="Xizmat Nomi" value={serviceForm.name} onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} required />
+               <div className="grid grid-cols-2 gap-4">
+                  <Input label="Narxi" type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
+                  <Input label="Texniklar xarajati" type="number" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} placeholder="0" />
+               </div>
                <Input label="Davomiyligi (daq)" type="number" value={serviceForm.duration} onChange={e => setServiceForm({ ...serviceForm, duration: e.target.value })} required />
-               <Input label="Narxi" type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsServiceModalOpen(false)}>Bekor qilish</Button>
                   <Button type="submit">Saqlash</Button>
@@ -532,6 +539,14 @@ export const Settings: React.FC<SettingsProps> = ({
                         onChange={e => setDoctorForm({ ...doctorForm, password: e.target.value })}
                         required={!editingDoctorId}
                         placeholder={editingDoctorId ? "O'zgartirish uchun kiriting" : "********"}
+                     />
+                     <Input
+                        label="Shifokor Ulushi (%)"
+                        type="number"
+                        value={doctorForm.percentage}
+                        onChange={e => setDoctorForm({ ...doctorForm, percentage: e.target.value })}
+                        placeholder="50"
+                        helperText="Sof foydadan shifokor olishi kerak bo'lgan foiz"
                      />
                   </div>
                </div>

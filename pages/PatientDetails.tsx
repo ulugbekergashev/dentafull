@@ -116,19 +116,39 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setIcd10Query(query);
       if (query.length > 1) {
          try {
-            // Use local templates instead of API
-            const results = diagnosisTemplates.map(t => {
-               // Extract code from title like "Chuqur karies (K02.1)" -> "K02.1"
-               const codeMatch = t.title.match(/\(([^)]+)\)/);
-               const code = codeMatch ? codeMatch[1] : t.title.split(' ')[0];
+            // Define category prefixes
+            const categoryPrefixes: Record<string, string[]> = {
+               "Og'iz bo'shlig'i kasalliklari": ['K00', 'K01', 'K02', 'K03', 'K04'],
+               "Milk va periodontal kasalliklar": ['K05', 'K06'],
+               "Og'iz bo'shlig'i shilliq qavati va boshqa kasalliklar": ['K12', 'K13', 'K14', 'B37'],
+               "Jag' va temporomandibulyar bo'g'im kasalliklari": ['K07', 'K09', 'S02', 'Q35'],
+               "Tish protezlari va davolash bilan bog'liq asoratlar": ['T88']
+            };
 
-               return {
-                  code: code,
-                  name: t.title,
-                  category: query,
-                  description: ''
-               };
-            });
+            // Get prefixes for the selected category
+            const prefixes = categoryPrefixes[query] || [];
+
+            // Filter templates based on prefixes
+            const results = diagnosisTemplates
+               .filter(t => {
+                  // Extract code from title like "Chuqur karies (K02.1)" -> "K02.1"
+                  const codeMatch = t.title.match(/\(([^)]+)\)/);
+                  const code = codeMatch ? codeMatch[1] : t.title.split(' ')[0];
+
+                  // Check if code starts with any of the prefixes
+                  return prefixes.some(prefix => code.startsWith(prefix));
+               })
+               .map(t => {
+                  const codeMatch = t.title.match(/\(([^)]+)\)/);
+                  const code = codeMatch ? codeMatch[1] : t.title.split(' ')[0];
+
+                  return {
+                     code: code,
+                     name: t.title,
+                     category: query,
+                     description: ''
+                  };
+               });
             setIcd10Results(results as any);
          } catch (e) {
             console.error(e);
@@ -157,22 +177,23 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          // Find matching template based on code
          const matchingTemplate = diagnosisTemplates.find(t => t.title.includes(selectedCode.code));
 
-         // Create local diagnosis object
-         const newDiagnosis: PatientDiagnosis = {
-            id: Date.now().toString(),
+         // Create diagnosis payload
+         const diagnosisPayload = {
             patientId: patient.id,
             code: selectedCode.code,
+            name: selectedCode.name, // Send name for backend to create if missing
+            description: selectedCode.description, // Send description
             date: new Date().toISOString().split('T')[0],
             notes: matchingTemplate ? matchingTemplate.content : diagnosisNote,
             status: 'Active',
-            clinicId: patient.clinicId,
-            icd10: selectedCode
+            clinicId: patient.clinicId
          };
+
+         // Call API to save diagnosis
+         const newDiagnosis = await api.diagnoses.add(diagnosisPayload);
 
          // Add to diagnoses list
          setDiagnoses([newDiagnosis, ...diagnoses]);
-
-
 
          setIsDiagnosisModalOpen(false);
          setSelectedCode(null);
@@ -181,6 +202,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setIcd10Results([]);
          alert('Tashxis qo\'shildi!');
       } catch (e) {
+         console.error('Failed to add diagnosis', e);
          alert('Xatolik yuz berdi');
       }
    };

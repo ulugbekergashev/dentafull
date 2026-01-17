@@ -14,7 +14,7 @@ interface DoctorsAnalyticsProps {
 type DateRange = 'month' | '3months' | '6months' | 'year' | 'all' | 'custom';
 
 export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions }) => {
-    const [dateRange, setDateRange] = useState<DateRange>('month');
+    const [dateRange, setDateRange] = useState<DateRange>('all');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
 
@@ -102,6 +102,13 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                     return tx.doctorId === doctor.id;
                 }
 
+                // Check by name (like in Finance.tsx)
+                const docName = `${doctor.lastName} ${doctor.firstName}`.toLowerCase().trim();
+                const txDocName = (tx.doctorName || '').toLowerCase().trim();
+                if (txDocName && (docName === txDocName || docName.includes(txDocName) || txDocName.includes(docName))) {
+                    return true;
+                }
+
                 // Fallback: Match transaction to doctor's appointments by patient name and service
                 // (for backward compatibility with old transactions)
                 const matchingAppt = doctorAppts.find(appt =>
@@ -110,10 +117,43 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 return matchingAppt !== undefined;
             });
 
-            // Calculate revenue from actual paid transactions only
-            const revenue = doctorTransactions
-                .filter(tx => tx.status === 'Paid')
-                .reduce((sum, tx) => sum + tx.amount, 0);
+            // Calculate metrics
+            let grossRevenue = 0; // Total money from patients
+            let totalNetRevenue = 0; // After technician costs
+            let doctorSalary = 0; // Doctor's share
+
+            // Check if doctor has a percentage set
+            const hasPercentage = doctor.percentage && doctor.percentage > 0;
+
+            doctorTransactions.forEach(tx => {
+                grossRevenue += tx.amount;
+
+                // Find service to get cost
+                // Normalize names for better matching
+                const txService = tx.service.trim().toLowerCase();
+                const service = services.find(s => s.name.trim().toLowerCase() === txService);
+
+                const servicePrice = service?.price || tx.amount; // Fallback
+                const serviceCost = service?.cost || 0;
+
+                // Calculate proportional cost
+                const ratio = servicePrice > 0 ? Math.min(tx.amount / servicePrice, 1) : 1;
+                const allocatedCost = serviceCost * ratio;
+
+                const netRevenue = tx.amount - allocatedCost;
+                totalNetRevenue += netRevenue;
+
+                if (hasPercentage) {
+                    // New Formula: (Price - Cost) * Percentage
+                    const percentage = doctor.percentage || 0;
+                    // Ensure non-negative salary
+                    doctorSalary += Math.max(0, netRevenue * (percentage / 100));
+                } else {
+                    // If no percentage set, assume 0 salary (Clinic Profit)
+                    // This aligns with Finance.tsx logic
+                    doctorSalary += 0;
+                }
+            });
 
             // Unique Patients
             const uniquePatients = new Set(doctorAppts.map(a => a.patientId)).size;
@@ -133,9 +173,9 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 }
             });
 
-            // Average revenue per appointment (based on actual transactions)
-            const avgRevenue = doctorTransactions.filter(tx => tx.status === 'Paid').length > 0
-                ? revenue / doctorTransactions.filter(tx => tx.status === 'Paid').length
+            // Average revenue per appointment
+            const avgRevenue = doctorTransactions.length > 0
+                ? grossRevenue / doctorTransactions.length
                 : 0;
 
             // Day of week analysis
@@ -153,7 +193,9 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 totalAppts: doctorAppts.length,
                 completedAppts: completedAppts.length,
                 uniquePatients,
-                revenue,
+                revenue: grossRevenue, // For charts/sorting (Total generated)
+                salary: doctorSalary, // Actual doctor pay
+                netRevenue: totalNetRevenue, // Profit for clinic context
                 topService,
                 topServiceCount: maxCount,
                 avgRevenue,
@@ -372,7 +414,8 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                 <th className="p-4 font-medium text-center">Bemorlar</th>
                                 <th className="p-4 font-medium text-center">Qabullar</th>
                                 <th className="p-4 font-medium">Top Xizmat</th>
-                                <th className="p-4 font-medium text-right">Tushum</th>
+                                <th className="p-4 font-medium text-right">Jami Tushum</th>
+                                <th className="p-4 font-medium text-right">Shifokor Ulushi</th>
                                 <th className="p-4 font-medium text-right">O'rtacha</th>
                                 <th className="p-4 font-medium text-center">Eng Band Kun</th>
                                 <th className="p-4 font-medium text-center">Samaradorlik</th>
@@ -405,8 +448,11 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                         <div className="text-sm text-gray-900 dark:text-white">{doc.topService}</div>
                                         <div className="text-xs text-gray-500">{doc.topServiceCount} marta</div>
                                     </td>
-                                    <td className="p-4 text-right font-bold text-green-600 dark:text-green-400">
+                                    <td className="p-4 text-right font-bold text-gray-900 dark:text-white">
                                         {doc.revenue.toLocaleString()} UZS
+                                    </td>
+                                    <td className="p-4 text-right font-bold text-green-600 dark:text-green-400">
+                                        {doc.salary.toLocaleString()} UZS
                                     </td>
                                     <td className="p-4 text-right text-sm text-gray-700 dark:text-gray-300">
                                         {Math.round(doc.avgRevenue).toLocaleString()} UZS

@@ -29,6 +29,7 @@ export interface Doctor {
   clinicId: string;
   username?: string;
   password?: string;
+  percentage?: number; // Revenue share percentage
 }
 
 export interface Patient {
@@ -80,6 +81,7 @@ export interface Service {
   id?: number; // Optional because it might be auto-generated or missing in some contexts
   name: string;
   price: number;
+  cost?: number; // Service cost (e.g., technician fee)
   duration: number;
   clinicId: string;
 }

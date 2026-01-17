@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
 import { UserRole, Transaction, Appointment, Patient } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot } from 'lucide-react';
+import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users } from 'lucide-react';
 import { api } from '../services/api';
 
 interface FinanceProps {
@@ -14,9 +14,12 @@ interface FinanceProps {
   patients: Patient[];
   onPatientClick: (id: string) => void;
   doctorId: string;
+  doctors: Doctor[];
 }
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId }) => {
+import { Doctor } from '../types';
+
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDebtorModalOpen, setIsDebtorModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Barchasi');
@@ -112,6 +115,61 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   ];
 
   const totalRevenue = filteredTransactions.reduce((acc, t) => acc + t.amount, 0);
+
+  // --- Financial Breakdown Logic ---
+  let technicianCosts = 0;
+  let doctorSalaries = 0;
+
+  filteredTransactions.forEach(t => {
+    // 1. Technician Cost
+    // Normalize names for better matching
+    const txService = t.service.trim().toLowerCase();
+    const service = services.find(s => s.name.trim().toLowerCase() === txService);
+
+    const servicePrice = service?.price || t.amount; // Fallback to amount if price missing
+    const serviceCost = service?.cost || 0;
+
+    // Calculate ratio of this payment to total price (e.g. paid 500k of 1m = 0.5)
+    // Cap ratio at 1 to avoid negative calculations if overpaid
+    const ratio = servicePrice > 0 ? Math.min(t.amount / servicePrice, 1) : 1;
+
+    const allocatedCost = serviceCost * ratio;
+    technicianCosts += allocatedCost;
+
+    // 2. Doctor Salary
+    // Find doctor by ID (preferred) or Name (fallback)
+    let doctor = doctors.find(d => d.id === t.doctorId) ||
+      doctors.find(d => {
+        const docName = `${d.lastName} ${d.firstName}`.toLowerCase();
+        const txDocName = (t.doctorName || '').toLowerCase();
+        return docName === txDocName || docName.includes(txDocName) || txDocName.includes(docName);
+      });
+
+    // Fallback: Try to find doctor via Appointment matching (like in DoctorsAnalytics)
+    if (!doctor) {
+      const matchingAppt = appointments.find(a =>
+        (a.patientId === t.patientId || a.patientName === t.patientName) &&
+        a.type === t.service &&
+        a.status === 'Completed' // Only look at completed appointments
+      );
+
+      if (matchingAppt && matchingAppt.doctorId) {
+        doctor = doctors.find(d => d.id === matchingAppt.doctorId);
+      }
+    }
+
+    if (doctor && doctor.percentage > 0) {
+      // New Formula: (PaidAmount - AllocatedCost) * Percentage
+      const netRevenue = t.amount - allocatedCost;
+      // Ensure we don't calculate negative salary if cost > payment (unlikely with proportional, but safe)
+      doctorSalaries += Math.max(0, netRevenue * (doctor.percentage / 100));
+    } else {
+      // If no percentage set, assume 0 salary (Clinic Profit)
+      doctorSalaries += 0;
+    }
+  });
+
+  const netProfit = totalRevenue - technicianCosts - doctorSalaries;
 
   // --- Lost Revenue Logic ---
   const noShowAppointments = filteredAppointments.filter(a => a.status === 'No-Show');
@@ -323,6 +381,45 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
                 {filteredTransactions.length ? Math.round(totalRevenue / filteredTransactions.length).toLocaleString() : 0} UZS
               </h3>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Financial Breakdown Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+        <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-red-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Texniklar Xarajati</p>
+              <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{technicianCosts.toLocaleString()} UZS</h3>
+            </div>
+            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+              <DollarSign className="w-6 h-6 text-red-600 dark:text-red-400" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-blue-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Shifokorlar Oyligi</p>
+              <h3 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{doctorSalaries.toLocaleString()} UZS</h3>
+            </div>
+            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+              <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-green-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Sof Foyda</p>
+              <h3 className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{netProfit.toLocaleString()} UZS</h3>
+            </div>
+            <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
+              <TrendingDown className="w-6 h-6 text-green-600 dark:text-green-400 rotate-180" />
             </div>
           </div>
         </Card>

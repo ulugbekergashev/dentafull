@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model Doctor {
@@ -21,6 +21,7 @@ model Doctor {
   username       String?  @unique
   password       String?
   telegramChatId String?
+  percentage     Float    @default(0) // Revenue share percentage
   clinicId       String
   clinic         Clinic   @relation(fields: [clinicId], references: [id])
   appointments   Appointment[]
@@ -115,6 +116,7 @@ model Service {
   id       Int    @id @default(autoincrement())
   name     String
   price    Float
+  cost     Float  @default(0) // Service cost (e.g., technician fee)
   duration Int
   clinicId String
   clinic   Clinic @relation(fields: [clinicId], references: [id])

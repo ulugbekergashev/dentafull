@@ -506,6 +506,7 @@ const App: React.FC = () => {
           patients={patients}
           onPatientClick={handlePatientClick}
           doctorId={doctorId}
+          doctors={doctors}
         />;
       case Route.SETTINGS:
         return <Settings
