@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
-import { UserRole, Doctor, Clinic, SubscriptionPlan } from '../types';
+
+import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 
 interface SettingsProps {
    userRole: UserRole;
-   services: { name: string; price: number; duration: number }[];
+   services: Service[];
    doctors: Doctor[];
-   onAddService: (service: { name: string; price: number; duration: number }) => void;
-   onUpdateService: (index: number, service: { name: string; price: number; duration: number }) => void;
+   onAddService: (service: Omit<Service, 'id' | 'clinicId'>) => void;
+   onUpdateService: (index: number, service: Partial<Service>) => void;
    onAddDoctor: (doctor: Omit<Doctor, 'id'>) => void;
    onUpdateDoctor: (id: string, doctor: Partial<Doctor>) => void;
    onDeleteDoctor: (id: string) => void;
@@ -21,11 +22,15 @@ export const Settings: React.FC<SettingsProps> = ({
    userRole, services, doctors, onAddService, onUpdateService, onAddDoctor, onUpdateDoctor, onDeleteDoctor, currentClinic, plans
 }) => {
    const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'bot'>('services');
+   const [categories, setCategories] = useState<ServiceCategory[]>([]);
+   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+   const [categoryForm, setCategoryForm] = useState({ name: '' });
 
    // Service Modal State
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
    const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
-   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', duration: '' });
+   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', duration: '', categoryId: '' });
 
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
@@ -113,15 +118,28 @@ export const Settings: React.FC<SettingsProps> = ({
       fetchBotUsername();
    }, [currentClinic?.id, currentClinic?.botToken]);
 
+   // Fetch Categories
+   React.useEffect(() => {
+      if (currentClinic?.id) {
+         api.categories.getAll(currentClinic.id).then(setCategories).catch(console.error);
+      }
+   }, [currentClinic?.id]);
+
    // Handlers
    const handleOpenServiceModal = (index?: number) => {
       if (index !== undefined) {
          setEditingServiceIndex(index);
          const s = services[index];
-         setServiceForm({ name: s.name, price: s.price.toString(), cost: (s.cost || 0).toString(), duration: s.duration.toString() });
+         setServiceForm({
+            name: s.name,
+            price: s.price.toString(),
+            cost: (s.cost || 0).toString(),
+            duration: s.duration.toString(),
+            categoryId: s.categoryId || ''
+         });
       } else {
          setEditingServiceIndex(null);
-         setServiceForm({ name: '', price: '', cost: '', duration: '' });
+         setServiceForm({ name: '', price: '', cost: '', duration: '', categoryId: selectedCategory || '' });
       }
       setIsServiceModalOpen(true);
    };
@@ -132,7 +150,8 @@ export const Settings: React.FC<SettingsProps> = ({
          name: serviceForm.name,
          price: Number(serviceForm.price),
          cost: Number(serviceForm.cost) || 0,
-         duration: Number(serviceForm.duration)
+         duration: Number(serviceForm.duration),
+         categoryId: serviceForm.categoryId || undefined
       };
 
       if (editingServiceIndex !== null) {
@@ -141,6 +160,35 @@ export const Settings: React.FC<SettingsProps> = ({
          onAddService(data);
       }
       setIsServiceModalOpen(false);
+   };
+
+   const handleCategorySubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!currentClinic?.id) return;
+      try {
+         const newCategory = await api.categories.create({
+            name: categoryForm.name,
+            clinicId: currentClinic.id
+         });
+         setCategories([...categories, newCategory]);
+         setCategoryForm({ name: '' });
+         setIsCategoryModalOpen(false);
+      } catch (error) {
+         console.error('Failed to create category:', error);
+         alert('Xatolik yuz berdi');
+      }
+   };
+
+   const handleDeleteCategory = async (id: string) => {
+      if (!window.confirm('Kategoriyani o\'chirmoqchimisiz?')) return;
+      try {
+         await api.categories.delete(id);
+         setCategories(categories.filter(c => c.id !== id));
+         if (selectedCategory === id) setSelectedCategory(null);
+      } catch (error) {
+         console.error('Failed to delete category:', error);
+         alert('Xatolik yuz berdi');
+      }
    };
 
    const handleOpenDoctorModal = (doctor?: Doctor) => {
@@ -279,64 +327,106 @@ export const Settings: React.FC<SettingsProps> = ({
 
                {/* Services Tab */}
                {activeTab === 'services' && (
-                  <>
-                     <Card className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                           <div>
-                              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Xizmatlar va Narxlar</h3>
-                              <p className="text-sm text-gray-500">Davolash turlari va narxlarini boshqarish.</p>
-                           </div>
-                           <Button size="sm" onClick={() => handleOpenServiceModal()}>Xizmat Qo'shish</Button>
-                        </div>
 
-                        <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-                           <table className="w-full text-left text-sm">
-                              <thead className="bg-gray-50 dark:bg-gray-800">
-                                 <tr>
-                                    <th className="px-4 py-3 font-medium text-gray-500">Xizmat Nomi</th>
-                                    <th className="px-4 py-3 font-medium text-gray-500">Davomiyligi</th>
-                                    <th className="px-4 py-3 font-medium text-gray-500">Narxi</th>
-                                    <th className="px-4 py-3 font-medium text-gray-500 text-right">Amal</th>
-                                 </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                 {services.map((s, i) => (
-                                    <tr key={i} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
-                                       <td className="px-4 py-3 text-gray-900 dark:text-gray-200 font-medium">{s.name}</td>
-                                       <td className="px-4 py-3 text-gray-500">{s.duration} daq</td>
-                                       <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
-                                       <td className="px-4 py-3 text-right">
-                                          <button
-                                             onClick={() => handleOpenServiceModal(i)}
-                                             className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
-                                          >
-                                             <Edit className="w-4 h-4" />
-                                          </button>
-                                       </td>
-                                    </tr>
-                                 ))}
-                              </tbody>
-                           </table>
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                     {/* Categories Sidebar */}
+                     <Card className="col-span-1 h-fit p-4">
+                        <div className="flex justify-between items-center mb-4">
+                           <h3 className="font-medium text-gray-900 dark:text-white">Kategoriyalar</h3>
+                           <Button size="sm" variant="secondary" onClick={() => setIsCategoryModalOpen(true)}>+</Button>
                         </div>
-                     </Card>
-
-                     <Card className="p-6">
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Joriy Tarif</h3>
-                        <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg border border-indigo-100 dark:border-indigo-800">
-                           <div>
-                              <p className="font-bold text-indigo-900 dark:text-indigo-200">{plans?.find(p => p.id === currentClinic?.planId)?.name || 'Standart Tarif'}</p>
-                              <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">{plans?.find(p => p.id === currentClinic?.planId)?.maxDoctors || 10} tagacha shifokor • Ustuvor Yordam</p>
-                           </div>
-                           <Button
-                              size="sm"
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white border-none"
-                              onClick={() => setIsUpgradeModalOpen(true)}
+                        <div className="space-y-1">
+                           <button
+                              onClick={() => setSelectedCategory(null)}
+                              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${!selectedCategory ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
                            >
-                              Tarifni Yangilash
-                           </Button>
+                              Barcha Xizmatlar
+                           </button>
+                           {categories.map(cat => (
+                              <div key={cat.id} className="group flex items-center justify-between">
+                                 <button
+                                    onClick={() => setSelectedCategory(cat.id)}
+                                    className={`flex-1 text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${selectedCategory === cat.id ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
+                                 >
+                                    {cat.name}
+                                 </button>
+                                 <button onClick={() => handleDeleteCategory(cat.id)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500">
+                                    <Trash2 className="w-3 h-3" />
+                                 </button>
+                              </div>
+                           ))}
                         </div>
                      </Card>
-                  </>
+
+                     {/* Services List */}
+                     <div className="lg:col-span-3 space-y-6">
+                        <Card className="p-6">
+                           <div className="flex justify-between items-center mb-6">
+                              <div>
+                                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Xizmatlar va Narxlar</h3>
+                                 <p className="text-sm text-gray-500">Davolash turlari va narxlarini boshqarish.</p>
+                              </div>
+                              <Button size="sm" onClick={() => handleOpenServiceModal()}>Xizmat Qo'shish</Button>
+                           </div>
+
+                           <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                              <table className="w-full text-left text-sm">
+                                 <thead className="bg-gray-50 dark:bg-gray-800">
+                                    <tr>
+                                       <th className="px-4 py-3 font-medium text-gray-500">Xizmat Nomi</th>
+                                       <th className="px-4 py-3 font-medium text-gray-500">Davomiyligi</th>
+                                       <th className="px-4 py-3 font-medium text-gray-500">Narxi</th>
+                                       <th className="px-4 py-3 font-medium text-gray-500 text-right">Amal</th>
+                                    </tr>
+                                 </thead>
+                                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                    {services
+                                       .filter(s => !selectedCategory || s.categoryId === selectedCategory)
+                                       .map((s, i) => (
+                                          <tr key={i} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                             <td className="px-4 py-3 text-gray-900 dark:text-gray-200 font-medium">{s.name}</td>
+                                             <td className="px-4 py-3 text-gray-500">{s.duration} daq</td>
+                                             <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
+                                             <td className="px-4 py-3 text-right">
+                                                <button
+                                                   onClick={() => handleOpenServiceModal(i)}
+                                                   className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
+                                                >
+                                                   <Edit className="w-4 h-4" />
+                                                </button>
+                                             </td>
+                                          </tr>
+                                       ))}
+                                    {services.filter(s => !selectedCategory || s.categoryId === selectedCategory).length === 0 && (
+                                       <tr>
+                                          <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                                             Xizmatlar topilmadi
+                                          </td>
+                                       </tr>
+                                    )}
+                                 </tbody>
+                              </table>
+                           </div>
+                        </Card>
+
+                        <Card className="p-6">
+                           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Joriy Tarif</h3>
+                           <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg border border-indigo-100 dark:border-indigo-800">
+                              <div>
+                                 <p className="font-bold text-indigo-900 dark:text-indigo-200">{plans?.find(p => p.id === currentClinic?.planId)?.name || 'Standart Tarif'}</p>
+                                 <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">{plans?.find(p => p.id === currentClinic?.planId)?.maxDoctors || 10} tagacha shifokor • Ustuvor Yordam</p>
+                              </div>
+                              <Button
+                                 size="sm"
+                                 className="bg-indigo-600 hover:bg-indigo-700 text-white border-none"
+                                 onClick={() => setIsUpgradeModalOpen(true)}
+                              >
+                                 Tarifni Yangilash
+                              </Button>
+                           </div>
+                        </Card>
+                     </div>
+                  </div>
                )}
 
                {/* Doctors Tab */}
@@ -500,6 +590,18 @@ export const Settings: React.FC<SettingsProps> = ({
          <Modal isOpen={isServiceModalOpen} onClose={() => setIsServiceModalOpen(false)} title={editingServiceIndex !== null ? "Xizmatni Tahrirlash" : "Yangi Xizmat Qo'shish"}>
             <form onSubmit={handleServiceSubmit} className="space-y-4">
                <Input label="Xizmat Nomi" value={serviceForm.name} onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} required />
+
+               <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kategoriya</label>
+                  <Select
+                     value={serviceForm.categoryId}
+                     onChange={e => setServiceForm({ ...serviceForm, categoryId: e.target.value })}
+                     options={[
+                        { value: '', label: 'Kategoriyasiz' },
+                        ...categories.map(c => ({ value: c.id, label: c.name }))
+                     ]}
+                  />
+               </div>
                <div className="grid grid-cols-2 gap-4">
                   <Input label="Narxi" type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
                   <Input label="Texniklar xarajati" type="number" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} placeholder="0" />
@@ -507,6 +609,17 @@ export const Settings: React.FC<SettingsProps> = ({
                <Input label="Davomiyligi (daq)" type="number" value={serviceForm.duration} onChange={e => setServiceForm({ ...serviceForm, duration: e.target.value })} required />
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsServiceModalOpen(false)}>Bekor qilish</Button>
+                  <Button type="submit">Saqlash</Button>
+               </div>
+            </form>
+         </Modal>
+
+         {/* Add Category Modal */}
+         <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title="Yangi Kategoriya Qo'shish">
+            <form onSubmit={handleCategorySubmit} className="space-y-4">
+               <Input label="Kategoriya Nomi" value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })} required />
+               <div className="flex justify-end gap-2 pt-4">
+                  <Button type="button" variant="secondary" onClick={() => setIsCategoryModalOpen(false)}>Bekor qilish</Button>
                   <Button type="submit">Saqlash</Button>
                </div>
             </form>

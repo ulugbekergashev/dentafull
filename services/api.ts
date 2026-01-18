@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, ICD10Code, PatientDiagnosis, InventoryItem } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog } from '../types';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app');
@@ -149,6 +149,22 @@ export const api = {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
+        }),
+    },
+    categories: {
+        getAll: (clinicId: string) => fetchJson<ServiceCategory[]>(`/categories?clinicId=${clinicId}`),
+        create: (data: Omit<ServiceCategory, 'id'>) => fetchJson<ServiceCategory>('/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        update: (id: string, data: Partial<ServiceCategory>) => fetchJson<ServiceCategory>(`/categories/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        delete: (id: string) => fetchJson<{ success: true }>(`/categories/${id}`, {
+            method: 'DELETE',
         }),
     },
     clinics: {

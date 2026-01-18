@@ -5,6 +5,7 @@ import { UserRole, Transaction, Appointment, Patient } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users } from 'lucide-react';
 import { api } from '../services/api';
+import { calculateTotalFinancials } from '../utils/financialCalculations';
 
 interface FinanceProps {
   userRole: UserRole;
@@ -117,59 +118,12 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const totalRevenue = filteredTransactions.reduce((acc, t) => acc + t.amount, 0);
 
   // --- Financial Breakdown Logic ---
-  let technicianCosts = 0;
-  let doctorSalaries = 0;
-
-  filteredTransactions.forEach(t => {
-    // 1. Technician Cost
-    // Normalize names for better matching
-    const txService = t.service.trim().toLowerCase();
-    const service = services.find(s => s.name.trim().toLowerCase() === txService);
-
-    const servicePrice = service?.price || t.amount; // Fallback to amount if price missing
-    const serviceCost = service?.cost || 0;
-
-    // Calculate ratio of this payment to total price (e.g. paid 500k of 1m = 0.5)
-    // Cap ratio at 1 to avoid negative calculations if overpaid
-    const ratio = servicePrice > 0 ? Math.min(t.amount / servicePrice, 1) : 1;
-
-    const allocatedCost = serviceCost * ratio;
-    technicianCosts += allocatedCost;
-
-    // 2. Doctor Salary
-    // Find doctor by ID (preferred) or Name (fallback)
-    let doctor = doctors.find(d => d.id === t.doctorId) ||
-      doctors.find(d => {
-        const docName = `${d.lastName} ${d.firstName}`.toLowerCase();
-        const txDocName = (t.doctorName || '').toLowerCase();
-        return docName === txDocName || docName.includes(txDocName) || txDocName.includes(docName);
-      });
-
-    // Fallback: Try to find doctor via Appointment matching (like in DoctorsAnalytics)
-    if (!doctor) {
-      const matchingAppt = appointments.find(a =>
-        (a.patientId === t.patientId || a.patientName === t.patientName) &&
-        a.type === t.service &&
-        a.status === 'Completed' // Only look at completed appointments
-      );
-
-      if (matchingAppt && matchingAppt.doctorId) {
-        doctor = doctors.find(d => d.id === matchingAppt.doctorId);
-      }
-    }
-
-    if (doctor && doctor.percentage > 0) {
-      // New Formula: (PaidAmount - AllocatedCost) * Percentage
-      const netRevenue = t.amount - allocatedCost;
-      // Ensure we don't calculate negative salary if cost > payment (unlikely with proportional, but safe)
-      doctorSalaries += Math.max(0, netRevenue * (doctor.percentage / 100));
-    } else {
-      // If no percentage set, assume 0 salary (Clinic Profit)
-      doctorSalaries += 0;
-    }
-  });
-
-  const netProfit = totalRevenue - technicianCosts - doctorSalaries;
+  // Use shared utility function for consistent calculations
+  const { technicianCosts, doctorSalaries, netProfit } = calculateTotalFinancials(
+    filteredTransactions,
+    doctors,
+    services
+  );
 
   // --- Lost Revenue Logic ---
   const noShowAppointments = filteredAppointments.filter(a => a.status === 'No-Show');

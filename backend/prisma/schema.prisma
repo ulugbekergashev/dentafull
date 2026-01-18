@@ -120,6 +120,8 @@ model Service {
   duration Int
   clinicId String
   clinic   Clinic @relation(fields: [clinicId], references: [id])
+  categoryId String?
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id])
 }
 
 model SubscriptionPlan {
@@ -154,6 +156,7 @@ model Clinic {
   appointments  Appointment[]
   transactions  Transaction[]
   services      Service[]
+  serviceCategories ServiceCategory[]
   diagnoses     PatientDiagnosis[]
   inventoryItems InventoryItem[]
 
@@ -208,4 +211,14 @@ model InventoryLog {
   
   @@index([itemId])
   @@index([patientId])
+}
+
+model ServiceCategory {
+  id       String    @id @default(uuid())
+  name     String
+  clinicId String
+  clinic   Clinic    @relation(fields: [clinicId], references: [id])
+  services Service[]
+
+  @@unique([clinicId, name])
 }

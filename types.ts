@@ -83,6 +83,15 @@ export interface Service {
   price: number;
   cost?: number; // Service cost (e.g., technician fee)
   duration: number;
+
+  clinicId: string;
+  categoryId?: string;
+  category?: ServiceCategory;
+}
+
+export interface ServiceCategory {
+  id: string;
+  name: string;
   clinicId: string;
 }
 

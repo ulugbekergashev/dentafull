@@ -553,6 +553,57 @@ app.delete('/api/doctors/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Service Categories ---
+app.get('/api/categories', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+        const categories = await prisma.serviceCategory.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { name: 'asc' }
+        });
+        res.json(categories);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch categories' });
+    }
+});
+
+app.post('/api/categories', authenticateToken, async (req, res) => {
+    try {
+        const category = await prisma.serviceCategory.create({
+            data: req.body
+        });
+        res.json(category);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create category' });
+    }
+});
+
+app.put('/api/categories/:id', authenticateToken, async (req, res) => {
+    try {
+        const category = await prisma.serviceCategory.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        res.json(category);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update category' });
+    }
+});
+
+app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.serviceCategory.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete category' });
+    }
+});
+
 // --- Services ---
 app.get('/api/services', authenticateToken, async (req, res) => {
     try {
@@ -562,7 +613,8 @@ app.get('/api/services', authenticateToken, async (req, res) => {
         }
 
         const services = await prisma.service.findMany({
-            where: { clinicId: clinicId as string }
+            where: { clinicId: clinicId as string },
+            include: { category: true }
         });
         res.json(services);
     } catch (error) {

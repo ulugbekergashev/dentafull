@@ -3,6 +3,7 @@ import { Doctor, Appointment, Service, Transaction } from '../types';
 import { Card } from '../components/Common';
 import { DollarSign, Calendar, Award, Users } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+import { calculateDoctorSalary } from '../utils/financialCalculations';
 
 interface DoctorsAnalyticsProps {
     doctors: Doctor[];
@@ -17,6 +18,9 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
     const [dateRange, setDateRange] = useState<DateRange>('all');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
+
+    // Detect if clinic has only 1 doctor (individual plan)
+    const hasSingleDoctor = doctors.length === 1;
 
     // Filter appointments by date range
     const filteredAppointments = useMemo(() => {
@@ -97,6 +101,12 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
             // Revenue Calculation - Use doctorId directly if available (new transactions)
             // Fallback to appointment matching for old transactions without doctorId
             const doctorTransactions = filteredTransactions.filter(tx => {
+                // SPECIAL CASE: If only 1 doctor, assign ALL transactions automatically
+                // This is for individual plans where all revenue goes to the single doctor
+                if (hasSingleDoctor) {
+                    return true;
+                }
+
                 // If transaction has doctorId, use it directly (preferred method)
                 if (tx.doctorId) {
                     return tx.doctorId === doctor.id;
@@ -118,42 +128,13 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
             });
 
             // Calculate metrics
-            let grossRevenue = 0; // Total money from patients
-            let totalNetRevenue = 0; // After technician costs
-            let doctorSalary = 0; // Doctor's share
-
-            // Check if doctor has a percentage set
-            const hasPercentage = doctor.percentage && doctor.percentage > 0;
-
-            doctorTransactions.forEach(tx => {
-                grossRevenue += tx.amount;
-
-                // Find service to get cost
-                // Normalize names for better matching
-                const txService = tx.service.trim().toLowerCase();
-                const service = services.find(s => s.name.trim().toLowerCase() === txService);
-
-                const servicePrice = service?.price || tx.amount; // Fallback
-                const serviceCost = service?.cost || 0;
-
-                // Calculate proportional cost
-                const ratio = servicePrice > 0 ? Math.min(tx.amount / servicePrice, 1) : 1;
-                const allocatedCost = serviceCost * ratio;
-
-                const netRevenue = tx.amount - allocatedCost;
-                totalNetRevenue += netRevenue;
-
-                if (hasPercentage) {
-                    // New Formula: (Price - Cost) * Percentage
-                    const percentage = doctor.percentage || 0;
-                    // Ensure non-negative salary
-                    doctorSalary += Math.max(0, netRevenue * (percentage / 100));
-                } else {
-                    // If no percentage set, assume 0 salary (Clinic Profit)
-                    // This aligns with Finance.tsx logic
-                    doctorSalary += 0;
-                }
-            });
+            // Use shared financial calculation utility
+            const {
+                grossRevenue,
+                technicianCosts,
+                netRevenue: totalNetRevenue,
+                doctorSalary
+            } = calculateDoctorSalary(doctorTransactions, doctor, services);
 
             // Unique Patients
             const uniquePatients = new Set(doctorAppts.map(a => a.patientId)).size;
@@ -205,7 +186,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
         }).sort((a, b) => b.revenue - a.revenue);
     }, [doctors, filteredAppointments, filteredTransactions]);
 
-    const totalRevenue = analyticsData.reduce((sum, d) => sum + d.revenue, 0);
+    const totalRevenue = filteredTransactions.reduce((acc, t) => acc + t.amount, 0);
     const totalAppointments = analyticsData.reduce((sum, d) => sum + d.totalAppts, 0);
     const totalPatients = analyticsData.reduce((sum, d) => sum + d.uniquePatients, 0);
     const topPerformer = analyticsData.length > 0 ? analyticsData[0] : null;
@@ -316,6 +297,25 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                     </div>
                 </Card>
             </div>
+
+            {/* Single Doctor Mode Indicator */}
+            {hasSingleDoctor && (
+                <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                Individual tarif rejimi
+                            </p>
+                            <p className="text-xs text-blue-600 dark:text-blue-400">
+                                Barcha {filteredTransactions.length} ta tranzaksiya avtomatik biriktirildi
+                            </p>
+                        </div>
+                    </div>
+                </Card>
+            )}
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
