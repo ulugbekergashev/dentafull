@@ -120,9 +120,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             const categoryPrefixes: Record<string, string[]> = {
                "Og'iz bo'shlig'i kasalliklari": ['K00', 'K01', 'K02', 'K03', 'K04'],
                "Milk va periodontal kasalliklar": ['K05', 'K06'],
-               "Og'iz bo'shlig'i shilliq qavati va boshqa kasalliklar": ['K12', 'K13', 'K14', 'B37'],
-               "Jag' va temporomandibulyar bo'g'im kasalliklari": ['K07', 'K09', 'S02', 'Q35'],
-               "Tish protezlari va davolash bilan bog'liq asoratlar": ['T88']
+               "Og'iz bo'shlig'i shilliq qavati va boshqa kasalliklar": ['K11', 'K12', 'K13', 'K14', 'B37'],
+               "Jag' va temporomandibulyar bo'g'im kasalliklari": ['K07', 'K09', 'S02', 'Q35', 'M26'],
+               "Tish protezlari va davolash bilan bog'liq asoratlar": ['T88', 'K08']
             };
 
             // Get prefixes for the selected category
