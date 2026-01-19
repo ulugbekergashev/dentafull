@@ -132,14 +132,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             const results = diagnosisTemplates
                .filter(t => {
                   // Extract code from title like "Chuqur karies (K02.1)" -> "K02.1"
-                  const codeMatch = t.title.match(/\(([^)]+)\)/);
+                  // Use specific regex to find code pattern (Letter + Number + optional dot + Number) inside parentheses
+                  // This avoids matching descriptions in parentheses like "(yallig'lanish)"
+                  const codeMatch = t.title.match(/\(([A-Z]\d+(?:\.\d+)?)\)/);
                   const code = codeMatch ? codeMatch[1] : t.title.split(' ')[0];
 
                   // Check if code starts with any of the prefixes
                   return prefixes.some(prefix => code.startsWith(prefix));
                })
                .map(t => {
-                  const codeMatch = t.title.match(/\(([^)]+)\)/);
+                  const codeMatch = t.title.match(/\(([A-Z]\d+(?:\.\d+)?)\)/);
                   const code = codeMatch ? codeMatch[1] : t.title.split(' ')[0];
 
                   return {
