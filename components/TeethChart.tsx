@@ -37,10 +37,12 @@ const STATUS_LABELS: Record<string, string> = {
   [ToothStatus.ABSCESS]: 'Absses',
   [ToothStatus.PHLEGMON]: 'Flegmona',
   [ToothStatus.OSTEOMYELITIS]: 'Osteomiyelit',
+  [ToothStatus.ADENTIA]: 'Adentiya',
+  [ToothStatus.IMPLANT]: 'Implant',
 };
 
 // Physical states can combine with diseases
-const PHYSICAL_STATES = [ToothStatus.FILLED, ToothStatus.MISSING, ToothStatus.CROWN];
+const PHYSICAL_STATES = [ToothStatus.FILLED, ToothStatus.MISSING, ToothStatus.CROWN, ToothStatus.IMPLANT];
 
 // Disease states are mutually exclusive (severity levels)
 const DISEASE_STATES = [
@@ -49,7 +51,8 @@ const DISEASE_STATES = [
   ToothStatus.PERIODONTITIS,
   ToothStatus.ABSCESS,
   ToothStatus.PHLEGMON,
-  ToothStatus.OSTEOMYELITIS
+  ToothStatus.OSTEOMYELITIS,
+  ToothStatus.ADENTIA
 ];
 
 // --- Ultra-Realistic 3D Render Style Tooth ---
@@ -226,6 +229,27 @@ const RealisticTooth: React.FC<{
                     style={{ mixBlendMode: 'multiply' }}
                   />
                 )}
+
+                {/* Adentia - Very Dark/Black overlay */}
+                {hasCondition(ToothStatus.ADENTIA) && (
+                  <path
+                    d="M15,45 Q15,20 25,10 Q35,2 50,2 Q65,2 75,10 Q85,20 85,45 Q88,65 80,75 Q70,85 50,82 Q30,85 20,75 Q12,65 15,45 Z"
+                    fill="#000000"
+                    opacity="0.7"
+                    style={{ mixBlendMode: 'multiply' }}
+                  />
+                )}
+
+                {/* Implant - Screw in root */}
+                {hasCondition(ToothStatus.IMPLANT) && (
+                  <g filter="url(#glossy3D)">
+                    <rect x="42" y="55" width="16" height="50" rx="2" fill="#9ca3af" />
+                    <line x1="42" y1="65" x2="58" y2="65" stroke="#4b5563" strokeWidth="1" />
+                    <line x1="42" y1="75" x2="58" y2="75" stroke="#4b5563" strokeWidth="1" />
+                    <line x1="42" y1="85" x2="58" y2="85" stroke="#4b5563" strokeWidth="1" />
+                    <line x1="42" y1="95" x2="58" y2="95" stroke="#4b5563" strokeWidth="1" />
+                  </g>
+                )}
               </>
             )}
           </g>
@@ -363,6 +387,8 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-500 border border-orange-600"></div> Absses</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-700 border border-purple-800"></div> Flegmona</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-800 border border-slate-900"></div> Osteomiyelit</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-black border border-gray-800"></div> Adentiya</div>
+        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-400 border border-gray-500"></div> Implant</div>
       </div>
 
       {/* Chart Container */}
@@ -484,6 +510,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
                            ${s === ToothStatus.ABSCESS ? 'bg-orange-500' : ''}
                            ${s === ToothStatus.PHLEGMON ? 'bg-purple-700' : ''}
                            ${s === ToothStatus.OSTEOMYELITIS ? 'bg-slate-800' : ''}
+                           ${s === ToothStatus.ADENTIA ? 'bg-black' : ''}
                          `}></div>
                         <span className="font-medium text-xs">{STATUS_LABELS[s]}</span>
                       </button>

@@ -15,7 +15,9 @@ export enum ToothStatus {
   PERIODONTITIS = 'Periodontitis',
   ABSCESS = 'Abscess',
   PHLEGMON = 'Phlegmon',
-  OSTEOMYELITIS = 'Osteomyelitis'
+  OSTEOMYELITIS = 'Osteomyelitis',
+  ADENTIA = 'Adentia',
+  IMPLANT = 'Implant'
 }
 
 export interface Doctor {
