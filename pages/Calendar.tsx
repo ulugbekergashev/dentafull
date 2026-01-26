@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Modal, Input, Select, Badge } from '../components/Common';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell } from 'lucide-react';
-import { Appointment, Patient, Doctor, UserRole } from '../types';
+import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan } from '../types';
 import { api } from '../services/api';
 
 interface CalendarProps {
@@ -15,12 +15,14 @@ interface CalendarProps {
   onDeleteAppointment: (id: string) => void;
   userRole: UserRole;
   doctorId: string;
+  currentClinic?: Clinic;
+  plans: SubscriptionPlan[];
 }
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, patients, doctors, services, onAddAppointment, onUpdateAppointment, onDeleteAppointment, userRole, doctorId
+  appointments, patients, doctors, services, onAddAppointment, onUpdateAppointment, onDeleteAppointment, userRole, doctorId, currentClinic, plans
 }) => {
   // Filter appointments for doctors
   const filteredAppointments = userRole === UserRole.DOCTOR && doctorId
@@ -69,9 +71,12 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   // Open Add Modal with default values selected if available
   const openAddModal = () => {
+    // Check if clinic is on individual plan
+    const isIndividualPlan = currentClinic?.planId === 'individual';
+
     setFormData({
       patientId: patients.length > 0 ? patients[0].id : '',
-      doctorId: doctors.length > 0 ? doctors[0].id : '',
+      doctorId: doctors.length > 0 ? doctors[0].id : '', // Auto-select first doctor (especially for individual plans)
       type: services.length > 0 ? services[0].name : '',
       date: new Date().toISOString().split('T')[0],
       time: '09:00',
@@ -132,9 +137,17 @@ export const Calendar: React.FC<CalendarProps> = ({
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation check
-    if (!formData.patientId || !formData.doctorId) {
-      alert("Iltimos, avval bemor va shifokorni tanlang!");
+    // Check if clinic is on individual plan
+    const isIndividualPlan = currentClinic?.planId === 'individual';
+
+    // Validation check - skip doctor requirement for individual plans
+    if (!formData.patientId) {
+      alert("Iltimos, avval bemorni tanlang!");
+      return;
+    }
+
+    if (!isIndividualPlan && !formData.doctorId) {
+      alert("Iltimos, shifokorni tanlang!");
       return;
     }
 
@@ -431,12 +444,15 @@ export const Calendar: React.FC<CalendarProps> = ({
             value={formData.patientId}
             onChange={(e) => setFormData({ ...formData, patientId: e.target.value })}
           />
-          <Select
-            label="Shifokor"
-            options={doctors.map(d => ({ value: d.id, label: `Dr. ${d.firstName} ${d.lastName}` }))}
-            value={formData.doctorId}
-            onChange={(e) => setFormData({ ...formData, doctorId: e.target.value })}
-          />
+          {/* Hide doctor selection for individual plan clinics */}
+          {currentClinic?.planId !== 'individual' && (
+            <Select
+              label="Shifokor"
+              options={doctors.map(d => ({ value: d.id, label: `Dr. ${d.firstName} ${d.lastName}` }))}
+              value={formData.doctorId}
+              onChange={(e) => setFormData({ ...formData, doctorId: e.target.value })}
+            />
+          )}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Sana"

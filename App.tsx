@@ -489,6 +489,8 @@ const App: React.FC = () => {
           onDeleteAppointment={deleteAppointment}
           userRole={userRole}
           doctorId={doctorId}
+          currentClinic={clinics.find(c => c.id === clinicId)}
+          plans={plans}
         />;
       case Route.DOCTORS_ANALYTICS:
         return <DoctorsAnalytics
