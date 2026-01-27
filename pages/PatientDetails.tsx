@@ -37,7 +37,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Edit Form State
    const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
    // Payment Form State
-   const [paymentData, setPaymentData] = useState({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
+   const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
 
    // Medical History State
    const [historyText, setHistoryText] = useState('');
@@ -311,22 +311,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       // Check if current plan is individual
       const isIndividualPlan = currentClinic?.planId === 'individual';
 
-      // Debug logging
-      console.log('🔍 Payment Modal Debug:', {
-         currentClinic: currentClinic,
-         planId: currentClinic?.planId,
-         isIndividualPlan,
-         doctorsCount: doctors.length,
-         firstDoctorId: doctors[0]?.id
-      });
-
       // Auto-select first doctor for individual plans
       if (isIndividualPlan && doctors.length > 0) {
-         console.log('✅ Auto-selecting doctor:', doctors[0].id);
-         setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id });
       } else {
-         console.log('❌ Not auto-selecting. IsIndividual:', isIndividualPlan, 'DoctorCount:', doctors.length);
-         setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
       }
 
       setIsPaymentModalOpen(true);
@@ -348,19 +337,70 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       const doctor = doctors.find(d => d.id === paymentData.doctorId);
 
-      onAddTransaction({
-         patientId: patient.id,
-         patientName: `${patient.lastName} ${patient.firstName}`,
-         date: new Date().toISOString().split('T')[0],
-         amount: Number(paymentData.amount),
-         service: paymentData.service,
-         type: paymentData.type as any,
-         status: paymentData.status as any,
-         doctorId: paymentData.doctorId || '',
-         doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
-      });
+      // Calculate amounts
+      const paidAmount = Number(paymentData.paidAmount) || 0;
+      const debtAmount = Number(paymentData.debtAmount) || 0;
+      const totalAmount = paidAmount + debtAmount;
+
+      // Scenario 1: Full Payment (Debt == 0)
+      if (debtAmount <= 0) {
+         onAddTransaction({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            date: new Date().toISOString().split('T')[0],
+            amount: totalAmount,
+            service: paymentData.service,
+            type: paymentData.type as any,
+            status: 'Paid',
+            doctorId: paymentData.doctorId || '',
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+         });
+      }
+      // Scenario 2: No Payment (Paid == 0)
+      else if (paidAmount <= 0) {
+         onAddTransaction({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            date: new Date().toISOString().split('T')[0],
+            amount: totalAmount,
+            service: paymentData.service,
+            type: paymentData.type as any,
+            status: 'Pending',
+            doctorId: paymentData.doctorId || '',
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+         });
+      }
+      // Scenario 3: Partial Payment (Paid > 0 && Debt > 0)
+      else {
+         // 1. Paid Part
+         onAddTransaction({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            date: new Date().toISOString().split('T')[0],
+            amount: paidAmount,
+            service: `${paymentData.service} (Qisman to'lov)`,
+            type: paymentData.type as any,
+            status: 'Paid',
+            doctorId: paymentData.doctorId || '',
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+         });
+
+         // 2. Pending Part (Debt)
+         onAddTransaction({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            date: new Date().toISOString().split('T')[0],
+            amount: debtAmount,
+            service: `${paymentData.service} (Qarz)`,
+            type: paymentData.type as any,
+            status: 'Pending',
+            doctorId: paymentData.doctorId || '',
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+         });
+      }
+
       setIsPaymentModalOpen(false);
-      setPaymentData({ amount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
+      setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
    };
 
    const handleSendMessage = async (e: React.FormEvent) => {
@@ -383,15 +423,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    const handleApptSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-
-      // Past Time Validation
-      const selectedDateTime = new Date(`${apptData.date}T${apptData.time}`);
-      const now = new Date();
-
-      if (selectedDateTime < now) {
-         alert("O'tgan vaqtga qabul belgilash mumkin emas!");
-         return;
-      }
 
       if (!apptData.doctorId) {
          alert('Iltimos, shifokorni tanlang!');
@@ -913,10 +944,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      value={paymentData.service}
                      onChange={e => {
                         const selectedService = services.find(s => s.name === e.target.value);
+                        const price = selectedService ? selectedService.price.toString() : '';
                         setPaymentData({
                            ...paymentData,
                            service: e.target.value,
-                           amount: selectedService ? selectedService.price.toString() : paymentData.amount
+                           amount: price,
+                           paidAmount: price, // Default to full payment
+                           debtAmount: '0'
                         });
                      }}
                      options={[
@@ -924,8 +958,33 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         ...services.map(s => ({ value: s.name, label: `${s.name} (${s.price.toLocaleString()} UZS)` }))
                      ]}
                   />
-                  <Input label="Summa" type="number" value={paymentData.amount} onChange={e => setPaymentData({ ...paymentData, amount: e.target.value })} placeholder="0.00" required />
                   <div className="grid grid-cols-2 gap-4">
+                     <Input
+                        label="To'lanayotgan Summa"
+                        type="number"
+                        value={paymentData.paidAmount}
+                        onChange={e => setPaymentData({ ...paymentData, paidAmount: e.target.value })}
+                        placeholder="0.00"
+                        required
+                     />
+                     <Input
+                        label="Qolgan Qarzdorlik"
+                        type="number"
+                        value={paymentData.debtAmount}
+                        onChange={e => setPaymentData({ ...paymentData, debtAmount: e.target.value })}
+                        placeholder="0.00"
+                     />
+                  </div>
+
+                  {/* Total Calculator Display */}
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex justify-between items-center">
+                     <span className="text-gray-700 dark:text-gray-300 font-medium">Jami Summa:</span>
+                     <span className="text-gray-900 dark:text-white font-bold text-lg">
+                        {((Number(paymentData.paidAmount) || 0) + (Number(paymentData.debtAmount) || 0)).toLocaleString()} UZS
+                     </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
                      <Select
                         label="To'lov Usuli"
                         value={paymentData.type}
@@ -934,15 +993,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            { value: 'Cash', label: 'Naqd' },
                            { value: 'Card', label: 'Karta' },
                            { value: 'Insurance', label: 'Sug\'urta' }
-                        ]}
-                     />
-                     <Select
-                        label="Holati"
-                        value={paymentData.status}
-                        onChange={e => setPaymentData({ ...paymentData, status: e.target.value })}
-                        options={[
-                           { value: 'Paid', label: 'To\'landi' },
-                           { value: 'Pending', label: 'Qarz (Kutilmoqda)' }
                         ]}
                      />
                   </div>
