@@ -84,7 +84,7 @@ export interface Service {
   name: string;
   price: number;
   cost?: number; // Service cost (e.g., technician fee)
-  duration: number;
+  duration?: number; // Optional, defaults to 60 minutes
 
   clinicId: string;
   categoryId?: string;

@@ -115,7 +115,23 @@ const App: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        if (userRole === UserRole.SUPER_ADMIN) {
+        // Check if demo mode
+        const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+        const isDemo = storedAuth ? JSON.parse(storedAuth).isDemo : false;
+
+        if (isDemo && clinicId === 'demo-clinic-1') {
+          // Load demo data
+          const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN } = await import('./services/demoData');
+
+          setPatients(DEMO_PATIENTS);
+          setAppointments(DEMO_APPOINTMENTS);
+          setTransactions(DEMO_TRANSACTIONS);
+          setServices(DEMO_SERVICES);
+          setDoctors(DEMO_DOCTORS);
+          setClinics([DEMO_CLINIC]);
+          setPlans([DEMO_PLAN]);
+          setInventoryItems([]);
+        } else if (userRole === UserRole.SUPER_ADMIN) {
           const [clns, plns] = await Promise.all([
             api.clinics.getAll(),
             api.plans.getAll()
@@ -323,23 +339,22 @@ const App: React.FC = () => {
 
   // Settings Actions
   // Settings Actions
-  const addService = async (service: { name: string; price: number; duration: number }) => {
+  const addService = async (service: Omit<Service, 'id' | 'clinicId'>) => {
     try {
-      const newService = await api.services.create({ ...service, clinicId });
+      const newService = await api.services.create({ ...service, duration: service.duration || 60, clinicId });
       setServices(prev => [...prev, newService]);
       addToast('success', 'Yangi xizmat qo\'shildi.');
     } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
   };
 
-  const updateService = async (index: number, service: { name: string; price: number; duration: number }) => {
+  const updateService = async (index: number, service: Partial<Service>) => {
     // Note: index logic might need to change to ID based if backend uses IDs.
     // Assuming service object has ID now or we pass ID.
-    // The original code used index. I need to check how Settings page calls this.
     // For now, I'll assume the service object passed has an ID if it's an update, or I need to find the ID from the list.
     const serviceToUpdate = services[index];
     if (serviceToUpdate && serviceToUpdate.id) {
       try {
-        const updated = await api.services.update(serviceToUpdate.id, service);
+        const updated = await api.services.update(serviceToUpdate.id, { ...service, duration: service.duration || 60 });
         setServices(prev => prev.map(s => s.id === updated.id ? updated : s));
         addToast('success', 'Xizmat yangilandi.');
       } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
@@ -682,6 +697,11 @@ const App: React.FC = () => {
             </button>
             <div className="h-8 w-px bg-gray-200 dark:bg-gray-700"></div>
             <span className="font-bold text-xl text-gray-900 dark:text-white">DentaCRM</span>
+            {clinicId === 'demo-clinic-1' && (
+              <span className="px-2 py-1 text-xs font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
+                🧪 DEMO MODE
+              </span>
+            )}
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {new Date().toLocaleDateString('uz-UZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </span>

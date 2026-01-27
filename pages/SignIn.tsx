@@ -21,6 +21,32 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
+      // Check if on localhost
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+      // Demo mode credentials (localhost only)
+      if (isLocalhost && username === 'demoklinikaadmin' && password === 'demoklinikaparol') {
+        const demoAuthData = {
+          role: UserRole.CLINIC_ADMIN,
+          name: 'Demo Admin',
+          clinicId: 'demo-clinic-1',
+          username: username,
+          token: 'demo-token',
+          isDemo: true,
+        };
+
+        if (rememberMe) {
+          localStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData));
+        } else {
+          sessionStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData));
+        }
+
+        onLogin(UserRole.CLINIC_ADMIN, 'Demo Admin', 'demo-clinic-1');
+        setIsLoading(false);
+        return;
+      }
+
+      // Regular backend authentication
       const response = await api.auth.login(username, password);
 
       if (response.success && response.role && response.name) {
@@ -130,6 +156,18 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
           </form>
 
           <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700 text-center">
+            {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                  🧪 Localhost - Demo rejimi mavjud
+                </p>
+                <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">
+                  Login: <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">demoklinikaadmin</code>
+                  <br />
+                  Parol: <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">demoklinikaparol</code>
+                </p>
+              </div>
+            )}
             <p className="text-xs text-gray-400">
               Muammo yuzaga kelsa, texnik yordamga murojaat qiling: <br />
               <span className="font-medium text-blue-600">+998 90 824 29 92</span>

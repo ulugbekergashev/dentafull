@@ -30,7 +30,7 @@ export const Settings: React.FC<SettingsProps> = ({
    // Service Modal State
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
    const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
-   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', duration: '', categoryId: '' });
+   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '' });
 
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
@@ -134,12 +134,11 @@ export const Settings: React.FC<SettingsProps> = ({
             name: s.name,
             price: s.price.toString(),
             cost: (s.cost || 0).toString(),
-            duration: s.duration.toString(),
             categoryId: s.categoryId || ''
          });
       } else {
          setEditingServiceIndex(null);
-         setServiceForm({ name: '', price: '', cost: '', duration: '', categoryId: selectedCategory || '' });
+         setServiceForm({ name: '', price: '', cost: '', categoryId: selectedCategory || '' });
       }
       setIsServiceModalOpen(true);
    };
@@ -150,7 +149,7 @@ export const Settings: React.FC<SettingsProps> = ({
          name: serviceForm.name,
          price: Number(serviceForm.price),
          cost: Number(serviceForm.cost) || 0,
-         duration: Number(serviceForm.duration),
+         duration: 60,
          categoryId: serviceForm.categoryId || undefined
       };
 
@@ -374,7 +373,6 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <thead className="bg-gray-50 dark:bg-gray-800">
                                     <tr>
                                        <th className="px-4 py-3 font-medium text-gray-500">Xizmat Nomi</th>
-                                       <th className="px-4 py-3 font-medium text-gray-500">Davomiyligi</th>
                                        <th className="px-4 py-3 font-medium text-gray-500">Narxi</th>
                                        <th className="px-4 py-3 font-medium text-gray-500 text-right">Amal</th>
                                     </tr>
@@ -385,7 +383,6 @@ export const Settings: React.FC<SettingsProps> = ({
                                        .map((s, i) => (
                                           <tr key={i} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
                                              <td className="px-4 py-3 text-gray-900 dark:text-gray-200 font-medium">{s.name}</td>
-                                             <td className="px-4 py-3 text-gray-500">{s.duration} daq</td>
                                              <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
                                              <td className="px-4 py-3 text-right">
                                                 <button
@@ -399,7 +396,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                        ))}
                                     {services.filter(s => !selectedCategory || s.categoryId === selectedCategory).length === 0 && (
                                        <tr>
-                                          <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                                          <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
                                              Xizmatlar topilmadi
                                           </td>
                                        </tr>
@@ -606,7 +603,6 @@ export const Settings: React.FC<SettingsProps> = ({
                   <Input label="Narxi" type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
                   <Input label="Texniklar xarajati" type="number" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} placeholder="0" />
                </div>
-               <Input label="Davomiyligi (daq)" type="number" value={serviceForm.duration} onChange={e => setServiceForm({ ...serviceForm, duration: e.target.value })} required />
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsServiceModalOpen(false)}>Bekor qilish</Button>
                   <Button type="submit">Saqlash</Button>
