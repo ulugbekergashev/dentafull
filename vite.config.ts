@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['logo-icon.png'],
+        manifestFilename: 'manifest.json',
         manifest: {
           name: 'DentaCRM',
           short_name: 'DentaCRM',
@@ -22,14 +23,16 @@ export default defineConfig(({ mode }) => {
           theme_color: '#ffffff',
           background_color: '#ffffff',
           display: 'standalone',
+          start_url: '/',
+          scope: '/',
           icons: [
             {
-              src: 'logo-icon.png',
+              src: '/logo-icon.png',
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: 'logo-icon.png',
+              src: '/logo-icon.png',
               sizes: '512x512',
               type: 'image/png'
             }
