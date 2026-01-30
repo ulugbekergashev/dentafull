@@ -15,6 +15,26 @@
             "dest": "/assets/$1"
         },
         {
+            "src": "/sw.js",
+            "dest": "/sw.js"
+        },
+        {
+            "src": "/registerSW.js",
+            "dest": "/registerSW.js"
+        },
+        {
+            "src": "/manifest.json",
+            "dest": "/manifest.json"
+        },
+        {
+            "src": "/workbox-(.*).js",
+            "dest": "/workbox-$1.js"
+        },
+        {
+            "src": "/logo-icon.png",
+            "dest": "/logo-icon.png"
+        },
+        {
             "src": "/(.*)",
             "dest": "/index.html"
         }
