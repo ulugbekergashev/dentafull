@@ -32,10 +32,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
   const filteredTransactionsByDoctor = useMemo(() => {
     if (userRole === UserRole.DOCTOR && doctorId) {
-      // Filter transactions based on appointments that belong to this doctor
-      const doctorAppointmentIds = new Set(filteredAppointmentsByDoctor.map(a => a.id));
+      // Filter transactions based on doctorId if available, or fall back to appointment matching
       return transactions.filter(t => {
-        // Match transaction to appointment by patient name and service
+        if (t.doctorId) {
+          return t.doctorId === doctorId;
+        }
+        // Fallback: Match transaction to appointment by patient name and service
         const matchingAppt = filteredAppointmentsByDoctor.find(a =>
           a.patientName === t.patientName && a.type === t.service
         );

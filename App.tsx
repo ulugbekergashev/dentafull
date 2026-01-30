@@ -472,7 +472,7 @@ const App: React.FC = () => {
     // Standard Clinic View
     switch (currentRoute) {
       case Route.DASHBOARD:
-        return <Dashboard patients={patients} appointments={appointments} transactions={transactions} />;
+        return <Dashboard patients={patients} appointments={appointments} transactions={transactions} userRole={userRole} doctorId={doctorId} />;
       case Route.PATIENTS:
         return <Patients patients={patients} onPatientClick={handlePatientClick} onAddPatient={addPatient} onDeletePatient={deletePatient} />;
       case Route.PATIENT_DETAILS:
