@@ -12,6 +12,38 @@ console.log('🔌 API Configuration:', {
     API_URL
 });
 
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF = 1000; // 1 second
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_RETRIES, backoff = INITIAL_BACKOFF): Promise<Response> {
+    try {
+        const response = await fetch(url, options);
+
+        // Check if we should retry based on status
+        // Retry on 5xx (Server Error), 408 (Timeout), 429 (Too Many Requests)
+        // AND ONLY if it is a GET request (safe to retry)
+        if (!response.ok && (response.status >= 500 || response.status === 408 || response.status === 429)) {
+            const method = options.method || 'GET';
+            if (retries > 0 && method === 'GET') {
+                console.warn(`Request to ${url} failed with status ${response.status}. Retrying in ${backoff}ms... (${retries} attempts left)`);
+                await new Promise(resolve => setTimeout(resolve, backoff));
+                return fetchWithRetry(url, options, retries - 1, backoff * 2);
+            }
+        }
+
+        return response;
+    } catch (error) {
+        // Network errors (fetch throws generic TypeError for network issues)
+        const method = options.method || 'GET';
+        if (retries > 0 && method === 'GET') {
+            console.warn(`Network error for ${url}. Retrying in ${backoff}ms... (${retries} attempts left)`, error);
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            return fetchWithRetry(url, options, retries - 1, backoff * 2);
+        }
+        throw error;
+    }
+}
+
 async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -30,7 +62,7 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
         }
     }
 
-    const response = await fetch(`${API_URL}${url}`, {
+    const response = await fetchWithRetry(`${API_URL}${url}`, {
         ...options,
         headers,
     });
