@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Service, Clinic, SubscriptionPlan } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory } from '../types';
 
 // Demo Clinic
 export const DEMO_CLINIC: Clinic = {
@@ -8,9 +8,9 @@ export const DEMO_CLINIC: Clinic = {
     username: 'demoklinikaadmin',
     phone: '+998 90 123 45 67',
     status: 'Active',
-    planId: 'individual',
+    planId: 'pro',
     subscriptionStartDate: new Date('2024-01-01').toISOString(),
-    expiryDate: new Date('2025-12-31').toISOString(),
+    expiryDate: new Date('2030-12-31').toISOString(),
     monthlyRevenue: 0,
     subscriptionType: 'Paid',
     botToken: '',
@@ -44,13 +44,13 @@ export const DEMO_DOCTORS: Doctor[] = [
 
 // Demo Services
 export const DEMO_SERVICES: Service[] = [
-    { id: 1, name: 'Konsultatsiya', price: 50000, category: 'Konsultatsiya', duration: 30, clinicId: 'demo-clinic-1' },
-    { id: 2, name: 'Tish tozalash', price: 200000, category: 'Profilaktika', duration: 45, clinicId: 'demo-clinic-1' },
-    { id: 3, name: 'Tish plombalash', price: 300000, category: 'Terapiya', duration: 60, clinicId: 'demo-clinic-1' },
-    { id: 4, name: 'Tish olib tashlash', price: 150000, category: 'Jarrohlik', duration: 30, clinicId: 'demo-clinic-1' },
-    { id: 5, name: 'Tish oqartirish', price: 800000, category: 'Estetik', duration: 90, clinicId: 'demo-clinic-1' },
-    { id: 6, name: 'Metall-keramika toj', price: 1200000, category: 'Protezlash', duration: 120, clinicId: 'demo-clinic-1' },
-    { id: 7, name: 'Breket tizimi', price: 5000000, category: 'Ortodontiya', duration: 90, clinicId: 'demo-clinic-1' },
+    { id: 1, name: 'Konsultatsiya', price: 50000, category: 'Konsultatsiya' as unknown as ServiceCategory, duration: 30, clinicId: 'demo-clinic-1' },
+    { id: 2, name: 'Tish tozalash', price: 200000, category: 'Profilaktika' as unknown as ServiceCategory, duration: 45, clinicId: 'demo-clinic-1' },
+    { id: 3, name: 'Tish plombalash', price: 300000, category: 'Terapiya' as unknown as ServiceCategory, duration: 60, clinicId: 'demo-clinic-1' },
+    { id: 4, name: 'Tish olib tashlash', price: 150000, category: 'Jarrohlik' as unknown as ServiceCategory, duration: 30, clinicId: 'demo-clinic-1' },
+    { id: 5, name: 'Tish oqartirish', price: 800000, category: 'Estetik' as unknown as ServiceCategory, duration: 90, clinicId: 'demo-clinic-1' },
+    { id: 6, name: 'Metall-keramika toj', price: 1200000, category: 'Protezlash' as unknown as ServiceCategory, duration: 120, clinicId: 'demo-clinic-1' },
+    { id: 7, name: 'Breket tizimi', price: 5000000, category: 'Ortodontiya' as unknown as ServiceCategory, duration: 90, clinicId: 'demo-clinic-1' },
 ];
 
 // Demo Patients
@@ -256,10 +256,11 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
 
 // Demo Subscription Plan
 export const DEMO_PLAN: SubscriptionPlan = {
-    id: 'individual',
-    name: 'Individual',
+    id: 'pro',
+    name: 'Pro',
     price: 0,
-    features: ['Bir shifokor', 'Cheklanmagan bemorlar'],
+    features: ['Cheklanmagan shifokorlar', 'Cheklanmagan bemorlar', 'Ombor', 'Telegram Bot'],
+    maxDoctors: 999,
 };
 
 // Demo credentials
@@ -267,3 +268,61 @@ export const DEMO_CREDENTIALS = {
     username: 'demoklinikaadmin',
     password: 'demoklinikaparol',
 };
+
+// Demo Inventory Items
+export const DEMO_INVENTORY: InventoryItem[] = [
+    {
+        id: 'demo-item-1',
+        name: 'Liqidoqain',
+        unit: 'ampula',
+        quantity: 50,
+        minQuantity: 10,
+        clinicId: 'demo-clinic-1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    },
+    {
+        id: 'demo-item-2',
+        name: 'Paxta',
+        unit: 'kg',
+        quantity: 5,
+        minQuantity: 2,
+        clinicId: 'demo-clinic-1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    },
+    {
+        id: 'demo-item-3',
+        name: 'Shprits 2ml',
+        unit: 'dona',
+        quantity: 100,
+        minQuantity: 20,
+        clinicId: 'demo-clinic-1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    },
+];
+
+// Demo Inventory Logs
+export const DEMO_INVENTORY_LOGS: InventoryLog[] = [
+    {
+        id: 'demo-log-1',
+        itemId: 'demo-item-1',
+        change: 50,
+        type: 'IN',
+        note: 'Boshlang\'ich qoldiq',
+        date: new Date('2026-01-01').toISOString(),
+        userName: 'Demo Admin',
+    },
+    {
+        id: 'demo-log-2',
+        itemId: 'demo-item-2',
+        change: 5,
+        type: 'IN',
+        note: 'Xarid',
+        date: new Date('2026-01-05').toISOString(),
+        userName: 'Demo Admin',
+    }
+];
+
+

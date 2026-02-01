@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, MessageSquare
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
@@ -267,7 +267,10 @@ const App: React.FC = () => {
       const newPatient = await api.patients.create({ ...patient, clinicId });
       setPatients(prev => [newPatient, ...prev]);
       addToast('success', `Bemor ${patient.firstName} muvaffaqiyatli qo'shildi!`);
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      console.error('Add patient error:', e);
+      addToast('error', e.message || 'Xatolik yuz berdi');
+    }
   };
 
   const updatePatient = async (id: string, data: Partial<Patient>) => {

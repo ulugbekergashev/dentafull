@@ -187,3 +187,14 @@ export interface InventoryLog {
   patientId?: string;
   patientName?: string;
 }
+
+export interface SMSCampaign {
+  id: string;
+  name: string;
+  message: string;
+  audience: 'all' | 'male' | 'female' | 'debtors';
+  sentCount: number;
+  status: 'Draft' | 'Sent' | 'Failed';
+  date: string;
+  clinicId: string;
+}

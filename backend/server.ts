@@ -192,8 +192,9 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
             data: req.body
         });
         res.json(patient);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to create patient' });
+    } catch (error: any) {
+        console.error('Patient creation error:', error);
+        res.status(500).json({ error: error.message || 'Failed to create patient' });
     }
 });
 
