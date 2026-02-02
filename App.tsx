@@ -101,7 +101,6 @@ const App: React.FC = () => {
           }
         }
       } catch (e) {
-      } catch (e) {
         console.error('Failed to parse stored auth', e);
         localStorage.removeItem('dentalflow_auth');
         sessionStorage.removeItem('dentalflow_auth');
