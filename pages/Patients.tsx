@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
-import { Search, Plus, MoreHorizontal, Eye, Trash2 } from 'lucide-react';
+import { Search, Plus, MoreHorizontal, Eye, Trash2, Loader2 } from 'lucide-react';
 import { Patient } from '../types';
 import { api } from '../services/api';
 
