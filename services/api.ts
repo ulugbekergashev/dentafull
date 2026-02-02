@@ -84,7 +84,9 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
     if (response.status === 401) {
         // Token expired or invalid
         localStorage.removeItem('dentalflow_auth');
-        window.location.href = '/'; // Redirect to login
+        sessionStorage.removeItem('dentalflow_auth');
+        window.dispatchEvent(new Event('auth:unauthorized'));
+        // We throw an error to stop execution, but the event listener in App.tsx will handle the redirect/UI update
         throw new Error('Session expired');
     }
 

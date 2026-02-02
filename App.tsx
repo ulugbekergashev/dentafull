@@ -101,10 +101,19 @@ const App: React.FC = () => {
           }
         }
       } catch (e) {
+      } catch (e) {
         console.error('Failed to parse stored auth', e);
         localStorage.removeItem('dentalflow_auth');
+        sessionStorage.removeItem('dentalflow_auth');
       }
     }
+
+    const handleAuthError = () => {
+      handleLogout();
+    };
+
+    window.addEventListener('auth:unauthorized', handleAuthError);
+    return () => window.removeEventListener('auth:unauthorized', handleAuthError);
   }, []);
 
   // Load Data
@@ -159,9 +168,13 @@ const App: React.FC = () => {
           setPlans(plns);
           setInventoryItems(invItems);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load data:', error);
-        setError('Ma\'lumotlarni yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+        if (error.message === 'Session expired') {
+          handleLogout();
+        } else {
+          setError('Ma\'lumotlarni yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+        }
       } finally {
         setIsLoading(false);
       }

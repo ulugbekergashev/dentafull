@@ -150,7 +150,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         if (userPayload && responseData) {
-            const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '24h' });
+            const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '30d' });
             return res.json({ ...responseData, token });
         }
 
