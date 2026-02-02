@@ -188,13 +188,48 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
 
 app.post('/api/patients', authenticateToken, async (req, res) => {
     try {
+        const { firstName, lastName, phone, clinicId, dob, gender, medicalHistory } = req.body;
+
+        // 1. Validate required fields
+        if (!firstName || !lastName || !phone) {
+            return res.status(400).json({ error: 'Ism, familiya va telefon raqam kiritilishi shart.' });
+        }
+
+        if (!clinicId) {
+            return res.status(400).json({ error: 'Klinika aniqlanmadi (Tizim xatoligi). Iltimos, sahifani yangilab qayta urining.' });
+        }
+
+        // 2. Validate format (optional but recommended)
+        // Basic phone validation could go here
+
+        // 3. Create Patient
         const patient = await prisma.patient.create({
-            data: req.body
+            data: {
+                firstName,
+                lastName,
+                phone,
+                clinicId,
+                dob: dob || '',
+                gender: gender || 'Male',
+                medicalHistory: medicalHistory || '',
+                status: 'Active',
+                lastVisit: 'Never'
+            }
         });
         res.json(patient);
     } catch (error: any) {
         console.error('Patient creation error:', error);
-        res.status(500).json({ error: error.message || 'Failed to create patient' });
+
+        // Handle specific Prisma errors
+        if (error.code === 'P2002') {
+            // Unique constraint violation (e.g. if we had unique phone per clinic)
+            return res.status(400).json({ error: 'Ushbu ma\'lumotga ega bemor allaqachon mavjud.' });
+        }
+        if (error.code === 'P2003') {
+            return res.status(400).json({ error: 'Bog\'liq ma\'lumotlar (klinika) topilmadi.' });
+        }
+
+        res.status(500).json({ error: 'Bemor yaratishda xatolik yuz berdi: ' + (error.message || 'Noma\'lum xatolik') });
     }
 });
 
