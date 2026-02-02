@@ -276,7 +276,22 @@ const App: React.FC = () => {
   // Patient Actions
   const addPatient = async (patient: Omit<Patient, 'id'>) => {
     try {
-      const newPatient = await api.patients.create({ ...patient, clinicId });
+      // Safety check for clinicId
+      let activeClinicId = clinicId;
+      if (!activeClinicId) {
+        const stored = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.clinicId) activeClinicId = parsed.clinicId;
+        }
+      }
+
+      if (!activeClinicId) {
+        addToast('error', 'Klinika aniqlanmadi. Iltimos sahafani yangilang.');
+        return;
+      }
+
+      const newPatient = await api.patients.create({ ...patient, clinicId: activeClinicId });
       setPatients(prev => [newPatient, ...prev]);
       addToast('success', `Bemor ${patient.firstName} muvaffaqiyatli qo'shildi!`);
     } catch (e: any) {

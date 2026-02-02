@@ -36,27 +36,36 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
     return matchesSearch && matchesStatus;
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.firstName || !formData.lastName) return;
 
-    onAddPatient({
-      ...formData,
-      status: 'Active',
-      lastVisit: 'Never',
-      gender: formData.gender as 'Male' | 'Female'
-    });
+    setIsSubmitting(true);
+    try {
+      await onAddPatient({
+        ...formData,
+        status: 'Active',
+        lastVisit: 'Never',
+        gender: formData.gender as 'Male' | 'Female'
+      });
 
-    setIsAddModalOpen(false);
-    setFormData({
-      firstName: '',
-      lastName: '',
-      phone: '',
-      dob: '',
-      gender: 'Male',
-      medicalHistory: '',
-      address: ''
-    });
+      setIsAddModalOpen(false);
+      setFormData({
+        firstName: '',
+        lastName: '',
+        phone: '',
+        dob: '',
+        gender: 'Male',
+        medicalHistory: '',
+        address: ''
+      });
+    } catch (error) {
+      // Error is handled by parent (App.tsx) toast, but we should stop loading
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -235,8 +244,15 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
             ></textarea>
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>Bekor qilish</Button>
-            <Button type="submit">Saqlash</Button>
+            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)} disabled={isSubmitting}>Bekor qilish</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saqlanmoqda...
+                </>
+              ) : 'Saqlash'}
+            </Button>
           </div>
         </form>
       </Modal>
