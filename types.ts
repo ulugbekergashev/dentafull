@@ -2,7 +2,8 @@
 export enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
   CLINIC_ADMIN = 'CLINIC_ADMIN',
-  DOCTOR = 'DOCTOR'
+  DOCTOR = 'DOCTOR',
+  RECEPTIONIST = 'RECEPTIONIST'
 }
 
 export enum ToothStatus {
@@ -32,6 +33,17 @@ export interface Doctor {
   username?: string;
   password?: string;
   percentage?: number; // Revenue share percentage
+}
+
+export interface Receptionist {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  username: string;
+  password?: string;
+  status: 'Active' | 'Inactive';
+  clinicId: string;
 }
 
 export interface Patient {

@@ -29,6 +29,18 @@ model Doctor {
   @@unique([clinicId, telegramChatId])
 }
 
+model Receptionist {
+  id        String @id @default(uuid())
+  firstName String
+  lastName  String
+  phone     String
+  username  String @unique
+  password  String
+  status    String // 'Active' | 'Inactive' | 'Deleted'
+  clinicId  String
+  clinic    Clinic @relation(fields: [clinicId], references: [id])
+}
+
 model Patient {
   id             String        @id @default(uuid())
   firstName      String
@@ -152,6 +164,7 @@ model Clinic {
 
   // Relations
   doctors       Doctor[]
+  receptionists Receptionist[]
   patients      Patient[]
   appointments  Appointment[]
   transactions  Transaction[]

@@ -15,7 +15,7 @@ import { SignIn } from './pages/SignIn';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
 import { Inventory } from './pages/Inventory';
-import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, InventoryItem } from './types';
+import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { api } from './services/api';
@@ -36,13 +36,13 @@ enum Route {
 
 // Navigation for Clinic Admin and Doctors
 const CLINIC_NAVIGATION: NavItem[] = [
-  { id: Route.DASHBOARD, label: 'Boshqaruv Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
-  { id: Route.PATIENTS, label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
-  { id: Route.CALENDAR, label: 'Kalendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+  { id: Route.DASHBOARD, label: 'Boshqaruv Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
+  { id: Route.PATIENTS, label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
+  { id: Route.CALENDAR, label: 'Kalendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: Route.FINANCE, label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
   { id: Route.DOCTORS_ANALYTICS, label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
-  { id: Route.INVENTORY, label: 'Ombor', icon: Package, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
-  { id: Route.SETTINGS, label: 'Sozlamalar', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
+  { id: Route.INVENTORY, label: 'Ombor', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
+  { id: Route.SETTINGS, label: 'Sozlamalar', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
 ];
 
 // Navigation for Super Admin
@@ -59,6 +59,7 @@ const App: React.FC = () => {
   const [userName, setUserName] = useState('');
   const [clinicId, setClinicId] = useState<string>('');
   const [doctorId, setDoctorId] = useState<string>(''); // For doctor role
+  const [receptionistId, setReceptionistId] = useState<string>(''); // For receptionist role
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -72,6 +73,7 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [receptionists, setReceptionists] = useState<Receptionist[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
   // Super Admin Data Store
@@ -83,7 +85,7 @@ const App: React.FC = () => {
     const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
     if (storedAuth) {
       try {
-        const { role, name, clinicId: storedClinicId, doctorId: storedDoctorId } = JSON.parse(storedAuth);
+        const { role, name, clinicId: storedClinicId, doctorId: storedDoctorId, receptionistId: storedReceptionistId } = JSON.parse(storedAuth);
         if (role && name) {
           setUserRole(role);
           setUserName(name);
@@ -92,6 +94,9 @@ const App: React.FC = () => {
           }
           if (storedDoctorId) {
             setDoctorId(storedDoctorId);
+          }
+          if (storedReceptionistId) {
+            setReceptionistId(storedReceptionistId);
           }
           setIsAuthenticated(true);
           if (role === UserRole.SUPER_ADMIN) {
@@ -148,12 +153,13 @@ const App: React.FC = () => {
           setClinics(clns);
           setPlans(plns);
         } else if (clinicId) {
-          const [pts, appts, txs, svcs, docs, clns, plns, invItems] = await Promise.all([
+          const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
             api.services.getAll(clinicId),
             api.doctors.getAll(clinicId),
+            api.receptionists.getAll(clinicId),
             api.clinics.getAll(), // Clinic admin might not need all clinics, but maybe for reference? Or maybe just their own.
             api.plans.getAll(),
             api.inventory.getAll(clinicId)
@@ -163,6 +169,7 @@ const App: React.FC = () => {
           setTransactions(txs);
           setServices(svcs);
           setDoctors(docs);
+          setReceptionists(recs);
           setClinics(clns);
           setPlans(plns);
           setInventoryItems(invItems);
@@ -193,7 +200,7 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   // --- Auth Actions ---
-  const handleLogin = (role: UserRole, name: string, clinicIdParam?: string, doctorIdParam?: string) => {
+  const handleLogin = (role: UserRole, name: string, clinicIdParam?: string, doctorIdParam?: string, receptionistIdParam?: string) => {
     setUserRole(role);
     setUserName(name);
     if (clinicIdParam) {
@@ -201,6 +208,9 @@ const App: React.FC = () => {
     }
     if (doctorIdParam) {
       setDoctorId(doctorIdParam);
+    }
+    if (receptionistIdParam) {
+      setReceptionistId(receptionistIdParam);
     }
     setIsAuthenticated(true);
     // Set default route based on role
@@ -220,6 +230,7 @@ const App: React.FC = () => {
     setUserName('');
     setClinicId('');
     setDoctorId('');
+    setReceptionistId('');
   };
 
   const retryLoadData = async () => {
@@ -234,12 +245,13 @@ const App: React.FC = () => {
         setClinics(clns);
         setPlans(plns);
       } else if (clinicId) {
-        const [pts, appts, txs, svcs, docs, clns, plns, invItems] = await Promise.all([
+        const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems] = await Promise.all([
           api.patients.getAll(clinicId),
           api.appointments.getAll(clinicId),
           api.transactions.getAll(clinicId),
           api.services.getAll(clinicId),
           api.doctors.getAll(clinicId),
+          api.receptionists.getAll(clinicId),
           api.clinics.getAll(),
           api.plans.getAll(),
           api.inventory.getAll(clinicId)
@@ -249,6 +261,7 @@ const App: React.FC = () => {
         setTransactions(txs);
         setServices(svcs);
         setDoctors(docs);
+        setReceptionists(recs);
         setClinics(clns);
         setPlans(plns);
         setInventoryItems(invItems);
@@ -416,6 +429,30 @@ const App: React.FC = () => {
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
+  const addReceptionist = async (receptionist: Omit<Receptionist, 'id'>) => {
+    try {
+      const newRec = await api.receptionists.create({ ...receptionist, clinicId });
+      setReceptionists(prev => [...prev, newRec]);
+      addToast('success', 'Yangi resepshn qo\'shildi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const updateReceptionist = async (id: string, data: Partial<Receptionist>) => {
+    try {
+      const updated = await api.receptionists.update(id, data);
+      setReceptionists(prev => prev.map(r => r.id === id ? updated : r));
+      addToast('success', 'Resepshn ma\'lumotlari yangilandi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const deleteReceptionist = async (id: string) => {
+    try {
+      await api.receptionists.delete(id);
+      setReceptionists(prev => prev.filter(r => r.id !== id));
+      addToast('info', 'Resepshn o\'chirildi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
   // Super Admin Actions
   // Super Admin Actions
   const addClinic = async (clinic: Omit<Clinic, 'id'>) => {
@@ -561,11 +598,15 @@ const App: React.FC = () => {
           userRole={userRole}
           services={services}
           doctors={doctors}
+          receptionists={receptionists}
           onAddService={addService}
           onUpdateService={updateService}
           onAddDoctor={addDoctor}
           onUpdateDoctor={updateDoctor}
           onDeleteDoctor={deleteDoctor}
+          onAddReceptionist={addReceptionist}
+          onUpdateReceptionist={updateReceptionist}
+          onDeleteReceptionist={deleteReceptionist}
           currentClinic={clinics.find(c => c.id === clinicId)}
           plans={plans}
         />;
@@ -705,7 +746,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="ml-3 truncate">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate" title={userName}>{userName}</p>
-                  <p className="text-xs text-gray-500 capitalize">{userRole === UserRole.SUPER_ADMIN ? 'SaaS Owner' : userRole === UserRole.CLINIC_ADMIN ? 'Administrator' : 'Shifokor'}</p>
+                  <p className="text-xs text-gray-500 capitalize">{userRole === UserRole.SUPER_ADMIN ? 'SaaS Owner' : userRole === UserRole.CLINIC_ADMIN ? 'Administrator' : userRole === UserRole.RECEPTIONIST ? 'Resepshn' : 'Shifokor'}</p>
                 </div>
               </div>
               <button

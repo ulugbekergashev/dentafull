@@ -145,6 +145,25 @@ app.post('/api/auth/login', async (req, res) => {
                         clinicId: doctor.clinicId,
                         doctorId: doctor.id
                     };
+                } else {
+                    // Check for receptionist
+                    const receptionist = await prisma.receptionist.findUnique({
+                        where: { username: cleanUsername }
+                    });
+
+                    if (receptionist && receptionist.password === cleanPassword) {
+                        if (receptionist.status !== 'Active') {
+                            return res.status(403).json({ success: false, error: 'Resepshn bloklangan' });
+                        }
+                        userPayload = { role: 'RECEPTIONIST', name: `${receptionist.firstName} ${receptionist.lastName}`, clinicId: receptionist.clinicId, receptionistId: receptionist.id };
+                        responseData = {
+                            success: true,
+                            role: 'RECEPTIONIST',
+                            name: `${receptionist.firstName} ${receptionist.lastName}`,
+                            clinicId: receptionist.clinicId,
+                            receptionistId: receptionist.id
+                        };
+                    }
                 }
             }
         }
@@ -586,6 +605,93 @@ app.delete('/api/doctors/:id', authenticateToken, async (req, res) => {
     } catch (error: any) {
         console.error('Doctor delete error:', error);
         res.status(500).json({ error: error.message || 'Failed to delete doctor' });
+    }
+});
+
+// --- Receptionists ---
+app.get('/api/receptionists', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const receptionists = await prisma.receptionist.findMany({
+            where: {
+                clinicId: clinicId as string,
+                status: { not: 'Deleted' }
+            }
+        });
+        res.json(receptionists);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch receptionists' });
+    }
+});
+
+app.post('/api/receptionists', authenticateToken, async (req, res) => {
+    try {
+        const { firstName, lastName, phone, username, password, clinicId } = req.body;
+
+        if (!firstName || !lastName || !username || !password) {
+            return res.status(400).json({ error: 'Barcha maydonlar to\'ldirilishi shart' });
+        }
+
+        if (username) {
+            const existing = await prisma.receptionist.findUnique({ where: { username } });
+            if (existing) {
+                return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
+            }
+        }
+
+        const data: any = {
+            firstName, lastName, phone, username, password, clinicId,
+            status: 'Active'
+        };
+
+        const newReceptionist = await prisma.receptionist.create({ data });
+        res.json(newReceptionist);
+    } catch (error: any) {
+        console.error('Receptionist creation error:', error);
+        if (error.code === 'P2002') {
+            return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
+        }
+        res.status(500).json({ error: error.message || 'Failed to create receptionist' });
+    }
+});
+
+app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
+    try {
+        const { username } = req.body;
+        if (username) {
+            const existing = await prisma.receptionist.findUnique({ where: { username } });
+            if (existing && existing.id !== req.params.id) {
+                return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
+            }
+        }
+        const receptionist = await prisma.receptionist.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        res.json(receptionist);
+    } catch (error: any) {
+        console.error('Receptionist update error:', error);
+        if (error.code === 'P2002') {
+            return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
+        }
+        res.status(500).json({ error: error.message || 'Failed to update receptionist' });
+    }
+});
+
+app.delete('/api/receptionists/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.receptionist.update({
+            where: { id: req.params.id },
+            data: { status: 'Deleted' }
+        });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Receptionist delete error:', error);
+        res.status(500).json({ error: error.message || 'Failed to delete receptionist' });
     }
 });
 

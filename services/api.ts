@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog } from '../types';
 import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
@@ -267,6 +267,25 @@ export const api = {
             body: JSON.stringify(data),
         }),
         delete: (id: string) => fetchJson<{ success: true }>(`/doctors/${id}`, {
+            method: 'DELETE',
+        }),
+    },
+    receptionists: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([]);
+            return fetchJson<Receptionist[]>(`/receptionists?clinicId=${clinicId}`);
+        },
+        create: (data: Omit<Receptionist, 'id'>) => fetchJson<Receptionist>('/receptionists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        update: (id: string, data: Partial<Receptionist>) => fetchJson<Receptionist>(`/receptionists/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        }),
+        delete: (id: string) => fetchJson<{ success: true }>(`/receptionists/${id}`, {
             method: 'DELETE',
         }),
     },

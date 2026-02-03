@@ -1,27 +1,31 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
-import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot } from 'lucide-react';
+import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory } from '../types';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 
 interface SettingsProps {
    userRole: UserRole;
    services: Service[];
    doctors: Doctor[];
+   receptionists?: Receptionist[];
    onAddService: (service: Omit<Service, 'id' | 'clinicId'>) => void;
    onUpdateService: (index: number, service: Partial<Service>) => void;
    onAddDoctor: (doctor: Omit<Doctor, 'id'>) => void;
    onUpdateDoctor: (id: string, doctor: Partial<Doctor>) => void;
    onDeleteDoctor: (id: string) => void;
+   onAddReceptionist?: (receptionist: Omit<Receptionist, 'id'>) => void;
+   onUpdateReceptionist?: (id: string, receptionist: Partial<Receptionist>) => void;
+   onDeleteReceptionist?: (id: string) => void;
    currentClinic?: Clinic;
    plans?: SubscriptionPlan[];
 }
 
 export const Settings: React.FC<SettingsProps> = ({
-   userRole, services, doctors, onAddService, onUpdateService, onAddDoctor, onUpdateDoctor, onDeleteDoctor, currentClinic, plans
+   userRole, services, doctors, receptionists = [], onAddService, onUpdateService, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans
 }) => {
-   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'bot'>('services');
+   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot'>('services');
    const [categories, setCategories] = useState<ServiceCategory[]>([]);
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -37,11 +41,17 @@ export const Settings: React.FC<SettingsProps> = ({
    const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
    const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '', percentage: '' });
 
+   // Receptionist Modal State
+   const [isReceptionistModalOpen, setIsReceptionistModalOpen] = useState(false);
+   const [editingReceptionistId, setEditingReceptionistId] = useState<string | null>(null);
+   const [receptionistForm, setReceptionistForm] = useState({ firstName: '', lastName: '', phone: '', username: '', password: '' });
+
    // Upgrade Plan Modal State
    const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-   // Delete Doctor Confirmation Modal
+   // Delete Confirmation Modals
    const [deleteConfirmDoctor, setDeleteConfirmDoctor] = useState<Doctor | null>(null);
+   const [deleteConfirmReceptionist, setDeleteConfirmReceptionist] = useState<Receptionist | null>(null);
 
    // General Form State
    const [generalForm, setGeneralForm] = useState({
@@ -240,6 +250,45 @@ export const Settings: React.FC<SettingsProps> = ({
       setIsDoctorModalOpen(false);
    };
 
+   const handleOpenReceptionistModal = (receptionist?: Receptionist) => {
+      if (receptionist) {
+         setEditingReceptionistId(receptionist.id);
+         setReceptionistForm({
+            firstName: receptionist.firstName,
+            lastName: receptionist.lastName,
+            phone: receptionist.phone,
+            username: receptionist.username,
+            password: ''
+         });
+      } else {
+         setEditingReceptionistId(null);
+         setReceptionistForm({ firstName: '', lastName: '', phone: '', username: '', password: '' });
+      }
+      setIsReceptionistModalOpen(true);
+   };
+
+   const handleReceptionistSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (editingReceptionistId) {
+         if (onUpdateReceptionist) {
+            const updateData: any = { ...receptionistForm };
+            if (!updateData.password) {
+               delete updateData.password;
+            }
+            onUpdateReceptionist(editingReceptionistId, updateData);
+         }
+      } else {
+         if (onAddReceptionist) {
+            onAddReceptionist({
+               ...receptionistForm,
+               status: 'Active',
+               clinicId: currentClinic?.id || ''
+            });
+         }
+      }
+      setIsReceptionistModalOpen(false);
+   };
+
    const handleGeneralSave = (e: React.FormEvent) => {
       e.preventDefault();
       setGeneralSaved(true);
@@ -286,6 +335,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   { id: 'general', name: 'Umumiy', icon: User },
                   { id: 'services', name: 'Xizmatlar va Narxlar', icon: DollarSign },
                   { id: 'doctors', name: 'Shifokorlar', icon: Users },
+                  { id: 'receptionists', name: 'Resepshnlar', icon: Phone },
                   { id: 'bot', name: 'Telegram Bot', icon: Bot },
                ].map((item) => (
                   <button
@@ -465,6 +515,54 @@ export const Settings: React.FC<SettingsProps> = ({
                               </div>
                            </div>
                         ))}
+                     </div>
+                  </Card>
+               )}
+
+               {/* Receptionists Tab */}
+               {activeTab === 'receptionists' && (
+                  <Card className="p-6">
+                     <div className="flex justify-between items-center mb-6">
+                        <div>
+                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">Resepshn Boshqaruvi</h3>
+                           <p className="text-sm text-gray-500">Resepshn xodimlarini boshqarish.</p>
+                        </div>
+                        <Button size="sm" onClick={() => handleOpenReceptionistModal()}>Resepshn Qo'shish</Button>
+                     </div>
+                     <div className="grid grid-cols-1 gap-4">
+                        {receptionists.map(rec => (
+                           <div key={rec.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
+                              <div className="flex items-center gap-4">
+                                 <div className="h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-purple-600 font-bold">
+                                    {rec.firstName[0]}{rec.lastName[0]}
+                                 </div>
+                                 <div>
+                                    <p className="font-medium text-gray-900 dark:text-white">{rec.firstName} {rec.lastName}</p>
+                                    <p className="text-xs text-gray-500">{rec.phone}</p>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{rec.status === 'Active' ? 'Faol' : 'Faol Emas'}</span>
+                                 <button
+                                    onClick={() => handleOpenReceptionistModal(rec)}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                                 >
+                                    <Edit className="w-4 h-4" />
+                                 </button>
+                                 <button
+                                    className="p-2 text-gray-400 hover:text-red-600"
+                                    onClick={() => setDeleteConfirmReceptionist(rec)}
+                                 >
+                                    <Trash2 className="w-4 h-4" />
+                                 </button>
+                              </div>
+                           </div>
+                        ))}
+                        {receptionists.length === 0 && (
+                           <div className="text-center py-8 text-gray-500">
+                              Resepshnlar mavjud emas
+                           </div>
+                        )}
                      </div>
                   </Card>
                )}
@@ -714,6 +812,69 @@ export const Settings: React.FC<SettingsProps> = ({
                         if (deleteConfirmDoctor) {
                            onDeleteDoctor(deleteConfirmDoctor.id);
                            setDeleteConfirmDoctor(null);
+                        }
+                     }}
+                  >
+                     Ha, O'chirish
+                  </Button>
+               </div>
+            </div>
+         </Modal>
+
+         {/* Add/Edit Receptionist Modal */}
+         <Modal isOpen={isReceptionistModalOpen} onClose={() => setIsReceptionistModalOpen(false)} title={editingReceptionistId ? "Resepshnni Tahrirlash" : "Yangi Resepshn Qo'shish"}>
+            <form onSubmit={handleReceptionistSubmit} className="space-y-4">
+               <div className="grid grid-cols-2 gap-4">
+                  <Input label="Ism" value={receptionistForm.firstName} onChange={e => setReceptionistForm({ ...receptionistForm, firstName: e.target.value })} required />
+                  <Input label="Familiya" value={receptionistForm.lastName} onChange={e => setReceptionistForm({ ...receptionistForm, lastName: e.target.value })} required />
+               </div>
+               <Input label="Telefon" value={receptionistForm.phone} onChange={e => setReceptionistForm({ ...receptionistForm, phone: e.target.value })} required />
+
+               <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Tizimga kirish ma'lumotlari</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                     <Input
+                        label="Login (Username)"
+                        value={receptionistForm.username}
+                        onChange={e => setReceptionistForm({ ...receptionistForm, username: e.target.value })}
+                        required={!editingReceptionistId}
+                        placeholder="resepshn_login"
+                     />
+                     <Input
+                        label="Parol"
+                        type="password"
+                        value={receptionistForm.password}
+                        onChange={e => setReceptionistForm({ ...receptionistForm, password: e.target.value })}
+                        required={!editingReceptionistId}
+                        placeholder={editingReceptionistId ? "O'zgartirish uchun kiriting" : "********"}
+                     />
+                  </div>
+               </div>
+               <div className="flex justify-end gap-2 pt-4">
+                  <Button type="button" variant="secondary" onClick={() => setIsReceptionistModalOpen(false)}>Bekor qilish</Button>
+                  <Button type="submit">Saqlash</Button>
+               </div>
+            </form>
+         </Modal>
+
+         {/* Delete Receptionist Confirmation Modal */}
+         <Modal isOpen={!!deleteConfirmReceptionist} onClose={() => setDeleteConfirmReceptionist(null)} title="Resepshnni O'chirish">
+            <div className="text-center space-y-4">
+               <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+               </div>
+               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
+               <p className="text-gray-600 dark:text-gray-300">
+                  <strong>{deleteConfirmReceptionist?.firstName} {deleteConfirmReceptionist?.lastName}</strong> ni o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.
+               </p>
+               <div className="flex justify-center gap-3 pt-4">
+                  <Button variant="secondary" onClick={() => setDeleteConfirmReceptionist(null)}>Bekor qilish</Button>
+                  <Button
+                     className="bg-red-600 hover:bg-red-700 text-white border-none"
+                     onClick={() => {
+                        if (deleteConfirmReceptionist && onDeleteReceptionist) {
+                           onDeleteReceptionist(deleteConfirmReceptionist.id);
+                           setDeleteConfirmReceptionist(null);
                         }
                      }}
                   >
