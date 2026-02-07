@@ -35,23 +35,37 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
 
-// CORS Configuration - Must be first
-const corsOptions = {
-    origin: [
+// Manual CORS Middleware
+app.use((req, res, next) => {
+    const allowedOrigins = [
         'http://localhost:5173',
         'http://localhost:3000',
         'https://dentafull-production.up.railway.app',
         'https://dentacrm.uz',
         'http://dentacrm.uz',
         'https://www.dentacrm.uz'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
-};
+    ];
+    const origin = req.headers.origin;
 
-app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions)); // Enable pre-flight for all routes using Regex for Express 5 compatibility
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return next();
+
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
+// app.use(cors(corsOptions)); // Disabled in favor of manual middleware
+// app.options(/.*/, cors(corsOptions)); // Disabled
 
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
