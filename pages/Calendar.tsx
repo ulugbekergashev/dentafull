@@ -192,14 +192,10 @@ export const Calendar: React.FC<CalendarProps> = ({
       return;
     }
 
-    // Past Time Validation
-    const selectedDateTime = new Date(`${formData.date}T${formData.time}`);
-    const now = new Date();
-
-    if (selectedDateTime < now) {
-      alert("O'tgan vaqtga qabul belgilash mumkin emas!");
-      return;
-    }
+    // Past Time Validation - REMOVED per user request
+    // const selectedDateTime = new Date(`${formData.date}T${formData.time}`);
+    // const now = new Date();
+    // if (selectedDateTime < now) { ... }
 
     const patient = patients.find(p => p.id === formData.patientId);
 
