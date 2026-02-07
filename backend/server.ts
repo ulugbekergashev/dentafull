@@ -37,7 +37,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_202
 
 // CORS Configuration - Must be first
 const corsOptions = {
-    origin: true, // Reflects the request origin, allowing all origins
+    origin: [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        'https://dentafull-production.up.railway.app',
+        'https://dentacrm.uz',
+        'http://dentacrm.uz',
+        'https://www.dentacrm.uz'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
