@@ -161,6 +161,11 @@ model Clinic {
   expiryDate            String
   monthlyRevenue        Float
   subscriptionType      String           @default("Paid") // 'Paid' | 'Trial'
+  
+  // SMS settings (Added to match production schema)
+  smsBalance            Float            @default(0)
+  smsLimit              Int              @default(0)
+  smsUsedThisMonth      Int              @default(0)
 
   // Relations
   doctors       Doctor[]
