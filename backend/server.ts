@@ -560,7 +560,10 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
         }
 
         const currentDoctorCount = await prisma.doctor.count({
-            where: { clinicId }
+            where: {
+                clinicId,
+                status: { not: 'Deleted' }
+            }
         });
 
         if (currentDoctorCount >= clinic.plan.maxDoctors) {
