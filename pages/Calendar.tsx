@@ -76,8 +76,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
     setFormData({
       patientId: patients.length > 0 ? patients[0].id : '',
-      doctorId: doctors.length > 0 ? doctors[0].id : '', // Auto-select first doctor (especially for individual plans)
-      type: services.length > 0 ? services[0].name : '',
+      doctorId: doctors.length > 0 ? doctors[0].id : '', // Auto-select first doctor
       date: new Date().toISOString().split('T')[0],
       time: '09:00',
       duration: 60,
@@ -140,10 +139,21 @@ export const Calendar: React.FC<CalendarProps> = ({
     // Check if clinic is on individual plan
     const isIndividualPlan = currentClinic?.planId === 'individual';
 
-    // Validation check - skip doctor requirement for individual plans
+    // Validation check
     if (!formData.patientId) {
       alert("Iltimos, avval bemorni tanlang!");
       return;
+    }
+
+    // Special handling for individual plan or if doctor is missing
+    if (!formData.doctorId) {
+      // If we have doctors but none selected (shouldn't happen often if auto-selected), try to select first
+      if (doctors.length > 0) {
+        formData.doctorId = doctors[0].id;
+      } else {
+        alert("Tizimda shifokor mavjud emas! Iltimos, 'Sozlamalar' bo'limiga o'tib, kamida bitta shifokor profilini yarating. Individual tarifda ham shifokor profili bo'lishi shart.");
+        return;
+      }
     }
 
     if (!isIndividualPlan && !formData.doctorId) {
@@ -161,10 +171,20 @@ export const Calendar: React.FC<CalendarProps> = ({
     }
 
     const patient = patients.find(p => p.id === formData.patientId);
-    const doctor = doctors.find(d => d.id === formData.doctorId);
+    let doctor = doctors.find(d => d.id === formData.doctorId);
 
-    if (!patient || !doctor) {
-      alert("Bemor yoki shifokor topilmadi.");
+    // Fallback: If doctor not found by ID but we have doctors, use the first one (safety net)
+    if (!doctor && doctors.length > 0) {
+      doctor = doctors[0];
+    }
+
+    if (!patient) {
+      alert("Bemor topilmadi.");
+      return;
+    }
+
+    if (!doctor) {
+      alert("Shifokor topilmadi. Iltimos, sozlamalar bo'limida shifokor ma'lumotlarini tekshiring.");
       return;
     }
 

@@ -55,10 +55,10 @@ export const Settings: React.FC<SettingsProps> = ({
 
    // General Form State
    const [generalForm, setGeneralForm] = useState({
-      clinicName: 'DentaCRM Clinic',
-      address: '123 Main St, Tashkent, Uzbekistan',
-      phone: '+998 71 200 00 00',
-      email: 'info@dentacrm.uz'
+      clinicName: '',
+      address: '',
+      phone: '',
+      email: ''
    });
    const [generalSaved, setGeneralSaved] = useState(false);
 
