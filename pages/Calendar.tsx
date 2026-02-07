@@ -133,7 +133,7 @@ export const Calendar: React.FC<CalendarProps> = ({
     setCurrentDate(newDate);
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Check if clinic is on individual plan
@@ -145,18 +145,49 @@ export const Calendar: React.FC<CalendarProps> = ({
       return;
     }
 
+    let finalDoctorId = formData.doctorId;
+    let finalDoctorName = '';
+
     // Special handling for individual plan or if doctor is missing
-    if (!formData.doctorId) {
-      // If we have doctors but none selected (shouldn't happen often if auto-selected), try to select first
-      if (doctors.length > 0) {
-        formData.doctorId = doctors[0].id;
+    if (!finalDoctorId) {
+      if (isIndividualPlan && doctors.length === 0) {
+        // Auto-create doctor logic
+        try {
+          // Use admin name or default
+          const adminNameParts = currentClinic?.adminName?.split(' ') || ['Admin'];
+          const firstName = adminNameParts[0];
+          const lastName = adminNameParts.slice(1).join(' ') || 'Doctor';
+
+          const newDoctor = await api.doctors.create({
+            firstName,
+            lastName,
+            specialty: 'Stomatolog',
+            phone: currentClinic?.phone || '',
+            status: 'Active',
+            clinicId: currentClinic?.id || ''
+          });
+
+          finalDoctorId = newDoctor.id;
+          finalDoctorName = `Dr. ${newDoctor.lastName}`;
+
+          // Notify user (optional, but good for context)
+          // alert("Individual tarif bo'yicha shifokor profili avtomatik yaratildi.");
+        } catch (err) {
+          console.error('Failed to auto-create doctor', err);
+          alert("Xatolik: Shifokor profilini avtomatik yaratib bo'lmadi. Iltimos, Sozlamalar bo'limida yarating.");
+          return;
+        }
+      } else if (doctors.length > 0) {
+        // Auto-select first doctor
+        finalDoctorId = doctors[0].id;
+        finalDoctorName = `Dr. ${doctors[0].lastName}`;
       } else {
-        alert("Tizimda shifokor mavjud emas! Iltimos, 'Sozlamalar' bo'limiga o'tib, kamida bitta shifokor profilini yarating. Individual tarifda ham shifokor profili bo'lishi shart.");
+        alert("Tizimda shifokor mavjud emas! Iltimos, 'Sozlamalar' bo'limiga o'tib, kamida bitta shifokor profilini yarating.");
         return;
       }
     }
 
-    if (!isIndividualPlan && !formData.doctorId) {
+    if (!isIndividualPlan && !finalDoctorId) {
       alert("Iltimos, shifokorni tanlang!");
       return;
     }
@@ -171,26 +202,33 @@ export const Calendar: React.FC<CalendarProps> = ({
     }
 
     const patient = patients.find(p => p.id === formData.patientId);
-    let doctor = doctors.find(d => d.id === formData.doctorId);
 
-    // Fallback: If doctor not found by ID but we have doctors, use the first one (safety net)
-    if (!doctor && doctors.length > 0) {
-      doctor = doctors[0];
-    }
+    // Check if we found the doctor in existing list (might be new if we just created)
+    let doctor = doctors.find(d => d.id === finalDoctorId);
+
+    // If not in list (newly created), mock it for immediate UI usage if needed, 
+    // but we have finalDoctorId and finalDoctorName now.
 
     if (!patient) {
       alert("Bemor topilmadi.");
       return;
     }
 
-    if (!doctor) {
-      alert("Shifokor topilmadi. Iltimos, sozlamalar bo'limida shifokor ma'lumotlarini tekshiring.");
+    // Only check for doctor object if we didn't just create it
+    if (!doctor && !finalDoctorName) {
+      // Should not match here if we handled creation
+      alert("Shifokor topilmadi.");
       return;
+    }
+
+    // Set names if we found existing doctor
+    if (doctor) {
+      finalDoctorName = `Dr. ${doctor.lastName}`;
     }
 
     // Doctor Conflict Validation
     const doctorConflict = appointments.some(appt =>
-      appt.doctorId === doctor.id &&
+      appt.doctorId === finalDoctorId &&
       appt.date === formData.date &&
       appt.time === formData.time &&
       appt.status !== 'Cancelled'
@@ -217,8 +255,8 @@ export const Calendar: React.FC<CalendarProps> = ({
     onAddAppointment({
       patientId: patient.id,
       patientName: `${patient.lastName} ${patient.firstName}`,
-      doctorId: doctor.id,
-      doctorName: `Dr. ${doctor.lastName}`,
+      doctorId: finalDoctorId,
+      doctorName: finalDoctorName,
       type: formData.type || 'Konsultatsiya',
       date: formData.date,
       time: formData.time,
