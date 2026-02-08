@@ -15,7 +15,7 @@ import { SignIn } from './pages/SignIn';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
 import { Inventory } from './pages/Inventory';
-import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem } from './types';
+import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { api } from './services/api';
@@ -75,6 +75,7 @@ const App: React.FC = () => {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [receptionists, setReceptionists] = useState<Receptionist[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
 
   // Super Admin Data Store
   const [clinics, setClinics] = useState<Clinic[]>([]);
@@ -135,12 +136,13 @@ const App: React.FC = () => {
 
         if (isDemo && clinicId === 'demo-clinic-1') {
           // Load demo data
-          const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN } = await import('./services/demoData');
+          const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN, DEMO_CATEGORIES } = await import('./services/demoData');
 
           setPatients(DEMO_PATIENTS);
           setAppointments(DEMO_APPOINTMENTS);
           setTransactions(DEMO_TRANSACTIONS);
           setServices(DEMO_SERVICES);
+          setCategories(DEMO_CATEGORIES);
           setDoctors(DEMO_DOCTORS);
           setClinics([DEMO_CLINIC]);
           setPlans([DEMO_PLAN]);
@@ -153,16 +155,17 @@ const App: React.FC = () => {
           setClinics(clns);
           setPlans(plns);
         } else if (clinicId) {
-          const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems] = await Promise.all([
+          const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems, cats] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
             api.services.getAll(clinicId),
             api.doctors.getAll(clinicId),
             api.receptionists.getAll(clinicId),
-            api.clinics.getAll(), // Clinic admin might not need all clinics, but maybe for reference? Or maybe just their own.
+            api.clinics.getAll(),
             api.plans.getAll(),
-            api.inventory.getAll(clinicId)
+            api.inventory.getAll(clinicId),
+            api.categories.getAll(clinicId)
           ]);
           setPatients(pts);
           setAppointments(appts);
@@ -173,6 +176,8 @@ const App: React.FC = () => {
           setClinics(clns);
           setPlans(plns);
           setInventoryItems(invItems);
+          // @ts-ignore
+          setCategories(cats);
         }
       } catch (error: any) {
         console.error('Failed to load data:', error);
@@ -245,7 +250,7 @@ const App: React.FC = () => {
         setClinics(clns);
         setPlans(plns);
       } else if (clinicId) {
-        const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems] = await Promise.all([
+        const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems, cats] = await Promise.all([
           api.patients.getAll(clinicId),
           api.appointments.getAll(clinicId),
           api.transactions.getAll(clinicId),
@@ -254,7 +259,8 @@ const App: React.FC = () => {
           api.receptionists.getAll(clinicId),
           api.clinics.getAll(),
           api.plans.getAll(),
-          api.inventory.getAll(clinicId)
+          api.inventory.getAll(clinicId),
+          api.categories.getAll(clinicId)
         ]);
         setPatients(pts);
         setAppointments(appts);
@@ -265,6 +271,7 @@ const App: React.FC = () => {
         setClinics(clns);
         setPlans(plns);
         setInventoryItems(invItems);
+        setCategories(cats);
       }
       addToast('success', 'Ma\'lumotlar muvaffaqiyatli yuklandi!');
     } catch (error) {
@@ -335,7 +342,18 @@ const App: React.FC = () => {
   const addAppointment = async (appt: Omit<Appointment, 'id'>) => {
     try {
       const newAppt = await api.appointments.create({ ...appt, clinicId });
-      setAppointments(prev => [...prev, newAppt]);
+
+      // FIX: Check if appointment already exists (backend might return existing one if deduped)
+      setAppointments(prev => {
+        const exists = prev.find(a => a.id === newAppt.id);
+        if (exists) {
+          // Update existing
+          return prev.map(a => a.id === newAppt.id ? newAppt : a);
+        }
+        // Add new
+        return [...prev, newAppt];
+      });
+
       addToast('success', 'Uchrashuv belgilandi.');
     } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
   };
@@ -512,6 +530,23 @@ const App: React.FC = () => {
     } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
   };
 
+  // Category Actions
+  const addCategory = async (category: Omit<ServiceCategory, 'id' | 'clinicId'>) => {
+    try {
+      const newCategory = await api.categories.create({ ...category, clinicId });
+      setCategories(prev => [...prev, newCategory]);
+      addToast('success', 'Kategoriya qo\'shildi!');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  const deleteCategory = async (id: string) => {
+    try {
+      await api.categories.delete(id);
+      setCategories(prev => prev.filter(c => c.id !== id));
+      addToast('info', 'Kategoriya o\'chirildi.');
+    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
   // --- Navigation ---
   const handleNavigate = (route: Route) => {
     setCurrentRoute(route);
@@ -552,13 +587,18 @@ const App: React.FC = () => {
             transactions={transactions}
             doctors={doctors}
             services={services}
+            categories={categories}
             currentClinic={clinics.find(c => c.id === clinicId)}
             plans={plans}
-            onBack={() => setCurrentRoute(Route.PATIENTS)}
+            onBack={() => {
+              setSelectedPatientId(null);
+              setCurrentRoute(Route.PATIENTS);
+            }}
             onUpdatePatient={updatePatient}
             onAddTransaction={addTransaction}
             onUpdateTransaction={updateTransaction}
             onAddAppointment={addAppointment}
+            onUpdateAppointment={updateAppointment}
           />
         );
       case Route.CALENDAR:
@@ -567,6 +607,7 @@ const App: React.FC = () => {
           patients={patients}
           doctors={doctors}
           services={services}
+          categories={categories}
           onAddAppointment={addAppointment}
           onUpdateAppointment={updateAppointment}
           onDeleteAppointment={deleteAppointment}
@@ -597,10 +638,13 @@ const App: React.FC = () => {
         return <Settings
           userRole={userRole}
           services={services}
+          categories={categories}
           doctors={doctors}
           receptionists={receptionists}
           onAddService={addService}
           onUpdateService={updateService}
+          onAddCategory={addCategory}
+          onDeleteCategory={deleteCategory}
           onAddDoctor={addDoctor}
           onUpdateDoctor={updateDoctor}
           onDeleteDoctor={deleteDoctor}

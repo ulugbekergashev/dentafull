@@ -26,6 +26,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
       // Demo mode credentials (localhost only)
+      // Demo mode credentials (localhost only)
       if (isLocalhost && username === 'demoklinikaadmin' && password === 'demoklinikaparol') {
         const demoAuthData = {
           role: UserRole.CLINIC_ADMIN,

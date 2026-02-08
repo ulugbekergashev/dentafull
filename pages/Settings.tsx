@@ -10,8 +10,11 @@ interface SettingsProps {
    services: Service[];
    doctors: Doctor[];
    receptionists?: Receptionist[];
+   categories: ServiceCategory[];
    onAddService: (service: Omit<Service, 'id' | 'clinicId'>) => void;
    onUpdateService: (index: number, service: Partial<Service>) => void;
+   onAddCategory: (category: Omit<ServiceCategory, 'id' | 'clinicId'>) => void;
+   onDeleteCategory: (id: string) => void;
    onAddDoctor: (doctor: Omit<Doctor, 'id'>) => void;
    onUpdateDoctor: (id: string, doctor: Partial<Doctor>) => void;
    onDeleteDoctor: (id: string) => void;
@@ -23,10 +26,9 @@ interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({
-   userRole, services, doctors, receptionists = [], onAddService, onUpdateService, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans
+   userRole, services, categories, doctors, receptionists = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans
 }) => {
    const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot'>('services');
-   const [categories, setCategories] = useState<ServiceCategory[]>([]);
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
    const [categoryForm, setCategoryForm] = useState({ name: '' });
@@ -128,12 +130,8 @@ export const Settings: React.FC<SettingsProps> = ({
       fetchBotUsername();
    }, [currentClinic?.id, currentClinic?.botToken]);
 
-   // Fetch Categories
-   React.useEffect(() => {
-      if (currentClinic?.id) {
-         api.categories.getAll(currentClinic.id).then(setCategories).catch(console.error);
-      }
-   }, [currentClinic?.id]);
+   // Categories effect removed as it's now in App.tsx
+
 
    // Handlers
    const handleOpenServiceModal = (index?: number) => {
@@ -173,31 +171,15 @@ export const Settings: React.FC<SettingsProps> = ({
 
    const handleCategorySubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!currentClinic?.id) return;
-      try {
-         const newCategory = await api.categories.create({
-            name: categoryForm.name,
-            clinicId: currentClinic.id
-         });
-         setCategories([...categories, newCategory]);
-         setCategoryForm({ name: '' });
-         setIsCategoryModalOpen(false);
-      } catch (error) {
-         console.error('Failed to create category:', error);
-         alert('Xatolik yuz berdi');
-      }
+      onAddCategory({ name: categoryForm.name });
+      setCategoryForm({ name: '' });
+      setIsCategoryModalOpen(false);
    };
 
    const handleDeleteCategory = async (id: string) => {
       if (!window.confirm('Kategoriyani o\'chirmoqchimisiz?')) return;
-      try {
-         await api.categories.delete(id);
-         setCategories(categories.filter(c => c.id !== id));
-         if (selectedCategory === id) setSelectedCategory(null);
-      } catch (error) {
-         console.error('Failed to delete category:', error);
-         alert('Xatolik yuz berdi');
-      }
+      onDeleteCategory(id);
+      if (selectedCategory === id) setSelectedCategory(null);
    };
 
    const handleOpenDoctorModal = (doctor?: Doctor) => {

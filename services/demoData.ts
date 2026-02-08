@@ -1,7 +1,59 @@
-import { Patient, Appointment, Transaction, Doctor, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis } from '../types';
+
+// --- PERSISTENCE HELPERS ---
+const STORAGE_KEY = 'dentalflow_demo_data';
+
+export const loadDemoData = () => {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        console.log('📦 Loading Demo Data from LS:', stored ? 'Found' : 'Not Found');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            console.log('✅ Demo Data Parsed:', {
+                patients: parsed.patients?.length,
+                appointments: parsed.appointments?.length,
+                transactions: parsed.transactions?.length
+            });
+            return parsed;
+        }
+    } catch (e) {
+        console.error('❌ Failed to load demo data', e);
+    }
+    return null;
+};
+
+// Load initial data
+const savedData = loadDemoData();
+
+export const saveDemoData = () => {
+    try {
+        const data = {
+            patients: DEMO_PATIENTS,
+            appointments: DEMO_APPOINTMENTS,
+            transactions: DEMO_TRANSACTIONS,
+            services: DEMO_SERVICES,
+            doctors: DEMO_DOCTORS,
+            receptionists: DEMO_RECEPTIONISTS,
+            clinic: DEMO_CLINIC,
+            teeth: DEMO_TEETH,
+            diagnoses: DEMO_DIAGNOSES,
+            inventory: DEMO_INVENTORY,
+            logs: DEMO_INVENTORY_LOGS,
+            categories: DEMO_CATEGORIES
+        };
+        const stringified = JSON.stringify(data);
+        localStorage.setItem(STORAGE_KEY, stringified);
+        console.log('💾 Demo Data Saved to LS. Size:', Math.round(stringified.length / 1024), 'KB');
+    } catch (e) {
+        console.error('❌ Failed to save demo data', e);
+        if (e instanceof Error && e.name === 'QuotaExceededError') {
+            console.error('Critial: LocalStorage Quota Exceeded!');
+        }
+    }
+};
 
 // Demo Clinic
-export const DEMO_CLINIC: Clinic = {
+export let DEMO_CLINIC: Clinic = savedData?.clinic || {
     id: 'demo-clinic-1',
     name: 'Demo Stomatologiya',
     adminName: 'Demo Admin',
@@ -16,8 +68,15 @@ export const DEMO_CLINIC: Clinic = {
     botToken: '',
 };
 
+export let DEMO_RECEPTIONISTS: Receptionist[] = savedData?.receptionists || [];
+
+export let DEMO_TEETH: any[] = savedData?.teeth || [];
+
+export let DEMO_DIAGNOSES: PatientDiagnosis[] = savedData?.diagnoses || [];
+
+
 // Demo Doctors
-export const DEMO_DOCTORS: Doctor[] = [
+export let DEMO_DOCTORS: Doctor[] = savedData?.doctors || [
     {
         id: 'demo-doctor-1',
         firstName: 'Kamola',
@@ -42,19 +101,29 @@ export const DEMO_DOCTORS: Doctor[] = [
     },
 ];
 
+// Demo Categories
+export let DEMO_CATEGORIES: ServiceCategory[] = savedData?.categories || [
+    { id: 'cat-1', name: 'Konsultatsiya', clinicId: 'demo-clinic-1' },
+    { id: 'cat-2', name: 'Gigiena va Profilaktika', clinicId: 'demo-clinic-1' },
+    { id: 'cat-3', name: 'Terapiya', clinicId: 'demo-clinic-1' },
+    { id: 'cat-4', name: 'Jarrohlik', clinicId: 'demo-clinic-1' },
+    { id: 'cat-5', name: 'Ortodontiya', clinicId: 'demo-clinic-1' },
+    { id: 'cat-6', name: 'Protezlash', clinicId: 'demo-clinic-1' },
+];
+
 // Demo Services
-export const DEMO_SERVICES: Service[] = [
-    { id: 1, name: 'Konsultatsiya', price: 50000, category: 'Konsultatsiya' as unknown as ServiceCategory, duration: 30, clinicId: 'demo-clinic-1' },
-    { id: 2, name: 'Tish tozalash', price: 200000, category: 'Profilaktika' as unknown as ServiceCategory, duration: 45, clinicId: 'demo-clinic-1' },
-    { id: 3, name: 'Tish plombalash', price: 300000, category: 'Terapiya' as unknown as ServiceCategory, duration: 60, clinicId: 'demo-clinic-1' },
-    { id: 4, name: 'Tish olib tashlash', price: 150000, category: 'Jarrohlik' as unknown as ServiceCategory, duration: 30, clinicId: 'demo-clinic-1' },
-    { id: 5, name: 'Tish oqartirish', price: 800000, category: 'Estetik' as unknown as ServiceCategory, duration: 90, clinicId: 'demo-clinic-1' },
-    { id: 6, name: 'Metall-keramika toj', price: 1200000, category: 'Protezlash' as unknown as ServiceCategory, duration: 120, clinicId: 'demo-clinic-1' },
-    { id: 7, name: 'Breket tizimi', price: 5000000, category: 'Ortodontiya' as unknown as ServiceCategory, duration: 90, clinicId: 'demo-clinic-1' },
+export let DEMO_SERVICES: Service[] = savedData?.services || [
+    { id: 1, name: 'Konsultatsiya', price: 50000, categoryId: 'cat-1', duration: 30, clinicId: 'demo-clinic-1' },
+    { id: 2, name: 'Tish tozalash', price: 200000, categoryId: 'cat-2', duration: 45, clinicId: 'demo-clinic-1' },
+    { id: 3, name: 'Tish plombalash', price: 300000, categoryId: 'cat-3', duration: 60, clinicId: 'demo-clinic-1' },
+    { id: 4, name: 'Tish olib tashlash', price: 150000, categoryId: 'cat-4', duration: 30, clinicId: 'demo-clinic-1' },
+    { id: 5, name: 'Tish oqartirish', price: 800000, categoryId: 'cat-2', duration: 90, clinicId: 'demo-clinic-1' },
+    { id: 6, name: 'Metall-keramika toj', price: 1200000, categoryId: 'cat-6', duration: 120, clinicId: 'demo-clinic-1' },
+    { id: 7, name: 'Breket tizimi', price: 5000000, categoryId: 'cat-5', duration: 90, clinicId: 'demo-clinic-1' },
 ];
 
 // Demo Patients
-export const DEMO_PATIENTS: Patient[] = [
+export let DEMO_PATIENTS: Patient[] = savedData?.patients || [
     {
         id: 'demo-patient-1',
         firstName: 'Aziza',
@@ -125,7 +194,7 @@ export const DEMO_PATIENTS: Patient[] = [
 ];
 
 // Demo Appointments
-export const DEMO_APPOINTMENTS: Appointment[] = [
+export let DEMO_APPOINTMENTS: Appointment[] = savedData?.appointments || [
     {
         id: 'demo-appt-1',
         patientId: 'demo-patient-1',
@@ -199,7 +268,7 @@ export const DEMO_APPOINTMENTS: Appointment[] = [
 ];
 
 // Demo Transactions
-export const DEMO_TRANSACTIONS: Transaction[] = [
+export let DEMO_TRANSACTIONS: Transaction[] = savedData?.transactions || [
     {
         id: 'demo-tx-1',
         patientId: 'demo-patient-1',
@@ -270,7 +339,7 @@ export const DEMO_CREDENTIALS = {
 };
 
 // Demo Inventory Items
-export const DEMO_INVENTORY: InventoryItem[] = [
+export let DEMO_INVENTORY: InventoryItem[] = savedData?.inventory || [
     {
         id: 'demo-item-1',
         name: 'Liqidoqain',
@@ -304,7 +373,7 @@ export const DEMO_INVENTORY: InventoryItem[] = [
 ];
 
 // Demo Inventory Logs
-export const DEMO_INVENTORY_LOGS: InventoryLog[] = [
+export let DEMO_INVENTORY_LOGS: InventoryLog[] = savedData?.logs || [
     {
         id: 'demo-log-1',
         itemId: 'demo-item-1',

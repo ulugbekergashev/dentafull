@@ -4,7 +4,7 @@ import { Button, Card, Badge, Modal, Input, Select } from '../components/Common'
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
 import { VisitWorkflow } from '../components/ProceduresSection';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 
@@ -15,19 +15,18 @@ interface PatientDetailsProps {
    transactions: Transaction[];
    doctors: Doctor[];
    services: Service[];
-   categories: ServiceCategory[];
    currentClinic?: Clinic;
    plans?: SubscriptionPlan[];
    onBack: () => void;
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
-   onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<void>;
+   onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
    onUpdateTransaction: (id: string, data: Partial<Transaction>) => void;
    onAddAppointment: (appt: Omit<Appointment, 'id'>) => void;
    onUpdateAppointment: (id: string, data: Partial<Appointment>) => void;
 }
 
 export const PatientDetails: React.FC<PatientDetailsProps> = ({
-   patientId, patients, appointments, transactions, doctors, services, categories, currentClinic, plans,
+   patientId, patients, appointments, transactions, doctors, services, currentClinic, plans,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment, onUpdateAppointment
 }) => {
    const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'diagnoses' | 'materials'>('overview');
@@ -64,14 +63,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       date: new Date().toISOString().split('T')[0],
       time: '09:00',
       type: 'Konsultatsiya',
-      categoryId: '',
       duration: 60,
       notes: ''
    });
 
    // Key to reset VisitWorkflow after successful payment
    const [visitKey, setVisitKey] = useState(0);
-   const [processedBatches, setProcessedBatches] = useState<Set<string>>(new Set());
 
    // Diagnosis State
    const [diagnoses, setDiagnoses] = useState<PatientDiagnosis[]>([]);
@@ -89,51 +86,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [isPaymentEditModalOpen, setIsPaymentEditModalOpen] = useState(false);
    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
    const [editPaymentAmount, setEditPaymentAmount] = useState('');
-   const [editPaymentStatus, setEditPaymentStatus] = useState('Paid');
-   const [editPaymentMethod, setEditPaymentMethod] = useState('Cash');
 
    // Material Usage State
    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
    const [materialLogs, setMaterialLogs] = useState<InventoryLog[]>([]);
    const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
    const [materialData, setMaterialData] = useState({ itemId: '', quantity: '', note: '' });
-
-   // Prevents double submission
-   const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false);
-   const isSubmittingRef = React.useRef(false);
-
-   // Parse procedures from appointment notes
-   const pastProcedures = React.useMemo(() => {
-      const results: { id: string; serviceName: string; date: string; toothNumber?: number }[] = [];
-      const regex = /- ([^\n(]+) \((?:Tish #(\d+)|Umumiy)\)/g;
-
-      appointments.forEach(appt => {
-         if (appt.patientId !== (patientId || patient?.id) || !appt.notes) return;
-         regex.lastIndex = 0;
-         let match;
-         while ((match = regex.exec(appt.notes)) !== null) {
-            results.push({
-               id: `past-${appt.id}-${results.length}`,
-               serviceName: match[1].trim(),
-               date: appt.date,
-               toothNumber: match[2] ? parseInt(match[2]) : undefined
-            });
-         }
-      });
-      return results;
-   }, [appointments, patientId, patient?.id]);
-
-   const allProceduresHistory = React.useMemo(() => {
-      const today = new Date().toISOString().split('T')[0];
-      const current = pendingProcedures.map((p: any) => ({
-         id: p.id,
-         serviceName: p.serviceName,
-         date: today,
-         toothNumber: p.toothNumber
-      }));
-      return [...pastProcedures, ...current];
-   }, [pastProcedures, pendingProcedures]);
-
 
    useEffect(() => {
       const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
@@ -146,41 +104,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          }
       }
    }, []);
-
-   const [isLoaded, setIsLoaded] = useState(false);
-
-   // Persistence for pending procedures
-   useEffect(() => {
-      setIsLoaded(false);
-      if (patientId) {
-         const key = `pending_procedures_${patientId}`;
-         const saved = localStorage.getItem(key);
-
-         if (saved) {
-            try {
-               const parsed = JSON.parse(saved);
-               setPendingProcedures(parsed);
-            } catch (e) {
-               console.error('Failed to parse saved procedures');
-               setPendingProcedures([]);
-            }
-         } else {
-            setPendingProcedures([]);
-         }
-         setIsLoaded(true);
-      }
-   }, [patientId]);
-
-   useEffect(() => {
-      if (patientId && isLoaded) {
-         const key = `pending_procedures_${patientId}`;
-         if (pendingProcedures.length > 0) {
-            localStorage.setItem(key, JSON.stringify(pendingProcedures));
-         } else {
-            localStorage.removeItem(key);
-         }
-      }
-   }, [patientId, pendingProcedures, isLoaded]);
 
    useEffect(() => {
       if (patientId) {
@@ -316,96 +239,17 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       }
    };
 
-   // Helper: Calculate total amount from appointment procedures and generate breakdown
-   const calculateAppointmentTotal = (appointmentNotes: string): { total: number; breakdown: string } => {
-      if (!appointmentNotes) return { total: 0, breakdown: '' };
-
-      let total = 0;
-      const lines = appointmentNotes.split('\n');
-      const breakdownLines: string[] = [];
-
-      for (const line of lines) {
-         // Skip header lines and empty lines
-         if (line.includes('Bajarilgan ishlar:') || line.includes("Qo'shimcha") || line.trim() === '') {
-            continue;
-         }
-
-         // Extract service name from format like "- Konsultatsiya (Tish #11)"
-         const match = line.match(/^[\s-]*(.+?)\s*\(/);
-         const serviceName = match ? match[1].trim() : line.replace(/^[\s-]*/, '').trim();
-
-         if (!serviceName) continue;
-
-         // Try to match service names
-         for (const service of services) {
-            if (serviceName.includes(service.name) || service.name.includes(serviceName)) {
-               total += service.price;
-               breakdownLines.push(`${service.name}|${service.price.toLocaleString()}`);
-               break;
-            }
-         }
-      }
-
-      if (breakdownLines.length === 0) {
-         return { total: 0, breakdown: '' };
-      }
-
-      const breakdown = breakdownLines.join('||') + '||TOTAL||' + total.toLocaleString();
-      return { total, breakdown };
-   };
-
    const handleEditPaymentOpen = (transaction: Transaction) => {
       setEditingTransaction(transaction);
       setEditPaymentAmount(transaction.amount.toString());
       setIsPaymentEditModalOpen(true);
    };
 
-   const handleEditPaymentSave = async (e: React.FormEvent) => {
+   const handleEditPaymentSave = (e: React.FormEvent) => {
       e.preventDefault();
       if (!editingTransaction) return;
 
-      const newAmount = Number(editPaymentAmount);
-      const originalAmount = editingTransaction.amount;
-      const isNowPaid = editPaymentStatus === 'Paid';
-
-      // Repayment logic: if marking a pending debt as paid
-      if (editingTransaction.status === 'Pending' && isNowPaid) {
-         // Case 1: Partial Repayment
-         if (newAmount < originalAmount) {
-            // 1. Create a new Paid transaction for the partial amount
-            await onAddTransaction({
-               ...editingTransaction,
-               id: undefined as any,
-               amount: newAmount,
-               status: 'Paid',
-               type: editPaymentMethod as any,
-               service: `${editingTransaction.service} (Qarzdorlik yopildi)`,
-               date: new Date().toISOString().split('T')[0]
-            });
-
-            // 2. Reduce the original Pending amount
-            await onUpdateTransaction(editingTransaction.id, {
-               amount: originalAmount - newAmount
-            });
-         }
-         // Case 2: Full Repayment
-         else {
-            await onUpdateTransaction(editingTransaction.id, {
-               status: 'Paid',
-               amount: newAmount,
-               type: editPaymentMethod as any,
-               date: new Date().toISOString().split('T')[0]
-            });
-         }
-      } else {
-         // Simple edit for other scenarios
-         await onUpdateTransaction(editingTransaction.id, {
-            amount: newAmount,
-            status: editPaymentStatus as any,
-            type: editPaymentMethod as any
-         });
-      }
-
+      onUpdateTransaction(editingTransaction.id, { amount: Number(editPaymentAmount) });
       setIsPaymentEditModalOpen(false);
       setEditingTransaction(null);
       setEditPaymentAmount('');
@@ -445,16 +289,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    }
 
    // Filter related data
-   // FIX: Deduplicate appointments on the frontend as a safety net
-   const rawPatientAppointments = appointments.filter(a => a.patientId === patient.id);
-   const patientAppointments = rawPatientAppointments.filter((appt, index, self) =>
-      index === self.findIndex((t) => (
-         t.date === appt.date &&
-         // Treat as duplicate if same date AND (same time OR same notes content)
-         // This is aggressive deduplication to hide the errors the user is seeing
-         (t.time === appt.time || t.notes === appt.notes)
-      ))
-   );
+   const patientAppointments = appointments.filter(a => a.patientId === patient.id);
    const patientTransactions = transactions.filter(t => {
       // Priority 1: Match by ID (new data)
       if (t.patientId) {
@@ -492,11 +327,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setIsPaymentModalOpen(true);
    };
 
-   const handlePaymentSave = async (e: React.FormEvent) => {
+   const handlePaymentSave = (e: React.FormEvent) => {
       e.preventDefault();
-      if (isSubmittingRef.current) return;
-      isSubmittingRef.current = true;
-      setIsPaymentSubmitting(true);
 
       // Check if current plan is individual
       const isIndividualPlan = currentClinic?.planId === 'individual';
@@ -505,8 +337,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       if (!paymentData.doctorId) {
          if (!isIndividualPlan || (isIndividualPlan && doctors.length > 0)) {
             alert('Iltimos, shifokorni tanlang!');
-            isSubmittingRef.current = false;
-            setIsPaymentSubmitting(false);
             return;
          }
       }
@@ -514,79 +344,91 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       const doctor = doctors.find(d => d.id === paymentData.doctorId);
 
       // Calculate amounts
-      const paidAmount = Number(paymentData.paidAmount.replace(/,/g, '')) || 0;
-      const debtAmount = Number(paymentData.debtAmount.replace(/,/g, '')) || 0;
+      const paidAmount = Number(paymentData.paidAmount) || 0;
+      const debtAmount = Number(paymentData.debtAmount) || 0;
       const totalAmount = paidAmount + debtAmount;
 
-      try {
-         // Scenario 1: Full Payment (Debt == 0)
-         if (debtAmount <= 0) {
-            await onAddTransaction({
-               patientId: patient.id,
-               patientName: `${patient.lastName} ${patient.firstName}`,
-               date: new Date().toISOString().split('T')[0],
-               amount: totalAmount,
-               service: paymentData.service,
-               type: paymentData.type as any,
-               status: 'Paid',
-               doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
-            });
-         }
-         // Scenario 2: No Payment (Paid == 0)
-         else if (paidAmount <= 0) {
-            await onAddTransaction({
-               patientId: patient.id,
-               patientName: `${patient.lastName} ${patient.firstName}`,
-               date: new Date().toISOString().split('T')[0],
-               amount: totalAmount,
-               service: paymentData.service,
-               type: paymentData.type as any,
-               status: 'Pending',
-               doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
-            });
-         }
-         // Scenario 3: Partial Payment (Paid > 0 && Debt > 0)
-         else {
-            // 1. Paid Part
-            await onAddTransaction({
-               patientId: patient.id,
-               patientName: `${patient.lastName} ${patient.firstName}`,
-               date: new Date().toISOString().split('T')[0],
-               amount: paidAmount,
-               service: `${paymentData.service} (Qisman to'lov)`,
-               type: paymentData.type as any,
-               status: 'Paid',
-               doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
-            });
-
-            // 2. Pending Part (Debt)
-            await onAddTransaction({
-               patientId: patient.id,
-               patientName: `${patient.lastName} ${patient.firstName}`,
-               date: new Date().toISOString().split('T')[0],
-               amount: debtAmount,
-               service: `${paymentData.service} (Qarz)`,
-               type: paymentData.type as any,
-               status: 'Pending',
-               doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
-            });
-         }
-
-         setIsPaymentModalOpen(false);
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
-
-         setVisitKey(prev => prev + 1);
-      } catch (error) {
-         console.error('Payment processing failed', error);
-         alert('To\'lovni saqlashda xatolik yuz berdi');
-      } finally {
-         isSubmittingRef.current = false;
-         setIsPaymentSubmitting(false);
+      // Scenario 1: Full Payment (Debt == 0)
+      if (debtAmount <= 0) {
+         onAddTransaction({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            date: new Date().toISOString().split('T')[0],
+            amount: totalAmount,
+            service: paymentData.service,
+            type: paymentData.type as any,
+            status: 'Paid',
+            doctorId: paymentData.doctorId || '',
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+         });
       }
+      // Scenario 2: No Payment (Paid == 0)
+      else if (paidAmount <= 0) {
+         onAddTransaction({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            date: new Date().toISOString().split('T')[0],
+            amount: totalAmount,
+            service: paymentData.service,
+            type: paymentData.type as any,
+            status: 'Pending',
+            doctorId: paymentData.doctorId || '',
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+         });
+      }
+      // Scenario 3: Partial Payment (Paid > 0 && Debt > 0)
+      else {
+         // 1. Paid Part
+         onAddTransaction({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            date: new Date().toISOString().split('T')[0],
+            amount: paidAmount,
+            service: `${paymentData.service} (Qisman to'lov)`,
+            type: paymentData.type as any,
+            status: 'Paid',
+            doctorId: paymentData.doctorId || '',
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+         });
+
+         // 2. Pending Part (Debt)
+         onAddTransaction({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            date: new Date().toISOString().split('T')[0],
+            amount: debtAmount,
+            service: `${paymentData.service} (Qarz)`,
+            type: paymentData.type as any,
+            status: 'Pending',
+            doctorId: paymentData.doctorId || '',
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+         });
+      }
+
+      // Create appointment history if there are pending procedures
+      if (pendingProcedures.length > 0) {
+         const doctor = doctors.find(d => d.id === paymentData.doctorId);
+         onAddAppointment({
+            patientId: patient.id,
+            patientName: `${patient.lastName} ${patient.firstName}`,
+            doctorId: paymentData.doctorId || (doctors.length > 0 ? doctors[0].id : ''),
+            doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : (doctors.length > 0 ? `Dr. ${doctors[0].firstName} ${doctors[0].lastName}` : ''),
+            type: 'Davolash',
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+            duration: 60,
+            status: 'Completed',
+            notes: `Bajarilgan ishlar:\n` + pendingProcedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'})`).join('\n'),
+            clinicId: patient.clinicId
+         });
+      }
+
+      setIsPaymentModalOpen(false);
+      setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
+      setPendingProcedures([]);
+
+      // Reset the visit workflow (clear procedures list)
+      setVisitKey(prev => prev + 1);
    };
 
    const handleSendMessage = async (e: React.FormEvent) => {
@@ -658,97 +500,18 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          duration: Number(apptData.duration),
          status: 'Pending',
          notes: apptData.notes,
-         clinicId: patient.clinicId,
-         categoryId: apptData.categoryId || null // Add categoryId
+         clinicId: patient.clinicId
       });
       setIsApptModalOpen(false);
-      setApptData({ doctorId: '', date: new Date().toISOString().split('T')[0], time: '09:00', type: 'Konsultatsiya', categoryId: '', duration: 60, notes: '' });
+      setApptData({ doctorId: '', date: new Date().toISOString().split('T')[0], time: '09:00', type: 'Konsultatsiya', duration: 60, notes: '' });
    };
 
    const openApptModal = () => {
       setApptData(prev => ({
          ...prev,
          doctorId: doctors.length > 0 ? doctors[0].id : '',
-         categoryId: categories.length > 0 ? categories[0].id : '', // Set default category
       }));
       setIsApptModalOpen(true);
-   };
-
-   const handleCompleteVisit = async (procedures: any[], total: number) => {
-      // 1. Double-check if we are already processing or have processed this exact content recently
-      // (Though isSubmitting in child handles UI, this handles logic safety)
-      const today = new Date().toISOString().split('T')[0];
-
-      // Generate a simple hash/signature for this batch of procedures
-      const batchSignature = `${today}-${total}-${procedures.map(p => p.id).join(',')}`;
-
-      if (processedBatches.has(batchSignature)) {
-         console.log("Duplicate prevention: Batch already processed");
-         return;
-      }
-
-      // Add to processed set immediately
-      setProcessedBatches(prev => {
-         const newSet = new Set(prev);
-         newSet.add(batchSignature);
-         return newSet;
-      });
-
-      const existingAppt = appointments.find(a =>
-         a.patientId === patient.id &&
-         a.date === today &&
-         a.status !== 'Cancelled'
-      );
-
-      let doctorId = doctors.length > 0 ? doctors[0].id : '';
-      const proceduresText = procedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'})`).join('\n');
-
-      if (!existingAppt) {
-         // Create NEW Appointment
-         // newApptId is not used in onAddAppointment, it's Omit<Appointment, 'id'>
-         doctorId = doctors.length > 0 ? doctors[0].id : '';
-
-         await onAddAppointment({
-            patientId: patient.id,
-            patientName: `${patient.lastName} ${patient.firstName}`,
-            doctorId: doctorId,
-            doctorName: doctors.find(d => d.id === doctorId)?.firstName || 'Doctor',
-            type: 'Davolash',
-            date: today,
-            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-            duration: 60,
-            status: 'Completed',
-            notes: `Bajarilgan ishlar:\n` + proceduresText,
-            clinicId: patient.clinicId,
-            categoryId: procedures[0]?.categoryId || null // Use category from first procedure if available
-         });
-         alert("Qabul tarixi saqlandi!");
-      } else {
-         // Update EXISTING Appointment
-         const currentNotes = existingAppt.notes || '';
-
-         // Deduplication check: if notes already contain this text, skip appending
-         if (currentNotes.includes(proceduresText)) {
-            console.log("Duplicate prevention: Procedures already in notes");
-            // We still alert success to user so they don't panic, but we don't duplicate data
-            alert("Qabul tarixi yangilandi!");
-            setPendingProcedures([]);
-            setVisitKey(prev => prev + 1);
-            return;
-         }
-
-         const newNotes = currentNotes ? currentNotes + '\n\n' + `Qo'shimcha (${new Date().toLocaleTimeString()}):\n` + proceduresText : `Bajarilgan ishlar:\n` + proceduresText;
-
-         await onUpdateAppointment(existingAppt.id, {
-            notes: newNotes,
-            status: 'Completed'
-         });
-         alert("Qabul tarixi yangilandi!");
-      }
-
-      // 2. Cleanup
-      setPendingProcedures([]);
-      setVisitKey(prev => prev + 1);
    };
 
 
@@ -847,16 +610,60 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             {/* Tab Content */}
             <div className="min-h-[400px]">
 
+               {/* Overview Tab */}
                {activeTab === 'overview' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  <div className="grid grid-cols-1 gap-6">
                      <VisitWorkflow
                         key={visitKey}
                         services={services}
-                        categories={categories}
                         doctors={doctors}
-                        initialProcedures={pendingProcedures}
-                        onProceduresChange={setPendingProcedures}
-                        onCompleteVisit={handleCompleteVisit}
+                        onCompleteVisit={(procedures, total) => {
+                           // 1. Save Medical History IMMEDIATELY
+                           const today = new Date().toISOString().split('T')[0];
+                           const existingAppt = appointments.find(a =>
+                              a.patientId === patient.id &&
+                              a.date === today &&
+                              a.status !== 'Cancelled'
+                           );
+
+                           let doctorId = doctors.length > 0 ? doctors[0].id : '';
+                           const proceduresText = procedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'})`).join('\n');
+
+                           if (!existingAppt) {
+                              // Create NEW Appointment
+                              const newApptId = Date.now().toString();
+                              doctorId = doctors.length > 0 ? doctors[0].id : '';
+
+                              onAddAppointment({
+                                 patientId: patient.id,
+                                 patientName: `${patient.lastName} ${patient.firstName}`,
+                                 doctorId: doctorId,
+                                 doctorName: doctors.find(d => d.id === doctorId)?.firstName || 'Doctor',
+                                 type: 'Davolash',
+                                 date: today,
+                                 time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+                                 duration: 60,
+                                 status: 'Completed',
+                                 notes: `Bajarilgan ishlar:\n` + proceduresText,
+                                 clinicId: patient.clinicId
+                              });
+                              alert("Qabul tarixi saqlandi!");
+                           } else {
+                              // Update EXISTING Appointment
+                              const currentNotes = existingAppt.notes || '';
+                              const newNotes = currentNotes ? currentNotes + '\n\n' + `Qo'shimcha (${new Date().toLocaleTimeString()}):\n` + proceduresText : `Bajarilgan ishlar:\n` + proceduresText;
+
+                              onUpdateAppointment(existingAppt.id, {
+                                 notes: newNotes,
+                                 status: 'Completed'
+                              });
+                              alert("Qabul tarixi yangilandi!");
+                           }
+
+                           // 2. Cleanup
+                           setPendingProcedures([]);
+                           setVisitKey(prev => prev + 1);
+                        }}
                      />
 
                      <Card className="p-6 space-y-4">
@@ -929,6 +736,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            </div>
                         </div>
                      </Card>
+
+
+
+
                   </div>
                )}
 
@@ -983,11 +794,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            <Button variant="secondary" size="sm" onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Chop etish</Button>
                         </div>
                      </div>
-                     <TeethChart
-                        initialData={teethData}
-                        onSave={handleSaveTeeth}
-                        procedures={allProceduresHistory}
-                     />
+                     <TeethChart initialData={teethData} onSave={handleSaveTeeth} />
                   </div>
                )}
 
@@ -1096,100 +903,63 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                {/* Payments Tab */}
                {activeTab === 'payments' && (
-                  <div className="space-y-6">
-                     {/* Pending Payments Section */}
-                     <Card className="overflow-hidden border-yellow-200 dark:border-yellow-800">
-                        <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-100 dark:border-yellow-800 flex justify-between items-center">
-                           <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><FileText className="w-5 h-5 text-yellow-600" /> To'lov Kutayotgan Qabullar</h3>
-                              <p className="text-sm text-gray-500">Ushbu qabullar uchun to'lov amalga oshirilmagan</p>
-                           </div>
+                  <Card className="overflow-hidden">
+                     <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                        <div>
+                           <p className="text-sm text-gray-500">Jami Xarajat</p>
+                           <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                              {patientTransactions.reduce((acc, t) => acc + t.amount, 0).toLocaleString()} UZS
+                           </p>
                         </div>
-                        <table className="w-full text-left text-sm">
-                           <thead className="bg-gray-50 dark:bg-gray-800">
-                              <tr>
-                                 <th className="p-4 font-medium text-gray-500">Sana</th>
-                                 <th className="p-4 font-medium text-gray-500">Muolaja</th>
-                                 <th className="p-4 font-medium text-gray-500 w-1/3">Bajarilgan ishlar</th>
-                                 <th className="p-4 font-medium text-gray-500">Status</th>
-                                 <th className="p-4 font-medium text-gray-500">Amal</th>
-                              </tr>
-                           </thead>
-                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                              {patientAppointments.filter(app => {
-                                 // Check if there is any PAID transaction for this date
-                                 // Since we enforce 1 appt/day, date match is sufficient and more robust than text matching
-                                 const isPaid = patientTransactions.some(t => t.date === app.date && t.status === 'Paid');
-                                 return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid;
-                              }).map(app => (
-                                 <tr key={app.id} className="hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-colors">
-                                    <td className="p-4 text-gray-900 dark:text-white font-medium whitespace-nowrap">{new Date(app.date).toLocaleDateString('uz-UZ')} <br /><span className="text-xs text-gray-500 font-normal">{app.time}</span></td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
-                                    <td className="p-4"><Badge status="Pending" /></td>
-                                    <td className="p-4"><Button size="sm" onClick={() => {
-                                       const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
-                                       setPaymentData({
-                                          amount: total.toString(),
-                                          paidAmount: total.toString(),
-                                          debtAmount: '0',
-                                          service: breakdown || app.type,
-                                          type: 'Cash',
-                                          status: 'Paid',
-                                          doctorId: app.doctorId
-                                       });
-                                       setIsPaymentModalOpen(true);
-                                    }}>To'lov</Button></td>
-                                 </tr>
-                              ))}
-                           </tbody>
-                        </table>
-                        {patientAppointments.filter(app => { const isPaid = patientTransactions.some(t => t.date === app.date && t.service && t.service.includes(app.type) && t.status === 'Paid'); return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid; }).length === 0 && <div className="p-8 text-center text-gray-500">To'lov kutayotgan qabullar yo'q.</div>}
-                     </Card>
-                     {/* Transaction History Section */}
-                     <Card className="overflow-hidden">
-                        <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                           <div><h3 className="text-lg font-bold text-gray-900 dark:text-white">To'lovlar Tarixi</h3><p className="text-sm text-gray-500">Barcha amalga oshirilgan to'lovlar</p></div>
-                           <div className="text-right"><p className="text-sm text-gray-500">Jami To'landi</p><p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{patientTransactions.filter(t => t.status === 'Paid').reduce((acc, t) => acc + t.amount, 0).toLocaleString()} UZS</p></div>
-                        </div>
-                        <table className="w-full text-left text-sm">
-                           <thead className="bg-gray-50 dark:bg-gray-800">
-                              <tr><th className="p-4 font-medium text-gray-500">Sana</th><th className="p-4 font-medium text-gray-500">Xizmat</th><th className="p-4 font-medium text-gray-500">Usul</th><th className="p-4 font-medium text-gray-500">Summa</th><th className="p-4 font-medium text-gray-500">Status</th><th className="p-4 font-medium text-gray-500">Amal</th></tr>
-                           </thead>
-                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                              {patientTransactions.map(t => (
-                                 <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                    <td className="p-4 text-gray-900 dark:text-white">{t.date}</td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300">{t.service}</td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300">{t.type}</td>
-                                    <td className="p-4 text-gray-900 dark:text-white font-medium">{t.amount.toLocaleString()} UZS</td>
-                                    <td className="p-4"><Badge status={t.status} /></td>
-                                    <td className="p-4 flex gap-2">
+                        <Button size="sm" onClick={handlePaymentModalOpen}>To'lov Qilish</Button>
+                     </div>
+                     <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-800">
+                           <tr>
+                              <th className="p-4 font-medium text-gray-500">Sana</th>
+                              <th className="p-4 font-medium text-gray-500">Xizmat</th>
+                              <th className="p-4 font-medium text-gray-500">Usul</th>
+                              <th className="p-4 font-medium text-gray-500">Summa</th>
+                              <th className="p-4 font-medium text-gray-500">Status</th>
+                              <th className="p-4 font-medium text-gray-500">Amal</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                           {patientTransactions.map(t => (
+                              <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                 <td className="p-4 text-gray-900 dark:text-white">{t.date}</td>
+                                 <td className="p-4 text-gray-600 dark:text-gray-300">{t.service}</td>
+                                 <td className="p-4 text-gray-600 dark:text-gray-300">{t.type === 'Cash' ? 'Naqd' : t.type === 'Card' ? 'Karta' : 'Sug\'urta'}</td>
+                                 <td className="p-4 text-gray-900 dark:text-white font-medium">{t.amount.toLocaleString()} UZS</td>
+                                 <td className="p-4"><Badge status={t.status} /></td>
+                                 <td className="p-4">
+                                    <div className="flex gap-2">
                                        {t.status === 'Pending' && (
-                                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                                             setEditingTransaction(t);
-                                             setEditPaymentAmount(t.amount.toString());
-                                             setEditPaymentStatus('Paid');
-                                             setEditPaymentMethod('Cash');
-                                             setIsPaymentEditModalOpen(true);
-                                          }}>To'lash</Button>
+                                          <Button
+                                             size="sm"
+                                             onClick={() => onUpdateTransaction(t.id, { status: 'Paid' })}
+                                          >
+                                             To'landi
+                                          </Button>
                                        )}
-                                       <Button size="sm" variant="secondary" onClick={() => {
-                                          setEditingTransaction(t);
-                                          setEditPaymentAmount(t.amount.toString());
-                                          setEditPaymentStatus(t.status);
-                                          setEditPaymentMethod(t.type);
-                                          setIsPaymentEditModalOpen(true);
-                                       }}><Edit className="w-4 h-4" /></Button>
-                                    </td>
-                                 </tr>
-                              ))}
-                           </tbody>
-                        </table>
-                        {patientTransactions.length === 0 && <div className="p-8 text-center text-gray-500">To'lovlar tarixi topilmadi.</div>}
-                     </Card>
-                  </div>
+                                       <Button
+                                          size="sm"
+                                          variant="secondary"
+                                          onClick={() => handleEditPaymentOpen(t)}
+                                       >
+                                          <Edit className="w-4 h-4" />
+                                       </Button>
+                                    </div>
+                                 </td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                     {patientAppointments.filter(app => app.status === 'Completed' || app.status === 'Checked-In').length === 0 && <div className="p-8 text-center text-gray-500">Bajarilgan qabullar topilmadi.</div>}
+                  </Card>
                )}
+
+               {/* Materials Tab */}
                {activeTab === 'materials' && (
                   <Card className="overflow-hidden">
                      <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
@@ -1296,33 +1066,25 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         required
                      />
                   )}
-                  <div>
-                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📋 Bajarilgan Xizmatlar</label>
-                     <div className="border-2 border-blue-100 dark:border-blue-800 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-4 space-y-0.5">
-                        {paymentData.service && paymentData.service.split('||').filter(Boolean).map((item, idx) => {
-                           const parts = item.split('|');
-                           if (parts[0] === 'TOTAL') {
-                              return (
-                                 <div key={idx} className="pt-3 mt-3 border-t-2 border-blue-300 dark:border-blue-700">
-                                    <div className="flex justify-between items-center bg-blue-600 dark:bg-blue-700 text-white px-4 py-2.5 rounded-md font-bold text-base">
-                                       <span className="flex items-center gap-2">💰 JAMI:</span>
-                                       <span className="text-lg">{parts[1]} UZS</span>
-                                    </div>
-                                 </div>
-                              );
-                           }
-                           return (
-                              <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-800 px-3 py-2 rounded border border-blue-100 dark:border-gray-700">
-                                 <span className="text-gray-700 dark:text-gray-200 font-medium">{parts[0]}</span>
-                                 <span className="text-blue-600 dark:text-blue-400 font-semibold">{parts[1]} UZS</span>
-                              </div>
-                           );
-                        })}
-                        {!paymentData.service && (
-                           <div className="text-center text-gray-400 py-8">Xizmatlar ro'yxati</div>
-                        )}
-                     </div>
-                  </div>
+                  <Select
+                     label="Xizmat Nomi"
+                     value={paymentData.service}
+                     onChange={e => {
+                        const selectedService = services.find(s => s.name === e.target.value);
+                        const price = selectedService ? selectedService.price.toString() : '';
+                        setPaymentData({
+                           ...paymentData,
+                           service: e.target.value,
+                           amount: price,
+                           paidAmount: price, // Default to full payment
+                           debtAmount: '0'
+                        });
+                     }}
+                     options={[
+                        { value: '', label: 'Xizmatni tanlang' },
+                        ...services.map(s => ({ value: s.name, label: `${s.name} (${s.price.toLocaleString()} UZS)` }))
+                     ]}
+                  />
                   <div className="grid grid-cols-2 gap-4">
                      <Input
                         label="To'lanayotgan Summa"
@@ -1362,10 +1124,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      />
                   </div>
                   <div className="flex justify-end gap-2 pt-4">
-                     <Button type="button" variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isPaymentSubmitting}>Bekor qilish</Button>
-                     <Button type="submit" disabled={isPaymentSubmitting}>
-                        {isPaymentSubmitting ? 'Saqlanmoqda...' : 'Saqlash'}
-                     </Button>
+                     <Button type="button" variant="secondary" onClick={() => setIsPaymentModalOpen(false)}>Bekor qilish</Button>
+                     <Button type="submit">Saqlash</Button>
                   </div>
                </form>
             </Modal>
@@ -1379,34 +1139,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <p className="text-sm text-gray-500 mt-2">Sana:</p>
                      <p className="font-medium text-gray-900 dark:text-white">{editingTransaction?.date}</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <Input
-                        label="Summa"
-                        type="number"
-                        value={editPaymentAmount}
-                        onChange={e => setEditPaymentAmount(e.target.value)}
-                        placeholder="0.00"
-                        required
-                     />
-                     <Select
-                        label="Status"
-                        value={editPaymentStatus}
-                        onChange={e => setEditPaymentStatus(e.target.value)}
-                        options={[
-                           { value: 'Paid', label: 'To\'landi' },
-                           { value: 'Pending', label: 'Kutilmoqda' }
-                        ]}
-                     />
-                  </div>
-                  <Select
-                     label="To'lov Usuli"
-                     value={editPaymentMethod}
-                     onChange={e => setEditPaymentMethod(e.target.value)}
-                     options={[
-                        { value: 'Cash', label: 'Naqd' },
-                        { value: 'Card', label: 'Karta' },
-                        { value: 'Insurance', label: 'Sug\'urta' }
-                     ]}
+                  <Input
+                     label="Summa"
+                     type="number"
+                     value={editPaymentAmount}
+                     onChange={e => setEditPaymentAmount(e.target.value)}
+                     placeholder="0.00"
+                     required
                   />
                   <div className="flex justify-end gap-2 pt-4">
                      <Button type="button" variant="secondary" onClick={() => setIsPaymentEditModalOpen(false)}>Bekor qilish</Button>
@@ -1496,32 +1235,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <Input label="Sana" type="date" value={apptData.date} onChange={e => setApptData({ ...apptData, date: e.target.value })} required />
                      <Input label="Vaqt" type="time" value={apptData.time} onChange={e => setApptData({ ...apptData, time: e.target.value })} required />
                   </div>
-                  {categories.length > 0 && (
-                     <Select
-                        label="Xizmat kategoriyasi"
-                        options={[
-                           { value: '', label: 'Barcha kategoriyalar' },
-                           ...categories.map(c => ({ value: c.id, label: c.name }))
-                        ]}
-                        value={apptData.categoryId}
-                        onChange={(e) => setApptData({ ...apptData, categoryId: e.target.value, type: '' })}
-                     />
-                  )}
                   <div className="grid grid-cols-2 gap-4">
                      <Select
                         label="Muolaja turi"
-                        options={services
-                           .filter(s => !apptData.categoryId || (s as any).categoryId === apptData.categoryId)
-                           .map(s => ({ value: s.name, label: s.name }))}
+                        options={services.map(s => ({ value: s.name, label: s.name }))}
                         value={apptData.type}
-                        onChange={e => {
-                           const service = services.find(s => s.name === e.target.value);
-                           setApptData({
-                              ...apptData,
-                              type: e.target.value,
-                              duration: service?.duration || apptData.duration
-                           });
-                        }}
+                        onChange={e => setApptData({ ...apptData, type: e.target.value })}
                      />
                      <Input label="Davomiylik (daq)" type="number" value={apptData.duration} onChange={e => setApptData({ ...apptData, duration: Number(e.target.value) })} required />
                   </div>
@@ -1670,11 +1389,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <div className="mb-8 break-inside-avoid">
                <h3 className="text-lg font-bold border-b border-gray-400 mb-4 pb-1">Tish Kartasi</h3>
                <div className="scale-75 origin-top-left">
-                  <TeethChart
-                     initialData={teethData}
-                     readOnly={true}
-                     procedures={allProceduresHistory}
-                  />
+                  <TeethChart initialData={teethData} readOnly={true} />
                </div>
             </div>
 

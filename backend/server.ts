@@ -317,11 +317,52 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
 
 app.post('/api/appointments', authenticateToken, async (req, res) => {
     try {
+        const { patientId, date, time, notes, clinicId } = req.body;
+
+        // 1. Check for existing appointment for this patient on this date
+        // This prevents creating duplicate appointments due to frontend race conditions or network lag
+        const existingAppointment = await prisma.appointment.findFirst({
+            where: {
+                patientId: patientId,
+                date: date,
+                status: { not: 'Cancelled' } // Only check active appointments
+            }
+        });
+
+        if (existingAppointment) {
+            console.log(`⚠️ Prevented duplicate appointment creation for patient ${patientId} on ${date}. Merging instead.`);
+
+            // Check if notes already contain the new information to avoid appending duplicates
+            const currentNotes = existingAppointment.notes || '';
+            let newNotes = currentNotes;
+
+            // If the incoming notes (e.g., procedures) are not already in the current notes, append them
+            if (notes && !currentNotes.includes(notes)) {
+                const timestamp = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                newNotes = currentNotes ? `${currentNotes}\n\nQo'shimcha (${timestamp}):\n${notes}` : notes;
+
+                // Update the existing appointment
+                const updatedAppointment = await prisma.appointment.update({
+                    where: { id: existingAppointment.id },
+                    data: {
+                        notes: newNotes,
+                        // Optionally update status if needed, but 'Completed' usually stays 'Completed'
+                    }
+                });
+                return res.json(updatedAppointment);
+            }
+
+            // If notes are identical/contained, just return the existing one without changes
+            return res.json(existingAppointment);
+        }
+
+        // 2. If no existing appointment, create a new one
         const appointment = await prisma.appointment.create({
             data: req.body
         });
         res.json(appointment);
     } catch (error) {
+        console.error('Failed to create appointment:', error);
         res.status(500).json({ error: 'Failed to create appointment' });
     }
 });

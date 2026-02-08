@@ -263,9 +263,19 @@ interface TeethChartProps {
   initialData?: ToothData[];
   readOnly?: boolean;
   onSave?: (data: { number: number; conditions: ToothStatus[]; notes: string }) => void;
+  onToothClick?: (number: number) => void;
+  selectedTooth?: number | null;
+  procedures?: { id: string; serviceName: string; date: string; toothNumber?: number }[];
 }
 
-export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOnly = false, onSave }) => {
+export const TeethChart: React.FC<TeethChartProps> = ({
+  initialData = [],
+  readOnly = false,
+  onSave,
+  onToothClick,
+  selectedTooth: externalSelectedTooth,
+  procedures = []
+}) => {
   const [toothType, setToothType] = useState<'permanent' | 'primary'>('permanent');
 
   const [teethData, setTeethData] = useState<Record<number, { conditions: ToothStatus[]; notes: string }>>(() => {
@@ -297,13 +307,22 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
     }
   }, [initialData]);
 
-  const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
+  const [internalSelectedTooth, setInternalSelectedTooth] = useState<number | null>(null);
   const [tempConditions, setTempConditions] = useState<ToothStatus[]>([]);
   const [tempNotes, setTempNotes] = useState('');
 
+  // Use external selected tooth if provided, otherwise internal
+  const activeSelectedTooth = externalSelectedTooth !== undefined ? externalSelectedTooth : internalSelectedTooth;
+
   const handleToothClick = (num: number) => {
+    // If external handler exists, use it and don't open modal
+    if (onToothClick) {
+      onToothClick(num);
+      return;
+    }
+
     if (readOnly) return;
-    setSelectedTooth(num);
+    setInternalSelectedTooth(num);
     setTempConditions([...teethData[num].conditions]);
     setTempNotes(teethData[num].notes);
   };
@@ -331,19 +350,20 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
     });
   };
 
+
   const saveChanges = () => {
-    if (selectedTooth) {
+    if (internalSelectedTooth) {
       const newData = { conditions: tempConditions, notes: tempNotes };
       setTeethData(prev => ({
         ...prev,
-        [selectedTooth]: newData
+        [internalSelectedTooth]: newData
       }));
 
       if (onSave) {
-        onSave({ number: selectedTooth, ...newData });
+        onSave({ number: internalSelectedTooth, ...newData });
       }
 
-      setSelectedTooth(null);
+      setInternalSelectedTooth(null);
     }
   };
 
@@ -399,14 +419,15 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
           <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0">Yuqori Jag'</div>
           <div className="flex gap-1 sm:gap-2 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.upper : PRIMARY_TOOTH_NUMBERS.upper).map(num => (
-              <RealisticTooth
-                key={num}
-                number={num}
-                conditions={teethData[num]?.conditions || []}
-                isUpper={true}
-                isPrimary={toothType === 'primary'}
-                onClick={() => handleToothClick(num)}
-              />
+              <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
+                <RealisticTooth
+                  number={num}
+                  conditions={teethData[num]?.conditions || []}
+                  isUpper={true}
+                  isPrimary={toothType === 'primary'}
+                  onClick={() => handleToothClick(num)}
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -417,25 +438,26 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
           <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0">Pastki Jag'</div>
           <div className="flex gap-1 sm:gap-2 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.lower : PRIMARY_TOOTH_NUMBERS.lower).map(num => (
-              <RealisticTooth
-                key={num}
-                number={num}
-                conditions={teethData[num]?.conditions || []}
-                isUpper={false}
-                isPrimary={toothType === 'primary'}
-                onClick={() => handleToothClick(num)}
-              />
+              <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
+                <RealisticTooth
+                  number={num}
+                  conditions={teethData[num]?.conditions || []}
+                  isUpper={false}
+                  isPrimary={toothType === 'primary'}
+                  onClick={() => handleToothClick(num)}
+                />
+              </div>
             ))}
           </div>
         </div>
       </div>
 
       {/* Detail Modal */}
-      {selectedTooth && (
+      {internalSelectedTooth && (
         <Modal
-          isOpen={!!selectedTooth}
-          onClose={() => setSelectedTooth(null)}
-          title={`Tish №${toothType === 'primary' ? toRomanNumeral(selectedTooth) : selectedTooth} holati`}
+          isOpen={!!internalSelectedTooth}
+          onClose={() => setInternalSelectedTooth(null)}
+          title={`Tish №${toothType === 'primary' ? toRomanNumeral(internalSelectedTooth) : internalSelectedTooth} holati`}
         >
           <div className="flex flex-col md:flex-row gap-8">
 
@@ -443,9 +465,9 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
             <div className="flex flex-col items-center justify-center p-8 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 min-w-[180px] shadow-inner">
               <div className="scale-[2.5] transform mb-8 mt-4">
                 <RealisticTooth
-                  number={selectedTooth}
+                  number={internalSelectedTooth}
                   conditions={tempConditions}
-                  isUpper={TOOTH_NUMBERS.upper.includes(selectedTooth) || PRIMARY_TOOTH_NUMBERS.upper.includes(selectedTooth)}
+                  isUpper={TOOTH_NUMBERS.upper.includes(internalSelectedTooth) || PRIMARY_TOOTH_NUMBERS.upper.includes(internalSelectedTooth)}
                   isPrimary={toothType === 'primary'}
                   onClick={() => { }}
                 />
@@ -531,8 +553,29 @@ export const TeethChart: React.FC<TeethChartProps> = ({ initialData = [], readOn
                 />
               </div>
 
+              {/* Performed Procedures Section */}
+              <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                  Qilingan protseduralar
+                </label>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                  {procedures.filter(p => p.toothNumber === internalSelectedTooth).length === 0 ? (
+                    <p className="text-xs text-gray-500 italic">Hozircha protseduralar yo'q</p>
+                  ) : (
+                    procedures
+                      .filter(p => p.toothNumber === internalSelectedTooth)
+                      .map((proc, idx) => (
+                        <div key={proc.id || idx} className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800 flex justify-between items-center">
+                          <span className="text-xs font-medium text-blue-900 dark:text-blue-100">{proc.serviceName}</span>
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono">{proc.date}</span>
+                        </div>
+                      ))
+                  )}
+                </div>
+              </div>
+
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
-                <Button variant="secondary" onClick={() => setSelectedTooth(null)}>Bekor qilish</Button>
+                <Button variant="secondary" onClick={() => setInternalSelectedTooth(null)}>Bekor qilish</Button>
                 <Button onClick={saveChanges} className="px-6">
                   <Save className="w-4 h-4 mr-2" /> Saqlash
                 </Button>

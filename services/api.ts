@@ -1,5 +1,5 @@
 import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog } from '../types';
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS } from './demoData';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app');
@@ -39,7 +39,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
         if (!response.ok && (response.status >= 500 || response.status === 408 || response.status === 429)) {
             const method = options.method || 'GET';
             if (retries > 0 && method === 'GET') {
-                console.warn(`Request to ${url} failed with status ${response.status}. Retrying in ${backoff}ms... (${retries} attempts left)`);
+                console.warn(`Request to ${url} failed with status ${response.status}.Retrying in ${backoff}ms... (${retries} attempts left)`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
                 return fetchWithRetry(url, options, retries - 1, backoff * 2);
             }
@@ -50,7 +50,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
         // Network errors (fetch throws generic TypeError for network issues)
         const method = options.method || 'GET';
         if (retries > 0 && method === 'GET') {
-            console.warn(`Network error for ${url}. Retrying in ${backoff}ms... (${retries} attempts left)`, error);
+            console.warn(`Network error for ${url}.Retrying in ${backoff}ms... (${retries} attempts left)`, error);
             await new Promise(resolve => setTimeout(resolve, backoff));
             return fetchWithRetry(url, options, retries - 1, backoff * 2);
         }
@@ -69,14 +69,14 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
         try {
             const { token } = JSON.parse(storedAuth);
             if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+                headers['Authorization'] = `Bearer ${token} `;
             }
         } catch (e) {
             // Ignore parse error
         }
     }
 
-    const response = await fetchWithRetry(`${API_URL}${url}`, {
+    const response = await fetchWithRetry(`${API_URL}${url} `, {
         ...options,
         headers,
     });
@@ -92,7 +92,7 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API request failed: ${response.statusText}`);
+        throw new Error(errorData.error || `API request failed: ${response.statusText} `);
     }
     return response.json();
 }
@@ -100,7 +100,7 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
 export const api = {
     auth: {
         login: async (username: string, password: string) => {
-            const response = await fetch(`${API_URL}/auth/login`, {
+            const response = await fetch(`${API_URL} /auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
@@ -111,12 +111,13 @@ export const api = {
     patients: {
         getAll: (clinicId: string) => {
             if (isDemoMode()) return Promise.resolve(DEMO_PATIENTS);
-            return fetchJson<Patient[]>(`/patients?clinicId=${clinicId}`);
+            return fetchJson<Patient[]>(`/ patients ? clinicId = ${clinicId} `);
         },
         create: (data: Omit<Patient, 'id'>) => {
             if (isDemoMode()) {
-                const newPatient = { ...data, id: `demo-patient-${Date.now()}-${Math.floor(Math.random() * 1000)}` } as Patient;
+                const newPatient = { ...data, id: `demo - patient - ${Date.now()} -${Math.floor(Math.random() * 1000)} ` } as Patient;
                 DEMO_PATIENTS.push(newPatient);
+                saveDemoData();
                 return Promise.resolve(newPatient);
             }
             return fetchJson<Patient>('/patients', {
@@ -130,11 +131,12 @@ export const api = {
                 const index = DEMO_PATIENTS.findIndex(p => p.id === id);
                 if (index !== -1) {
                     DEMO_PATIENTS[index] = { ...DEMO_PATIENTS[index], ...data };
+                    saveDemoData();
                     return Promise.resolve(DEMO_PATIENTS[index]);
                 }
                 return Promise.reject('Patient not found');
             }
-            return fetchJson<Patient>(`/patients/${id}`, {
+            return fetchJson<Patient>(`/ patients / ${id} `, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
@@ -143,16 +145,19 @@ export const api = {
         delete: (id: string) => {
             if (isDemoMode()) {
                 const index = DEMO_PATIENTS.findIndex(p => p.id === id);
-                if (index !== -1) DEMO_PATIENTS.splice(index, 1);
+                if (index !== -1) {
+                    DEMO_PATIENTS.splice(index, 1);
+                    saveDemoData();
+                }
                 return Promise.resolve({ success: true });
             }
-            return fetchJson<{ success: true }>(`/patients/${id}`, {
+            return fetchJson<{ success: true }>(`/ patients / ${id} `, {
                 method: 'DELETE',
             });
         },
         remindDebt: (id: string, amount?: number) => {
             if (isDemoMode()) return Promise.resolve({ success: true });
-            return fetchJson<{ success: true }>(`/patients/${id}/remind-debt`, {
+            return fetchJson<{ success: true }>(`/ patients / ${id}/remind-debt`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ amount }),
@@ -176,6 +181,7 @@ export const api = {
             if (isDemoMode()) {
                 const newAppt = { ...data, id: `demo-appt-${Date.now()}-${Math.floor(Math.random() * 1000)}` } as Appointment;
                 DEMO_APPOINTMENTS.push(newAppt);
+                saveDemoData();
                 return Promise.resolve(newAppt);
             }
             return fetchJson<Appointment>('/appointments', {
@@ -189,6 +195,7 @@ export const api = {
                 const index = DEMO_APPOINTMENTS.findIndex(a => a.id === id);
                 if (index !== -1) {
                     DEMO_APPOINTMENTS[index] = { ...DEMO_APPOINTMENTS[index], ...data };
+                    saveDemoData();
                     return Promise.resolve(DEMO_APPOINTMENTS[index]);
                 }
                 return Promise.reject('Appointment not found');
@@ -202,7 +209,10 @@ export const api = {
         delete: (id: string) => {
             if (isDemoMode()) {
                 const index = DEMO_APPOINTMENTS.findIndex(a => a.id === id);
-                if (index !== -1) DEMO_APPOINTMENTS.splice(index, 1);
+                if (index !== -1) {
+                    DEMO_APPOINTMENTS.splice(index, 1);
+                    saveDemoData();
+                }
                 return Promise.resolve({ success: true });
             }
             return fetchJson<{ success: true }>(`/appointments/${id}`, {
@@ -223,8 +233,21 @@ export const api = {
         },
         create: (data: Omit<Transaction, 'id'>) => {
             if (isDemoMode()) {
+                // Prevent duplicates in demo mode
+                const exists = DEMO_TRANSACTIONS.some(t =>
+                    t.patientId === data.patientId &&
+                    t.date === data.date &&
+                    t.amount === data.amount &&
+                    t.service === data.service
+                );
+
+                if (exists) {
+                    return Promise.reject('Duplicate transaction');
+                }
+
                 const newTx = { ...data, id: `demo-tx-${Date.now()}-${Math.floor(Math.random() * 1000)}` } as Transaction;
                 DEMO_TRANSACTIONS.push(newTx);
+                saveDemoData();
                 return Promise.resolve(newTx);
             }
             return fetchJson<Transaction>('/transactions', {
@@ -238,6 +261,7 @@ export const api = {
                 const index = DEMO_TRANSACTIONS.findIndex(t => t.id === id);
                 if (index !== -1) {
                     DEMO_TRANSACTIONS[index] = { ...DEMO_TRANSACTIONS[index], ...data };
+                    saveDemoData();
                     return Promise.resolve(DEMO_TRANSACTIONS[index]);
                 }
                 return Promise.reject('Transaction not found');
@@ -256,38 +280,96 @@ export const api = {
             if (isDemoMode()) return Promise.resolve(DEMO_DOCTORS);
             return fetchJson<Doctor[]>(`/doctors?clinicId=${clinicId}`);
         },
-        create: (data: Omit<Doctor, 'id'>) => fetchJson<Doctor>('/doctors', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        }),
-        update: (id: string, data: Partial<Doctor>) => fetchJson<Doctor>(`/doctors/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        }),
-        delete: (id: string) => fetchJson<{ success: true }>(`/doctors/${id}`, {
-            method: 'DELETE',
-        }),
+        create: (data: Omit<Doctor, 'id'>) => {
+            if (isDemoMode()) {
+                const newDoc = { ...data, id: `demo-doctor-${Date.now()}` } as Doctor;
+                DEMO_DOCTORS.push(newDoc);
+                saveDemoData();
+                return Promise.resolve(newDoc);
+            }
+            return fetchJson<Doctor>('/doctors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<Doctor>) => {
+            if (isDemoMode()) {
+                const index = DEMO_DOCTORS.findIndex(d => d.id === id);
+                if (index !== -1) {
+                    DEMO_DOCTORS[index] = { ...DEMO_DOCTORS[index], ...data };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_DOCTORS[index]);
+                }
+                return Promise.reject('Doctor not found');
+            }
+            return fetchJson<Doctor>(`/doctors/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_DOCTORS.findIndex(d => d.id === id);
+                if (index !== -1) {
+                    DEMO_DOCTORS.splice(index, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/doctors/${id}`, {
+                method: 'DELETE',
+            });
+        },
     },
     receptionists: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve([]);
+            if (isDemoMode()) return Promise.resolve(DEMO_RECEPTIONISTS);
             return fetchJson<Receptionist[]>(`/receptionists?clinicId=${clinicId}`);
         },
-        create: (data: Omit<Receptionist, 'id'>) => fetchJson<Receptionist>('/receptionists', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        }),
-        update: (id: string, data: Partial<Receptionist>) => fetchJson<Receptionist>(`/receptionists/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        }),
-        delete: (id: string) => fetchJson<{ success: true }>(`/receptionists/${id}`, {
-            method: 'DELETE',
-        }),
+        create: (data: Omit<Receptionist, 'id'>) => {
+            if (isDemoMode()) {
+                const newRec = { ...data, id: `demo-rec-${Date.now()}` } as Receptionist;
+                DEMO_RECEPTIONISTS.push(newRec);
+                saveDemoData();
+                return Promise.resolve(newRec);
+            }
+            return fetchJson<Receptionist>('/receptionists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<Receptionist>) => {
+            if (isDemoMode()) {
+                const index = DEMO_RECEPTIONISTS.findIndex(r => r.id === id);
+                if (index !== -1) {
+                    DEMO_RECEPTIONISTS[index] = { ...DEMO_RECEPTIONISTS[index], ...data };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_RECEPTIONISTS[index]);
+                }
+                return Promise.reject('Receptionist not found');
+            }
+            return fetchJson<Receptionist>(`/receptionists/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_RECEPTIONISTS.findIndex(r => r.id === id);
+                if (index !== -1) {
+                    DEMO_RECEPTIONISTS.splice(index, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/receptionists/${id}`, {
+                method: 'DELETE',
+            });
+        },
     },
     services: {
         getAll: (clinicId: string) => {
@@ -298,6 +380,7 @@ export const api = {
             if (isDemoMode()) {
                 const newService: Service = { ...data, id: Date.now() + Math.floor(Math.random() * 1000) } as Service;
                 DEMO_SERVICES.push(newService);
+                saveDemoData();
                 return Promise.resolve(newService);
             }
             return fetchJson<Service>('/services', {
@@ -311,6 +394,7 @@ export const api = {
                 const index = DEMO_SERVICES.findIndex(s => s.id === id);
                 if (index !== -1) {
                     DEMO_SERVICES[index] = { ...DEMO_SERVICES[index], ...data };
+                    saveDemoData();
                     return Promise.resolve(DEMO_SERVICES[index]);
                 }
                 return Promise.reject('Service not found');
@@ -325,23 +409,16 @@ export const api = {
     categories: {
         getAll: (clinicId: string) => {
             if (isDemoMode()) {
-                // Return unique categories from DEMO_SERVICES
-                const categories = Array.from(new Set(DEMO_SERVICES.map(s => s.category))).map((cat, index) => ({
-                    id: `demo-cat-${index}`,
-                    name: cat as unknown as string,
-                    clinicId: 'demo-clinic-1'
-                }));
-                // If we had a separate DEMO_CATEGORIES array, we'd use that.
-                // For now, deriving from services or returning a static list is fine,
-                // but let's assume we might want to edit them.
-                // Let's create a static list in memory if needed, but for now just returning simple list
-                return Promise.resolve(categories);
+                return Promise.resolve(DEMO_CATEGORIES);
             }
             return fetchJson<ServiceCategory[]>(`/categories?clinicId=${clinicId}`);
         },
         create: (data: Omit<ServiceCategory, 'id'>) => {
             if (isDemoMode()) {
-                return Promise.resolve({ ...data, id: `demo-cat-${Date.now()}-${Math.floor(Math.random() * 1000)}` } as ServiceCategory);
+                const newCat = { ...data, id: `demo-cat-${Date.now()}-${Math.floor(Math.random() * 1000)}` } as ServiceCategory;
+                DEMO_CATEGORIES.push(newCat);
+                saveDemoData();
+                return Promise.resolve(newCat);
             }
             return fetchJson<ServiceCategory>('/categories', {
                 method: 'POST',
@@ -350,7 +427,15 @@ export const api = {
             });
         },
         update: (id: string, data: Partial<ServiceCategory>) => {
-            if (isDemoMode()) return Promise.resolve({ ...data, id } as ServiceCategory);
+            if (isDemoMode()) {
+                const index = DEMO_CATEGORIES.findIndex(c => c.id === id);
+                if (index !== -1) {
+                    DEMO_CATEGORIES[index] = { ...DEMO_CATEGORIES[index], ...data };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_CATEGORIES[index]);
+                }
+                return Promise.reject('Category not found');
+            }
             return fetchJson<ServiceCategory>(`/categories/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -358,7 +443,14 @@ export const api = {
             });
         },
         delete: (id: string) => {
-            if (isDemoMode()) return Promise.resolve({ success: true });
+            if (isDemoMode()) {
+                const index = DEMO_CATEGORIES.findIndex(c => c.id === id);
+                if (index !== -1) {
+                    DEMO_CATEGORIES.splice(index, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
             return fetchJson<{ success: true }>(`/categories/${id}`, {
                 method: 'DELETE',
             });
@@ -380,7 +472,11 @@ export const api = {
             method: 'DELETE',
         }),
         updateSettings: (id: string, data: { botToken?: string }) => {
-            if (isDemoMode()) return Promise.resolve({ success: true, clinic: DEMO_CLINIC });
+            if (isDemoMode()) {
+                DEMO_CLINIC.botToken = data.botToken || '';
+                saveDemoData();
+                return Promise.resolve({ success: true, clinic: DEMO_CLINIC });
+            }
             return fetchJson<{ success: true; clinic: Clinic }>(`/clinics/${id}/settings`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -406,18 +502,46 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         }),
-        getByPatient: (patientId: string) => fetchJson<PatientDiagnosis[]>(`/diagnoses?patientId=${patientId}`),
-        delete: (id: string) => fetchJson<{ success: true }>(`/diagnoses/${id}`, {
-            method: 'DELETE',
-        }),
+        getByPatient: (patientId: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_DIAGNOSES.filter(d => d.patientId === patientId));
+            return fetchJson<PatientDiagnosis[]>(`/diagnoses?patientId=${patientId}`);
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_DIAGNOSES.findIndex(d => d.id === id);
+                if (index !== -1) {
+                    DEMO_DIAGNOSES.splice(index, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/diagnoses/${id}`, {
+                method: 'DELETE',
+            });
+        },
     },
     teeth: {
-        getAll: (patientId: string) => fetchJson<any[]>(`/patients/${patientId}/teeth`),
-        save: (patientId: string, data: { number: number; conditions: any[]; notes: string }) => fetchJson<any>(`/patients/${patientId}/teeth`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        }),
+        getAll: (patientId: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_TEETH.filter(t => t.patientId === patientId));
+            return fetchJson<any[]>(`/patients/${patientId}/teeth`);
+        },
+        save: (patientId: string, data: { number: number; conditions: any[]; notes: string }) => {
+            if (isDemoMode()) {
+                const index = DEMO_TEETH.findIndex(t => t.patientId === patientId && t.number === data.number);
+                if (index !== -1) {
+                    DEMO_TEETH[index] = { ...DEMO_TEETH[index], ...data };
+                } else {
+                    DEMO_TEETH.push({ ...data, patientId });
+                }
+                saveDemoData();
+                return Promise.resolve(data);
+            }
+            return fetchJson<any>(`/patients/${patientId}/teeth`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
     },
     batch: {
         remindAppointments: (clinicId: string) => fetchJson<{ success: true; message: string }>('/batch/remind-appointments', {
@@ -445,6 +569,7 @@ export const api = {
                     updatedAt: new Date().toISOString()
                 } as InventoryItem;
                 DEMO_INVENTORY.push(newItem);
+                saveDemoData();
                 return Promise.resolve(newItem);
             }
             return fetchJson<InventoryItem>('/inventory', {
@@ -474,7 +599,7 @@ export const api = {
                         patientId: data.patientId
                     };
                     DEMO_INVENTORY_LOGS.push(log);
-
+                    saveDemoData();
                     return Promise.resolve(item);
                 }
                 return Promise.reject('Item not found');
@@ -488,7 +613,10 @@ export const api = {
         delete: (id: string) => {
             if (isDemoMode()) {
                 const index = DEMO_INVENTORY.findIndex(i => i.id === id);
-                if (index !== -1) DEMO_INVENTORY.splice(index, 1);
+                if (index !== -1) {
+                    DEMO_INVENTORY.splice(index, 1);
+                    saveDemoData();
+                }
                 return Promise.resolve({ success: true });
             }
             return fetchJson<{ success: true }>(`/inventory/${id}`, {

@@ -1,0 +1,20 @@
+// PatientDetails.tsx ga qo'shiladigan kod
+// 658-qatordan keyin qo'shing (</Card> dan keyin, </div> dan oldin)
+
+                     <ProceduresSection 
+                        transactions={patientTransactions}
+                        doctors={doctors}
+                        onAddProcedure={() => {
+                           setPaymentData({ 
+                              amount: '', 
+                              paidAmount: '', 
+                              debtAmount: '', 
+                              service: '', 
+                              type: 'Cash', 
+                              status: 'Paid', 
+                              doctorId: doctors.length > 0 ? doctors[0].id : '' 
+                           });
+                           setIsPaymentModalOpen(true);
+                        }}
+                        onViewAll={() => setActiveTab('payments')}
+                     />

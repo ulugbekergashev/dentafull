@@ -57,6 +57,7 @@ model Patient {
   clinic         Clinic        @relation(fields: [clinicId], references: [id])
   appointments   Appointment[]
   diagnoses      PatientDiagnosis[]
+  visits         Visit[]       // New relation
   
   @@unique([clinicId, telegramChatId])
   @@index([phone]) // Optimize phone lookup
@@ -106,7 +107,63 @@ model Appointment {
   notes       String?
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  visits      Visit[]  // New relation
+  
+  @@unique([patientId, date], name: "unique_patient_date")
+  @@index([date])
+  @@index([patientId])
 }
+
+// Visit/Session - Tracks each patient visit from check-in to checkout
+model Visit {
+  id             String                @id @default(uuid())
+  patientId      String
+  patient        Patient               @relation(fields: [patientId], references: [id])
+  appointmentId  String?               // Optional link to appointment
+  appointment    Appointment?          @relation(fields: [appointmentId], references: [id])
+  date           String                // Visit date
+  checkInTime    DateTime              @default(now())
+  checkOutTime   DateTime?
+  status         String                @default("Waiting") // 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled'
+  complaints     String?               // Chief complaint
+  vitalSigns     String?               // JSON: { bloodPressure, pulse, etc. }
+  notes          String?               // General visit notes
+  clinicId       String
+  clinic         Clinic                @relation(fields: [clinicId], references: [id])
+  
+  // Relations
+  diagnoses      PatientDiagnosis[]
+  procedures     TreatmentProcedure[]
+  transactions   Transaction[]
+  
+  @@index([patientId])
+  @@index([date])
+}
+
+// Treatment Procedure - Individual procedures performed during a visit
+model TreatmentProcedure {
+  id            String   @id @default(uuid())
+  visitId       String
+  visit         Visit    @relation(fields: [visitId], references: [id])
+  procedureName String
+  toothNumber   Int?     // 1-32, optional for general procedures
+  toothSurface  String?  // e.g., "Mesial", "Distal", "Occlusal"
+  status        String   @default("Planned") // 'Planned' | 'In Progress' | 'Completed' | 'Cancelled'
+  basePrice     Float
+  discount      Float    @default(0)
+  finalPrice    Float
+  materialsUsed String?  // JSON array of materials
+  notes         String?
+  duration      Int?     // in minutes
+  doctorId      String
+  doctorName    String
+  createdAt     DateTime @default(now())
+  completedAt   DateTime?
+  
+  @@index([visitId])
+  @@index([toothNumber])
+}
+
 
 model Transaction {
   id          String   @id @default(uuid())
@@ -120,8 +177,13 @@ model Transaction {
   doctorName  String?  // Optional - for backward compatibility
   patientId   String?  // Optional initially to support existing data
   patient     Patient? @relation(fields: [patientId], references: [id])
+  visitId     String?  // New field - optional for backward compatibility
+  visit       Visit?   @relation(fields: [visitId], references: [id])
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])
+
+  // Prevent duplicate transactions for the same patient, date, service, and amount
+  @@unique([patientId, date, service, amount], name: "unique_patient_transaction")
 }
 
 model Service {
@@ -172,6 +234,7 @@ model Clinic {
   receptionists Receptionist[]
   patients      Patient[]
   appointments  Appointment[]
+  visits        Visit[]       // New relation
   transactions  Transaction[]
   services      Service[]
   serviceCategories ServiceCategory[]
@@ -198,6 +261,8 @@ model PatientDiagnosis {
   date        String
   notes       String?
   status      String // 'Active' | 'Resolved' | 'Chronic'
+  visitId     String?   // New field - optional for backward compatibility
+  visit       Visit?    @relation(fields: [visitId], references: [id])
   clinicId    String
   clinic      Clinic    @relation(fields: [clinicId], references: [id])
 }

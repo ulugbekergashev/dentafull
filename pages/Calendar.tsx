@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Modal, Input, Select, Badge } from '../components/Common';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell } from 'lucide-react';
-import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan } from '../types';
+import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 
 interface CalendarProps {
@@ -10,6 +10,7 @@ interface CalendarProps {
   patients: Patient[];
   doctors: Doctor[];
   services: { name: string; price: number; duration: number }[];
+  categories: ServiceCategory[];
   onAddAppointment: (appt: Omit<Appointment, 'id'>) => void;
   onUpdateAppointment: (id: string, data: Partial<Appointment>) => void;
   onDeleteAppointment: (id: string) => void;
@@ -22,7 +23,7 @@ interface CalendarProps {
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, patients, doctors, services, onAddAppointment, onUpdateAppointment, onDeleteAppointment, userRole, doctorId, currentClinic, plans
+  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, userRole, doctorId, currentClinic, plans
 }) => {
   // Filter appointments for doctors
   const filteredAppointments = userRole === UserRole.DOCTOR && doctorId
@@ -46,6 +47,7 @@ export const Calendar: React.FC<CalendarProps> = ({
     patientId: '',
     doctorId: '',
     type: '',
+    categoryId: '',
     date: new Date().toISOString().split('T')[0],
     time: '09:00',
     duration: 60,
@@ -399,7 +401,7 @@ export const Calendar: React.FC<CalendarProps> = ({
             </div>
 
             {/* Body */}
-            <div className={`grid ${gridColsClass} h-[1200px]`}>
+            <div className={`grid ${gridColsClass} h-[1200px] relative`}>
               {/* Time Column */}
               <div className="border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-20">
                 {HOURS.map(hour => (
@@ -423,66 +425,122 @@ export const Calendar: React.FC<CalendarProps> = ({
               ))}
 
               {/* Appointments Overlay */}
-              {appointments.map(app => {
-                const appDate = new Date(app.date);
-                // Find which column this appointment belongs to
-                const dayIndex = displayDays.findIndex(d => d.toDateString() === appDate.toDateString());
+              {/* Appointments Overlay */}
+              {(() => {
+                // Calculate layout data for overlapping appointments
+                const layoutData: Record<string, { col: number; total: number }> = {};
 
-                if (dayIndex === -1) return null; // Not in this view
+                // Group by day to handle overlaps independently per day
+                const dayGroups: Record<string, Appointment[]> = {};
+                filteredAppointments.forEach(app => {
+                  if (!dayGroups[app.date]) dayGroups[app.date] = [];
+                  dayGroups[app.date].push(app);
+                });
 
-                const [h, m] = app.time.split(':').map(Number);
-                if (isNaN(h)) return null;
+                Object.values(dayGroups).forEach(dayAppts => {
+                  const sorted = [...dayAppts].sort((a, b) => a.time.localeCompare(b.time));
+                  const groups: Appointment[][] = [];
 
-                const topOffset = ((h - 8) * 96) + (m >= 30 ? 48 : 0) + (m % 30 / 30 * 48);
-                const height = (app.duration / 30) * 48;
+                  sorted.forEach(app => {
+                    let placed = false;
+                    for (const group of groups) {
+                      const overlaps = group.some(other => {
+                        const startA = new Date(`${app.date}T${app.time}`).getTime();
+                        const endA = startA + app.duration * 60000;
+                        const startB = new Date(`${other.date}T${other.time}`).getTime();
+                        const endB = startB + other.duration * 60000;
+                        return Math.max(startA, startB) < Math.min(endA, endB);
+                      });
+                      if (overlaps) { group.push(app); placed = true; break; }
+                    }
+                    if (!placed) groups.push([app]);
+                  });
 
-                // Status Colors
-                const colors = {
-                  'Confirmed': 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/60 dark:border-blue-700 dark:text-blue-200',
-                  'Checked-In': 'bg-indigo-100 border-indigo-300 text-indigo-700 dark:bg-indigo-900/60 dark:border-indigo-700 dark:text-indigo-200',
-                  'Completed': 'bg-green-100 border-green-300 text-green-700 dark:bg-green-900/60 dark:border-green-700 dark:text-green-200',
-                  'Pending': 'bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/60 dark:border-yellow-700 dark:text-yellow-200',
-                  'Cancelled': 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900/60 dark:border-red-700 dark:text-red-300',
-                  'No-Show': 'bg-gray-200 border-gray-400 text-gray-600 dark:bg-gray-700 dark:border-gray-500 dark:text-gray-400 opacity-75'
-                }[app.status] || 'bg-gray-100';
+                  groups.forEach(group => {
+                    const columns: string[][] = [];
+                    group.forEach(app => {
+                      let colIndex = 0;
+                      while (true) {
+                        if (!columns[colIndex]) { columns[colIndex] = [app.id]; break; }
+                        const overlapsInCol = columns[colIndex].some(otherId => {
+                          const other = group.find(o => o.id === otherId)!;
+                          const startA = new Date(`${app.date}T${app.time}`).getTime();
+                          const endA = startA + app.duration * 60000;
+                          const startB = new Date(`${other.date}T${other.time}`).getTime();
+                          const endB = startB + other.duration * 60000;
+                          return Math.max(startA, startB) < Math.min(endA, endB);
+                        });
+                        if (!overlapsInCol) { columns[colIndex].push(app.id); break; }
+                        colIndex++;
+                      }
+                    });
+                    group.forEach(app => {
+                      layoutData[app.id] = { col: columns.findIndex(c => c.includes(app.id)), total: columns.length };
+                    });
+                  });
+                });
 
-                // Calculate position based on view
-                const left = view === 'week'
-                  ? `calc(${(dayIndex + 1) * (100 / 8)}% + 2px)`
-                  : `62px`;
+                return filteredAppointments.map(app => {
+                  const appDate = new Date(app.date);
+                  const dayIndex = displayDays.findIndex(d => d.toDateString() === appDate.toDateString());
+                  if (dayIndex === -1) return null;
 
-                const width = view === 'week'
-                  ? `calc(${100 / 8}% - 4px)`
-                  : `calc(100% - 64px)`;
+                  const [h, m] = app.time.split(':').map(Number);
+                  if (isNaN(h)) return null;
 
-                return (
-                  <div
-                    key={app.id}
-                    onClick={() => setSelectedAppointment(app)}
-                    className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all ${colors} z-10`}
-                    style={{
-                      top: `${topOffset}px`,
-                      left: left,
-                      width: width,
-                      height: `${height - 4}px`,
-                    }}
-                  >
-                    <div className="font-bold truncate pr-4">{app.patientName}</div>
-                    {app.reminderSent && (
-                      <div className="absolute top-1 right-1">
-                        <Bell className="w-3 h-3 text-blue-600 dark:text-blue-400 fill-current" />
-                      </div>
-                    )}
-                    <div className="truncate opacity-75">{app.type}</div>
-                    {height > 40 && (
-                      <div className="flex items-center mt-1 gap-1 text-[10px]">
-                        <div className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[9px]">{app.doctorName[0]}</div>
-                        {app.time}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  const topOffset = ((h - 8) * 96) + (m >= 30 ? 48 : 0) + (m % 30 / 30 * 48);
+                  const height = (app.duration / 30) * 48;
+
+                  const { col = 0, total = 1 } = layoutData[app.id] || {};
+                  const colWidth = 100 / total;
+                  const colOffset = col * colWidth;
+
+                  const left = view === 'week'
+                    ? `calc(${(dayIndex + 1) * (100 / 8)}% + 2px + ${(colOffset / 100) * (100 / 8)}%)`
+                    : `calc(62px + ${(colOffset / 100) * 100}%)`;
+
+                  const width = view === 'week'
+                    ? `calc(${(colWidth / 100) * (100 / 8)}% - 4px)`
+                    : `calc(${(colWidth / 100) * 100}% - 68px)`;
+
+                  const colors = {
+                    'Confirmed': 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/60 dark:border-blue-700 dark:text-blue-200',
+                    'Checked-In': 'bg-indigo-100 border-indigo-300 text-indigo-700 dark:bg-indigo-900/60 dark:border-indigo-700 dark:text-indigo-200',
+                    'Completed': 'bg-green-100 border-green-300 text-green-700 dark:bg-green-900/60 dark:border-green-700 dark:text-green-200',
+                    'Pending': 'bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/60 dark:border-yellow-700 dark:text-yellow-200',
+                    'Cancelled': 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900/60 dark:border-red-700 dark:text-red-300',
+                    'No-Show': 'bg-gray-200 border-gray-400 text-gray-600 dark:bg-gray-700 dark:border-gray-500 dark:text-gray-400 opacity-75'
+                  }[app.status] || 'bg-gray-100';
+
+                  return (
+                    <div
+                      key={app.id}
+                      onClick={() => setSelectedAppointment(app)}
+                      className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all ${colors} z-10`}
+                      style={{
+                        top: `${topOffset}px`,
+                        left: left,
+                        width: width,
+                        height: `${height - 4}px`,
+                      }}
+                    >
+                      <div className="font-bold truncate pr-4">{app.patientName}</div>
+                      {app.reminderSent && (
+                        <div className="absolute top-1 right-1">
+                          <Bell className="w-3 h-3 text-blue-600 dark:text-blue-400 fill-current" />
+                        </div>
+                      )}
+                      <div className="truncate opacity-75">{app.type}</div>
+                      {height > 40 && (
+                        <div className="flex items-center mt-1 gap-1 text-[10px]">
+                          <div className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[9px]">{app.doctorName[0]}</div>
+                          {app.time}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
 
             </div>
           </div>
@@ -507,6 +565,35 @@ export const Calendar: React.FC<CalendarProps> = ({
               onChange={(e) => setFormData({ ...formData, doctorId: e.target.value })}
             />
           )}
+          {categories.length > 0 && (
+            <Select
+              label="Xizmat kategoriyasi"
+              options={[
+                { value: '', label: 'Barcha kategoriyalar' },
+                ...categories.map(c => ({ value: c.id, label: c.name }))
+              ]}
+              value={formData.categoryId}
+              onChange={(e) => setFormData({ ...formData, categoryId: e.target.value, type: '' })}
+            />
+          )}
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label="Muolaja turi"
+              options={services
+                .filter(s => !formData.categoryId || (s as any).categoryId === formData.categoryId)
+                .map(s => ({ value: s.name, label: s.name }))}
+              value={formData.type}
+              onChange={e => {
+                const service = services.find(s => s.name === e.target.value);
+                setFormData({
+                  ...formData,
+                  type: e.target.value,
+                  duration: service?.duration || formData.duration
+                });
+              }}
+            />
+            <Input label="Davomiyligi (daq)" type="number" value={formData.duration} onChange={e => setFormData({ ...formData, duration: Number(e.target.value) })} />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Sana"
@@ -516,15 +603,6 @@ export const Calendar: React.FC<CalendarProps> = ({
               onChange={e => setFormData({ ...formData, date: e.target.value })}
             />
             <Input label="Vaqt" type="time" value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Select
-              label="Muolaja turi"
-              options={services.map(s => ({ value: s.name, label: s.name }))}
-              value={formData.type}
-              onChange={e => setFormData({ ...formData, type: e.target.value })}
-            />
-            <Input label="Davomiyligi (daq)" type="number" value={formData.duration} onChange={e => setFormData({ ...formData, duration: Number(e.target.value) })} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Izohlar</label>
@@ -577,42 +655,32 @@ export const Calendar: React.FC<CalendarProps> = ({
               <div className="flex flex-wrap gap-2 justify-end">
                 {/* Initial States: Pending, Confirmed or Checked-In (Legacy support) */}
                 {(selectedAppointment.status === 'Pending' || selectedAppointment.status === 'Confirmed' || selectedAppointment.status === 'Checked-In') && (
-                  <>
+                  <div className="flex flex-wrap gap-2 w-full">
                     <Button
                       variant="secondary"
-                      className={`mr-2 ${remindedAppts.has(selectedAppointment.id) ? 'bg-green-100 text-green-700 border-green-200' : ''}`}
+                      className={`${remindedAppts.has(selectedAppointment.id) ? 'bg-green-100 text-green-700 border-green-200' : ''} flex-1`}
                       onClick={() => openMessageModal(selectedAppointment)}
                     >
                       <Send className="w-4 h-4 mr-2" />
                       Xabar yuborish
                     </Button>
-                    <Button variant="danger" className="mr-auto" onClick={() => {
-                      if (confirm('Ushbu qabulni bekor qilmoqchimisiz?')) {
-                        onDeleteAppointment(selectedAppointment.id);
-                        setSelectedAppointment(null);
-                      }
-                    }}>
-                      Bekor qilish
-                    </Button>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleStatusUpdate('No-Show')}
-                        className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700"
-                      >
-                        <XCircle className="w-4 h-4 mr-2 text-red-500" />
-                        Kelmadi
-                      </button>
+                    <button
+                      onClick={() => handleStatusUpdate('No-Show')}
+                      className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 flex-1"
+                    >
+                      <XCircle className="w-4 h-4 mr-2 text-red-500" />
+                      Kelmadi
+                    </button>
 
-                      <button
-                        onClick={() => handleStatusUpdate('Completed')}
-                        className="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Yakunlash
-                      </button>
-                    </div>
-                  </>
+                    <button
+                      onClick={() => handleStatusUpdate('Completed')}
+                      className="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex-1"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Yakunlash
+                    </button>
+                  </div>
                 )}
 
                 {/* Read Only States */}

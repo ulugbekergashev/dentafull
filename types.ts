@@ -210,3 +210,43 @@ export interface SMSCampaign {
   date: string;
   clinicId: string;
 }
+
+// Workflow System Types
+export interface Visit {
+  id: string;
+  patientId: string;
+  appointmentId?: string; // Optional link to appointment
+  date: string; // YYYY-MM-DD
+  checkInTime: string; // ISO DateTime
+  checkOutTime?: string; // ISO DateTime
+  status: 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled';
+  complaints?: string; // Chief complaint
+  vitalSigns?: string; // JSON string
+  notes?: string; // General visit notes
+  clinicId: string;
+
+  // For UI display (populated from relations)
+  patient?: Patient;
+  diagnoses?: PatientDiagnosis[];
+  procedures?: TreatmentProcedure[];
+  transactions?: Transaction[];
+}
+
+export interface TreatmentProcedure {
+  id: string;
+  visitId: string;
+  procedureName: string;
+  toothNumber?: number; // 1-32, optional for general procedures
+  toothSurface?: string; // e.g., "Mesial", "Distal", "Occlusal"
+  status: 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
+  basePrice: number;
+  discount: number;
+  finalPrice: number;
+  materialsUsed?: string; // JSON array of materials
+  notes?: string;
+  duration?: number; // in minutes
+  doctorId: string;
+  doctorName: string;
+  createdAt: string; // ISO DateTime
+  completedAt?: string; // ISO DateTime
+}
