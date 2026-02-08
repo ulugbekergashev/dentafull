@@ -2,7 +2,7 @@ import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, Subscr
 import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
-const isProduction = window.location.hostname.includes('vercel.app');
+const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
 export const API_URL = isProduction
     ? 'https://dentafull-production.up.railway.app/api'
     : (import.meta.env.VITE_API_URL || 'http://localhost:3001/api');
