@@ -108,6 +108,7 @@ model Appointment {
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])
   visits      Visit[]  // New relation
+  reviews     Review[] // New relation
   
   @@unique([patientId, date], name: "unique_patient_date")
   @@index([date])
@@ -304,4 +305,13 @@ model ServiceCategory {
   services Service[]
 
   @@unique([clinicId, name])
+}
+
+model Review {
+  id            String      @id @default(uuid())
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  rating        Int         // 1-5
+  comment       String?
+  createdAt     DateTime    @default(now())
 }

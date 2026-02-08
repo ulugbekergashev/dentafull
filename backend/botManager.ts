@@ -121,6 +121,35 @@ class BotManager {
                 }
             });
 
+            // 3. Rating Action Handler
+            bot.action(/^rate_(\d+)_([\w-]+)$/, async (ctx) => {
+                const rating = parseInt(ctx.match[1]);
+                const appointmentId = ctx.match[2];
+                if (!ctx.chat) return;
+                const chatId = String(ctx.chat.id);
+
+                try {
+                    // Save review to database
+                    // Use upsert to prevent double-rating
+                    await prisma.review.upsert({
+                        where: { appointmentId: appointmentId },
+                        update: { rating: rating },
+                        create: {
+                            appointmentId: appointmentId,
+                            rating: rating
+                        }
+                    });
+
+                    // Edit original message to remove buttons and show thank you
+                    const stars = "⭐".repeat(rating);
+                    await ctx.editMessageText(`✅ Bahoingiz uchun rahmat!\n\nSiz bizni ${rating} ball (${stars}) bilan baholadingiz. Kelajakda xizmatlarimizni yanada yaxshilashda davom etamiz.`);
+                    await ctx.answerCbQuery("Rahmat!");
+                } catch (e) {
+                    console.error("Rating save error:", e);
+                    await ctx.answerCbQuery("Xatolik yuz berdi.");
+                }
+            });
+
             bot.launch().catch(err => console.error(`Bot launch failed for clinic ${clinicId}:`, err.message));
             this.bots.set(clinicId, bot);
             console.log(`✅ Bot started for clinic: ${clinicId}`);
@@ -154,6 +183,32 @@ class BotManager {
             }
         }
     }
+    public async sendRatingRequest(clinicId: string, chatId: string, appointmentId: string, patientName: string) {
+        const bot = this.bots.get(clinicId);
+        if (bot) {
+            try {
+                await bot.telegram.sendMessage(chatId,
+                    `🌟 Assalomu alaykum, ${patientName}!\n\nBugun klinikamamizdan foydalanganingiz uchun rahmat. Iltimos, xizmat ko'rsatish sifatini 5 ballik tizimda baholang. Bu bizga yanada yaxshiroq bo'lishimizga yordam beradi.`,
+                    {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    { text: "⭐ 1", callback_data: `rate_1_${appointmentId}` },
+                                    { text: "⭐ 2", callback_data: `rate_2_${appointmentId}` },
+                                    { text: "⭐ 3", callback_data: `rate_3_${appointmentId}` },
+                                    { text: "⭐ 4", callback_data: `rate_4_${appointmentId}` },
+                                    { text: "⭐ 5", callback_data: `rate_5_${appointmentId}` }
+                                ]
+                            ]
+                        }
+                    }
+                );
+            } catch (e) {
+                console.error(`Failed to send rating request in clinic ${clinicId}:`, e);
+            }
+        }
+    }
+
     public async getBotUsername(clinicId: string): Promise<string | null> {
         // Return cached username if available
         if (this.botUsernames.has(clinicId)) {

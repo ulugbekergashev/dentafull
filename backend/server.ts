@@ -41,6 +41,7 @@ app.use((req, res, next) => {
         'http://localhost:5173',
         'http://localhost:3000',
         'https://dentafull-production.up.railway.app',
+        'https://dentafull.vercel.app',
         'https://dentacrm.uz',
         'http://dentacrm.uz',
         'https://www.dentacrm.uz'
@@ -394,6 +395,26 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
                 console.error('Failed to send no-show notification:', notifyError);
                 // Don't fail the request if notification fails, just log it
             }
+        }
+
+        // Check if status changed to 'Completed' and send rating request after 1 hour
+        if (status === 'Completed' && appointment.patient.telegramChatId && appointment.patient.clinic.botToken) {
+            const patientName = appointment.patient.firstName;
+            const clinicId = appointment.patient.clinicId;
+            const chatId = appointment.patient.telegramChatId;
+            const appointmentId = appointment.id;
+
+            console.log(`🕒 Scheduling rating request for ${patientName} in 1 hour.`);
+
+            // 1 hour = 3600000 ms
+            setTimeout(async () => {
+                try {
+                    await botManager.sendRatingRequest(clinicId, chatId, appointmentId, patientName);
+                    console.log(`✅ Rating request sent to ${patientName} after 1 hour.`);
+                } catch (err) {
+                    console.error('Failed to send delayed rating request:', err);
+                }
+            }, 3600000);
         }
 
         res.json(appointment);
