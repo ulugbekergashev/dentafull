@@ -69,14 +69,14 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
         try {
             const { token } = JSON.parse(storedAuth);
             if (token) {
-                headers['Authorization'] = `Bearer ${token} `;
+                headers['Authorization'] = `Bearer ${token}`;
             }
         } catch (e) {
             // Ignore parse error
         }
     }
 
-    const response = await fetchWithRetry(`${API_URL}${url} `, {
+    const response = await fetchWithRetry(`${API_URL}${url}`, {
         ...options,
         headers,
     });
@@ -92,7 +92,7 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API request failed: ${response.statusText} `);
+        throw new Error(errorData.error || `API request failed: ${response.statusText}`);
     }
     return response.json();
 }
@@ -100,7 +100,7 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
 export const api = {
     auth: {
         login: async (username: string, password: string) => {
-            const response = await fetch(`${API_URL} /auth/login`, {
+            const response = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),
@@ -111,7 +111,7 @@ export const api = {
     patients: {
         getAll: (clinicId: string) => {
             if (isDemoMode()) return Promise.resolve(DEMO_PATIENTS);
-            return fetchJson<Patient[]>(`/ patients ? clinicId = ${clinicId} `);
+            return fetchJson<Patient[]>(`/patients?clinicId=${clinicId}`);
         },
         create: (data: Omit<Patient, 'id'>) => {
             if (isDemoMode()) {
@@ -136,7 +136,7 @@ export const api = {
                 }
                 return Promise.reject('Patient not found');
             }
-            return fetchJson<Patient>(`/ patients / ${id} `, {
+            return fetchJson<Patient>(`/patients/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
@@ -151,13 +151,13 @@ export const api = {
                 }
                 return Promise.resolve({ success: true });
             }
-            return fetchJson<{ success: true }>(`/ patients / ${id} `, {
+            return fetchJson<{ success: true }>(`/patients/${id}`, {
                 method: 'DELETE',
             });
         },
         remindDebt: (id: string, amount?: number) => {
             if (isDemoMode()) return Promise.resolve({ success: true });
-            return fetchJson<{ success: true }>(`/ patients / ${id}/remind-debt`, {
+            return fetchJson<{ success: true }>(`/patients/${id}/remind-debt`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ amount }),
