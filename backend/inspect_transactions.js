@@ -3,10 +3,12 @@ const prisma = new PrismaClient();
 
 async function inspectRecentTransactions() {
     try {
+        const today = new Date().toISOString().split('T')[0];
         const transactions = await prisma.transaction.findMany({
-            take: 5,
-            orderBy: { date: 'desc' }, // or createdAt if available, but date is string.
-            // Better to order by id or something if date is just YYYY-MM-DD
+            where: {
+                date: today
+            },
+            orderBy: { date: 'desc' },
         });
 
         console.log('--- Recent 5 Transactions ---');

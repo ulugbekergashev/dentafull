@@ -75,6 +75,7 @@ export interface Appointment {
   reminderSent?: boolean;
   notes?: string;
   clinicId: string;
+  review?: Review;
 }
 
 export interface Transaction {
@@ -249,4 +250,13 @@ export interface TreatmentProcedure {
   doctorName: string;
   createdAt: string; // ISO DateTime
   completedAt?: string; // ISO DateTime
+}
+
+export interface Review {
+  id: string;
+  appointmentId: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+  appointment?: Appointment;
 }

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
-import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone } from 'lucide-react';
+import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review } from '../types';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 
 interface SettingsProps {
@@ -23,10 +23,11 @@ interface SettingsProps {
    onDeleteReceptionist?: (id: string) => void;
    currentClinic?: Clinic;
    plans?: SubscriptionPlan[];
+   reviews: Review[];
 }
 
 export const Settings: React.FC<SettingsProps> = ({
-   userRole, services, categories, doctors, receptionists = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans
+   userRole, services, categories, doctors, receptionists = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans, reviews
 }) => {
    const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot'>('services');
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -69,6 +70,16 @@ export const Settings: React.FC<SettingsProps> = ({
    const [botSaved, setBotSaved] = useState(false);
    const [botUsername, setBotUsername] = useState<string | null>(null);
 
+   const [botLogs, setBotLogs] = useState<any[]>([]);
+   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+   // Clinic overall rating calculation
+   const clinicAvgRating = useMemo(() => {
+      if (!reviews || reviews.length === 0) return 0;
+      const total = reviews.reduce((sum, r) => sum + r.rating, 0);
+      return total / reviews.length;
+   }, [reviews]);
+
    // Debug: Log botUsername changes
    React.useEffect(() => {
       console.log('🔍 botUsername state changed:', botUsername);
@@ -78,6 +89,7 @@ export const Settings: React.FC<SettingsProps> = ({
    React.useEffect(() => {
       setBotToken(currentClinic?.botToken || '');
    }, [currentClinic?.botToken]);
+
 
    // Fetch bot username when clinic has bot token
    React.useEffect(() => {
@@ -339,21 +351,45 @@ export const Settings: React.FC<SettingsProps> = ({
 
                {/* General Tab */}
                {activeTab === 'general' && (
-                  <Card className="p-6">
-                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">Umumiy Ma'lumotlar</h3>
-                     <form onSubmit={handleGeneralSave} className="space-y-4">
-                        <Input label="Klinika Nomi" value={generalForm.clinicName} onChange={e => setGeneralForm({ ...generalForm, clinicName: e.target.value })} />
-                        <Input label="Manzil" value={generalForm.address} onChange={e => setGeneralForm({ ...generalForm, address: e.target.value })} />
-                        <div className="grid grid-cols-2 gap-4">
-                           <Input label="Telefon" value={generalForm.phone} onChange={e => setGeneralForm({ ...generalForm, phone: e.target.value })} />
-                           <Input label="Email" value={generalForm.email} onChange={e => setGeneralForm({ ...generalForm, email: e.target.value })} />
+                  <div className="space-y-6">
+                     <Card className="p-6">
+                        <div className="flex items-center justify-between">
+                           <div>
+                              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Klinika Reytingi</p>
+                              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                                 {clinicAvgRating > 0 ? clinicAvgRating.toFixed(1) : '0.0'}
+                              </h3>
+                           </div>
+                           <div className="p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-full">
+                              <Star className="w-6 h-6 text-yellow-500 fill-current" />
+                           </div>
                         </div>
-                        <div className="pt-4 flex items-center gap-4">
-                           <Button type="submit">Saqlash</Button>
-                           {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> Saqlandi!</span>}
+                        <div className="mt-4 flex items-center text-sm text-gray-500">
+                           <span className="font-medium text-yellow-600 mr-2 flex items-center">
+                              {[...Array(5)].map((_, i) => (
+                                 <Star key={i} className={`w-3 h-3 ${i < Math.round(clinicAvgRating) ? 'fill-current' : 'text-gray-200'}`} />
+                              ))}
+                           </span>
+                           {reviews.length} ta fikr
                         </div>
-                     </form>
-                  </Card>
+                     </Card>
+
+                     <Card className="p-6">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">Umumiy Ma'lumotlar</h3>
+                        <form onSubmit={handleGeneralSave} className="space-y-4">
+                           <Input label="Klinika Nomi" value={generalForm.clinicName} onChange={e => setGeneralForm({ ...generalForm, clinicName: e.target.value })} />
+                           <Input label="Manzil" value={generalForm.address} onChange={e => setGeneralForm({ ...generalForm, address: e.target.value })} />
+                           <div className="grid grid-cols-2 gap-4">
+                              <Input label="Telefon" value={generalForm.phone} onChange={e => setGeneralForm({ ...generalForm, phone: e.target.value })} />
+                              <Input label="Email" value={generalForm.email} onChange={e => setGeneralForm({ ...generalForm, email: e.target.value })} />
+                           </div>
+                           <div className="pt-4 flex items-center gap-4">
+                              <Button type="submit">Saqlash</Button>
+                              {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> Saqlandi!</span>}
+                           </div>
+                        </form>
+                     </Card>
+                  </div>
                )}
 
                {/* Services Tab */}
@@ -660,6 +696,7 @@ export const Settings: React.FC<SettingsProps> = ({
                      )}
                   </Card>
                )}
+
             </div>
          </div>
 

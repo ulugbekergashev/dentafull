@@ -102,6 +102,41 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
     });
 };
 
+// Bot Logs
+app.get('/api/clinics/:id/bot-logs', authenticateToken, async (req, res) => {
+    try {
+        const logs = await prisma.telegramLog.findMany({
+            where: { clinicId: req.params.id },
+            include: { patient: true },
+            orderBy: { sentAt: 'desc' },
+            take: 100
+        });
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch bot logs' });
+    }
+});
+
+// Patient Reviews
+app.get('/api/clinics/:id/reviews', authenticateToken, async (req, res) => {
+    try {
+        const reviews = await prisma.review.findMany({
+            where: {
+                appointment: { clinicId: req.params.id }
+            },
+            include: {
+                appointment: {
+                    include: { patient: true, doctor: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(reviews);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch reviews' });
+    }
+});
+
 // --- Authentication ---
 app.post('/api/auth/login', async (req, res) => {
     try {
@@ -308,6 +343,7 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
 
         const appointments = await prisma.appointment.findMany({
             where: { clinicId: clinicId as string },
+            include: { review: true },
             orderBy: { date: 'asc' }
         });
         res.json(appointments);

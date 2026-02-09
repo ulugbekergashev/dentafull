@@ -172,23 +172,46 @@ class BotManager {
         }
     }
 
-    public async notifyClinicUser(clinicId: string, chatId: string, message: string) {
+    public async notifyClinicUser(clinicId: string, chatId: string, message: string, patientId?: string, type: string = 'Manual') {
         const bot = this.bots.get(clinicId);
         if (bot) {
             try {
                 // Send message without inline keyboard (tel: URLs not supported by Telegram)
                 await bot.telegram.sendMessage(chatId, message);
-            } catch (e) {
+
+                // Log success
+                await prisma.telegramLog.create({
+                    data: {
+                        clinicId,
+                        patientId,
+                        type,
+                        status: 'Sent',
+                        message
+                    }
+                });
+            } catch (e: any) {
                 console.error(`Failed to send message in clinic ${clinicId}:`, e);
+                // Log failure
+                await prisma.telegramLog.create({
+                    data: {
+                        clinicId,
+                        patientId,
+                        type,
+                        status: 'Failed',
+                        message,
+                        error: e.message
+                    }
+                });
             }
         }
     }
-    public async sendRatingRequest(clinicId: string, chatId: string, appointmentId: string, patientName: string) {
+    public async sendRatingRequest(clinicId: string, chatId: string, appointmentId: string, patientName: string, patientId?: string) {
         const bot = this.bots.get(clinicId);
+        const message = `🌟 Assalomu alaykum, ${patientName}!\n\nBugun klinikamamizdan foydalanganingiz uchun rahmat. Iltimos, xizmat ko'rsatish sifatini 5 ballik tizimda baholang. Bu bizga yanada yaxshiroq bo'lishimizga yordam beradi.`;
+
         if (bot) {
             try {
-                await bot.telegram.sendMessage(chatId,
-                    `🌟 Assalomu alaykum, ${patientName}!\n\nBugun klinikamamizdan foydalanganingiz uchun rahmat. Iltimos, xizmat ko'rsatish sifatini 5 ballik tizimda baholang. Bu bizga yanada yaxshiroq bo'lishimizga yordam beradi.`,
+                await bot.telegram.sendMessage(chatId, message,
                     {
                         reply_markup: {
                             inline_keyboard: [
@@ -203,8 +226,30 @@ class BotManager {
                         }
                     }
                 );
-            } catch (e) {
+
+                // Log success
+                await prisma.telegramLog.create({
+                    data: {
+                        clinicId,
+                        patientId,
+                        type: 'Rating',
+                        status: 'Sent',
+                        message: 'Rating Request sent'
+                    }
+                });
+            } catch (e: any) {
                 console.error(`Failed to send rating request in clinic ${clinicId}:`, e);
+                // Log failure
+                await prisma.telegramLog.create({
+                    data: {
+                        clinicId,
+                        patientId,
+                        type: 'Rating',
+                        status: 'Failed',
+                        message: 'Rating Request failed',
+                        error: e.message
+                    }
+                });
             }
         }
     }

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, MessageSquare
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, MessageSquare, Star
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
@@ -76,6 +76,7 @@ const App: React.FC = () => {
   const [receptionists, setReceptionists] = useState<Receptionist[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
 
   // Super Admin Data Store
   const [clinics, setClinics] = useState<Clinic[]>([]);
@@ -155,7 +156,7 @@ const App: React.FC = () => {
           setClinics(clns);
           setPlans(plns);
         } else if (clinicId) {
-          const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems, cats] = await Promise.all([
+          const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems, cats, revs] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
@@ -165,7 +166,8 @@ const App: React.FC = () => {
             api.clinics.getAll(),
             api.plans.getAll(),
             api.inventory.getAll(clinicId),
-            api.categories.getAll(clinicId)
+            api.categories.getAll(clinicId),
+            api.reviews.getAll(clinicId)
           ]);
           setPatients(pts);
           setAppointments(appts);
@@ -178,6 +180,7 @@ const App: React.FC = () => {
           setInventoryItems(invItems);
           // @ts-ignore
           setCategories(cats);
+          setReviews(revs || []);
         }
       } catch (error: any) {
         console.error('Failed to load data:', error);
@@ -250,7 +253,7 @@ const App: React.FC = () => {
         setClinics(clns);
         setPlans(plns);
       } else if (clinicId) {
-        const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems, cats] = await Promise.all([
+        const [pts, appts, txs, svcs, docs, recs, clns, plns, invItems, cats, revs] = await Promise.all([
           api.patients.getAll(clinicId),
           api.appointments.getAll(clinicId),
           api.transactions.getAll(clinicId),
@@ -260,7 +263,8 @@ const App: React.FC = () => {
           api.clinics.getAll(),
           api.plans.getAll(),
           api.inventory.getAll(clinicId),
-          api.categories.getAll(clinicId)
+          api.categories.getAll(clinicId),
+          api.reviews.getAll(clinicId)
         ]);
         setPatients(pts);
         setAppointments(appts);
@@ -272,6 +276,8 @@ const App: React.FC = () => {
         setPlans(plns);
         setInventoryItems(invItems);
         setCategories(cats);
+        // @ts-ignore
+        setReviews(revs || []);
       }
       addToast('success', 'Ma\'lumotlar muvaffaqiyatli yuklandi!');
     } catch (error) {
@@ -312,7 +318,10 @@ const App: React.FC = () => {
       }
 
       const newPatient = await api.patients.create({ ...patient, clinicId: activeClinicId });
-      setPatients(prev => [newPatient, ...prev]);
+      setPatients(prev => {
+        if (prev.find(p => p.id === newPatient.id)) return prev;
+        return [newPatient, ...prev];
+      });
       addToast('success', `Bemor ${patient.firstName} muvaffaqiyatli qo'shildi!`);
     } catch (e: any) {
       console.error('Add patient error:', e);
@@ -379,7 +388,10 @@ const App: React.FC = () => {
   const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
     try {
       const newTx = await api.transactions.create({ ...tx, clinicId });
-      setTransactions(prev => [newTx, ...prev]);
+      setTransactions(prev => {
+        if (prev.find(t => t.id === newTx.id)) return prev;
+        return [newTx, ...prev];
+      });
       addToast('success', 'To\'lov qabul qilindi.');
     } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
   };
@@ -404,7 +416,10 @@ const App: React.FC = () => {
   const addService = async (service: Omit<Service, 'id' | 'clinicId'>) => {
     try {
       const newService = await api.services.create({ ...service, duration: service.duration || 60, clinicId });
-      setServices(prev => [...prev, newService]);
+      setServices(prev => {
+        if (prev.find(s => s.id === newService.id)) return prev;
+        return [...prev, newService];
+      });
       addToast('success', 'Yangi xizmat qo\'shildi.');
     } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
   };
@@ -426,7 +441,10 @@ const App: React.FC = () => {
   const addDoctor = async (doctor: Omit<Doctor, 'id'>) => {
     try {
       const newDoc = await api.doctors.create({ ...doctor, clinicId });
-      setDoctors(prev => [...prev, newDoc]);
+      setDoctors(prev => {
+        if (prev.find(d => d.id === newDoc.id)) return prev;
+        return [...prev, newDoc];
+      });
       addToast('success', 'Yangi shifokor qo\'shildi.');
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
@@ -575,7 +593,7 @@ const App: React.FC = () => {
     // Standard Clinic View
     switch (currentRoute) {
       case Route.DASHBOARD:
-        return <Dashboard patients={patients} appointments={appointments} transactions={transactions} userRole={userRole} doctorId={doctorId} />;
+        return <Dashboard patients={patients} appointments={appointments} transactions={transactions} reviews={reviews} userRole={userRole} doctorId={doctorId} />;
       case Route.PATIENTS:
         return <Patients patients={patients} onPatientClick={handlePatientClick} onAddPatient={addPatient} onDeletePatient={deletePatient} />;
       case Route.PATIENT_DETAILS:
@@ -622,6 +640,7 @@ const App: React.FC = () => {
           appointments={appointments}
           services={services}
           transactions={transactions}
+          reviews={reviews}
         />;
       case Route.FINANCE:
         return <Finance
@@ -653,6 +672,7 @@ const App: React.FC = () => {
           onDeleteReceptionist={deleteReceptionist}
           currentClinic={clinics.find(c => c.id === clinicId)}
           plans={plans}
+          reviews={reviews}
         />;
       case Route.INVENTORY:
         return <Inventory

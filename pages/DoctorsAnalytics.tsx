@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Doctor, Appointment, Service, Transaction } from '../types';
+import { Doctor, Appointment, Service, Transaction, Review } from '../types';
 import { Card } from '../components/Common';
-import { DollarSign, Calendar, Award, Users } from 'lucide-react';
+import { DollarSign, Calendar, Award, Users, Star } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { calculateDoctorSalary } from '../utils/financialCalculations';
 
@@ -10,11 +10,12 @@ interface DoctorsAnalyticsProps {
     appointments: Appointment[];
     services: Service[];
     transactions: Transaction[];
+    reviews: Review[];
 }
 
 type DateRange = 'month' | '3months' | '6months' | 'year' | 'all' | 'custom';
 
-export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions }) => {
+export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions, reviews }) => {
     const [dateRange, setDateRange] = useState<DateRange>('all');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
@@ -139,6 +140,16 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
             // Unique Patients
             const uniquePatients = new Set(doctorAppts.map(a => a.patientId)).size;
 
+            // Calculate Average Rating
+            const doctorReviews = reviews.filter(r => {
+                // Since Review has appointmentId, we can match through filteredAppointments
+                const appt = appointments.find(a => a.id === r.appointmentId);
+                return appt?.doctorId === doctor.id;
+            });
+            const avgRating = doctorReviews.length > 0
+                ? doctorReviews.reduce((acc, r) => acc + r.rating, 0) / doctorReviews.length
+                : 0;
+
             // Top Service
             const serviceCounts: Record<string, number> = {};
             completedAppts.forEach(appt => {
@@ -180,6 +191,8 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 topService,
                 topServiceCount: maxCount,
                 avgRevenue,
+                avgRating,
+                reviewCount: doctorReviews.length,
                 busiestDay: busiestDayName,
                 name: `Dr. ${doctor.lastName}` // For charts
             };
@@ -417,6 +430,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                 <th className="p-4 font-medium text-right">Jami Tushum</th>
                                 <th className="p-4 font-medium text-right">Shifokor Ulushi</th>
                                 <th className="p-4 font-medium text-right">O'rtacha</th>
+                                <th className="p-4 font-medium text-center">Baho</th>
                                 <th className="p-4 font-medium text-center">Eng Band Kun</th>
                                 <th className="p-4 font-medium text-center">Samaradorlik</th>
                             </tr>
@@ -456,6 +470,19 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                     </td>
                                     <td className="p-4 text-right text-sm text-gray-700 dark:text-gray-300">
                                         {Math.round(doc.avgRevenue).toLocaleString()} UZS
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        {doc.avgRating > 0 ? (
+                                            <div className="flex flex-col items-center">
+                                                <div className="flex items-center gap-1 text-yellow-500">
+                                                    <Star className="w-4 h-4 fill-current" />
+                                                    <span className="font-bold text-gray-900 dark:text-white">{doc.avgRating.toFixed(1)}</span>
+                                                </div>
+                                                <span className="text-[10px] text-gray-400">({doc.reviewCount})</span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-gray-400">-</span>
+                                        )}
                                     </td>
                                     <td className="p-4 text-center">
                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">

@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Badge, Input } from '../components/Common';
 import {
-  Users, Calendar, DollarSign, TrendingUp,
-  AlertCircle, CheckCircle, Clock
+  Users, Calendar, DollarSign, TrendingUp, TrendingDown,
+  CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -14,11 +14,12 @@ interface DashboardProps {
   patients: Patient[];
   appointments: Appointment[];
   transactions: Transaction[];
+  reviews: any[];
   userRole: UserRole;
   doctorId: string;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, userRole, doctorId }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -128,6 +129,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             {userRole === UserRole.DOCTOR ? 'Shaxsiy statistika' : 'Klinika faoliyati bo\'yicha umumiy hisobot'}
           </p>
         </div>
+
         <div className="flex gap-2 w-full sm:w-auto">
           <Input
             type="date"
@@ -221,7 +223,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               </p>
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                 {periodAppointmentsCount > 0
-                  ? `${Math.round((filteredAppointments.filter(a => a.status === 'Completed').length / periodAppointmentsCount) * 100)}%`
+                  ? `${Math.round((filteredAppointments.filter(a => a.status === 'Completed').length / periodAppointmentsCount) * 100)}% `
                   : '0%'
                 }
               </h3>
@@ -284,7 +286,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   stroke="none"
                 >
                   {SERVICE_DATA.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell key={`cell - ${index} `} fill={entry.color} />
                   ))}
                 </Pie>
                 <Legend verticalAlign="bottom" height={36} iconType="circle" />
@@ -298,12 +300,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </Card>
       </div>
 
-      {/* Activity & List */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Qabullar Ro'yxati (Tanlangan davr)</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Qabullar Ro'yxati</h3>
           </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -313,6 +315,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Shifokor</th>
                   <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Turi</th>
                   <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                  <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Baho</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -323,10 +326,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     <td className="py-4 text-gray-500">{app.doctorName}</td>
                     <td className="py-4 text-gray-500">{app.type}</td>
                     <td className="py-4"><Badge status={app.status} /></td>
+                    <td className="py-4">
+                      {app.review ? (
+                        <div className="flex items-center gap-0.5 text-yellow-500">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className={`w-3 h-3 ${i < app.review.rating ? 'fill-current' : 'text-gray-200'}`} />
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">Baholanmagan</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {filteredAppointments.length === 0 && (
-                  <tr><td colSpan={5} className="text-center py-4 text-gray-500">Qabullar topilmadi</td></tr>
+                  <tr>
+                    <td colSpan={6} className="text-center py-4 text-gray-500">Qabullar topilmadi</td>
+                  </tr>
                 )}
               </tbody>
             </table>
@@ -419,9 +435,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 </div>
               ));
             })()}
-          </div>
-        </Card>
-      </div>
+          </div >
+        </Card >
+      </div >
     </div>
   );
 };

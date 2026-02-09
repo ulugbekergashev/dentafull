@@ -65,6 +65,7 @@ model Patient {
   teeth          ToothData[]
   transactions   Transaction[]
   inventoryLogs  InventoryLog[]
+  telegramLogs   TelegramLog[]
 }
 
 model ToothData {
@@ -108,7 +109,7 @@ model Appointment {
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])
   visits      Visit[]  // New relation
-  reviews     Review[] // New relation
+  review      Review?  // Changed to 1-to-1
   
   @@unique([patientId, date], name: "unique_patient_date")
   @@index([date])
@@ -241,6 +242,7 @@ model Clinic {
   serviceCategories ServiceCategory[]
   diagnoses     PatientDiagnosis[]
   inventoryItems InventoryItem[]
+  telegramLogs  TelegramLog[]
 
   @@index([botToken]) // Optimize bot startup
 }
@@ -314,4 +316,20 @@ model Review {
   rating        Int         // 1-5
   comment       String?
   createdAt     DateTime    @default(now())
+}
+
+model TelegramLog {
+  id        String   @id @default(uuid())
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id])
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id])
+  type      String   // 'Reminder' | 'Rating' | 'Manual' | 'Debt'
+  status    String   // 'Sent' | 'Failed'
+  message   String?
+  error     String?
+  sentAt    DateTime @default(now())
+
+  @@index([clinicId])
+  @@index([patientId])
 }

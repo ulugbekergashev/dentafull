@@ -102,6 +102,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false);
    const isSubmittingRef = React.useRef(false);
 
+   // Manual Payment Selection State
+   const [manualPaymentCategoryId, setManualPaymentCategoryId] = useState<string>('');
+   const [manualPaymentServiceId, setManualPaymentServiceId] = useState<number | null>(null);
+
    // Parse procedures from appointment notes
    const pastProcedures = React.useMemo(() => {
       const results: { id: string; serviceName: string; date: string; toothNumber?: number }[] = [];
@@ -489,7 +493,22 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
       }
 
+      setManualPaymentCategoryId('');
+      setManualPaymentServiceId(null);
+
       setIsPaymentModalOpen(true);
+   };
+
+   const handleManualServiceChange = (serviceId: number) => {
+      setManualPaymentServiceId(serviceId);
+      const service = services.find(s => s.id === serviceId);
+      if (service) {
+         setPaymentData({
+            ...paymentData,
+            service: service.name,
+            paidAmount: service.price.toString()
+         });
+      }
    };
 
    const handlePaymentSave = async (e: React.FormEvent) => {
@@ -1149,7 +1168,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <Card className="overflow-hidden">
                         <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                            <div><h3 className="text-lg font-bold text-gray-900 dark:text-white">To'lovlar Tarixi</h3><p className="text-sm text-gray-500">Barcha amalga oshirilgan to'lovlar</p></div>
-                           <div className="text-right"><p className="text-sm text-gray-500">Jami To'landi</p><p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{patientTransactions.filter(t => t.status === 'Paid').reduce((acc, t) => acc + t.amount, 0).toLocaleString()} UZS</p></div>
+                           <div className="flex items-center gap-6">
+                              <div className="text-right"><p className="text-sm text-gray-500">Jami To'landi</p><p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{patientTransactions.filter(t => t.status === 'Paid').reduce((acc, t) => acc + t.amount, 0).toLocaleString()} UZS</p></div>
+                              <Button size="sm" onClick={handlePaymentModalOpen}>+ To'lov</Button>
+                           </div>
                         </div>
                         <table className="w-full text-left text-sm">
                            <thead className="bg-gray-50 dark:bg-gray-800">
@@ -1298,27 +1320,64 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <div>
                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📋 Bajarilgan Xizmatlar</label>
                      <div className="border-2 border-blue-100 dark:border-blue-800 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-4 space-y-0.5">
-                        {paymentData.service && paymentData.service.split('||').filter(Boolean).map((item, idx) => {
-                           const parts = item.split('|');
-                           if (parts[0] === 'TOTAL') {
-                              return (
-                                 <div key={idx} className="pt-3 mt-3 border-t-2 border-blue-300 dark:border-blue-700">
-                                    <div className="flex justify-between items-center bg-blue-600 dark:bg-blue-700 text-white px-4 py-2.5 rounded-md font-bold text-base">
-                                       <span className="flex items-center gap-2">💰 JAMI:</span>
-                                       <span className="text-lg">{parts[1]} UZS</span>
+                        {paymentData.service && paymentData.service.includes('|') ? (
+                           paymentData.service.split('||').filter(Boolean).map((item, idx) => {
+                              const parts = item.split('|');
+                              if (parts[0] === 'TOTAL') {
+                                 return (
+                                    <div key={idx} className="pt-3 mt-3 border-t-2 border-blue-300 dark:border-blue-700">
+                                       <div className="flex justify-between items-center bg-blue-600 dark:bg-blue-700 text-white px-4 py-2.5 rounded-md font-bold text-base">
+                                          <span className="flex items-center gap-2">💰 JAMI:</span>
+                                          <span className="text-lg">{parts[1]} UZS</span>
+                                       </div>
                                     </div>
+                                 );
+                              }
+                              return (
+                                 <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-800 px-3 py-2 rounded border border-blue-100 dark:border-gray-700">
+                                    <span className="text-gray-700 dark:text-gray-200 font-medium">{parts[0]}</span>
+                                    <span className="text-blue-600 dark:text-blue-400 font-semibold">{parts[1]} UZS</span>
                                  </div>
                               );
-                           }
-                           return (
-                              <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-800 px-3 py-2 rounded border border-blue-100 dark:border-gray-700">
-                                 <span className="text-gray-700 dark:text-gray-200 font-medium">{parts[0]}</span>
-                                 <span className="text-blue-600 dark:text-blue-400 font-semibold">{parts[1]} UZS</span>
-                              </div>
-                           );
-                        })}
-                        {!paymentData.service && (
-                           <div className="text-center text-gray-400 py-8">Xizmatlar ro'yxati</div>
+                           })
+                        ) : (
+                           <div className="space-y-4">
+                              {categories && categories.length > 0 && (
+                                 <Select
+                                    label="Kategoriya"
+                                    value={manualPaymentCategoryId}
+                                    onChange={(e) => {
+                                       setManualPaymentCategoryId(e.target.value);
+                                       setManualPaymentServiceId(null);
+                                       setPaymentData({ ...paymentData, service: '', paidAmount: '' });
+                                    }}
+                                 >
+                                    <option value="">Barcha kategoriyalar</option>
+                                    {categories.map(cat => (
+                                       <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                    ))}
+                                 </Select>
+                              )}
+
+                              <Select
+                                 label="Xizmat"
+                                 value={manualPaymentServiceId?.toString() || ''}
+                                 onChange={(e) => handleManualServiceChange(parseInt(e.target.value))}
+                              >
+                                 <option value="">Xizmatni tanlang...</option>
+                                 {(services || [])
+                                    .filter(s => {
+                                       if (!manualPaymentCategoryId) return true;
+                                       const serviceCatId = (s as any).categoryId?.toString();
+                                       return serviceCatId === manualPaymentCategoryId.toString();
+                                    })
+                                    .map(service => (
+                                       <option key={service.id} value={service.id}>
+                                          {service.name} - {service.price.toLocaleString()} UZS
+                                       </option>
+                                    ))}
+                              </Select>
+                           </div>
                         )}
                      </div>
                   </div>

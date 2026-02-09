@@ -636,5 +636,17 @@ export const api = {
             if (isDemoMode()) return Promise.resolve([]); // Simple empty analytics for demo
             return fetchJson<any[]>(`/inventory/analytics?clinicId=${clinicId}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`);
         },
+    },
+    bot: {
+        getLogs: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([]);
+            return fetchJson<any[]>(`/clinics/${clinicId}/bot-logs`);
+        }
+    },
+    reviews: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([]);
+            return fetchJson<any[]>(`/clinics/${clinicId}/reviews`);
+        }
     }
 };
