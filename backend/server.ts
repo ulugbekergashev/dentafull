@@ -358,8 +358,22 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
         }
 
         // 2. If no existing appointment, create a new one
+        const { patientName, doctorId, doctorName, type, duration, status, reminderSent } = req.body;
         const appointment = await prisma.appointment.create({
-            data: req.body
+            data: {
+                patientId: patientId,
+                patientName,
+                doctorId,
+                doctorName,
+                type,
+                date: date,
+                time: time,
+                duration,
+                status,
+                reminderSent,
+                notes: notes,
+                clinicId: clinicId
+            }
         });
         res.json(appointment);
     } catch (error) {
@@ -370,12 +384,26 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
 
 app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
     try {
-        const { status } = req.body;
+        // Sanitize body to only include valid Appointment fields
+        const { patientId, patientName, doctorId, doctorName, type, date, time, duration, status: s, reminderSent, notes, clinicId } = req.body;
+        const updateData: any = {};
+        if (patientId !== undefined) updateData.patientId = patientId;
+        if (patientName !== undefined) updateData.patientName = patientName;
+        if (doctorId !== undefined) updateData.doctorId = doctorId;
+        if (doctorName !== undefined) updateData.doctorName = doctorName;
+        if (type !== undefined) updateData.type = type;
+        if (date !== undefined) updateData.date = date;
+        if (time !== undefined) updateData.time = time;
+        if (duration !== undefined) updateData.duration = duration;
+        if (s !== undefined) updateData.status = s;
+        if (reminderSent !== undefined) updateData.reminderSent = reminderSent;
+        if (notes !== undefined) updateData.notes = notes;
+        if (clinicId !== undefined) updateData.clinicId = clinicId;
 
         // Update appointment and fetch necessary data for notification
         const appointment = await prisma.appointment.update({
             where: { id: req.params.id },
-            data: req.body,
+            data: updateData,
             include: {
                 patient: {
                     include: { clinic: true }

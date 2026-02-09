@@ -719,8 +719,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             duration: 60,
             status: 'Completed',
             notes: `Bajarilgan ishlar:\n` + proceduresText,
-            clinicId: patient.clinicId,
-            categoryId: procedures[0]?.categoryId || null // Use category from first procedure if available
+            clinicId: patient.clinicId
          });
          alert("Qabul tarixi saqlandi!");
       } else {
