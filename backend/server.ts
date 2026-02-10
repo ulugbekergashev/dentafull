@@ -1120,13 +1120,16 @@ app.put('/api/plans/:id', authenticateToken, async (req, res) => {
 // --- Bot Settings ---
 app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
     try {
-        const { botToken } = req.body;
+        const { botToken, ownerPhone } = req.body;
         const clinicId = req.params.id;
 
-        // Update clinic with new bot token
+        // Update clinic with new bot token and owner phone
         const clinic = await prisma.clinic.update({
             where: { id: clinicId },
-            data: { botToken: botToken || null }
+            data: {
+                botToken: botToken !== undefined ? (botToken || null) : undefined,
+                ownerPhone: ownerPhone !== undefined ? (ownerPhone || null) : undefined
+            } as any
         });
 
         // Restart bot if token is provided, otherwise remove it

@@ -106,7 +106,7 @@ class BotManager {
                                 data: { telegramChatId: chatId }
                             } as any);
                             ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz klinika egasi sifatida muvaffaqiyatli ulandingiz. Endi siz har kuni soat 22:00 da kunlik hisobotlarni olasiz.`);
-                            return;
+                            // User linked as owner, continue to check if they are also a patient
                         }
                     }
 
