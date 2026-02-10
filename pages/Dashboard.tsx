@@ -10,6 +10,8 @@ import {
 } from 'recharts';
 import { Patient, Appointment, Transaction, UserRole } from '../types';
 
+import { getCurrentMonthRange } from '../utils/dateUtils';
+
 interface DashboardProps {
   patients: Patient[];
   appointments: Appointment[];
@@ -20,8 +22,9 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId }) => {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
+  const [startDate, setStartDate] = useState(defaultStart);
+  const [endDate, setEndDate] = useState(defaultEnd);
 
   // Filter data for doctors - only show their appointments and transactions
   const filteredAppointmentsByDoctor = useMemo(() => {

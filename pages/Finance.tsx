@@ -19,6 +19,7 @@ interface FinanceProps {
 }
 
 import { Doctor } from '../types';
+import { getCurrentMonthRange } from '../utils/dateUtils';
 
 export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -27,8 +28,9 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const [remindedDebtors, setRemindedDebtors] = useState<Set<string>>(new Set());
 
   // Date Range State
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
+  const [startDate, setStartDate] = useState(defaultStart);
+  const [endDate, setEndDate] = useState(defaultEnd);
 
   // Filter data for doctors - only show their appointments and transactions
   const filteredAppointmentsByDoctor = userRole === UserRole.DOCTOR && doctorId

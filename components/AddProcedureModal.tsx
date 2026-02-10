@@ -112,11 +112,11 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
 
     return (
         <Modal isOpen={isOpen} onClose={handleClose} title="Protsedura Qo'shish" className="max-w-6xl">
-            <div className="flex flex-col lg:flex-row gap-6 h-[80vh]">
+            <div className="flex flex-col lg:flex-row gap-6 min-h-[60vh] lg:h-[80vh]">
 
                 {/* Left Side: Teeth Chart */}
-                <div className="lg:w-1/2 bg-gray-50 dark:bg-gray-800 rounded-xl p-4 overflow-y-auto">
-                    <h4 className="text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2">
+                <div className="lg:w-1/2 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-y-auto min-h-[400px]">
+                    <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2">
                         1. Tishni tanlang
                     </h4>
                     <TeethChart
@@ -133,11 +133,11 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                 </div>
 
                 {/* Right Side: Actions & Queue */}
-                <div className="lg:w-1/2 flex flex-col h-full">
+                <div className="lg:w-1/2 flex flex-col h-auto lg:h-full">
 
                     {/* Input Area */}
-                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm mb-4 shrink-0">
-                        <h4 className="text-sm font-bold text-gray-500 uppercase mb-4 flex items-center justify-between">
+                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm mb-4 shrink-0">
+                        <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 flex items-center justify-between">
                             <span>2. Xizmat qo'shish {selectedTooth ? `(#${selectedTooth})` : '(Umumiy)'}</span>
                             {selectedTooth && <button onClick={() => setSelectedTooth(null)} className="text-xs text-blue-500 hover:underline">Umumiyga o'tish</button>}
                         </h4>

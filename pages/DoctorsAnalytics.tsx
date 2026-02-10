@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Doctor, Appointment, Service, Transaction, Review } from '../types';
-import { Card } from '../components/Common';
+import { Card, Input } from '../components/Common';
 import { DollarSign, Calendar, Award, Users, Star } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { calculateDoctorSalary } from '../utils/financialCalculations';
@@ -15,10 +15,13 @@ interface DoctorsAnalyticsProps {
 
 type DateRange = 'month' | '3months' | '6months' | 'year' | 'all' | 'custom';
 
+import { getCurrentMonthRange } from '../utils/dateUtils';
+
 export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions, reviews }) => {
-    const [dateRange, setDateRange] = useState<DateRange>('all');
-    const [customStartDate, setCustomStartDate] = useState('');
-    const [customEndDate, setCustomEndDate] = useState('');
+    const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
+    const [dateRange, setDateRange] = useState<DateRange>('month');
+    const [customStartDate, setCustomStartDate] = useState(defaultStart);
+    const [customEndDate, setCustomEndDate] = useState(defaultEnd);
 
     // Detect if clinic has only 1 doctor (individual plan)
     const hasSingleDoctor = doctors.length === 1;
@@ -28,18 +31,15 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
         if (dateRange === 'all') return appointments;
 
         const now = new Date();
-        let startDate = new Date();
+        let startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         let endDate = now;
 
         if (dateRange === 'custom') {
             if (!customStartDate || !customEndDate) return appointments;
             startDate = new Date(customStartDate);
             endDate = new Date(customEndDate);
-        } else {
+        } else if (dateRange !== 'month') {
             switch (dateRange) {
-                case 'month':
-                    startDate.setMonth(now.getMonth() - 1);
-                    break;
                 case '3months':
                     startDate.setMonth(now.getMonth() - 3);
                     break;
@@ -63,18 +63,15 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
         if (dateRange === 'all') return transactions;
 
         const now = new Date();
-        let startDate = new Date();
+        let startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         let endDate = now;
 
         if (dateRange === 'custom') {
             if (!customStartDate || !customEndDate) return transactions;
             startDate = new Date(customStartDate);
             endDate = new Date(customEndDate);
-        } else {
+        } else if (dateRange !== 'month') {
             switch (dateRange) {
-                case 'month':
-                    startDate.setMonth(now.getMonth() - 1);
-                    break;
                 case '3months':
                     startDate.setMonth(now.getMonth() - 3);
                     break;
@@ -222,36 +219,26 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Shifokorlar Statistikasi</h1>
 
                 <div className="flex gap-3">
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                            Boshlanish sanasi
-                        </label>
-                        <input
-                            type="date"
-                            value={customStartDate}
-                            onChange={(e) => {
-                                setCustomStartDate(e.target.value);
-                                setDateRange('custom');
-                            }}
-                            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="дд.мм.гггг"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                            Tugash sanasi
-                        </label>
-                        <input
-                            type="date"
-                            value={customEndDate}
-                            onChange={(e) => {
-                                setCustomEndDate(e.target.value);
-                                setDateRange('custom');
-                            }}
-                            className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="дд.мм.гггг"
-                        />
-                    </div>
+                    <Input
+                        type="date"
+                        label="Boshlanish sanasi"
+                        value={customStartDate}
+                        onChange={(e) => {
+                            setCustomStartDate(e.target.value);
+                            setDateRange('custom');
+                        }}
+                        containerClassName="w-40"
+                    />
+                    <Input
+                        type="date"
+                        label="Tugash sanasi"
+                        value={customEndDate}
+                        onChange={(e) => {
+                            setCustomEndDate(e.target.value);
+                            setDateRange('custom');
+                        }}
+                        containerClassName="w-40"
+                    />
                 </div>
             </div>
 

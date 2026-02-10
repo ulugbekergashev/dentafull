@@ -19,8 +19,24 @@ if (typeof window !== 'undefined') {
 
 export function usePWAInstall() {
     const [isInstallable, setIsInstallable] = useState(!!deferredPrompt);
+    const [isIOS, setIsIOS] = useState(false);
+    const [isStandalone, setIsStandalone] = useState(false);
 
     useEffect(() => {
+        // iOS detection
+        const checkIOS = () => {
+            const userAgent = window.navigator.userAgent.toLowerCase();
+            return /iphone|ipad|ipod/.test(userAgent);
+        };
+
+        // Standalone detection
+        const checkStandalone = () => {
+            return (window.matchMedia('(display-mode: standalone)').matches) || (window.navigator as any).standalone;
+        };
+
+        setIsIOS(checkIOS());
+        setIsStandalone(checkStandalone());
+
         // Check initial state
         if (deferredPrompt) {
             setIsInstallable(true);
@@ -69,5 +85,5 @@ export function usePWAInstall() {
         setIsInstallable(false);
     };
 
-    return { isInstallable, install };
+    return { isInstallable, install, isIOS, isStandalone };
 }

@@ -51,6 +51,8 @@ const SUPER_ADMIN_NAVIGATION: NavItem[] = [
   // Reuse settings? Or make specific settings. For now just Dashboard which contains tabs.
 ];
 
+import { BottomNav } from './components/BottomNav';
+
 const App: React.FC = () => {
   // --- Global State ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -879,10 +881,18 @@ const App: React.FC = () => {
             </span>
           </div>
         </header>
-        <div className="flex-1 p-4 sm:p-8 overflow-x-hidden">
+        <div className="flex-1 p-4 sm:p-8 overflow-x-hidden pb-24 lg:pb-8">
           {renderContent()}
         </div>
       </main>
+
+      <BottomNav
+        currentRoute={currentRoute}
+        onNavigate={(route) => handleNavigate(route)}
+        userRole={userRole}
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+      />
 
       {isSidebarOpen && (
         <div

@@ -1095,44 +1095,46 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Qabullar Tarixi</h3>
                            <Button size="sm" onClick={openApptModal}>+ Yangi</Button>
                         </div>
-                        <table className="w-full text-left text-sm">
-                           <thead className="bg-gray-50 dark:bg-gray-800">
-                              <tr>
-                                 <th className="p-4 font-medium text-gray-500">Sana</th>
-                                 <th className="p-4 font-medium text-gray-500">Muolaja</th>
-                                 <th className="p-4 font-medium text-gray-500 w-1/3">Bajarilgan ishlar</th>
-                                 <th className="p-4 font-medium text-gray-500">Shifokor</th>
-                                 <th className="p-4 font-medium text-gray-500">Status</th>
-                              </tr>
-                           </thead>
-                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                              {patientAppointments
-                                 .sort((a, b) => new Date(b.date + ' ' + b.time).getTime() - new Date(a.date + ' ' + a.time).getTime())
-                                 .map(app => (
-                                    <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => {
-                                       // Optional: Add click handler if user wants to open details modal
-                                       if (app.notes) alert(app.notes); // Temporary quick view or just rely on the column
-                                    }}>
-                                       <td className="p-4 text-gray-900 dark:text-white font-medium whitespace-nowrap">
-                                          {new Date(app.date).toLocaleDateString('uz-UZ')} <br />
-                                          <span className="text-xs text-gray-500 font-normal">{app.time}</span>
-                                       </td>
-                                       <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
-                                       <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]">
-                                          {app.notes ? (
-                                             <div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">
-                                                {app.notes}
-                                             </div>
-                                          ) : (
-                                             <span className="text-xs text-gray-400">-</span>
-                                          )}
-                                       </td>
-                                       <td className="p-4 text-gray-600 dark:text-gray-300 whitespace-nowrap">{app.doctorName}</td>
-                                       <td className="p-4"><Badge status={app.status} /></td>
-                                    </tr>
-                                 ))}
-                           </tbody>
-                        </table>
+                        <div className="overflow-x-auto">
+                           <table className="w-full text-left text-sm">
+                              <thead className="bg-gray-50 dark:bg-gray-800">
+                                 <tr>
+                                    <th className="p-4 font-medium text-gray-500">Sana</th>
+                                    <th className="p-4 font-medium text-gray-500">Muolaja</th>
+                                    <th className="p-4 font-medium text-gray-500 w-1/3">Bajarilgan ishlar</th>
+                                    <th className="p-4 font-medium text-gray-500">Shifokor</th>
+                                    <th className="p-4 font-medium text-gray-500">Status</th>
+                                 </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                 {patientAppointments
+                                    .sort((a, b) => new Date(b.date + ' ' + b.time).getTime() - new Date(a.date + ' ' + a.time).getTime())
+                                    .map(app => (
+                                       <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => {
+                                          // Optional: Add click handler if user wants to open details modal
+                                          if (app.notes) alert(app.notes); // Temporary quick view or just rely on the column
+                                       }}>
+                                          <td className="p-4 text-gray-900 dark:text-white font-medium whitespace-nowrap">
+                                             {new Date(app.date).toLocaleDateString('uz-UZ')} <br />
+                                             <span className="text-xs text-gray-500 font-normal">{app.time}</span>
+                                          </td>
+                                          <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
+                                          <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]">
+                                             {app.notes ? (
+                                                <div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">
+                                                   {app.notes}
+                                                </div>
+                                             ) : (
+                                                <span className="text-xs text-gray-400">-</span>
+                                             )}
+                                          </td>
+                                          <td className="p-4 text-gray-600 dark:text-gray-300 whitespace-nowrap">{app.doctorName}</td>
+                                          <td className="p-4"><Badge status={app.status} /></td>
+                                       </tr>
+                                    ))}
+                              </tbody>
+                           </table>
+                        </div>
                         {patientAppointments.length === 0 && <div className="p-8 text-center text-gray-500">Qabullar tarixi topilmadi.</div>}
                      </Card>
                   </div>
@@ -1149,45 +1151,47 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               <p className="text-sm text-gray-500">Ushbu qabullar uchun to'lov amalga oshirilmagan</p>
                            </div>
                         </div>
-                        <table className="w-full text-left text-sm">
-                           <thead className="bg-gray-50 dark:bg-gray-800">
-                              <tr>
-                                 <th className="p-4 font-medium text-gray-500">Sana</th>
-                                 <th className="p-4 font-medium text-gray-500">Muolaja</th>
-                                 <th className="p-4 font-medium text-gray-500 w-1/3">Bajarilgan ishlar</th>
-                                 <th className="p-4 font-medium text-gray-500">Status</th>
-                                 <th className="p-4 font-medium text-gray-500">Amal</th>
-                              </tr>
-                           </thead>
-                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                              {patientAppointments.filter(app => {
-                                 // Check if there is any PAID transaction for this date
-                                 // Since we enforce 1 appt/day, date match is sufficient and more robust than text matching
-                                 const isPaid = patientTransactions.some(t => t.date === app.date && t.status === 'Paid');
-                                 return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid;
-                              }).map(app => (
-                                 <tr key={app.id} className="hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-colors">
-                                    <td className="p-4 text-gray-900 dark:text-white font-medium whitespace-nowrap">{new Date(app.date).toLocaleDateString('uz-UZ')} <br /><span className="text-xs text-gray-500 font-normal">{app.time}</span></td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
-                                    <td className="p-4"><Badge status="Pending" /></td>
-                                    <td className="p-4"><Button size="sm" onClick={() => {
-                                       const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
-                                       setPaymentData({
-                                          amount: total.toString(),
-                                          paidAmount: total.toString(),
-                                          debtAmount: '0',
-                                          service: breakdown || app.type,
-                                          type: 'Cash',
-                                          status: 'Paid',
-                                          doctorId: app.doctorId
-                                       });
-                                       setIsPaymentModalOpen(true);
-                                    }}>To'lov</Button></td>
+                        <div className="overflow-x-auto">
+                           <table className="w-full text-left text-sm">
+                              <thead className="bg-gray-50 dark:bg-gray-800">
+                                 <tr>
+                                    <th className="p-4 font-medium text-gray-500">Sana</th>
+                                    <th className="p-4 font-medium text-gray-500">Muolaja</th>
+                                    <th className="p-4 font-medium text-gray-500 w-1/3">Bajarilgan ishlar</th>
+                                    <th className="p-4 font-medium text-gray-500">Status</th>
+                                    <th className="p-4 font-medium text-gray-500">Amal</th>
                                  </tr>
-                              ))}
-                           </tbody>
-                        </table>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                 {patientAppointments.filter(app => {
+                                    // Check if there is any PAID transaction for this date
+                                    // Since we enforce 1 appt/day, date match is sufficient and more robust than text matching
+                                    const isPaid = patientTransactions.some(t => t.date === app.date && t.status === 'Paid');
+                                    return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid;
+                                 }).map(app => (
+                                    <tr key={app.id} className="hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-colors">
+                                       <td className="p-4 text-gray-900 dark:text-white font-medium whitespace-nowrap">{new Date(app.date).toLocaleDateString('uz-UZ')} <br /><span className="text-xs text-gray-500 font-normal">{app.time}</span></td>
+                                       <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
+                                       <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
+                                       <td className="p-4"><Badge status="Pending" /></td>
+                                       <td className="p-4"><Button size="sm" onClick={() => {
+                                          const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                          setPaymentData({
+                                             amount: total.toString(),
+                                             paidAmount: total.toString(),
+                                             debtAmount: '0',
+                                             service: breakdown || app.type,
+                                             type: 'Cash',
+                                             status: 'Paid',
+                                             doctorId: app.doctorId
+                                          });
+                                          setIsPaymentModalOpen(true);
+                                       }}>To'lov</Button></td>
+                                    </tr>
+                                 ))}
+                              </tbody>
+                           </table>
+                        </div>
                         {patientAppointments.filter(app => { const isPaid = patientTransactions.some(t => t.date === app.date && t.service && t.service.includes(app.type) && t.status === 'Paid'); return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid; }).length === 0 && <div className="p-8 text-center text-gray-500">To'lov kutayotgan qabullar yo'q.</div>}
                      </Card>
                      {/* Transaction History Section */}
@@ -1199,40 +1203,42 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               <Button size="sm" onClick={handlePaymentModalOpen}>+ To'lov</Button>
                            </div>
                         </div>
-                        <table className="w-full text-left text-sm">
-                           <thead className="bg-gray-50 dark:bg-gray-800">
-                              <tr><th className="p-4 font-medium text-gray-500">Sana</th><th className="p-4 font-medium text-gray-500">Xizmat</th><th className="p-4 font-medium text-gray-500">Usul</th><th className="p-4 font-medium text-gray-500">Summa</th><th className="p-4 font-medium text-gray-500">Status</th><th className="p-4 font-medium text-gray-500">Amal</th></tr>
-                           </thead>
-                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                              {patientTransactions.map(t => (
-                                 <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                    <td className="p-4 text-gray-900 dark:text-white">{t.date}</td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300">{t.service}</td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300">{t.type}</td>
-                                    <td className="p-4 text-gray-900 dark:text-white font-medium">{t.amount.toLocaleString()} UZS</td>
-                                    <td className="p-4"><Badge status={t.status} /></td>
-                                    <td className="p-4 flex gap-2">
-                                       {t.status === 'Pending' && (
-                                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
+                        <div className="overflow-x-auto">
+                           <table className="w-full text-left text-sm">
+                              <thead className="bg-gray-50 dark:bg-gray-800">
+                                 <tr><th className="p-4 font-medium text-gray-500">Sana</th><th className="p-4 font-medium text-gray-500">Xizmat</th><th className="p-4 font-medium text-gray-500">Usul</th><th className="p-4 font-medium text-gray-500">Summa</th><th className="p-4 font-medium text-gray-500">Status</th><th className="p-4 font-medium text-gray-500">Amal</th></tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                 {patientTransactions.map(t => (
+                                    <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                       <td className="p-4 text-gray-900 dark:text-white">{t.date}</td>
+                                       <td className="p-4 text-gray-600 dark:text-gray-300">{t.service}</td>
+                                       <td className="p-4 text-gray-600 dark:text-gray-300">{t.type}</td>
+                                       <td className="p-4 text-gray-900 dark:text-white font-medium">{t.amount.toLocaleString()} UZS</td>
+                                       <td className="p-4"><Badge status={t.status} /></td>
+                                       <td className="p-4 flex gap-2">
+                                          {t.status === 'Pending' && (
+                                             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
+                                                setEditingTransaction(t);
+                                                setEditPaymentAmount(t.amount.toString());
+                                                setEditPaymentStatus('Paid');
+                                                setEditPaymentMethod('Cash');
+                                                setIsPaymentEditModalOpen(true);
+                                             }}>To'lash</Button>
+                                          )}
+                                          <Button size="sm" variant="secondary" onClick={() => {
                                              setEditingTransaction(t);
                                              setEditPaymentAmount(t.amount.toString());
-                                             setEditPaymentStatus('Paid');
-                                             setEditPaymentMethod('Cash');
+                                             setEditPaymentStatus(t.status);
+                                             setEditPaymentMethod(t.type);
                                              setIsPaymentEditModalOpen(true);
-                                          }}>To'lash</Button>
-                                       )}
-                                       <Button size="sm" variant="secondary" onClick={() => {
-                                          setEditingTransaction(t);
-                                          setEditPaymentAmount(t.amount.toString());
-                                          setEditPaymentStatus(t.status);
-                                          setEditPaymentMethod(t.type);
-                                          setIsPaymentEditModalOpen(true);
-                                       }}><Edit className="w-4 h-4" /></Button>
-                                    </td>
-                                 </tr>
-                              ))}
-                           </tbody>
-                        </table>
+                                          }}><Edit className="w-4 h-4" /></Button>
+                                       </td>
+                                    </tr>
+                                 ))}
+                              </tbody>
+                           </table>
+                        </div>
                         {patientTransactions.length === 0 && <div className="p-8 text-center text-gray-500">To'lovlar tarixi topilmadi.</div>}
                      </Card>
                   </div>
@@ -1243,31 +1249,33 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <h3 className="font-bold text-gray-900 dark:text-white">Ishlatilgan Materiallar</h3>
                         <Button size="sm" onClick={() => setIsMaterialModalOpen(true)}>+ Material Ishlatish</Button>
                      </div>
-                     <table className="w-full text-left text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-800">
-                           <tr>
-                              <th className="p-4 font-medium text-gray-500">Sana</th>
-                              <th className="p-4 font-medium text-gray-500">Material</th>
-                              <th className="p-4 font-medium text-gray-500">Miqdor</th>
-                              <th className="p-4 font-medium text-gray-500">Izoh</th>
-                              <th className="p-4 font-medium text-gray-500">Foydalanuvchi</th>
-                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                           {materialLogs.map(log => (
-                              <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                 <td className="p-4 text-gray-900 dark:text-white">{new Date(log.date).toLocaleDateString('uz-UZ')}</td>
-                                 <td className="p-4 text-gray-900 dark:text-white font-medium">
-                                    {log.item?.name}
-                                    <span className="text-xs text-gray-500 ml-1">({log.item?.unit})</span>
-                                 </td>
-                                 <td className="p-4 text-red-600 font-medium">{Math.abs(log.change)}</td>
-                                 <td className="p-4 text-gray-600 dark:text-gray-300">{log.note || '-'}</td>
-                                 <td className="p-4 text-gray-600 dark:text-gray-300">{log.userName}</td>
+                     <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                           <thead className="bg-gray-50 dark:bg-gray-800">
+                              <tr>
+                                 <th className="p-4 font-medium text-gray-500">Sana</th>
+                                 <th className="p-4 font-medium text-gray-500">Material</th>
+                                 <th className="p-4 font-medium text-gray-500">Miqdor</th>
+                                 <th className="p-4 font-medium text-gray-500">Izoh</th>
+                                 <th className="p-4 font-medium text-gray-500">Foydalanuvchi</th>
                               </tr>
-                           ))}
-                        </tbody>
-                     </table>
+                           </thead>
+                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                              {materialLogs.map(log => (
+                                 <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                    <td className="p-4 text-gray-900 dark:text-white">{new Date(log.date).toLocaleDateString('uz-UZ')}</td>
+                                    <td className="p-4 text-gray-900 dark:text-white font-medium">
+                                       {log.item?.name}
+                                       <span className="text-xs text-gray-500 ml-1">({log.item?.unit})</span>
+                                    </td>
+                                    <td className="p-4 text-red-600 font-medium">{Math.abs(log.change)}</td>
+                                    <td className="p-4 text-gray-600 dark:text-gray-300">{log.note || '-'}</td>
+                                    <td className="p-4 text-gray-600 dark:text-gray-300">{log.userName}</td>
+                                 </tr>
+                              ))}
+                           </tbody>
+                        </table>
+                     </div>
                      {materialLogs.length === 0 && <div className="p-8 text-center text-gray-500">Hozircha material ishlatilmagan.</div>}
                   </Card>
                )}

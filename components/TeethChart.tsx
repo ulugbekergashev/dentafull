@@ -368,56 +368,63 @@ export const TeethChart: React.FC<TeethChartProps> = ({
   };
 
 
+  const [showLegend, setShowLegend] = useState(false);
+
   return (
-    <div className="p-4 sm:p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="p-2 sm:p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
 
       {/* Tooth Type Toggle */}
-      <div className="flex justify-center mb-6">
+      <div className="flex justify-center mb-4 sm:mb-6">
         <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 p-1 bg-gray-100 dark:bg-gray-700">
           <button
             onClick={() => setToothType('permanent')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${toothType === 'permanent'
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-sm font-medium rounded-md transition-all duration-200 ${toothType === 'permanent'
               ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
           >
-            Doimiy tishlar (32)
+            Doimiy (32)
           </button>
           <button
             onClick={() => setToothType('primary')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${toothType === 'primary'
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-sm font-medium rounded-md transition-all duration-200 ${toothType === 'primary'
               ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
           >
-            Sut tishlari (20)
+            Sut (20)
           </button>
         </div>
       </div>
 
+      {/* Legend Toggle for Mobile */}
+      <div className="flex justify-center mb-4 sm:hidden">
+        <button
+          onClick={() => setShowLegend(!showLegend)}
+          className="text-xs text-blue-600 font-medium px-3 py-1 rounded-full bg-blue-50 border border-blue-100"
+        >
+          {showLegend ? 'Izohlarni yashirish' : 'Holat izohlarini ko\'rish'}
+        </button>
+      </div>
+
       {/* Legend */}
-      <div className="flex flex-wrap justify-center gap-3 sm:gap-6 mb-10 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 select-none">
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-300 shadow-sm"></div> Sog'lom</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-[#3f0808] border border-red-900"></div> Karies</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-500 border border-gray-600"></div> Plombalangan</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-yellow-500 border border-yellow-600"></div> Qoplama</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full border-2 border-dashed border-gray-400 opacity-50"></div> Yo'q</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-500 border border-red-600"></div> Pulpit</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-700 border border-red-800"></div> Periodontit</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-500 border border-orange-600"></div> Absses</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-700 border border-purple-800"></div> Flegmona</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-800 border border-slate-900"></div> Osteomiyelit</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-black border border-gray-800"></div> Adentiya</div>
-        <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-400 border border-gray-500"></div> Implant</div>
+      <div className={`${showLegend ? 'flex' : 'hidden sm:flex'} flex-wrap justify-center gap-2 sm:gap-6 mb-6 sm:mb-10 text-[10px] sm:text-sm font-medium text-gray-600 dark:text-gray-300 select-none pb-4 border-b border-gray-50 border-hidden sm:border-solid`}>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-gray-100 border border-gray-300 shadow-sm"></div> Sog'lom</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#3f0808] border border-red-900"></div> Karies</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-gray-500 border border-gray-600"></div> Plombalangan</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-yellow-500 border border-yellow-600"></div> Qoplama</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full border-2 border-dashed border-gray-400 opacity-50"></div> Yo'q</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500 border border-red-600"></div> Pulpit</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-700 border border-red-800"></div> Periodontit</div>
       </div>
 
       {/* Chart Container */}
-      <div className="flex flex-col items-center gap-8 overflow-x-auto pb-4 select-none bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-800/50 dark:to-gray-900 rounded-3xl p-4 sm:p-6 border border-gray-100 dark:border-gray-700/50">
+      <div className="flex flex-col items-start lg:items-center gap-4 sm:gap-8 overflow-x-auto pb-6 select-none bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-800/50 dark:to-gray-900 rounded-3xl p-4 sm:p-6 border border-gray-100 dark:border-gray-700/50">
 
         {/* Upper Jaw */}
-        <div className="relative min-w-max px-4">
-          <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0">Yuqori Jag'</div>
-          <div className="flex gap-1 sm:gap-2 justify-center">
+        <div className="relative min-w-max px-8">
+          <div className="text-left lg:text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0 pl-2 lg:pl-0">Yuqori Jag'</div>
+          <div className="flex gap-1.5 sm:gap-2 justify-start lg:justify-center pr-8">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.upper : PRIMARY_TOOTH_NUMBERS.upper).map(num => (
               <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
                 <RealisticTooth
@@ -433,10 +440,10 @@ export const TeethChart: React.FC<TeethChartProps> = ({
         </div>
 
         {/* Lower Jaw */}
-        <div className="relative min-w-max px-4 flex flex-col items-center">
-          <div className="w-full border-t-2 border-dashed border-gray-200 dark:border-gray-700 mb-8"></div>
-          <div className="text-center text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0">Pastki Jag'</div>
-          <div className="flex gap-1 sm:gap-2 justify-center">
+        <div className="relative min-w-max px-8 flex flex-col items-start lg:items-center">
+          <div className="w-full border-t-2 border-dashed border-gray-100 dark:border-gray-700/50 my-6 sm:my-8 pr-12"></div>
+          <div className="text-left lg:text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0 pl-2 lg:pl-0">Pastki Jag'</div>
+          <div className="flex gap-1.5 sm:gap-2 justify-start lg:justify-center pr-8">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.lower : PRIMARY_TOOTH_NUMBERS.lower).map(num => (
               <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
                 <RealisticTooth
