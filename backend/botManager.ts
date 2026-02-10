@@ -98,13 +98,13 @@ class BotManager {
                         where: { id: clinicId }
                     });
 
-                    if (clinic && clinic.ownerPhone) {
-                        const ownerPhone = clinic.ownerPhone.replace(/\s/g, '').replace('+', '');
+                    if (clinic && (clinic as any).ownerPhone) {
+                        const ownerPhone = (clinic as any).ownerPhone.replace(/\s/g, '').replace('+', '');
                         if (ownerPhone === phone) {
                             await prisma.clinic.update({
                                 where: { id: clinicId },
                                 data: { telegramChatId: chatId }
-                            });
+                            } as any);
                             ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz klinika egasi sifatida muvaffaqiyatli ulandingiz. Endi siz har kuni soat 22:00 da kunlik hisobotlarni olasiz.`);
                             return;
                         }

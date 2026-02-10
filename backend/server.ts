@@ -1826,7 +1826,7 @@ async function sendDailyClinicReports() {
                     createdAt: {
                         gte: todayStart
                     }
-                }
+                } as any
             });
 
             // 2. Sum revenue from paid transactions today
