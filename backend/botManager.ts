@@ -69,7 +69,22 @@ class BotManager {
                                 where: { id: payload },
                                 data: { telegramChatId: chatId }
                             });
-                            ctx.reply(`✅ Assalomu alaykum, ${patient.firstName}!\n\nSizning profilingiz muvaffaqiyatli ulandi.\n\nEndi siz ${patient.clinic.name}dan eslatmalar va xabarlar olasiz.`);
+
+                            // Check if also owner
+                            const ownerClinic = await prisma.clinic.findFirst({
+                                where: { telegramChatId: chatId, botToken: token }
+                            });
+
+                            const keyboard = ownerClinic
+                                ? [[{ text: "📊 Kunlik hisobot" }]]
+                                : [[{ text: "📱 Telefon raqamni yuborish", request_contact: true }]];
+
+                            ctx.reply(`✅ Assalomu alaykum, ${patient.firstName}!\n\nSizning profilingiz muvaffaqiyatli ulandi.\n\nEndi siz ${patient.clinic.name}dan eslatmalar va xabarlar olasiz.`, {
+                                reply_markup: {
+                                    keyboard,
+                                    resize_keyboard: true
+                                }
+                            });
                         } else {
                             ctx.reply("❌ Bemor topilmadi.");
                         }
@@ -96,7 +111,7 @@ class BotManager {
                         reply_markup: {
                             keyboard: [[{ text: "📱 Telefon raqamni yuborish", request_contact: true }]],
                             resize_keyboard: true,
-                            one_time_keyboard: true
+                            one_time_keyboard: false // Keep it persistent until linked
                         }
                     });
                 }
@@ -311,19 +326,24 @@ class BotManager {
     }
 
     public async generateDailyReport(clinicId: string): Promise<string> {
-        const today = new Date();
-        const todayDateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        // Use Tashkent timezone for date string
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Tashkent',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const todayDateString = formatter.format(new Date());
 
-        // Start of today for patient creation check
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+        // Start of today in Tashkent as a UTC Date for Prisma
+        const startOfTashkentToday = new Date(todayDateString + 'T00:00:00+05:00');
 
         // 1. Count new patients created today
         const newPatientsCount = await prisma.patient.count({
             where: {
                 clinicId: clinicId,
                 createdAt: {
-                    gte: todayStart
+                    gte: startOfTashkentToday
                 }
             } as any
         });
