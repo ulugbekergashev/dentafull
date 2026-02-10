@@ -52,21 +52,8 @@ class BotManager {
                 console.error(`Failed to fetch bot username for token:`, e.message);
             });
 
-            // Global Message Handler for Debugging
-            bot.on('message', async (ctx, next) => {
-                console.log(`[BOT_DEBUG] Received message in bot ${this.botUsernames.get(token) || token.substring(0, 10)} from ${ctx.from?.id}`);
-                const clinics = await prisma.clinic.findMany({ where: { botToken: token }, select: { name: true } });
-                const clinicNames = clinics.map(c => c.name).join(', ');
-
-                if (ctx.message && 'text' in ctx.message && ctx.message.text === '/whoami') {
-                    return ctx.reply(`🤖 Bot: ${this.botUsernames.get(token) || 'Noma\'lum'}\n🏥 Klinikalar: ${clinicNames || 'Hech qanday'}\n🔑 Token (oxiri): ...${token.slice(-5)}`);
-                }
-                return next();
-            });
-
             // 1. Start Command
             bot.start(async (ctx) => {
-                console.log(`[BOT_DEBUG] /start command from ${ctx.from?.id}`);
                 const payload = ctx.payload;
                 const chatId = String(ctx.chat.id);
 
@@ -91,6 +78,20 @@ class BotManager {
                         ctx.reply("❌ Xatolik.");
                     }
                 } else {
+                    // Check if user is already linked as owner
+                    const clinicAsOwner = await prisma.clinic.findFirst({
+                        where: { telegramChatId: chatId, botToken: token }
+                    });
+
+                    if (clinicAsOwner) {
+                        return ctx.reply(`👋 Assalomu alaykum, ${clinicAsOwner.adminName}!\n\nSiz ${clinicAsOwner.name} egasi sifatida ulandingiz. Hisobot olish uchun quyidagi tugmani bosing yoki /report komandasini yuboring.`, {
+                            reply_markup: {
+                                keyboard: [[{ text: "📊 Kunlik hisobot" }]],
+                                resize_keyboard: true
+                            }
+                        });
+                    }
+
                     ctx.reply("👋 Assalomu alaykum!\n\nKlinika botiga xush kelibsiz.\n\nIltimos, telefon raqamingizni yuboring:", {
                         reply_markup: {
                             keyboard: [[{ text: "📱 Telefon raqamni yuborish", request_contact: true }]],
@@ -101,9 +102,36 @@ class BotManager {
                 }
             });
 
-            // 2. Contact Listener
+            // 2. Report Command
+            bot.command('report', async (ctx) => {
+                const chatId = String(ctx.chat.id);
+                const clinic = await prisma.clinic.findFirst({
+                    where: { telegramChatId: chatId, botToken: token }
+                });
+
+                if (!clinic) {
+                    return ctx.reply("❌ Siz klinika egasi sifatida ulanmagansiz. Iltimos, avval ro'yxatdan o'ting.");
+                }
+
+                const report = await this.generateDailyReport(clinic.id);
+                ctx.reply(report, { parse_mode: 'Markdown' });
+            });
+
+            // Listen for report button text
+            bot.hears('📊 Kunlik hisobot', async (ctx) => {
+                const chatId = String(ctx.chat.id);
+                const clinic = await prisma.clinic.findFirst({
+                    where: { telegramChatId: chatId, botToken: token }
+                });
+
+                if (clinic) {
+                    const report = await this.generateDailyReport(clinic.id);
+                    ctx.reply(report, { parse_mode: 'Markdown' });
+                }
+            });
+
+            // 3. Contact Listener
             bot.on('contact', async (ctx) => {
-                console.log(`[BOT_DEBUG] Contact received from ${ctx.from?.id}`);
                 const contact = ctx.message.contact;
                 const chatId = String(ctx.chat.id);
                 if (!contact || !contact.phone_number) return;
@@ -126,7 +154,12 @@ class BotManager {
                                     where: { id: clinic.id },
                                     data: { telegramChatId: chatId }
                                 } as any);
-                                ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz ${clinic.name} egasi sifatida muvaffaqiyatli ulandingiz. Endi siz har kuni hisobotlarni olasiz.`);
+                                ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz ${clinic.name} egasi sifatida muvaffaqiyatli ulandingiz. Endi siz har kuni hisobotlarni olasiz.`, {
+                                    reply_markup: {
+                                        keyboard: [[{ text: "📊 Kunlik hisobot" }]],
+                                        resize_keyboard: true
+                                    }
+                                });
                                 foundAny = true;
                             }
                         }
@@ -275,6 +308,54 @@ class BotManager {
         const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
         if (!clinic || !clinic.botToken) return null;
         return this.botUsernames.get(clinic.botToken) || null;
+    }
+
+    public async generateDailyReport(clinicId: string): Promise<string> {
+        const today = new Date();
+        const todayDateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+        // Start of today for patient creation check
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        // 1. Count new patients created today
+        const newPatientsCount = await prisma.patient.count({
+            where: {
+                clinicId: clinicId,
+                createdAt: {
+                    gte: todayStart
+                }
+            } as any
+        });
+
+        // 2. Sum revenue from paid transactions today
+        const dailyRevenue = await prisma.transaction.aggregate({
+            where: {
+                clinicId: clinicId,
+                status: 'Paid',
+                date: todayDateString
+            },
+            _sum: {
+                amount: true
+            }
+        });
+
+        // 3. Count total appointments today
+        const appointmentsCount = await prisma.appointment.count({
+            where: {
+                clinicId: clinicId,
+                date: todayDateString,
+                status: { not: 'Cancelled' }
+            }
+        });
+
+        const totalRevenue = dailyRevenue._sum.amount || 0;
+
+        return `📊 *KUNLIK HISOBOT* (${todayDateString})\n\n` +
+            `👤 *Yangi bemorlar:* ${newPatientsCount}\n` +
+            `📅 *Qabullar soni:* ${appointmentsCount}\n` +
+            `💰 *Jami tushum:* ${totalRevenue.toLocaleString()} so'm\n\n` +
+            `Xizmatingiz barakali bo'lsin! 😊`;
     }
 }
 

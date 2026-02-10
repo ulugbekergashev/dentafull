@@ -1824,44 +1824,7 @@ async function sendDailyClinicReports() {
         console.log(`Processing reports for ${clinics.length} clinics...`);
 
         for (const clinic of clinics) {
-            // 1. Count new patients created today
-            const newPatientsCount = await prisma.patient.count({
-                where: {
-                    clinicId: clinic.id,
-                    createdAt: {
-                        gte: todayStart
-                    }
-                } as any
-            });
-
-            // 2. Sum revenue from paid transactions today
-            const dailyRevenue = await prisma.transaction.aggregate({
-                where: {
-                    clinicId: clinic.id,
-                    status: 'Paid',
-                    date: todayDateString
-                },
-                _sum: {
-                    amount: true
-                }
-            });
-
-            // 3. Count total appointments today
-            const appointmentsCount = await prisma.appointment.count({
-                where: {
-                    clinicId: clinic.id,
-                    date: todayDateString,
-                    status: { not: 'Cancelled' }
-                }
-            });
-
-            const totalRevenue = dailyRevenue._sum.amount || 0;
-
-            const message = `📊 *KUNLIK HISOBOT* (${todayDateString})\n\n` +
-                `👤 *Yangi bemorlar:* ${newPatientsCount}\n` +
-                `📅 *Qabullar soni:* ${appointmentsCount}\n` +
-                `💰 *Jami tushum:* ${totalRevenue.toLocaleString()} so'm\n\n` +
-                `Kuningiz xayrli o'tsin! 😊`;
+            const message = await botManager.generateDailyReport(clinic.id);
 
             try {
                 // Use botManager to notify clinical user (owner)
