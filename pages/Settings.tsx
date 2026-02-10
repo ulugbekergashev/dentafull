@@ -61,7 +61,8 @@ export const Settings: React.FC<SettingsProps> = ({
       clinicName: '',
       address: '',
       phone: '',
-      email: ''
+      email: '',
+      ownerPhone: ''
    });
    const [generalSaved, setGeneralSaved] = useState(false);
 
@@ -84,6 +85,19 @@ export const Settings: React.FC<SettingsProps> = ({
    React.useEffect(() => {
       console.log('🔍 botUsername state changed:', botUsername);
    }, [botUsername]);
+
+   // Sync generalForm with currentClinic
+   React.useEffect(() => {
+      if (currentClinic) {
+         setGeneralForm({
+            clinicName: currentClinic.name || '',
+            address: (currentClinic as any).address || '',
+            phone: currentClinic.phone || '',
+            email: (currentClinic as any).email || '',
+            ownerPhone: currentClinic.ownerPhone || ''
+         });
+      }
+   }, [currentClinic]);
 
    // Sync botToken with currentClinic
    React.useEffect(() => {
@@ -283,10 +297,23 @@ export const Settings: React.FC<SettingsProps> = ({
       setIsReceptionistModalOpen(false);
    };
 
-   const handleGeneralSave = (e: React.FormEvent) => {
+   const handleGeneralSave = async (e: React.FormEvent) => {
       e.preventDefault();
-      setGeneralSaved(true);
-      setTimeout(() => setGeneralSaved(false), 3000);
+      if (!currentClinic?.id) return;
+
+      try {
+         const response = await api.clinics.updateSettings(currentClinic.id, {
+            ownerPhone: generalForm.ownerPhone
+         });
+
+         if (response.success) {
+            setGeneralSaved(true);
+            setTimeout(() => setGeneralSaved(false), 3000);
+         }
+      } catch (error) {
+         console.error('Failed to save general settings:', error);
+         alert('Xatolik yuz berdi');
+      }
    };
 
    if (userRole === UserRole.DOCTOR) {
@@ -383,6 +410,13 @@ export const Settings: React.FC<SettingsProps> = ({
                               <Input label="Telefon" value={generalForm.phone} onChange={e => setGeneralForm({ ...generalForm, phone: e.target.value })} />
                               <Input label="Email" value={generalForm.email} onChange={e => setGeneralForm({ ...generalForm, email: e.target.value })} />
                            </div>
+                           <Input
+                              label="Klinika Egasi Telefoni (Hisobotlar uchun)"
+                              value={generalForm.ownerPhone}
+                              onChange={e => setGeneralForm({ ...generalForm, ownerPhone: e.target.value })}
+                              placeholder="998901234567"
+                              helperText="Ushbu raqam Telegram bot orqali bog'langanda hisobotlarni qabul qiladi."
+                           />
                            <div className="pt-4 flex items-center gap-4">
                               <Button type="submit">Saqlash</Button>
                               {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> Saqlandi!</span>}

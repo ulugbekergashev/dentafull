@@ -84,24 +84,40 @@ class BotManager {
                 }
             });
 
-            // 2. Contact Listener (Patient Linking via Phone)
+            // 2. Contact Listener (Patient & Owner Linking via Phone)
             bot.on('contact', async (ctx) => {
                 const contact = ctx.message.contact;
                 const chatId = String(ctx.chat.id);
                 if (!contact || !contact.phone_number) return;
 
-                let phone = contact.phone_number.replace(/\s/g, ''); // Remove spaces
-                const phoneWithoutPlus = phone.replace('+', '');
+                let phone = contact.phone_number.replace(/\s/g, '').replace('+', ''); // Normalize
 
                 try {
+                    // Check if this is the CLINIC OWNER (Clinic Admin)
+                    const clinic = await prisma.clinic.findUnique({
+                        where: { id: clinicId }
+                    });
+
+                    if (clinic && clinic.ownerPhone) {
+                        const ownerPhone = clinic.ownerPhone.replace(/\s/g, '').replace('+', '');
+                        if (ownerPhone === phone) {
+                            await prisma.clinic.update({
+                                where: { id: clinicId },
+                                data: { telegramChatId: chatId }
+                            });
+                            ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz klinika egasi sifatida muvaffaqiyatli ulandingiz. Endi siz har kuni soat 22:00 da kunlik hisobotlarni olasiz.`);
+                            return;
+                        }
+                    }
+
                     // Check Patient of THIS clinic ONLY
                     const patient = await prisma.patient.findFirst({
                         where: {
                             clinicId: clinicId,
                             OR: [
                                 { phone: phone },
-                                { phone: `+${phoneWithoutPlus}` },
-                                { phone: phoneWithoutPlus }
+                                { phone: `+${phone}` },
+                                { phone: phone.startsWith('998') ? phone.substring(3) : phone }
                             ]
                         }
                     });

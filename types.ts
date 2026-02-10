@@ -141,6 +141,7 @@ export interface Clinic {
   username: string;
   password?: string; // Only for display upon creation
   phone: string;
+  ownerPhone?: string; // Dedicated phone for clinic owner to receive reports
   status: 'Active' | 'Blocked' | 'Pending';
   planId: string;
   subscriptionStartDate: string; // Added field

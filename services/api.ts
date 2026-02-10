@@ -471,9 +471,10 @@ export const api = {
         delete: (id: string) => fetchJson<{ success: true }>(`/clinics/${id}`, {
             method: 'DELETE',
         }),
-        updateSettings: (id: string, data: { botToken?: string }) => {
+        updateSettings: (id: string, data: { botToken?: string, ownerPhone?: string }) => {
             if (isDemoMode()) {
-                DEMO_CLINIC.botToken = data.botToken || '';
+                if (data.botToken !== undefined) DEMO_CLINIC.botToken = data.botToken;
+                if (data.ownerPhone !== undefined) DEMO_CLINIC.ownerPhone = data.ownerPhone;
                 saveDemoData();
                 return Promise.resolve({ success: true, clinic: DEMO_CLINIC });
             }

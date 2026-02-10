@@ -1768,9 +1768,7 @@ async function sendNoShowFollowups() {
     }
 }
 
-// ============================================
-// CRON JOBS - Automated Reminders Schedule
-// ============================================
+console.log('✅ Automated reminder cron jobs initialized');
 
 // Birthday reminders - Every day at 9:00 AM
 cron.schedule('0 9 * * *', () => {
@@ -1780,15 +1778,6 @@ cron.schedule('0 9 * * *', () => {
     timezone: "Asia/Tashkent"
 });
 
-// Appointment reminders - Every day at 10:00 AM (24 hours before)
-// Appointment reminders - DISABLED (Manual trigger only)
-// cron.schedule('0 10 * * *', () => {
-//     console.log('⏰ Cron: Appointment reminder job triggered');
-//     sendAppointmentReminders();
-// }, {
-//     timezone: "Asia/Tashkent"
-// });
-
 // No-show follow-ups - Every day at 8:00 PM (Backup for missed manual updates)
 cron.schedule('0 20 * * *', () => {
     console.log('⏰ Cron: No-show follow-up job triggered');
@@ -1797,7 +1786,92 @@ cron.schedule('0 20 * * *', () => {
     timezone: "Asia/Tashkent"
 });
 
-console.log('✅ Automated reminder cron jobs initialized');
+// Daily Clinic Reports - Every day at 10:00 PM (22:00)
+cron.schedule('0 22 * * *', () => {
+    console.log('⏰ Cron: Daily clinic report job triggered');
+    sendDailyClinicReports();
+}, {
+    timezone: "Asia/Tashkent"
+});
+
+/**
+ * Helper function: Send daily summary reports to clinic owners
+ */
+async function sendDailyClinicReports() {
+    try {
+        console.log('📊 Running daily clinic report job...');
+
+        const today = new Date();
+        const todayDateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+        // Start of today for patient creation check
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        // Get all clinics with Telegram connected
+        const clinics = await prisma.clinic.findMany({
+            where: {
+                telegramChatId: { not: null },
+                status: 'Active'
+            }
+        });
+
+        console.log(`Processing reports for ${clinics.length} clinics...`);
+
+        for (const clinic of clinics) {
+            // 1. Count new patients created today
+            const newPatientsCount = await prisma.patient.count({
+                where: {
+                    clinicId: clinic.id,
+                    createdAt: {
+                        gte: todayStart
+                    }
+                }
+            });
+
+            // 2. Sum revenue from paid transactions today
+            const dailyRevenue = await prisma.transaction.aggregate({
+                where: {
+                    clinicId: clinic.id,
+                    status: 'Paid',
+                    date: todayDateString
+                },
+                _sum: {
+                    amount: true
+                }
+            });
+
+            // 3. Count total appointments today
+            const appointmentsCount = await prisma.appointment.count({
+                where: {
+                    clinicId: clinic.id,
+                    date: todayDateString,
+                    status: { not: 'Cancelled' }
+                }
+            });
+
+            const totalRevenue = dailyRevenue._sum.amount || 0;
+
+            const message = `📊 *KUNLIK HISOBOT* (${todayDateString})\n\n` +
+                `👤 *Yangi bemorlar:* ${newPatientsCount}\n` +
+                `📅 *Qabullar soni:* ${appointmentsCount}\n` +
+                `💰 *Jami tushum:* ${totalRevenue.toLocaleString()} so'm\n\n` +
+                `Kuningiz xayrli o'tsin! 😊`;
+
+            try {
+                // Use botManager to notify clinical user (owner)
+                await botManager.notifyClinicUser(clinic.id, clinic.telegramChatId!, message);
+                console.log(`✅ Daily report sent to ${clinic.name} (${clinic.adminName})`);
+            } catch (err) {
+                console.error(`Failed to send daily report to clinic ${clinic.id}:`, err);
+            }
+        }
+
+        console.log('📊 Daily clinic report job completed.');
+    } catch (error) {
+        console.error('❌ Daily clinic report job error:', error);
+    }
+}
 
 // ============================================
 // BATCH NOTIFICATION ENDPOINTS
@@ -2009,6 +2083,15 @@ app.post('/api/test/send-noshow-followups', authenticateToken, async (req, res) 
     try {
         await sendNoShowFollowups();
         res.json({ success: true, message: 'No-show follow-ups sent' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/test/send-daily-reports', authenticateToken, async (req, res) => {
+    try {
+        await sendDailyClinicReports();
+        res.json({ success: true, message: 'Daily reports triggered' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

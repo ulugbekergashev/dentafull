@@ -66,6 +66,7 @@ model Patient {
   transactions   Transaction[]
   inventoryLogs  InventoryLog[]
   telegramLogs   TelegramLog[]
+  createdAt      DateTime      @default(now())
 }
 
 model ToothData {
@@ -214,6 +215,7 @@ model Clinic {
   username              String           @unique
   password              String?
   phone                 String
+  ownerPhone            String? // Dedicated phone for clinic owner to receive reports
   status                String // 'Active' | 'Blocked' | 'Pending'
   telegramChatId        String?
   botToken              String? // Token for the clinic's own bot
