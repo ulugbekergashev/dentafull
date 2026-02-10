@@ -1132,11 +1132,13 @@ app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
             } as any
         });
 
-        // Restart bot if token is provided, otherwise remove it
-        if (botToken) {
-            botManager.startBot(clinicId, botToken);
-        } else {
-            botManager.removeBot(clinicId);
+        // Restart bot ONLY if token is provided or explicitly cleared
+        if (botToken !== undefined) {
+            if (botToken) {
+                botManager.startBot(clinicId, botToken);
+            } else {
+                botManager.removeBot(clinicId);
+            }
         }
 
         res.json({ success: true, clinic });
