@@ -3,7 +3,7 @@ import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPi
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
-import { VisitWorkflow } from '../components/ProceduresSection';
+import { VisitWorkflow, ProceduresSection } from '../components/ProceduresSection';
 import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
@@ -879,7 +879,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                      <Card className="p-6 space-y-4">
                         <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                           <FileText className="w-5 h-5" /> Tibbiy Tarix
+                           <Activity className="w-5 h-5" /> Tibbiy Tarix
                         </h3>
                         <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-100 dark:border-yellow-800">
                            <div className="flex justify-between items-center mb-2">

@@ -184,8 +184,6 @@ model Transaction {
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])
 
-  // Prevent duplicate transactions for the same patient, date, service, and amount
-  @@unique([patientId, date, service, amount], name: "unique_patient_transaction")
 }
 
 model Service {

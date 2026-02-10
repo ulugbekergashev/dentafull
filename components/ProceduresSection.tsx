@@ -172,3 +172,66 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
         </>
     );
 };
+
+interface ProceduresSectionProps {
+    transactions: Transaction[];
+    doctors: any[];
+    onAddProcedure: () => void;
+    onViewAll: () => void;
+}
+
+export const ProceduresSection: React.FC<ProceduresSectionProps> = ({
+    transactions,
+    doctors,
+    onAddProcedure,
+    onViewAll
+}) => {
+    // Get last 5 procedures
+    const recentTransactions = [...transactions]
+        .filter(t => t.status === 'Paid' || t.status === 'Pending')
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 5);
+
+    return (
+        <Card className="p-6 space-y-4">
+            <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Activity className="w-5 h-5" /> Protseduralar
+                </h3>
+                <Button onClick={onAddProcedure} size="sm">
+                    + Protsedura
+                </Button>
+            </div>
+
+            <div className="space-y-3">
+                {recentTransactions.length === 0 ? (
+                    <p className="text-center py-4 text-gray-500 text-sm">Protseduralar topilmadi</p>
+                ) : (
+                    recentTransactions.map((tx) => (
+                        <div key={tx.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700">
+                            <div>
+                                <p className="font-medium text-sm text-gray-900 dark:text-white">{tx.service}</p>
+                                <p className="text-xs text-gray-500">{tx.date} • {tx.doctorName}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="font-bold text-sm text-gray-900 dark:text-white">
+                                    {tx.amount.toLocaleString()} UZS
+                                </p>
+                                <Badge status={tx.status} />
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {transactions.length > 5 && (
+                <button
+                    onClick={onViewAll}
+                    className="w-full text-center text-sm text-blue-600 dark:text-blue-400 hover:underline pt-2 border-t border-gray-100 dark:border-gray-700"
+                >
+                    Barchasini ko'rish
+                </button>
+            )}
+        </Card>
+    );
+};
