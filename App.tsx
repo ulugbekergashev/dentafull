@@ -334,7 +334,10 @@ const App: React.FC = () => {
       const updated = await api.patients.update(id, data);
       setPatients(prev => prev.map(p => p.id === id ? updated : p));
       addToast('success', 'Bemor ma\'lumotlari yangilandi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   const deletePatient = async (id: string) => {
@@ -343,7 +346,10 @@ const App: React.FC = () => {
       setPatients(prev => prev.filter(p => p.id !== id));
       addToast('info', 'Bemor o\'chirildi.');
       if (selectedPatientId === id) setCurrentRoute(Route.PATIENTS);
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   // Appointment Actions
@@ -364,7 +370,10 @@ const App: React.FC = () => {
       });
 
       addToast('success', 'Uchrashuv belgilandi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   const updateAppointment = async (id: string, data: Partial<Appointment>) => {
@@ -372,7 +381,10 @@ const App: React.FC = () => {
       const updated = await api.appointments.update(id, data);
       setAppointments(prev => prev.map(a => a.id === id ? updated : a));
       addToast('success', 'Uchrashuv yangilandi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   const deleteAppointment = async (id: string) => {
@@ -380,7 +392,10 @@ const App: React.FC = () => {
       await api.appointments.delete(id);
       setAppointments(prev => prev.filter(a => a.id !== id));
       addToast('info', 'Uchrashuv bekor qilindi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   // Transaction Actions
@@ -393,7 +408,11 @@ const App: React.FC = () => {
         return [newTx, ...prev];
       });
       addToast('success', 'To\'lov qabul qilindi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      console.error('Add transaction error:', e);
+      addToast('error', e.message || 'To\'lovni saqlashda xatolik yuz berdi');
+      throw e; // Re-throw to allow component to handle it (e.g. stop state reset)
+    }
   };
 
   const updateTransaction = async (id: string, data: Partial<Transaction>) => {
@@ -406,8 +425,7 @@ const App: React.FC = () => {
       addToast('success', 'To\'lov holati yangilandi.');
     } catch (e: any) {
       console.error('Transaction update error:', e);
-      const errorMsg = e?.message || 'Xatolik yuz berdi';
-      addToast('error', errorMsg);
+      addToast('error', e.message || 'Xatolik yuz berdi');
     }
   };
 
@@ -421,20 +439,17 @@ const App: React.FC = () => {
         return [...prev, newService];
       });
       addToast('success', 'Yangi xizmat qo\'shildi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
   const updateService = async (index: number, service: Partial<Service>) => {
-    // Note: index logic might need to change to ID based if backend uses IDs.
-    // Assuming service object has ID now or we pass ID.
-    // For now, I'll assume the service object passed has an ID if it's an update, or I need to find the ID from the list.
     const serviceToUpdate = services[index];
     if (serviceToUpdate && serviceToUpdate.id) {
       try {
         const updated = await api.services.update(serviceToUpdate.id, { ...service, duration: service.duration || 60 });
         setServices(prev => prev.map(s => s.id === updated.id ? updated : s));
         addToast('success', 'Xizmat yangilandi.');
-      } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+      } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
     }
   };
 
@@ -478,7 +493,10 @@ const App: React.FC = () => {
       const updated = await api.receptionists.update(id, data);
       setReceptionists(prev => prev.map(r => r.id === id ? updated : r));
       addToast('success', 'Resepshn ma\'lumotlari yangilandi.');
-    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   const deleteReceptionist = async (id: string) => {
@@ -496,7 +514,10 @@ const App: React.FC = () => {
       const newClinic = await api.clinics.create(clinic);
       setClinics(prev => [...prev, newClinic]);
       addToast('success', 'Yangi klinika yaratildi!');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   const updateClinic = async (id: string, data: Partial<Clinic>) => {
@@ -504,7 +525,10 @@ const App: React.FC = () => {
       const updated = await api.clinics.update(id, data);
       setClinics(prev => prev.map(c => c.id === id ? updated : c));
       addToast('success', 'Klinika ma\'lumotlari yangilandi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   const updatePlan = async (id: string, data: Partial<SubscriptionPlan>) => {
@@ -512,7 +536,10 @@ const App: React.FC = () => {
       const updated = await api.plans.update(id, data);
       setPlans(prev => prev.map(p => p.id === id ? updated : p));
       addToast('success', 'Tarif rejasi yangilandi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   const deleteClinic = async (id: string) => {
@@ -520,7 +547,10 @@ const App: React.FC = () => {
       await api.clinics.delete(id);
       setClinics(prev => prev.filter(c => c.id !== id));
       addToast('info', 'Klinika o\'chirildi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
   };
 
   // Inventory Actions
@@ -529,7 +559,7 @@ const App: React.FC = () => {
       const newItem = await api.inventory.create({ ...item, clinicId });
       setInventoryItems(prev => [...prev, newItem]);
       addToast('success', 'Material qo\'shildi!');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
   const updateInventoryStock = async (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string }) => {
@@ -545,7 +575,7 @@ const App: React.FC = () => {
       await api.inventory.delete(id);
       setInventoryItems(prev => prev.filter(item => item.id !== id));
       addToast('info', 'Material o\'chirildi.');
-    } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
   // Category Actions

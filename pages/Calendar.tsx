@@ -11,8 +11,8 @@ interface CalendarProps {
   doctors: Doctor[];
   services: { name: string; price: number; duration: number }[];
   categories: ServiceCategory[];
-  onAddAppointment: (appt: Omit<Appointment, 'id'>) => void;
-  onUpdateAppointment: (id: string, data: Partial<Appointment>) => void;
+  onAddAppointment: (appt: Omit<Appointment, 'id'>) => Promise<void>;
+  onUpdateAppointment: (id: string, data: Partial<Appointment>) => Promise<void>;
   onDeleteAppointment: (id: string) => void;
   userRole: UserRole;
   doctorId: string;
@@ -250,25 +250,34 @@ export const Calendar: React.FC<CalendarProps> = ({
       return;
     }
 
-    onAddAppointment({
-      patientId: patient.id,
-      patientName: `${patient.lastName} ${patient.firstName}`,
-      doctorId: finalDoctorId,
-      doctorName: finalDoctorName,
-      type: formData.type || 'Konsultatsiya',
-      date: formData.date,
-      time: formData.time,
-      duration: Number(formData.duration),
-      status: 'Pending',
-      notes: formData.notes
-    });
-    setIsAddModalOpen(false);
+    try {
+      await onAddAppointment({
+        patientId: patient.id,
+        patientName: `${patient.lastName} ${patient.firstName}`,
+        doctorId: finalDoctorId,
+        doctorName: finalDoctorName,
+        type: formData.type || 'Konsultatsiya',
+        date: formData.date,
+        time: formData.time,
+        duration: Number(formData.duration),
+        status: 'Pending',
+        notes: formData.notes
+      });
+      setIsAddModalOpen(false);
+    } catch (error) {
+      // Error is handled by App.tsx toast and re-thrown
+      // Keeping modal open on failure
+    }
   };
 
-  const handleStatusUpdate = (status: Appointment['status']) => {
+  const handleStatusUpdate = async (status: Appointment['status']) => {
     if (selectedAppointment) {
-      onUpdateAppointment(selectedAppointment.id, { status });
-      setSelectedAppointment({ ...selectedAppointment, status }); // Optimistic update for modal
+      try {
+        await onUpdateAppointment(selectedAppointment.id, { status });
+        setSelectedAppointment({ ...selectedAppointment, status }); // Optimistic update for modal
+      } catch (error) {
+        // Error handled by App.tsx
+      }
     }
   };
 
@@ -685,7 +694,23 @@ export const Calendar: React.FC<CalendarProps> = ({
 
                 {/* Read Only States */}
                 {(selectedAppointment.status === 'Completed' || selectedAppointment.status === 'Cancelled' || selectedAppointment.status === 'No-Show') && (
-                  <Button variant="secondary" onClick={() => setSelectedAppointment(null)}>Yopish</Button>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={() => setSelectedAppointment(null)}>Yopish</Button>
+                    <Button
+                      variant="ghost"
+                      className="text-red-500 hover:text-red-700"
+                      onClick={async () => {
+                        if (confirm('Haqiqatan ham bu qabulni butunlay o\'chirmoqchimisiz?')) {
+                          try {
+                            await onDeleteAppointment(selectedAppointment.id);
+                            setSelectedAppointment(null);
+                          } catch (e) { }
+                        }
+                      }}
+                    >
+                      O'chirish
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>

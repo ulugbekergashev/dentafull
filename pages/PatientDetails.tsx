@@ -22,8 +22,8 @@ interface PatientDetailsProps {
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
    onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<void>;
    onUpdateTransaction: (id: string, data: Partial<Transaction>) => void;
-   onAddAppointment: (appt: Omit<Appointment, 'id'>) => void;
-   onUpdateAppointment: (id: string, data: Partial<Appointment>) => void;
+   onAddAppointment: (appt: Omit<Appointment, 'id'>) => Promise<void>;
+   onUpdateAppointment: (id: string, data: Partial<Appointment>) => Promise<void>;
 }
 
 export const PatientDetails: React.FC<PatientDetailsProps> = ({
@@ -449,16 +449,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    }
 
    // Filter related data
-   // FIX: Deduplicate appointments on the frontend as a safety net
-   const rawPatientAppointments = appointments.filter(a => a.patientId === patient.id);
-   const patientAppointments = rawPatientAppointments.filter((appt, index, self) =>
-      index === self.findIndex((t) => (
-         t.date === appt.date &&
-         // Treat as duplicate if same date AND (same time OR same notes content)
-         // This is aggressive deduplication to hide the errors the user is seeing
-         (t.time === appt.time || t.notes === appt.notes)
-      ))
-   );
+   const patientAppointments = appointments.filter(a => a.patientId === patient.id);
    const patientTransactions = transactions.filter(t => {
       // Priority 1: Match by ID (new data)
       if (t.patientId) {
@@ -595,13 +586,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             });
          }
 
+         // Cleanup only on SUCCESS
          setIsPaymentModalOpen(false);
          setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
-
          setVisitKey(prev => prev + 1);
-      } catch (error) {
+      } catch (error: any) {
          console.error('Payment processing failed', error);
-         alert('To\'lovni saqlashda xatolik yuz berdi');
+         alert(`To'lovni saqlashda xatolik yuz berdi: ${error.message || 'Iltimos qaytadan urunib ko\'ring.'}`);
       } finally {
          isSubmittingRef.current = false;
          setIsPaymentSubmitting(false);
@@ -695,7 +686,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    const handleCompleteVisit = async (procedures: any[], total: number) => {
       // 1. Double-check if we are already processing or have processed this exact content recently
-      // (Though isSubmitting in child handles UI, this handles logic safety)
       const today = new Date().toISOString().split('T')[0];
 
       // Generate a simple hash/signature for this batch of procedures
@@ -706,67 +696,103 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          return;
       }
 
-      // Add to processed set immediately
-      setProcessedBatches(prev => {
-         const newSet = new Set(prev);
-         newSet.add(batchSignature);
-         return newSet;
-      });
-
       const existingAppt = appointments.find(a =>
          a.patientId === patient.id &&
          a.date === today &&
          a.status !== 'Cancelled'
       );
 
-      let doctorId = doctors.length > 0 ? doctors[0].id : '';
+      let finalDoctorId = doctors.length > 0 ? doctors[0].id : '';
+      let finalDoctorName = doctors.length > 0 ? `Dr. ${doctors[0].lastName}` : 'Doctor';
+
       const proceduresText = procedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'})`).join('\n');
 
-      if (!existingAppt) {
-         // Create NEW Appointment
-         // newApptId is not used in onAddAppointment, it's Omit<Appointment, 'id'>
-         doctorId = doctors.length > 0 ? doctors[0].id : '';
+      try {
+         // ENSURE DOCTOR EXISTS (especially for new clinics or individual plans)
+         if (!finalDoctorId) {
+            const isIndividualPlan = currentClinic?.planId === 'individual';
+            if (isIndividualPlan) {
+               try {
+                  console.log("Auto-creating doctor for individual plan...");
+                  const adminNameParts = currentClinic?.adminName?.split(' ') || ['Admin'];
+                  const firstName = adminNameParts[0];
+                  const lastName = adminNameParts.slice(1).join(' ') || 'Doctor';
 
-         await onAddAppointment({
-            patientId: patient.id,
-            patientName: `${patient.lastName} ${patient.firstName}`,
-            doctorId: doctorId,
-            doctorName: doctors.find(d => d.id === doctorId)?.firstName || 'Doctor',
-            type: 'Davolash',
-            date: today,
-            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-            duration: 60,
-            status: 'Completed',
-            notes: `Bajarilgan ishlar:\n` + proceduresText,
-            clinicId: patient.clinicId
-         });
-         alert("Qabul tarixi saqlandi!");
-      } else {
-         // Update EXISTING Appointment
-         const currentNotes = existingAppt.notes || '';
+                  const newDoctor = await api.doctors.create({
+                     firstName,
+                     lastName,
+                     specialty: 'Stomatolog',
+                     phone: currentClinic?.phone || '',
+                     status: 'Active',
+                     clinicId: currentClinic?.id || ''
+                  });
 
-         // Deduplication check: if notes already contain this text, skip appending
-         if (currentNotes.includes(proceduresText)) {
-            console.log("Duplicate prevention: Procedures already in notes");
-            // We still alert success to user so they don't panic, but we don't duplicate data
-            alert("Qabul tarixi yangilandi!");
-            setPendingProcedures([]);
-            setVisitKey(prev => prev + 1);
-            return;
+                  finalDoctorId = newDoctor.id;
+                  finalDoctorName = `Dr. ${newDoctor.lastName}`;
+               } catch (err) {
+                  console.error('Failed to auto-create doctor', err);
+                  // Fallback to error if we absolutely can't create one
+                  throw new Error("Shifokor profilini avtomatik yaratib bo'lmadi. Iltimos, Sozlamalar bo'limida kamida bitta shifokor yarating.");
+               }
+            } else if (doctors.length > 0) {
+               finalDoctorId = doctors[0].id;
+               finalDoctorName = `Dr. ${doctors[0].lastName}`;
+            } else {
+               throw new Error("Tizimda shifokor topilmadi. Iltimos, 'Sozlamalar' bo'limida kamida bitta shifokor profilini yarating.");
+            }
          }
 
-         const newNotes = currentNotes ? currentNotes + '\n\n' + `Qo'shimcha (${new Date().toLocaleTimeString()}):\n` + proceduresText : `Bajarilgan ishlar:\n` + proceduresText;
+         if (!existingAppt) {
+            // Create NEW Appointment
+            await onAddAppointment({
+               patientId: patient.id,
+               patientName: `${patient.lastName} ${patient.firstName}`,
+               doctorId: finalDoctorId,
+               doctorName: finalDoctorName,
+               type: 'Davolash',
+               date: today,
+               time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+               duration: 60,
+               status: 'Completed',
+               notes: `Bajarilgan ishlar:\n` + proceduresText,
+               clinicId: patient.clinicId
+            });
+            alert("Qabul tarixi saqlandi!");
+         } else {
+            // Update EXISTING Appointment
+            const currentNotes = existingAppt.notes || '';
 
-         await onUpdateAppointment(existingAppt.id, {
-            notes: newNotes,
-            status: 'Completed'
+            // Deduplication check: if notes already contain this text, skip appending
+            if (currentNotes.includes(proceduresText)) {
+               console.log("Duplicate prevention: Procedures already in notes");
+               alert("Qabul tarixi yangilandi!");
+               setPendingProcedures([]);
+               setVisitKey(prev => prev + 1);
+               return;
+            }
+
+            const newNotes = currentNotes ? currentNotes + '\n\n' + `Qo'shimcha (${new Date().toLocaleTimeString()}):\n` + proceduresText : `Bajarilgan ishlar:\n` + proceduresText;
+
+            await onUpdateAppointment(existingAppt.id, {
+               notes: newNotes,
+               status: 'Completed'
+            });
+            alert("Qabul tarixi yangilandi!");
+         }
+
+         // 2. Cleanup only on SUCCESS
+         setProcessedBatches(prev => {
+            const newSet = new Set(prev);
+            newSet.add(batchSignature);
+            return newSet;
          });
-         alert("Qabul tarixi yangilandi!");
+         setPendingProcedures([]);
+         setVisitKey(prev => prev + 1);
+      } catch (error: any) {
+         console.error('Visit completion failed', error);
+         // Error toast is already shown by App.tsx, but we can add more specific alert here if needed
+         alert(`Xatolik: ${error.message || 'Tashrifni yakunlashda xato yuz berdi. Iltimos qaytadan urunib ko\'ring.'}`);
       }
-
-      // 2. Cleanup
-      setPendingProcedures([]);
-      setVisitKey(prev => prev + 1);
    };
 
 
