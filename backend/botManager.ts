@@ -52,8 +52,21 @@ class BotManager {
                 console.error(`Failed to fetch bot username for token:`, e.message);
             });
 
+            // Global Message Handler for Debugging
+            bot.on('message', async (ctx, next) => {
+                console.log(`[BOT_DEBUG] Received message in bot ${this.botUsernames.get(token) || token.substring(0, 10)} from ${ctx.from?.id}`);
+                const clinics = await prisma.clinic.findMany({ where: { botToken: token }, select: { name: true } });
+                const clinicNames = clinics.map(c => c.name).join(', ');
+
+                if (ctx.message && 'text' in ctx.message && ctx.message.text === '/whoami') {
+                    return ctx.reply(`🤖 Bot: ${this.botUsernames.get(token) || 'Noma\'lum'}\n🏥 Klinikalar: ${clinicNames || 'Hech qanday'}\n🔑 Token (oxiri): ...${token.slice(-5)}`);
+                }
+                return next();
+            });
+
             // 1. Start Command
             bot.start(async (ctx) => {
+                console.log(`[BOT_DEBUG] /start command from ${ctx.from?.id}`);
                 const payload = ctx.payload;
                 const chatId = String(ctx.chat.id);
 
@@ -90,6 +103,7 @@ class BotManager {
 
             // 2. Contact Listener
             bot.on('contact', async (ctx) => {
+                console.log(`[BOT_DEBUG] Contact received from ${ctx.from?.id}`);
                 const contact = ctx.message.contact;
                 const chatId = String(ctx.chat.id);
                 if (!contact || !contact.phone_number) return;
