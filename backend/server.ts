@@ -421,7 +421,7 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
 app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
     try {
         // Sanitize body to only include valid Appointment fields
-        const { patientId, patientName, doctorId, doctorName, type, date, time, duration, status: s, reminderSent, notes, clinicId } = req.body;
+        const { patientId, patientName, doctorId, doctorName, type, date, time, duration, status, reminderSent, notes, clinicId } = req.body;
         const updateData: any = {};
         if (patientId !== undefined) updateData.patientId = patientId;
         if (patientName !== undefined) updateData.patientName = patientName;
@@ -431,7 +431,7 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
         if (date !== undefined) updateData.date = date;
         if (time !== undefined) updateData.time = time;
         if (duration !== undefined) updateData.duration = duration;
-        if (s !== undefined) updateData.status = s;
+        if (status !== undefined) updateData.status = status;
         if (reminderSent !== undefined) updateData.reminderSent = reminderSent;
         if (notes !== undefined) updateData.notes = notes;
         if (clinicId !== undefined) updateData.clinicId = clinicId;
