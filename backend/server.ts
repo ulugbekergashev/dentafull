@@ -965,8 +965,9 @@ app.get('/api/clinics', authenticateToken, async (req, res) => {
             include: { plan: true }
         });
         res.json(clinics);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch clinics' });
+    } catch (error: any) {
+        console.error('Failed to fetch clinics:', error);
+        res.status(500).json({ error: 'Failed to fetch clinics', details: error.message });
     }
 });
 
