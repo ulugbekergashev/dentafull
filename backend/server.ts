@@ -1113,7 +1113,8 @@ app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
 app.get('/api/plans', authenticateToken, async (req, res) => {
     try {
         const plans = await prisma.subscriptionPlan.findMany();
-        const parsedPlans = plans.map(p => {
+        const parsedPlans = plans.map((p: any) => {
+            // ...
             try {
                 return {
                     ...p,
@@ -1471,7 +1472,7 @@ app.get('/api/inventory/analytics', authenticateToken, async (req, res) => {
         });
 
         // Group by item and calculate totals
-        const analytics = logs.reduce((acc: any, log) => {
+        const analytics = logs.reduce((acc: any, log: any) => {
             const itemId = log.itemId;
             if (!acc[itemId]) {
                 acc[itemId] = {
@@ -1936,7 +1937,7 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
 
             // Group by name
             const debtorMap = new Map();
-            overdueTransactions.forEach(t => {
+            overdueTransactions.forEach((t: any) => {
                 const existing = debtorMap.get(t.patientName);
                 if (existing) {
                     existing.amount += t.amount;
@@ -1975,7 +1976,7 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
             const cleanName = name.toLowerCase().trim();
 
             // Find patient in memory
-            const patient = patients.find(p => {
+            const patient = patients.find((p: any) => {
                 const pFirst = p.firstName.toLowerCase();
                 const pLast = p.lastName.toLowerCase();
                 const pFull1 = `${pFirst} ${pLast}`;
@@ -2037,11 +2038,11 @@ app.get('/api/debug/transactions', authenticateToken, async (req, res) => {
         });
 
         const byStatus: Record<string, number> = {};
-        allTransactions.forEach(t => {
+        allTransactions.forEach((t: any) => {
             byStatus[t.status] = (byStatus[t.status] || 0) + 1;
         });
 
-        const pendingOrOverdue = allTransactions.filter(t =>
+        const pendingOrOverdue = allTransactions.filter((t: any) =>
             t.status === 'Pending' || t.status === 'Overdue'
         );
 
@@ -2049,7 +2050,7 @@ app.get('/api/debug/transactions', authenticateToken, async (req, res) => {
             total: allTransactions.length,
             byStatus,
             pendingOrOverdueCount: pendingOrOverdue.length,
-            pendingOrOverdue: pendingOrOverdue.map(t => ({
+            pendingOrOverdue: pendingOrOverdue.map((t: any) => ({
                 name: t.patientName,
                 amount: t.amount,
                 status: t.status,
