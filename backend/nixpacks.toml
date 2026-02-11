@@ -8,4 +8,4 @@ cmds = ['npm install --legacy-peer-deps']
 cmds = ['npm run switch:prod', 'npx prisma generate', 'npm run build']
 
 [start]
-cmd = 'npx prisma migrate deploy && npm start'
+cmd = 'npm start'
