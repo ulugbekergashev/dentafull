@@ -1,25 +1,35 @@
 // PREVENT SERVER CRASH ON STARTUP
 process.on('uncaughtException', (err) => {
     console.error('🔥 UNCAUGHT EXCEPTION:', err);
-    // Do NOT exit the process. Keep it alive at all costs.
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('🔥 UNHANDLED REJECTION:', reason);
-    // Do NOT exit.
 });
 
 import express from 'express';
-import cron from 'node-cron';
-import { botManager } from './botManager';
-import cors from 'cors';
-import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { v2 as cloudinary } from 'cloudinary';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// IMMEDIATE HEALTH CHECK
+app.get('/health', (req, res) => res.status(200).send('OK'));
+app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP!'));
+
+app.listen(PORT, () => {
+    console.log(`✅ Server successfully started on port ${PORT}`);
+});
+
+// Load everything else AFTER the server is ready
+const cron = require('node-cron');
+const { botManager } = require('./botManager');
+const cors = require('cors');
+const { PrismaClient } = require('@prisma/client');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { v2: cloudinary } = require('cloudinary');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -28,10 +38,10 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET || 'RiLepq8hhEn2QlX0DqkeAmbNl0c'
 });
 
-// Configure Multer with Cloudinary Storage
+// Configure Multer
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
-    params: async (req, file) => {
+    params: async (req: any, file: any) => {
         return {
             folder: 'patient-photos',
             allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
@@ -42,9 +52,8 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 const prisma = new PrismaClient();
-const app = express();
-const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
+
 
 // Manual CORS Middleware
 app.use((req, res, next) => {
