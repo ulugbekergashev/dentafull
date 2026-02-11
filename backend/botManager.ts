@@ -9,23 +9,31 @@ class BotManager {
     private botUsernames: Map<string, string> = new Map(); // token -> username
 
     constructor() {
-        this.loadBots();
+        // Start loading bots without blocking the main thread or crashing
+        this.loadBots().catch(err => {
+            console.error("⚠️ Initial bot loading failed (likely DB issue). Server starting without bots.", err.message);
+        });
     }
 
     private async loadBots() {
-        try {
-            const clinics = await prisma.clinic.findMany({
-                where: { botToken: { not: null } }
-            });
+        while (true) {
+            try {
+                console.log('Attempting to load bots from database...');
+                const clinics = await prisma.clinic.findMany({
+                    where: { botToken: { not: null } }
+                });
 
-            for (const clinic of clinics) {
-                if (clinic.botToken) {
-                    await this.startBot(clinic.id, clinic.botToken);
+                for (const clinic of clinics) {
+                    if (clinic.botToken) {
+                        await this.startBot(clinic.id, clinic.botToken);
+                    }
                 }
+                console.log(`🤖 Loaded ${this.bots.size} unique bot instances.`);
+                break; // If successful, exit the retry loop
+            } catch (error: any) {
+                console.error("❌ Failed to load bots (retrying in 30s):", error.message);
+                await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds before retry
             }
-            console.log(`🤖 Loaded ${this.bots.size} unique bot instances.`);
-        } catch (error) {
-            console.error("Failed to load bots:", error);
         }
     }
 
