@@ -2095,6 +2095,7 @@ app.post('/api/test/send-daily-reports', authenticateToken, async (req, res) => 
 // START SERVER
 // ============================================
 
+console.log('🚀 Server is initializing...');
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`✅ Server successfully started on port ${PORT}`);
 });
