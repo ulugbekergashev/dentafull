@@ -112,8 +112,9 @@ app.get('/api/clinics/:id/bot-logs', authenticateToken, async (req, res) => {
             take: 100
         });
         res.json(logs);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch bot logs' });
+    } catch (error: any) {
+        console.error('Failed to fetch bot logs:', error);
+        res.status(500).json({ error: 'Failed to fetch bot logs', details: error.message });
     }
 });
 
@@ -235,11 +236,12 @@ app.post('/api/auth/login', async (req, res) => {
             success: false,
             error: 'Login yoki parol noto\'g\'ri'
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Login error:', error);
         res.status(500).json({
             success: false,
-            error: 'Tizimga kirishda xatolik yuz berdi'
+            error: 'Tizimga kirishda xatolik yuz berdi',
+            details: error.message // Added for debugging
         });
     }
 });
@@ -1091,13 +1093,27 @@ app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
 app.get('/api/plans', authenticateToken, async (req, res) => {
     try {
         const plans = await prisma.subscriptionPlan.findMany();
-        const parsedPlans = plans.map(p => ({
-            ...p,
-            features: JSON.parse(p.features)
-        }));
+        const parsedPlans = plans.map(p => {
+            try {
+                return {
+                    ...p,
+                    features: typeof p.features === 'string' ? JSON.parse(p.features) : p.features
+                };
+            } catch (parseError) {
+                console.error(`❌ Failed to parse features for plan ${p.id} (${p.name}):`, parseError);
+                return {
+                    ...p,
+                    features: [] // Return empty features on error instead of crashing
+                };
+            }
+        });
         res.json(parsedPlans);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch plans' });
+    } catch (error: any) {
+        console.error('❌ Failed to fetch plans:', error);
+        res.status(500).json({
+            error: 'Failed to fetch plans',
+            details: error.message
+        });
     }
 });
 
