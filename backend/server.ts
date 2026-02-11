@@ -1,3 +1,14 @@
+// PREVENT SERVER CRASH ON STARTUP
+process.on('uncaughtException', (err) => {
+    console.error('🔥 UNCAUGHT EXCEPTION:', err);
+    // Do NOT exit the process. Keep it alive at all costs.
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🔥 UNHANDLED REJECTION:', reason);
+    // Do NOT exit.
+});
+
 import express from 'express';
 import cron from 'node-cron';
 import { botManager } from './botManager';
