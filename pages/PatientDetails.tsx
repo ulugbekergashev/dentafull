@@ -1192,7 +1192,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               </tbody>
                            </table>
                         </div>
-                        {patientAppointments.filter(app => { const isPaid = patientTransactions.some(t => t.date === app.date && t.service && t.service.includes(app.type) && t.status === 'Paid'); return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid; }).length === 0 && <div className="p-8 text-center text-gray-500">To'lov kutayotgan qabullar yo'q.</div>}
+                        {patientAppointments.filter(app => { const isPaid = patientTransactions.some(t => t.date === app.date && t.status === 'Paid'); return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid; }).length === 0 && <div className="p-8 text-center text-gray-500">To'lov kutayotgan qabullar yo'q.</div>}
                      </Card>
                      {/* Transaction History Section */}
                      <Card className="overflow-hidden">
