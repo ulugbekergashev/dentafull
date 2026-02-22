@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Modal, Input, Select, Badge } from '../components/Common';
-import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell, Edit2 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 
@@ -18,12 +18,13 @@ interface CalendarProps {
   doctorId: string;
   currentClinic?: Clinic;
   plans: SubscriptionPlan[];
+  onPatientClick?: (id: string) => void;
 }
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, userRole, doctorId, currentClinic, plans
+  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, userRole, doctorId, currentClinic, plans, onPatientClick
 }) => {
   // Filter appointments for doctors
   const filteredAppointments = userRole === UserRole.DOCTOR && doctorId
@@ -34,6 +35,7 @@ export const Calendar: React.FC<CalendarProps> = ({
   const [view, setView] = useState<'day' | 'week'>('week');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [editingApptId, setEditingApptId] = useState<string | null>(null);
   const [remindedAppts, setRemindedAppts] = useState<Set<string>>(new Set());
 
   // Message Modal State
@@ -73,6 +75,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   // Open Add Modal with default values selected if available
   const openAddModal = () => {
+    setEditingApptId(null);
     // Check if clinic is on individual plan
     const isIndividualPlan = currentClinic?.planId === 'individual';
 
@@ -85,6 +88,22 @@ export const Calendar: React.FC<CalendarProps> = ({
       notes: ''
     });
     setIsAddModalOpen(true);
+  };
+
+  const openEditModal = (appt: Appointment) => {
+    setEditingApptId(appt.id);
+    setFormData({
+      patientId: appt.patientId,
+      doctorId: appt.doctorId || (doctors.length > 0 ? doctors[0].id : ''),
+      type: appt.type,
+      categoryId: '',
+      date: appt.date,
+      time: appt.time,
+      duration: appt.duration,
+      notes: appt.notes || ''
+    });
+    setIsAddModalOpen(true);
+    setSelectedAppointment(null);
   };
 
   // Helper: Get start of current week (Monday)
@@ -226,6 +245,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
     // Doctor Conflict Validation
     const doctorConflict = appointments.some(appt =>
+      appt.id !== editingApptId &&
       appt.doctorId === finalDoctorId &&
       appt.date === formData.date &&
       appt.time === formData.time &&
@@ -239,6 +259,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
     // Patient Conflict Validation
     const patientConflict = appointments.some(appt =>
+      appt.id !== editingApptId &&
       appt.patientId === patient.id &&
       appt.date === formData.date &&
       appt.time === formData.time &&
@@ -251,19 +272,34 @@ export const Calendar: React.FC<CalendarProps> = ({
     }
 
     try {
-      await onAddAppointment({
-        patientId: patient.id,
-        patientName: `${patient.lastName} ${patient.firstName}`,
-        doctorId: finalDoctorId,
-        doctorName: finalDoctorName,
-        type: formData.type || 'Konsultatsiya',
-        date: formData.date,
-        time: formData.time,
-        duration: Number(formData.duration),
-        status: 'Pending',
-        notes: formData.notes
-      });
+      if (editingApptId) {
+        await onUpdateAppointment(editingApptId, {
+          patientId: patient.id,
+          patientName: `${patient.lastName} ${patient.firstName}`,
+          doctorId: finalDoctorId,
+          doctorName: finalDoctorName,
+          type: formData.type || 'Konsultatsiya',
+          date: formData.date,
+          time: formData.time,
+          duration: Number(formData.duration),
+          notes: formData.notes
+        });
+      } else {
+        await onAddAppointment({
+          patientId: patient.id,
+          patientName: `${patient.lastName} ${patient.firstName}`,
+          doctorId: finalDoctorId,
+          doctorName: finalDoctorName,
+          type: formData.type || 'Konsultatsiya',
+          date: formData.date,
+          time: formData.time,
+          duration: Number(formData.duration),
+          status: 'Pending',
+          notes: formData.notes
+        });
+      }
       setIsAddModalOpen(false);
+      setEditingApptId(null);
     } catch (error) {
       // Error is handled by App.tsx toast and re-thrown
       // Keeping modal open on failure
@@ -557,7 +593,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       </div>
 
       {/* Add Appointment Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Yangi Qabul">
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setEditingApptId(null); }} title={editingApptId ? "Qabulni Tahrirlash" : "Yangi Qabul"}>
         <form onSubmit={handleAddSubmit} className="space-y-4">
           <Select
             label="Bemor"
@@ -622,8 +658,8 @@ export const Calendar: React.FC<CalendarProps> = ({
             />
           </div>
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>Bekor qilish</Button>
-            <Button type="submit">Band qilish</Button>
+            <Button type="button" variant="secondary" onClick={() => { setIsAddModalOpen(false); setEditingApptId(null); }}>Bekor qilish</Button>
+            <Button type="submit">{editingApptId ? "Saqlash" : "Band qilish"}</Button>
           </div>
         </form>
       </Modal>
@@ -634,10 +670,30 @@ export const Calendar: React.FC<CalendarProps> = ({
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{selectedAppointment.patientName}</h3>
+                <h3
+                  className={`text-xl font-bold text-gray-900 dark:text-white ${onPatientClick ? 'cursor-pointer hover:text-blue-600 transition-colors hover:underline title-transition' : ''}`}
+                  onClick={() => {
+                    if (onPatientClick) {
+                      onPatientClick(selectedAppointment.patientId);
+                      setSelectedAppointment(null);
+                    }
+                  }}
+                  title={onPatientClick ? "Bemor profiliga o'tish" : ""}
+                >
+                  {selectedAppointment.patientName}
+                </h3>
                 <p className="text-gray-500 text-sm">{selectedAppointment.type}</p>
               </div>
-              <Badge status={selectedAppointment.status} />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => openEditModal(selectedAppointment)}
+                  className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:text-gray-400 dark:hover:bg-gray-800 rounded-md transition-colors"
+                  title="Qabulni tahrirlash"
+                >
+                  <Edit2 className="w-5 h-5" />
+                </button>
+                <Badge status={selectedAppointment.status} />
+              </div>
             </div>
 
             <div className="space-y-3">

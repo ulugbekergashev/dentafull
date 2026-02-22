@@ -665,6 +665,7 @@ const App: React.FC = () => {
           doctorId={doctorId}
           currentClinic={clinics.find(c => c.id === clinicId)}
           plans={plans}
+          onPatientClick={handlePatientClick}
         />;
       case Route.DOCTORS_ANALYTICS:
         return <DoctorsAnalytics
