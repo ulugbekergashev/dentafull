@@ -837,7 +837,7 @@ const App: React.FC = () => {
 
           <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
             <div className="flex items-center justify-between">
-              <div className="flex items-center overflow-hidden">
+              <div className="flex items-center overflow-hidden flex-1 mr-2">
                 <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs uppercase ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-blue-600'}`}>
                   {userName ? userName.slice(0, 2) : 'A'}
                 </div>
@@ -848,7 +848,7 @@ const App: React.FC = () => {
               </div>
               <button
                 onClick={handleLogout}
-                className="text-gray-400 hover:text-red-500 ml-2"
+                className="text-gray-400 hover:text-red-500 flex-shrink-0"
                 title="Chiqish"
               >
                 <LogOut className="w-5 h-5" />
