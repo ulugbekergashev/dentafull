@@ -4,7 +4,7 @@ import { Button, Card, Badge, Modal, Input, Select } from '../components/Common'
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
 import { VisitWorkflow, ProceduresSection } from '../components/ProceduresSection';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 
@@ -18,6 +18,7 @@ interface PatientDetailsProps {
    categories: ServiceCategory[];
    currentClinic?: Clinic;
    plans?: SubscriptionPlan[];
+   userRole?: UserRole;
    onBack: () => void;
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
    onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<void>;
@@ -27,7 +28,7 @@ interface PatientDetailsProps {
 }
 
 export const PatientDetails: React.FC<PatientDetailsProps> = ({
-   patientId, patients, appointments, transactions, doctors, services, categories, currentClinic, plans,
+   patientId, patients, appointments, transactions, doctors, services, categories, currentClinic, plans, userRole,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment, onUpdateAppointment
 }) => {
    const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'diagnoses' | 'materials'>('overview');
@@ -1217,7 +1218,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                        <td className="p-4 text-gray-900 dark:text-white font-medium">{t.amount.toLocaleString()} UZS</td>
                                        <td className="p-4"><Badge status={t.status} /></td>
                                        <td className="p-4 flex gap-2">
-                                          {t.status === 'Pending' && (
+                                          {userRole !== UserRole.DOCTOR && t.status === 'Pending' && (
                                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
                                                 setEditingTransaction(t);
                                                 setEditPaymentAmount(t.amount.toString());
@@ -1226,13 +1227,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                 setIsPaymentEditModalOpen(true);
                                              }}>To'lash</Button>
                                           )}
-                                          <Button size="sm" variant="secondary" onClick={() => {
-                                             setEditingTransaction(t);
-                                             setEditPaymentAmount(t.amount.toString());
-                                             setEditPaymentStatus(t.status);
-                                             setEditPaymentMethod(t.type);
-                                             setIsPaymentEditModalOpen(true);
-                                          }}><Edit className="w-4 h-4" /></Button>
+                                          {userRole !== UserRole.DOCTOR && (
+                                             <Button size="sm" variant="secondary" onClick={() => {
+                                                setEditingTransaction(t);
+                                                setEditPaymentAmount(t.amount.toString());
+                                                setEditPaymentStatus(t.status);
+                                                setEditPaymentMethod(t.type);
+                                                setIsPaymentEditModalOpen(true);
+                                             }}><Edit className="w-4 h-4" /></Button>
+                                          )}
                                        </td>
                                     </tr>
                                  ))}

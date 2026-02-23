@@ -22,9 +22,11 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId }) => {
+  const isReceptionist = userRole === UserRole.RECEPTIONIST;
+  const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
-  const [startDate, setStartDate] = useState(defaultStart);
-  const [endDate, setEndDate] = useState(defaultEnd);
+  const [startDate, setStartDate] = useState(isReceptionist ? today : defaultStart);
+  const [endDate, setEndDate] = useState(isReceptionist ? today : defaultEnd);
 
   // Filter data for doctors - only show their appointments and transactions
   const filteredAppointmentsByDoctor = useMemo(() => {
@@ -129,33 +131,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Boshqaruv Paneli</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {userRole === UserRole.DOCTOR ? 'Shaxsiy statistika' : 'Klinika faoliyati bo\'yicha umumiy hisobot'}
+            {userRole === UserRole.DOCTOR ? 'Shaxsiy statistika' : isReceptionist ? 'Bugungi kun statistikasi' : 'Klinika faoliyati bo\'yicha umumiy hisobot'}
           </p>
         </div>
 
-        <div className="flex gap-2 w-full sm:w-auto">
-          <Input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            containerClassName="w-full sm:w-40"
-            className="cursor-pointer"
-            placeholder="Boshlash"
-          />
-          <Input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            containerClassName="w-full sm:w-auto"
-            className="cursor-pointer"
-            placeholder="Tugash"
-          />
-        </div>
+        {!isReceptionist && (
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              containerClassName="w-full sm:w-40"
+              className="cursor-pointer"
+              placeholder="Boshlash"
+            />
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              containerClassName="w-full sm:w-auto"
+              className="cursor-pointer"
+              placeholder="Tugash"
+            />
+          </div>
+        )}
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {userRole === UserRole.CLINIC_ADMIN && (
+        {userRole === UserRole.CLINIC_ADMIN && !isReceptionist && (
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -205,7 +209,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100 text-sm font-medium">
-                {userRole === UserRole.DOCTOR ? 'Mening Daromadim' : 'Jami Daromad'}
+                {userRole === UserRole.DOCTOR ? 'Mening Daromadim' : isReceptionist ? 'Bugungi Daromad' : 'Jami Daromad'}
               </p>
               <h3 className="text-2xl font-bold mt-1">{totalRevenue.toLocaleString()} UZS</h3>
             </div>
@@ -214,233 +218,237 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             </div>
           </div>
           <div className="mt-4 flex items-center text-sm text-green-100">
-            {startDate || endDate ? 'Tanlangan davr uchun' : 'Barcha vaqt uchun'}
+            {isReceptionist ? `${today}` : (startDate || endDate ? 'Tanlangan davr uchun' : 'Barcha vaqt uchun')}
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                {userRole === UserRole.DOCTOR ? 'Yakunlangan' : 'Samaradorlik'}
-              </p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                {periodAppointmentsCount > 0
-                  ? `${Math.round((filteredAppointments.filter(a => a.status === 'Completed').length / periodAppointmentsCount) * 100)}% `
-                  : '0%'
-                }
-              </h3>
-            </div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
-              <CheckCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
-          </div>
-          <div className="mt-4 text-sm text-gray-500">
-            {filteredAppointments.filter(a => a.status === 'Completed').length} / {periodAppointmentsCount} qabul
-          </div>
-        </Card>
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Revenue Chart */}
-        <Card className="p-6 lg:col-span-2">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
-            Daromad va Qabullar Statistikasi
-          </h3>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#9CA3AF" strokeOpacity={0.2} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} dy={10} />
-                <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} />
-                <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1F2937', borderRadius: '8px', border: 'none', color: '#fff', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
-                  itemStyle={{ color: '#fff' }}
-                  labelStyle={{ color: '#9CA3AF', marginBottom: '0.5rem' }}
-                />
-                <Line yAxisId="left" name="Daromad" type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={3} dot={{ r: 4, fill: '#3B82F6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
-                <Line yAxisId="right" name="Qabullar" type="monotone" dataKey="appointments" stroke="#10B981" strokeWidth={3} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#fff' }} />
-              </LineChart>
-            </ResponsiveContainer>
-            {trendData.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
-                Tanlangan davr uchun ma'lumot yo'q
+        {!isReceptionist && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                  {userRole === UserRole.DOCTOR ? 'Yakunlangan' : 'Samaradorlik'}
+                </p>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                  {periodAppointmentsCount > 0
+                    ? `${Math.round((filteredAppointments.filter(a => a.status === 'Completed').length / periodAppointmentsCount) * 100)}% `
+                    : '0%'
+                  }
+                </h3>
               </div>
-            )}
-          </div>
-        </Card>
-
-        {/* Service Distribution */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Muolajalar Turi Bo'yicha</h3>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={SERVICE_DATA}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  paddingAngle={5}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {SERVICE_DATA.map((entry, index) => (
-                    <Cell key={`cell - ${index} `} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1F2937', borderRadius: '8px', border: 'none', color: '#fff', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
-                  itemStyle={{ color: '#fff' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
+                <CheckCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+            <div className="mt-4 text-sm text-gray-500">
+              {filteredAppointments.filter(a => a.status === 'Completed').length} / {periodAppointmentsCount} qabul
+            </div>
+          </Card>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="p-6 lg:col-span-2">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Qabullar Ro'yxati</h3>
-          </div>
+      {/* Charts Row - hidden for receptionist */}
+      {!isReceptionist && (<>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Revenue Chart */}
+          <Card className="p-6 lg:col-span-2">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
+              Daromad va Qabullar Statistikasi
+            </h3>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#9CA3AF" strokeOpacity={0.2} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} dy={10} />
+                  <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} />
+                  <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF' }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1F2937', borderRadius: '8px', border: 'none', color: '#fff', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
+                    itemStyle={{ color: '#fff' }}
+                    labelStyle={{ color: '#9CA3AF', marginBottom: '0.5rem' }}
+                  />
+                  <Line yAxisId="left" name="Daromad" type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={3} dot={{ r: 4, fill: '#3B82F6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                  <Line yAxisId="right" name="Qabullar" type="monotone" dataKey="appointments" stroke="#10B981" strokeWidth={3} dot={{ r: 4, fill: '#10B981', strokeWidth: 2, stroke: '#fff' }} />
+                </LineChart>
+              </ResponsiveContainer>
+              {trendData.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+                  Tanlangan davr uchun ma'lumot yo'q
+                </div>
+              )}
+            </div>
+          </Card>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-700">
-                  <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Sana/Vaqt</th>
-                  <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Bemor</th>
-                  <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Shifokor</th>
-                  <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Turi</th>
-                  <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Baho</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {filteredAppointments.slice(0, 5).map(app => (
-                  <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800 last:border-0">
-                    <td className="py-4 font-medium text-gray-900 dark:text-white">{app.date} {app.time}</td>
-                    <td className="py-4 text-gray-600 dark:text-gray-300">{app.patientName}</td>
-                    <td className="py-4 text-gray-500">{app.doctorName}</td>
-                    <td className="py-4 text-gray-500">{app.type}</td>
-                    <td className="py-4"><Badge status={app.status} /></td>
-                    <td className="py-4">
-                      {app.review ? (
-                        <div className="flex items-center gap-0.5 text-yellow-500">
-                          {[...Array(5)].map((_, i) => (
-                            <Star key={i} className={`w-3 h-3 ${i < app.review.rating ? 'fill-current' : 'text-gray-200'}`} />
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">Baholanmagan</span>
-                      )}
-                    </td>
+          {/* Service Distribution */}
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">Muolajalar Turi Bo'yicha</h3>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={SERVICE_DATA}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {SERVICE_DATA.map((entry, index) => (
+                      <Cell key={`cell - ${index} `} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1F2937', borderRadius: '8px', border: 'none', color: '#fff', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="p-6 lg:col-span-2">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Qabullar Ro'yxati</h3>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-100 dark:border-gray-700">
+                    <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Sana/Vaqt</th>
+                    <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Bemor</th>
+                    <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Shifokor</th>
+                    <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Turi</th>
+                    <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th className="pb-3 text-xs font-semibold text-gray-500 uppercase">Baho</th>
                   </tr>
-                ))}
-                {filteredAppointments.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center py-4 text-gray-500">Qabullar topilmadi</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+                </thead>
+                <tbody className="text-sm">
+                  {filteredAppointments.slice(0, 5).map(app => (
+                    <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800 last:border-0">
+                      <td className="py-4 font-medium text-gray-900 dark:text-white">{app.date} {app.time}</td>
+                      <td className="py-4 text-gray-600 dark:text-gray-300">{app.patientName}</td>
+                      <td className="py-4 text-gray-500">{app.doctorName}</td>
+                      <td className="py-4 text-gray-500">{app.type}</td>
+                      <td className="py-4"><Badge status={app.status} /></td>
+                      <td className="py-4">
+                        {app.review ? (
+                          <div className="flex items-center gap-0.5 text-yellow-500">
+                            {[...Array(5)].map((_, i) => (
+                              <Star key={i} className={`w-3 h-3 ${i < app.review.rating ? 'fill-current' : 'text-gray-200'}`} />
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">Baholanmagan</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredAppointments.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center py-4 text-gray-500">Qabullar topilmadi</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">So'nggi Faoliyat</h3>
-          <div className="space-y-6">
-            {(() => {
-              // Combine recent activities from all sources
-              const activities: Array<{ type: string; text: string; time: Date; icon: any; color: string }> = [];
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">So'nggi Faoliyat</h3>
+            <div className="space-y-6">
+              {(() => {
+                // Combine recent activities from all sources
+                const activities: Array<{ type: string; text: string; time: Date; icon: any; color: string }> = [];
 
-              // Recent patients (last 5)
-              patients.slice(-5).reverse().forEach(patient => {
-                const createdDate = new Date(patient.lastVisit);
-                activities.push({
-                  type: 'patient',
-                  text: `Yangi bemor ro'yxatga olindi: ${patient.lastName} ${patient.firstName}`,
-                  time: createdDate,
-                  icon: Users,
-                  color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                });
-              });
-
-              // Recent transactions (last 5)
-              filteredTransactions.slice(-5).reverse().forEach(tx => {
-                const txDate = new Date(tx.date);
-                activities.push({
-                  type: 'transaction',
-                  text: `To'lov qabul qilindi: ${tx.amount.toLocaleString()} UZS - ${tx.service}`,
-                  time: txDate,
-                  icon: DollarSign,
-                  color: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-                });
-              });
-
-              // Recent completed appointments (last 5)
-              filteredAppointments
-                .filter(a => a.status === 'Completed')
-                .slice(-5)
-                .reverse()
-                .forEach(appt => {
-                  const apptDate = new Date(`${appt.date} ${appt.time}`);
+                // Recent patients (last 5)
+                patients.slice(-5).reverse().forEach(patient => {
+                  const createdDate = new Date(patient.lastVisit);
                   activities.push({
-                    type: 'appointment',
-                    text: `${appt.doctorName} ${appt.type} yakunladi`,
-                    time: apptDate,
-                    icon: CheckCircle,
-                    color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
+                    type: 'patient',
+                    text: `Yangi bemor ro'yxatga olindi: ${patient.lastName} ${patient.firstName}`,
+                    time: createdDate,
+                    icon: Users,
+                    color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
                   });
                 });
 
-              // Sort by time (most recent first) and take top 5
-              const sortedActivities = activities
-                .sort((a, b) => b.time.getTime() - a.time.getTime())
-                .slice(0, 5);
+                // Recent transactions (last 5)
+                filteredTransactions.slice(-5).reverse().forEach(tx => {
+                  const txDate = new Date(tx.date);
+                  activities.push({
+                    type: 'transaction',
+                    text: `To'lov qabul qilindi: ${tx.amount.toLocaleString()} UZS - ${tx.service}`,
+                    time: txDate,
+                    icon: DollarSign,
+                    color: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                  });
+                });
 
-              // Helper function to format time ago
-              const getTimeAgo = (date: Date) => {
-                const now = new Date();
-                const diffMs = now.getTime() - date.getTime();
-                const diffMins = Math.floor(diffMs / 60000);
-                const diffHours = Math.floor(diffMs / 3600000);
-                const diffDays = Math.floor(diffMs / 86400000);
+                // Recent completed appointments (last 5)
+                filteredAppointments
+                  .filter(a => a.status === 'Completed')
+                  .slice(-5)
+                  .reverse()
+                  .forEach(appt => {
+                    const apptDate = new Date(`${appt.date} ${appt.time}`);
+                    activities.push({
+                      type: 'appointment',
+                      text: `${appt.doctorName} ${appt.type} yakunladi`,
+                      time: apptDate,
+                      icon: CheckCircle,
+                      color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
+                    });
+                  });
 
-                if (diffMins < 1) return 'Hozirgina';
-                if (diffMins < 60) return `${diffMins} daq oldin`;
-                if (diffHours < 24) return `${diffHours} soat oldin`;
-                return `${diffDays} kun oldin`;
-              };
+                // Sort by time (most recent first) and take top 5
+                const sortedActivities = activities
+                  .sort((a, b) => b.time.getTime() - a.time.getTime())
+                  .slice(0, 5);
 
-              if (sortedActivities.length === 0) {
-                return (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    Hozircha faoliyat yo'q
+                // Helper function to format time ago
+                const getTimeAgo = (date: Date) => {
+                  const now = new Date();
+                  const diffMs = now.getTime() - date.getTime();
+                  const diffMins = Math.floor(diffMs / 60000);
+                  const diffHours = Math.floor(diffMs / 3600000);
+                  const diffDays = Math.floor(diffMs / 86400000);
+
+                  if (diffMins < 1) return 'Hozirgina';
+                  if (diffMins < 60) return `${diffMins} daq oldin`;
+                  if (diffHours < 24) return `${diffHours} soat oldin`;
+                  return `${diffDays} kun oldin`;
+                };
+
+                if (sortedActivities.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      Hozircha faoliyat yo'q
+                    </div>
+                  );
+                }
+
+                return sortedActivities.map((item, i) => (
+                  <div key={i} className="flex gap-3">
+                    <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${item.color}`}>
+                      <item.icon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{item.text}</p>
+                      <p className="text-xs text-gray-500">{getTimeAgo(item.time)}</p>
+                    </div>
                   </div>
-                );
-              }
-
-              return sortedActivities.map((item, i) => (
-                <div key={i} className="flex gap-3">
-                  <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${item.color}`}>
-                    <item.icon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{item.text}</p>
-                    <p className="text-xs text-gray-500">{getTimeAgo(item.time)}</p>
-                  </div>
-                </div>
-              ));
-            })()}
-          </div >
-        </Card >
-      </div >
+                ));
+              })()}
+            </div >
+          </Card >
+        </div >
+      </>)}
     </div>
   );
 };

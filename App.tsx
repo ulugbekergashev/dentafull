@@ -640,6 +640,7 @@ const App: React.FC = () => {
             categories={categories}
             currentClinic={clinics.find(c => c.id === clinicId)}
             plans={plans}
+            userRole={userRole}
             onBack={() => {
               setSelectedPatientId(null);
               setCurrentRoute(Route.PATIENTS);
