@@ -105,6 +105,8 @@ const App: React.FC = () => {
           setIsAuthenticated(true);
           if (role === UserRole.SUPER_ADMIN) {
             setCurrentRoute(Route.SAAS_DASHBOARD);
+          } else if (role === UserRole.RECEPTIONIST) {
+            setCurrentRoute(Route.PATIENTS);
           } else {
             setCurrentRoute(Route.DASHBOARD);
           }
@@ -627,6 +629,9 @@ const App: React.FC = () => {
     // Standard Clinic View
     switch (currentRoute) {
       case Route.DASHBOARD:
+        if (userRole === UserRole.RECEPTIONIST) {
+          return <Patients patients={patients} onPatientClick={handlePatientClick} onAddPatient={addPatient} onDeletePatient={deletePatient} />;
+        }
         return <Dashboard patients={patients} appointments={appointments} transactions={transactions} reviews={reviews} userRole={userRole} doctorId={doctorId} />;
       case Route.PATIENTS:
         return <Patients patients={patients} onPatientClick={handlePatientClick} onAddPatient={addPatient} onDeletePatient={deletePatient} />;
