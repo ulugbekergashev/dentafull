@@ -36,11 +36,11 @@ enum Route {
 
 // Navigation for Clinic Admin and Doctors
 const CLINIC_NAVIGATION: NavItem[] = [
-  { id: Route.DASHBOARD, label: 'Boshqaruv Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
+  { id: Route.DASHBOARD, label: 'Boshqaruv Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
   { id: Route.PATIENTS, label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: Route.CALENDAR, label: 'Kalendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: Route.FINANCE, label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
-  { id: Route.DOCTORS_ANALYTICS, label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN] }, // Admin only
+  { id: Route.DOCTORS_ANALYTICS, label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] }, // Admin and Receptionist
   { id: Route.INVENTORY, label: 'Ombor', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: Route.SETTINGS, label: 'Sozlamalar', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
 ];
@@ -226,6 +226,8 @@ const App: React.FC = () => {
     // Set default route based on role
     if (role === UserRole.SUPER_ADMIN) {
       setCurrentRoute(Route.SAAS_DASHBOARD);
+    } else if (role === UserRole.RECEPTIONIST) {
+      setCurrentRoute(Route.PATIENTS);
     } else {
       setCurrentRoute(Route.DASHBOARD);
     }
