@@ -329,9 +329,11 @@ const App: React.FC = () => {
         return [newPatient, ...prev];
       });
       addToast('success', `Bemor ${patient.firstName} muvaffaqiyatli qo'shildi!`);
+      return newPatient;
     } catch (e: any) {
       console.error('Add patient error:', e);
       addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
     }
   };
 
@@ -669,6 +671,7 @@ const App: React.FC = () => {
           onAddAppointment={addAppointment}
           onUpdateAppointment={updateAppointment}
           onDeleteAppointment={deleteAppointment}
+          onAddPatient={addPatient}
           userRole={userRole}
           doctorId={doctorId}
           currentClinic={clinics.find(c => c.id === clinicId)}

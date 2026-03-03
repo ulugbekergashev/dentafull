@@ -24,7 +24,8 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
     dob: '',
     gender: 'Male',
     medicalHistory: '',
-    address: ''
+    address: '',
+    secondaryPhone: ''
   });
 
   const filteredPatients = patients.filter(p => {
@@ -59,7 +60,8 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
         dob: '',
         gender: 'Male',
         medicalHistory: '',
-        address: ''
+        address: '',
+        secondaryPhone: ''
       });
     } catch (error) {
       // Error is handled by parent (App.tsx) toast, but we should stop loading
@@ -210,7 +212,10 @@ export const Patients: React.FC<PatientsProps> = ({ patients, onPatientClick, on
             <Input label="Ism" name="firstName" value={formData.firstName} onChange={handleInputChange} required />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Telefon" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
+            <Input label="Asosiy Telefon" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
+            <Input label="Qo'shimcha Telefon" name="secondaryPhone" value={formData.secondaryPhone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" />
+          </div>
+          <div className="grid grid-cols-1 gap-4">
             <Input
               label="Tug'ilgan sana"
               type="date"

@@ -829,6 +829,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                            <Phone className="w-4 h-4" /> {patient.phone}
                         </div>
+                        {patient.secondaryPhone && (
+                           <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                              <Phone className="w-4 h-4 text-gray-400" /> {patient.secondaryPhone} (Qo'shimcha)
+                           </div>
+                        )}
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                            <MapPin className="w-4 h-4" /> {patient.address || 'Manzil kiritilmagan'}
                         </div>
@@ -1291,7 +1296,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <Input label="Ism" value={editFormData.firstName || ''} onChange={e => setEditFormData({ ...editFormData, firstName: e.target.value })} />
                      <Input label="Familiya" value={editFormData.lastName || ''} onChange={e => setEditFormData({ ...editFormData, lastName: e.target.value })} />
                   </div>
-                  <Input label="Telefon" value={editFormData.phone || ''} onChange={e => setEditFormData({ ...editFormData, phone: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-4">
+                     <Input label="Asosiy Telefon" value={editFormData.phone || ''} onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })} required />
+                     <Input label="Qo'shimcha Telefon" value={editFormData.secondaryPhone || ''} onChange={(e) => setEditFormData({ ...editFormData, secondaryPhone: e.target.value })} />
+                  </div>
                   <Input label="Manzil" value={editFormData.address || ''} onChange={e => setEditFormData({ ...editFormData, address: e.target.value })} placeholder="Bemor manzilini kiriting..." />
                   <div className="flex justify-end gap-2 pt-4">
                      <Button type="button" variant="secondary" onClick={() => setIsEditModalOpen(false)}>Bekor qilish</Button>

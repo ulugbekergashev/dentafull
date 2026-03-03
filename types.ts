@@ -59,6 +59,7 @@ export interface Patient {
   address?: string;
   clinicId: string;
   telegramChatId?: string;
+  secondaryPhone?: string;
 }
 
 export interface Appointment {

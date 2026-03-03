@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Modal, Input, Select, Badge } from '../components/Common';
-import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell, Edit2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell, Edit2, Loader2 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 
@@ -14,6 +14,7 @@ interface CalendarProps {
   onAddAppointment: (appt: Omit<Appointment, 'id'>) => Promise<void>;
   onUpdateAppointment: (id: string, data: Partial<Appointment>) => Promise<void>;
   onDeleteAppointment: (id: string) => void;
+  onAddPatient: (patient: Omit<Patient, 'id'>) => Promise<Patient | undefined>;
   userRole: UserRole;
   doctorId: string;
   currentClinic?: Clinic;
@@ -24,7 +25,7 @@ interface CalendarProps {
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, userRole, doctorId, currentClinic, plans, onPatientClick
+  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, currentClinic, plans, onPatientClick
 }) => {
   // Filter appointments for doctors
   const filteredAppointments = userRole === UserRole.DOCTOR && doctorId
@@ -56,6 +57,20 @@ export const Calendar: React.FC<CalendarProps> = ({
     notes: ''
   });
 
+  // Patient Creation State
+  const [isAddPatientModalOpen, setIsAddPatientModalOpen] = useState(false);
+  const [isSubmittingPatient, setIsSubmittingPatient] = useState(false);
+  const [patientFormData, setPatientFormData] = useState({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    dob: '',
+    gender: 'Male',
+    medicalHistory: '',
+    address: '',
+    secondaryPhone: ''
+  });
+
   // Handle Resize for Responsive View
   React.useEffect(() => {
     const handleResize = () => {
@@ -74,7 +89,7 @@ export const Calendar: React.FC<CalendarProps> = ({
   }, []);
 
   // Open Add Modal with default values selected if available
-  const openAddModal = () => {
+  const openAddModal = (initialDate?: string, initialTime?: string) => {
     setEditingApptId(null);
     // Check if clinic is on individual plan
     const isIndividualPlan = currentClinic?.planId === 'individual';
@@ -82,8 +97,8 @@ export const Calendar: React.FC<CalendarProps> = ({
     setFormData({
       patientId: patients.length > 0 ? patients[0].id : '',
       doctorId: doctors.length > 0 ? doctors[0].id : '', // Auto-select first doctor
-      date: new Date().toISOString().split('T')[0],
-      time: '09:00',
+      date: initialDate || new Date().toISOString().split('T')[0],
+      time: initialTime || '09:00',
       duration: 60,
       notes: ''
     });
@@ -338,6 +353,55 @@ export const Calendar: React.FC<CalendarProps> = ({
     }
   };
 
+  const handlePatientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patientFormData.firstName || !patientFormData.lastName) {
+      alert("Iltimos, bemor ismi va familiyasini kiriting!");
+      return;
+    }
+
+    setIsSubmittingPatient(true);
+    try {
+      // Find the new patient after creation
+      // Note: onAddPatient doesn't return the patient in App.tsx but api.patients.create does.
+      // However, addPatient in App.tsx updates the state.
+      // We might need to handle selecting it after it's added to the patients list.
+      const currentPatientCount = patients.length;
+
+      const newPatient = await onAddPatient({
+        ...patientFormData,
+        status: 'Active',
+        lastVisit: 'Never',
+        gender: patientFormData.gender as 'Male' | 'Female'
+      });
+
+      setIsAddPatientModalOpen(false);
+
+      if (newPatient && newPatient.id) {
+        setFormData(prev => ({ ...prev, patientId: newPatient.id }));
+      }
+
+      // Reset form
+      setPatientFormData({
+        firstName: '',
+        lastName: '',
+        phone: '',
+        dob: '',
+        gender: 'Male',
+        medicalHistory: '',
+        address: '',
+        secondaryPhone: ''
+      });
+
+      // We'll need to wait for the patients list to update to find the new ID
+      // For now, the user can select from the dropdown which will include the new patient
+    } catch (error) {
+      console.error('Failed to create patient', error);
+    } finally {
+      setIsSubmittingPatient(false);
+    }
+  };
+
   const openMessageModal = (appt: Appointment) => {
     setMessagePatientId(appt.patientId);
     setMessageType('Custom');
@@ -458,16 +522,28 @@ export const Calendar: React.FC<CalendarProps> = ({
               </div>
 
               {/* Days Columns */}
-              {displayDays.map((day, i) => (
-                <div key={i} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
-                  {HOURS.map(hour => (
-                    <React.Fragment key={hour}>
-                      <div className="h-12 border-b border-gray-50 dark:border-gray-800/50"></div>
-                      <div className="h-12 border-b border-gray-50 dark:border-gray-800/50"></div>
-                    </React.Fragment>
-                  ))}
-                </div>
-              ))}
+              {displayDays.map((day, i) => {
+                const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+                return (
+                  <div key={i} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
+                    {HOURS.map(hour => {
+                      const formattedHour = hour.toString().padStart(2, '0');
+                      return (
+                        <React.Fragment key={hour}>
+                          <div
+                            className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                            onClick={() => openAddModal(dateStr, `${formattedHour}:00`)}
+                          ></div>
+                          <div
+                            className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                            onClick={() => openAddModal(dateStr, `${formattedHour}:30`)}
+                          ></div>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                );
+              })}
 
               {/* Appointments Overlay */}
               {/* Appointments Overlay */}
@@ -595,12 +671,27 @@ export const Calendar: React.FC<CalendarProps> = ({
       {/* Add Appointment Modal */}
       <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setEditingApptId(null); }} title={editingApptId ? "Qabulni Tahrirlash" : "Yangi Qabul"}>
         <form onSubmit={handleAddSubmit} className="space-y-4">
-          <Select
-            label="Bemor"
-            options={patients.map(p => ({ value: p.id, label: `${p.lastName} ${p.firstName}` }))}
-            value={formData.patientId}
-            onChange={(e) => setFormData({ ...formData, patientId: e.target.value })}
-          />
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Select
+                label="Bemor"
+                options={patients.map(p => ({ value: p.id, label: `${p.lastName} ${p.firstName}` }))}
+                value={formData.patientId}
+                onChange={(e) => setFormData({ ...formData, patientId: e.target.value })}
+              />
+            </div>
+            {!editingApptId && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="mb-1 p-2 h-10 w-10 flex items-center justify-center"
+                onClick={() => setIsAddPatientModalOpen(true)}
+                title="Yangi bemor qo'shish"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
           {/* Hide doctor selection for individual plan clinics */}
           {currentClinic?.planId !== 'individual' && (
             <Select
@@ -806,6 +897,101 @@ export const Calendar: React.FC<CalendarProps> = ({
           <div className="flex justify-end gap-2 pt-4">
             <Button type="button" variant="secondary" onClick={() => setIsMessageModalOpen(false)}>Bekor qilish</Button>
             <Button type="submit">Yuborish</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add Patient Modal */}
+      <Modal isOpen={isAddPatientModalOpen} onClose={() => setIsAddPatientModalOpen(false)} title="Yangi Bemor Qo'shish">
+        <form onSubmit={handlePatientSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Familiya"
+              value={patientFormData.lastName}
+              onChange={e => setPatientFormData({ ...patientFormData, lastName: e.target.value })}
+              required
+            />
+            <Input
+              label="Ism"
+              value={patientFormData.firstName}
+              onChange={e => setPatientFormData({ ...patientFormData, firstName: e.target.value })}
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Asosiy Telefon"
+              value={patientFormData.phone}
+              onChange={e => setPatientFormData({ ...patientFormData, phone: e.target.value })}
+              placeholder="+998 XX XXX XX XX"
+              required
+            />
+            <Input
+              label="Qo'shimcha Telefon"
+              value={patientFormData.secondaryPhone}
+              onChange={e => setPatientFormData({ ...patientFormData, secondaryPhone: e.target.value })}
+              placeholder="+998 XX XXX XX XX"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Tug'ilgan sana"
+              type="date"
+              value={patientFormData.dob}
+              onChange={e => setPatientFormData({ ...patientFormData, dob: e.target.value })}
+              required
+            />
+          </div>
+          <Input
+            label="Manzil (Ixtiyoriy)"
+            value={patientFormData.address}
+            onChange={e => setPatientFormData({ ...patientFormData, address: e.target.value })}
+            placeholder="Toshkent sh., Chilonzor t..."
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jins</label>
+            <div className="flex gap-4">
+              <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+                <input
+                  type="radio"
+                  name="calendar-gender"
+                  value="Male"
+                  checked={patientFormData.gender === 'Male'}
+                  onChange={e => setPatientFormData({ ...patientFormData, gender: e.target.value })}
+                  className="text-blue-600 focus:ring-blue-500"
+                /> <span>Erkak</span>
+              </label>
+              <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+                <input
+                  type="radio"
+                  name="calendar-gender"
+                  value="Female"
+                  checked={patientFormData.gender === 'Female'}
+                  onChange={e => setPatientFormData({ ...patientFormData, gender: e.target.value })}
+                  className="text-blue-600 focus:ring-blue-500"
+                /> <span>Ayol</span>
+              </label>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tibbiy Tarix</label>
+            <textarea
+              value={patientFormData.medicalHistory}
+              onChange={e => setPatientFormData({ ...patientFormData, medicalHistory: e.target.value })}
+              className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:text-white h-24 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="Allergiya, surunkali kasalliklar..."
+            ></textarea>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="secondary" onClick={() => setIsAddPatientModalOpen(false)} disabled={isSubmittingPatient}>Bekor qilish</Button>
+            <Button type="submit" disabled={isSubmittingPatient}>
+              {isSubmittingPatient ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saqlanmoqda...
+                </>
+              ) : 'Saqlash'}
+            </Button>
           </div>
         </form>
       </Modal>
