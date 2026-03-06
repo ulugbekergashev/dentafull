@@ -33,6 +33,7 @@ export interface Doctor {
   username?: string;
   password?: string;
   percentage?: number; // Revenue share percentage
+  secondaryPhone?: string;
 }
 
 export interface Receptionist {

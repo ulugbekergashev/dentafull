@@ -41,7 +41,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Edit Form State
    const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
    // Payment Form State
-   const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
+   const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '' });
    const [pendingProcedures, setPendingProcedures] = useState<any[]>([]);
 
    // Medical History State
@@ -480,9 +480,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       // Auto-select first doctor for individual plans
       if (isIndividualPlan && doctors.length > 0) {
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id, appointmentDate: '' });
       } else {
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '' });
       }
 
       setManualPaymentCategoryId('');
@@ -535,7 +535,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             await onAddTransaction({
                patientId: patient.id,
                patientName: `${patient.lastName} ${patient.firstName}`,
-               date: new Date().toISOString().split('T')[0],
+               date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
                amount: totalAmount,
                service: paymentData.service,
                type: paymentData.type as any,
@@ -549,7 +549,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             await onAddTransaction({
                patientId: patient.id,
                patientName: `${patient.lastName} ${patient.firstName}`,
-               date: new Date().toISOString().split('T')[0],
+               date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
                amount: totalAmount,
                service: paymentData.service,
                type: paymentData.type as any,
@@ -564,7 +564,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             await onAddTransaction({
                patientId: patient.id,
                patientName: `${patient.lastName} ${patient.firstName}`,
-               date: new Date().toISOString().split('T')[0],
+               date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
                amount: paidAmount,
                service: `${paymentData.service} (Qisman to'lov)`,
                type: paymentData.type as any,
@@ -577,7 +577,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             await onAddTransaction({
                patientId: patient.id,
                patientName: `${patient.lastName} ${patient.firstName}`,
-               date: new Date().toISOString().split('T')[0],
+               date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
                amount: debtAmount,
                service: `${paymentData.service} (Qarz)`,
                type: paymentData.type as any,
@@ -589,7 +589,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
          // Cleanup only on SUCCESS
          setIsPaymentModalOpen(false);
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '' });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '' });
          setVisitKey(prev => prev + 1);
       } catch (error: any) {
          console.error('Payment processing failed', error);
@@ -1189,7 +1189,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                              service: breakdown || app.type,
                                              type: 'Cash',
                                              status: 'Paid',
-                                             doctorId: app.doctorId
+                                             doctorId: app.doctorId,
+                                             appointmentDate: app.date
                                           });
                                           setIsPaymentModalOpen(true);
                                        }}>To'lov</Button></td>

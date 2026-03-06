@@ -42,7 +42,7 @@ export const Settings: React.FC<SettingsProps> = ({
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
    const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
-   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '', percentage: '' });
+   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '' });
 
    // Receptionist Modal State
    const [isReceptionistModalOpen, setIsReceptionistModalOpen] = useState(false);
@@ -228,13 +228,14 @@ export const Settings: React.FC<SettingsProps> = ({
             lastName: doctor.lastName,
             specialty: doctor.specialty,
             phone: doctor.phone,
+            secondaryPhone: doctor.secondaryPhone || '',
             username: doctor.username || '',
             password: '',
             percentage: (doctor.percentage || 0).toString()
          });
       } else {
          setEditingDoctorId(null);
-         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '', percentage: '' });
+         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '' });
       }
       setIsDoctorModalOpen(true);
    };
@@ -780,7 +781,10 @@ export const Settings: React.FC<SettingsProps> = ({
                   <Input label="Familiya" value={doctorForm.lastName} onChange={e => setDoctorForm({ ...doctorForm, lastName: e.target.value })} required />
                </div>
                <Input label="Mutaxassislik" value={doctorForm.specialty} onChange={e => setDoctorForm({ ...doctorForm, specialty: e.target.value })} required />
-               <Input label="Telefon" value={doctorForm.phone} onChange={e => setDoctorForm({ ...doctorForm, phone: e.target.value })} required />
+               <div className="grid grid-cols-2 gap-4">
+                  <Input label="Telefon" value={doctorForm.phone} onChange={e => setDoctorForm({ ...doctorForm, phone: e.target.value })} required />
+                  <Input label="Qo'shimcha raqam (Ixtiyoriy)" value={doctorForm.secondaryPhone} onChange={e => setDoctorForm({ ...doctorForm, secondaryPhone: e.target.value })} />
+               </div>
 
                <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                   <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Tizimga kirish ma'lumotlari</h4>

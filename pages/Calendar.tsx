@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Card, Button, Modal, Input, Select, Badge } from '../components/Common';
+import { Card, Button, Modal, Input, Select, Badge, SearchableSelect } from '../components/Common';
 import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell, Edit2, Loader2 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
@@ -673,11 +673,11 @@ export const Calendar: React.FC<CalendarProps> = ({
         <form onSubmit={handleAddSubmit} className="space-y-4">
           <div className="flex items-end gap-2">
             <div className="flex-1">
-              <Select
+              <SearchableSelect
                 label="Bemor"
                 options={patients.map(p => ({ value: p.id, label: `${p.lastName} ${p.firstName}` }))}
                 value={formData.patientId}
-                onChange={(e) => setFormData({ ...formData, patientId: e.target.value })}
+                onChange={(val) => setFormData({ ...formData, patientId: val })}
               />
             </div>
             {!editingApptId && (
@@ -734,7 +734,6 @@ export const Calendar: React.FC<CalendarProps> = ({
             <Input
               label="Sana"
               type="date"
-              min={new Date().toISOString().split('T')[0]}
               value={formData.date}
               onChange={e => setFormData({ ...formData, date: e.target.value })}
             />
