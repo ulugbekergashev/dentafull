@@ -2,8 +2,19 @@ import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
 import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus } from 'lucide-react';
 import { api, API_URL } from '../services/api';
+
+const DOCTOR_COLORS = [
+   { name: 'Ko\'k', value: '#3B82F6' },
+   { name: 'Yashil', value: '#10B981' },
+   { name: 'Binafsha', value: '#8B5CF6' },
+   { name: 'Qizil', value: '#F43F5E' },
+   { name: 'Sariq', value: '#F59E0B' },
+   { name: 'Havorang', value: '#06B6D4' },
+   { name: 'To\'q ko\'k', value: '#6366F1' },
+   { name: 'To\'q sariq', value: '#FB923C' },
+];
 
 interface SettingsProps {
    userRole: UserRole;
@@ -42,7 +53,7 @@ export const Settings: React.FC<SettingsProps> = ({
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
    const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
-   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '' });
+   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', color: DOCTOR_COLORS[0].value });
 
    // Receptionist Modal State
    const [isReceptionistModalOpen, setIsReceptionistModalOpen] = useState(false);
@@ -55,6 +66,8 @@ export const Settings: React.FC<SettingsProps> = ({
    // Delete Confirmation Modals
    const [deleteConfirmDoctor, setDeleteConfirmDoctor] = useState<Doctor | null>(null);
    const [deleteConfirmReceptionist, setDeleteConfirmReceptionist] = useState<Receptionist | null>(null);
+
+
 
    // General Form State
    const [generalForm, setGeneralForm] = useState({
@@ -231,11 +244,12 @@ export const Settings: React.FC<SettingsProps> = ({
             secondaryPhone: doctor.secondaryPhone || '',
             username: doctor.username || '',
             password: '',
-            percentage: (doctor.percentage || 0).toString()
+            percentage: (doctor.percentage || 0).toString(),
+            color: doctor.color || DOCTOR_COLORS[0].value
          });
       } else {
          setEditingDoctorId(null);
-         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '' });
+         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', color: DOCTOR_COLORS[0].value });
       }
       setIsDoctorModalOpen(true);
    };
@@ -297,6 +311,8 @@ export const Settings: React.FC<SettingsProps> = ({
       }
       setIsReceptionistModalOpen(false);
    };
+
+
 
    const handleGeneralSave = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -543,7 +559,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         {doctors.map(doc => (
                            <div key={doc.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
                               <div className="flex items-center gap-4">
-                                 <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 font-bold">
+                                 <div className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm" style={{ backgroundColor: doc.color || '#3B82F6' }}>
                                     {doc.firstName[0]}{doc.lastName[0]}
                                  </div>
                                  <div>
@@ -620,117 +636,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   </Card>
                )}
 
-               {/* Bot Settings Tab */}
-               {activeTab === 'bot' && (
-                  <Card className="p-6">
-                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Telegram Bot Sozlamalari</h3>
-                     <p className="text-sm text-gray-500 mb-6">
-                        Klinikangiz uchun Telegram bot tokenini kiriting. Bot bemorlar va xodimlarga avtomatik xabarlar yuboradi.
-                     </p>
-                     <form onSubmit={async (e) => {
-                        e.preventDefault();
-                        try {
-                           if (!currentClinic?.id) return;
 
-                           const response = await api.clinics.updateSettings(currentClinic.id, {
-                              botToken: botToken || undefined
-                           });
-
-                           if (response.success) {
-                              setBotSaved(true);
-                              setTimeout(() => setBotSaved(false), 3000);
-
-                              // Fetch bot username after saving token
-                              if (botToken) {
-                                 setTimeout(async () => {
-                                    try {
-                                       const usernameResponse = await fetch(`${API_URL}/clinics/${currentClinic.id}/bot-username`, {
-                                          headers: {
-                                             'Authorization': `Bearer ${JSON.parse(localStorage.getItem('dentalflow_auth') || '{}').token}`
-                                          }
-                                       });
-                                       const data = await usernameResponse.json();
-                                       if (data.botUsername) {
-                                          setBotUsername(data.botUsername);
-                                       }
-                                    } catch (err) {
-                                       console.error('Failed to fetch bot username:', err);
-                                    }
-                                 }, 1000); // Wait 1 second for bot to initialize
-                              } else {
-                                 setBotUsername(null);
-                              }
-                           } else {
-                              alert('Xatolik yuz berdi');
-                           }
-                        } catch (e) {
-                           console.error(e);
-                           alert('Xatolik yuz berdi');
-                        }
-                     }} className="space-y-4">
-                        <Input
-                           label="Bot Token"
-                           value={botToken}
-                           onChange={e => setBotToken(e.target.value)}
-                           placeholder="123456789:AABbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQq"
-                           helperText="@BotFather dan olgan tokenni kiriting"
-                        />
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
-                           <h4 className="font-medium text-blue-900 dark:text-blue-200 mb-2">📱 Bot yaratish:</h4>
-                           <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
-                              <li>Telegram'da @BotFather ni oching</li>
-                              <li>/newbot buyrug'ini yuboring</li>
-                              <li>Bot nomi va username kiriting</li>
-                              <li>Olingan tokenni yuqoridagi maydonga kiriting</li>
-                           </ol>
-                        </div>
-                        <div className="pt-4 flex items-center gap-4">
-                           <Button type="submit">Botni ulash</Button>
-                           {botSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> Bot muvaffaqiyatli ulandi!</span>}
-                        </div>
-                     </form>
-
-                     {/* Bot Link Section */}
-                     {botToken && (
-                        <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-100 dark:border-green-800 mt-6">
-                           <h4 className="font-medium text-green-900 dark:text-green-200 mb-3">🤖 Sizning botingiz:</h4>
-                           {botUsername ? (
-                              <div className="space-y-3">
-                                 <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-green-200 dark:border-green-700">
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Bot havolasi:</p>
-                                    <a
-                                       href={`https://t.me/${botUsername}`}
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       className="text-blue-600 dark:text-blue-400 hover:underline font-medium break-all"
-                                    >
-                                       https://t.me/{botUsername}
-                                    </a>
-                                 </div>
-                                 <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => {
-                                       navigator.clipboard.writeText(`https://t.me/${botUsername}`);
-                                       alert('✅ Bot havolasi nusxalandi!');
-                                    }}
-                                    className="w-full"
-                                 >
-                                    📋 Havolani nusxalash
-                                 </Button>
-                                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                                    💡 Ushbu havolani bemorlar bilan bo'lishing. Ular botga start bosgandan keyin xabar yuborishingiz mumkin.
-                                 </p>
-                              </div>
-                           ) : (
-                              <div className="text-center py-4">
-                                 <p className="text-gray-500 dark:text-gray-400">Bot ma'lumotlari yuklanmoqda...</p>
-                              </div>
-                           )}
-                        </div>
-                     )}
-                  </Card>
-               )}
 
             </div>
          </div>
@@ -773,6 +679,8 @@ export const Settings: React.FC<SettingsProps> = ({
             </form>
          </Modal>
 
+
+
          {/* Add/Edit Doctor Modal */}
          <Modal isOpen={isDoctorModalOpen} onClose={() => setIsDoctorModalOpen(false)} title={editingDoctorId ? "Shifokorni Tahrirlash" : "Yangi Shifokor Qo'shish"}>
             <form onSubmit={handleDoctorSubmit} className="space-y-4">
@@ -812,6 +720,23 @@ export const Settings: React.FC<SettingsProps> = ({
                         placeholder="50"
                         helperText="Sof foydadan shifokor olishi kerak bo'lgan foiz"
                      />
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Kalendar rangi</label>
+                     <div className="flex flex-wrap gap-3">
+                        {DOCTOR_COLORS.map((color) => (
+                           <button
+                              key={color.value}
+                              type="button"
+                              onClick={() => setDoctorForm({ ...doctorForm, color: color.value })}
+                              className={`w-8 h-8 rounded-full border-2 transition-all ${doctorForm.color === color.value ? 'border-blue-500 scale-110 shadow-md' : 'border-transparent hover:scale-105'}`}
+                              style={{ backgroundColor: color.value }}
+                              title={color.name}
+                           />
+                        ))}
+                     </div>
+                     <p className="text-xs text-gray-500 mt-2">Bu rang kalendarda shifokor qabullarini belgilash uchun ishlatiladi.</p>
                   </div>
                </div>
                <div className="flex justify-end gap-2 pt-4">

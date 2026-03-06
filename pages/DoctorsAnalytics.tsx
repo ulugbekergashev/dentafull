@@ -4,6 +4,7 @@ import { Card, Input } from '../components/Common';
 import { DollarSign, Calendar, Award, Users, Star } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { calculateDoctorSalary } from '../utils/financialCalculations';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface DoctorsAnalyticsProps {
     doctors: Doctor[];
@@ -18,6 +19,7 @@ type DateRange = 'month' | '3months' | '6months' | 'year' | 'all' | 'custom';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
 export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions, reviews }) => {
+    const navigate = useNavigate();
     const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
     const [dateRange, setDateRange] = useState<DateRange>('month');
     const [customStartDate, setCustomStartDate] = useState(defaultStart);
@@ -241,6 +243,114 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                     />
                 </div>
             </div>
+            {/* Detailed Table Moved to Top */}
+            <Card className="overflow-hidden bg-white dark:bg-gray-800">
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Batafsil Ko'rsatkichlar</h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider">
+                                <th className="p-4 font-medium">Shifokor</th>
+                                <th className="p-4 font-medium">Mutaxassislik</th>
+                                <th className="p-4 font-medium text-center">Bemorlar</th>
+                                <th className="p-4 font-medium text-center">Qabullar</th>
+                                <th className="p-4 font-medium">Top Xizmat</th>
+                                <th className="p-4 font-medium text-right">Jami Tushum</th>
+                                <th className="p-4 font-medium text-right">Shifokor Ulushi</th>
+                                <th className="p-4 font-medium text-right">O'rtacha</th>
+                                <th className="p-4 font-medium text-center">Baho</th>
+                                <th className="p-4 font-medium text-center">Eng Band Kun</th>
+                                <th className="p-4 font-medium text-center">Samaradorlik</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {analyticsData.map((doc) => (
+                                <tr
+                                    key={doc.id}
+                                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+                                    onClick={() => navigate(`/doctors/${doc.id}`)}
+                                >
+                                    <td className="p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm">
+                                                {doc.firstName[0]}{doc.lastName[0]}
+                                            </div>
+                                            <div>
+                                                <Link to={`/doctors/${doc.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline">
+                                                    Dr. {doc.firstName} {doc.lastName}
+                                                </Link>
+                                                <p className="text-xs text-gray-500">{doc.phone}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="p-4 text-gray-600 dark:text-gray-300 text-sm">{doc.specialty}</td>
+                                    <td className="p-4 text-center">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                            {doc.uniquePatients}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 text-center text-gray-900 dark:text-white font-medium text-sm">
+                                        {doc.completedAppts} <span className="text-gray-400 text-xs font-normal">/ {doc.totalAppts}</span>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="text-sm text-gray-900 dark:text-white">{doc.topService}</div>
+                                        <div className="text-xs text-gray-500">{doc.topServiceCount} marta</div>
+                                    </td>
+                                    <td className="p-4 text-right font-bold text-gray-900 dark:text-white">
+                                        {doc.revenue.toLocaleString()} UZS
+                                    </td>
+                                    <td className="p-4 text-right font-bold text-green-600 dark:text-green-400">
+                                        {doc.salary.toLocaleString()} UZS
+                                    </td>
+                                    <td className="p-4 text-right text-sm text-gray-700 dark:text-gray-300">
+                                        {Math.round(doc.avgRevenue).toLocaleString()} UZS
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        {doc.avgRating > 0 ? (
+                                            <div className="flex flex-col items-center">
+                                                <div className="flex items-center gap-1 text-yellow-500">
+                                                    <Star className="w-4 h-4 fill-current" />
+                                                    <span className="font-bold text-gray-900 dark:text-white">{doc.avgRating.toFixed(1)}</span>
+                                                </div>
+                                                <span className="text-[10px] text-gray-400">({doc.reviewCount})</span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-gray-400">-</span>
+                                        )}
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                                            {doc.busiestDay}
+                                        </span>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <div className="w-24 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-blue-500 rounded-full transition-all"
+                                                    style={{ width: `${doc.totalAppts > 0 ? (doc.completedAppts / doc.totalAppts) * 100 : 0}%` }}
+                                                ></div>
+                                            </div>
+                                            <span className="text-xs text-gray-500 min-w-[35px]">
+                                                {doc.totalAppts > 0 ? Math.round((doc.completedAppts / doc.totalAppts) * 100) : 0}%
+                                            </span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {analyticsData.length === 0 && (
+                                <tr>
+                                    <td colSpan={11} className="p-8 text-center text-gray-500">
+                                        Hozircha ma'lumot yo'q
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -299,23 +409,25 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
             </div>
 
             {/* Single Doctor Mode Indicator */}
-            {hasSingleDoctor && (
-                <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
-                            <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            {
+                hasSingleDoctor && (
+                    <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                                <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                    Individual tarif rejimi
+                                </p>
+                                <p className="text-xs text-blue-600 dark:text-blue-400">
+                                    Barcha {filteredTransactions.length} ta tranzaksiya avtomatik biriktirildi
+                                </p>
+                            </div>
                         </div>
-                        <div className="flex-1">
-                            <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                                Individual tarif rejimi
-                            </p>
-                            <p className="text-xs text-blue-600 dark:text-blue-400">
-                                Barcha {filteredTransactions.length} ta tranzaksiya avtomatik biriktirildi
-                            </p>
-                        </div>
-                    </div>
-                </Card>
-            )}
+                    </Card>
+                )
+            }
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -400,108 +512,6 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 </Card>
             </div>
 
-            {/* Detailed Table */}
-            <Card className="overflow-hidden bg-white dark:bg-gray-800">
-                <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Batafsil Ko'rsatkichlar</h3>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider">
-                                <th className="p-4 font-medium">Shifokor</th>
-                                <th className="p-4 font-medium">Mutaxassislik</th>
-                                <th className="p-4 font-medium text-center">Bemorlar</th>
-                                <th className="p-4 font-medium text-center">Qabullar</th>
-                                <th className="p-4 font-medium">Top Xizmat</th>
-                                <th className="p-4 font-medium text-right">Jami Tushum</th>
-                                <th className="p-4 font-medium text-right">Shifokor Ulushi</th>
-                                <th className="p-4 font-medium text-right">O'rtacha</th>
-                                <th className="p-4 font-medium text-center">Baho</th>
-                                <th className="p-4 font-medium text-center">Eng Band Kun</th>
-                                <th className="p-4 font-medium text-center">Samaradorlik</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {analyticsData.map((doc) => (
-                                <tr key={doc.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm">
-                                                {doc.firstName[0]}{doc.lastName[0]}
-                                            </div>
-                                            <div>
-                                                <p className="font-medium text-gray-900 dark:text-white">Dr. {doc.firstName} {doc.lastName}</p>
-                                                <p className="text-xs text-gray-500">{doc.phone}</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="p-4 text-gray-600 dark:text-gray-300 text-sm">{doc.specialty}</td>
-                                    <td className="p-4 text-center">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                                            {doc.uniquePatients}
-                                        </span>
-                                    </td>
-                                    <td className="p-4 text-center text-gray-900 dark:text-white font-medium text-sm">
-                                        {doc.completedAppts} <span className="text-gray-400 text-xs font-normal">/ {doc.totalAppts}</span>
-                                    </td>
-                                    <td className="p-4">
-                                        <div className="text-sm text-gray-900 dark:text-white">{doc.topService}</div>
-                                        <div className="text-xs text-gray-500">{doc.topServiceCount} marta</div>
-                                    </td>
-                                    <td className="p-4 text-right font-bold text-gray-900 dark:text-white">
-                                        {doc.revenue.toLocaleString()} UZS
-                                    </td>
-                                    <td className="p-4 text-right font-bold text-green-600 dark:text-green-400">
-                                        {doc.salary.toLocaleString()} UZS
-                                    </td>
-                                    <td className="p-4 text-right text-sm text-gray-700 dark:text-gray-300">
-                                        {Math.round(doc.avgRevenue).toLocaleString()} UZS
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        {doc.avgRating > 0 ? (
-                                            <div className="flex flex-col items-center">
-                                                <div className="flex items-center gap-1 text-yellow-500">
-                                                    <Star className="w-4 h-4 fill-current" />
-                                                    <span className="font-bold text-gray-900 dark:text-white">{doc.avgRating.toFixed(1)}</span>
-                                                </div>
-                                                <span className="text-[10px] text-gray-400">({doc.reviewCount})</span>
-                                            </div>
-                                        ) : (
-                                            <span className="text-xs text-gray-400">-</span>
-                                        )}
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
-                                            {doc.busiestDay}
-                                        </span>
-                                    </td>
-                                    <td className="p-4">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <div className="w-24 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-blue-500 rounded-full transition-all"
-                                                    style={{ width: `${doc.totalAppts > 0 ? (doc.completedAppts / doc.totalAppts) * 100 : 0}%` }}
-                                                ></div>
-                                            </div>
-                                            <span className="text-xs text-gray-500 min-w-[35px]">
-                                                {doc.totalAppts > 0 ? Math.round((doc.completedAppts / doc.totalAppts) * 100) : 0}%
-                                            </span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                            {analyticsData.length === 0 && (
-                                <tr>
-                                    <td colSpan={9} className="p-8 text-center text-gray-500">
-                                        Hozircha ma'lumot yo'q
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
         </div>
     );
 };

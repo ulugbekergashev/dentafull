@@ -148,6 +148,9 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   const displayDays = getDisplayDays(currentDate, view);
 
+  const activeDoctors = doctors.filter(d => d.status === 'Active');
+  const gridColsClass = view === 'week' ? 'grid-cols-8' : 'grid-cols-[60px_1fr]';
+
   // Handlers
   const handlePrev = () => {
     const newDate = new Date(currentDate);
@@ -431,8 +434,8 @@ export const Calendar: React.FC<CalendarProps> = ({
     setIsMessageModalOpen(true);
   };
 
+  // UI Data
   const dayNames = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
-  const gridColsClass = view === 'week' ? 'grid-cols-8' : 'grid-cols-[60px_1fr]';
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col animate-fade-in">
@@ -489,6 +492,16 @@ export const Calendar: React.FC<CalendarProps> = ({
           </Button>
           <Button onClick={openAddModal} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> Yangi Qabul</Button>
         </div>
+      </div>
+
+      {/* Doctor Color Legend */}
+      <div className="flex flex-wrap gap-4 px-1 py-1">
+        {doctors.filter(d => d.status === 'Active').map(doc => (
+          <div key={doc.id} className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: doc.color || '#3B82F6' }} />
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Dr. {doc.lastName}</span>
+          </div>
+        ))}
       </div>
 
       {/* Calendar Grid */}
@@ -566,6 +579,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                     let placed = false;
                     for (const group of groups) {
                       const overlaps = group.some(other => {
+
                         const startA = new Date(`${app.date}T${app.time}`).getTime();
                         const endA = startA + app.duration * 60000;
                         const startB = new Date(`${other.date}T${other.time}`).getTime();
@@ -624,28 +638,44 @@ export const Calendar: React.FC<CalendarProps> = ({
                     ? `calc(${(colWidth / 100) * (100 / 8)}% - 4px)`
                     : `calc(${(colWidth / 100) * 100}% - 68px)`;
 
-                  const colors = {
-                    'Confirmed': 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/60 dark:border-blue-700 dark:text-blue-200',
-                    'Checked-In': 'bg-indigo-100 border-indigo-300 text-indigo-700 dark:bg-indigo-900/60 dark:border-indigo-700 dark:text-indigo-200',
-                    'Completed': 'bg-green-100 border-green-300 text-green-700 dark:bg-green-900/60 dark:border-green-700 dark:text-green-200',
-                    'Pending': 'bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/60 dark:border-yellow-700 dark:text-yellow-200',
-                    'Cancelled': 'bg-red-100 border-red-300 text-red-800 dark:bg-red-900/60 dark:border-red-700 dark:text-red-300',
-                    'No-Show': 'bg-gray-200 border-gray-400 text-gray-600 dark:bg-gray-700 dark:border-gray-500 dark:text-gray-400 opacity-75'
-                  }[app.status] || 'bg-gray-100';
+                  const doctor = doctors.find(d => d.id === app.doctorId);
+                  const doctorColor = doctor?.color || '#3B82F6';
+
+                  const statusColors = {
+                    'Confirmed': 'border-current',
+                    'Checked-In': 'border-current',
+                    'Completed': 'border-current opacity-80',
+                    'Pending': 'border-current border-dashed',
+                    'Cancelled': 'border-red-500 bg-red-50 text-red-700 opacity-50',
+                    'No-Show': 'border-gray-400 bg-gray-100 text-gray-500 opacity-50'
+                  }[app.status] || 'border-current';
+
+                  const isSpecialStatus = app.status === 'Cancelled' || app.status === 'No-Show';
 
                   return (
                     <div
                       key={app.id}
                       onClick={() => setSelectedAppointment(app)}
-                      className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all ${colors} z-10`}
-                      style={{
+                      className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all z-10 ${isSpecialStatus ? statusColors : ''}`}
+                      style={!isSpecialStatus ? {
+                        top: `${topOffset}px`,
+                        left: left,
+                        width: width,
+                        height: `${height - 4}px`,
+                        backgroundColor: `${doctorColor}15`,
+                        borderLeftColor: doctorColor,
+                        color: doctorColor,
+                      } : {
                         top: `${topOffset}px`,
                         left: left,
                         width: width,
                         height: `${height - 4}px`,
                       }}
                     >
-                      <div className="font-bold truncate pr-4">{app.patientName}</div>
+                      <div className="font-bold truncate pr-4 flex items-center justify-between">
+                        <span className="truncate">{app.patientName}</span>
+                        {app.status === 'Completed' && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
+                      </div>
                       {app.reminderSent && (
                         <div className="absolute top-1 right-1">
                           <Bell className="w-3 h-3 text-blue-600 dark:text-blue-400 fill-current" />

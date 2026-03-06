@@ -8,7 +8,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { Patient, Appointment, Transaction, UserRole } from '../types';
+import { Patient, Appointment, Transaction, UserRole, Doctor } from '../types';
 
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
@@ -18,10 +18,11 @@ interface DashboardProps {
   transactions: Transaction[];
   reviews: any[];
   userRole: UserRole;
-  doctorId: string;
+  doctorId?: string;
+  doctors: Doctor[];
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors }) => {
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -333,7 +334,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800 last:border-0">
                       <td className="py-4 font-medium text-gray-900 dark:text-white">{app.date} {app.time}</td>
                       <td className="py-4 text-gray-600 dark:text-gray-300">{app.patientName}</td>
-                      <td className="py-4 text-gray-500">{app.doctorName}</td>
+                      <td className="py-4 text-gray-500">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: doctors.find(d => d.id === app.doctorId)?.color || '#3B82F6' }} />
+                          {app.doctorName}
+                        </div>
+                      </td>
                       <td className="py-4 text-gray-500">{app.type}</td>
                       <td className="py-4"><Badge status={app.status} /></td>
                       <td className="py-4">

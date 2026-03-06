@@ -35,6 +35,7 @@ export const saveDemoData = () => {
             doctors: DEMO_DOCTORS,
             receptionists: DEMO_RECEPTIONISTS,
             clinic: DEMO_CLINIC,
+            clinics: DEMO_CLINICS,
             teeth: DEMO_TEETH,
             diagnoses: DEMO_DIAGNOSES,
             inventory: DEMO_INVENTORY,
@@ -68,6 +69,8 @@ export let DEMO_CLINIC: Clinic = savedData?.clinic || {
     botToken: '',
 };
 
+export let DEMO_CLINICS: Clinic[] = savedData?.clinics || [DEMO_CLINIC];
+
 export let DEMO_RECEPTIONISTS: Receptionist[] = savedData?.receptionists || [];
 
 export let DEMO_TEETH: any[] = savedData?.teeth || [];
@@ -87,6 +90,7 @@ export let DEMO_DOCTORS: Doctor[] = savedData?.doctors || [
         clinicId: 'demo-clinic-1',
         percentage: 40,
         username: 'kamola',
+        color: '#3B82F6', // Blue
     },
     {
         id: 'demo-doctor-2',
@@ -96,8 +100,9 @@ export let DEMO_DOCTORS: Doctor[] = savedData?.doctors || [
         phone: '+998 90 444 55 66',
         status: 'Active',
         clinicId: 'demo-clinic-1',
-        percentage: 35,
+        percentage: 50,
         username: 'jamshid',
+        color: '#10B981', // Emerald
     },
 ];
 

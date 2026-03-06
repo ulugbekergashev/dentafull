@@ -34,6 +34,7 @@ export interface Doctor {
   password?: string;
   percentage?: number; // Revenue share percentage
   secondaryPhone?: string;
+  color?: string;
 }
 
 export interface Receptionist {
@@ -61,6 +62,8 @@ export interface Patient {
   clinicId: string;
   telegramChatId?: string;
   secondaryPhone?: string;
+  doctorId?: string;    // Assigned doctor
+  doctorName?: string;  // Cached doctor name
 }
 
 export interface Appointment {
@@ -143,6 +146,8 @@ export interface Clinic {
   username: string;
   password?: string; // Only for display upon creation
   phone: string;
+  address?: string; // New field
+  email?: string; // New field
   ownerPhone?: string; // Dedicated phone for clinic owner to receive reports
   status: 'Active' | 'Blocked' | 'Pending';
   planId: string;

@@ -1,5 +1,5 @@
 import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog } from '../types';
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, saveDemoData } from './demoData';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -457,20 +457,59 @@ export const api = {
         },
     },
     clinics: {
-        getAll: () => fetchJson<Clinic[]>('/clinics'),
-        create: (data: Omit<Clinic, 'id'>) => fetchJson<Clinic>('/clinics', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        }),
-        update: (id: string, data: Partial<Clinic>) => fetchJson<Clinic>(`/clinics/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        }),
-        delete: (id: string) => fetchJson<{ success: true }>(`/clinics/${id}`, {
-            method: 'DELETE',
-        }),
+        getById: (id: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_CLINIC);
+            return fetchJson<Clinic>(`/clinics/${id}`);
+        },
+        getAll: () => {
+            if (isDemoMode()) return Promise.resolve(DEMO_CLINICS);
+            return fetchJson<Clinic[]>('/clinics');
+        },
+        create: (data: Omit<Clinic, 'id'>) => {
+            if (isDemoMode()) {
+                const newClinic = { ...data, id: `demo-clinic-${Date.now()}` } as Clinic;
+                DEMO_CLINICS.push(newClinic);
+                saveDemoData();
+                return Promise.resolve(newClinic);
+            }
+            return fetchJson<Clinic>('/clinics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<Clinic>) => {
+            if (isDemoMode()) {
+                const index = DEMO_CLINICS.findIndex(c => c.id === id);
+                if (index !== -1) {
+                    DEMO_CLINICS[index] = { ...DEMO_CLINICS[index], ...data };
+                    if (id === DEMO_CLINIC.id) {
+                        Object.assign(DEMO_CLINIC, DEMO_CLINICS[index]);
+                    }
+                    saveDemoData();
+                    return Promise.resolve(DEMO_CLINICS[index]);
+                }
+                throw new Error('Clinic not found');
+            }
+            return fetchJson<Clinic>(`/clinics/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_CLINICS.findIndex(c => c.id === id);
+                if (index !== -1) {
+                    DEMO_CLINICS.splice(index, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/clinics/${id}`, {
+                method: 'DELETE',
+            });
+        },
         updateSettings: (id: string, data: { botToken?: string, ownerPhone?: string }) => {
             if (isDemoMode()) {
                 if (data.botToken !== undefined) DEMO_CLINIC.botToken = data.botToken;

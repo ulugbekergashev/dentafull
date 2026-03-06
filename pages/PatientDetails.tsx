@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
@@ -28,9 +29,12 @@ interface PatientDetailsProps {
 }
 
 export const PatientDetails: React.FC<PatientDetailsProps> = ({
-   patientId, patients, appointments, transactions, doctors, services, categories, currentClinic, plans, userRole,
+   patientId: patientIdProp, patients, appointments, transactions, doctors, services, categories, currentClinic, plans, userRole,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment, onUpdateAppointment
 }) => {
+   const { patientId: patientIdParam } = useParams<{ patientId: string }>();
+   const patientId = patientIdProp || patientIdParam || null;
+
    const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'diagnoses' | 'materials'>('overview');
    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -199,6 +203,20 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          }
       }
    }, [patientId, currentClinic]);
+
+   const [isAssignDoctorModalOpen, setIsAssignDoctorModalOpen] = useState(false);
+
+   const handleAssignDoctor = (doctorId: string) => {
+      const selectedDoctor = doctors.find(d => d.id === doctorId);
+      if (selectedDoctor) {
+         onUpdatePatient(patient.id, {
+            doctorId: selectedDoctor.id,
+            doctorName: `Dr. ${selectedDoctor.firstName} ${selectedDoctor.lastName}`
+         });
+         alert('Shifokor biriktirildi!');
+      }
+      setIsAssignDoctorModalOpen(false);
+   };
 
    const handleSearchICD10 = async (query: string) => {
       setIcd10Query(query);
@@ -840,11 +858,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                            <Clock className="w-4 h-4" /> Oxirgi tashrif: {patient.lastVisit}
                         </div>
+                        {patient.doctorName && (
+                           <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium">
+                              <User className="w-4 h-4" /> Shifokor: {patient.doctorName}
+                           </div>
+                        )}
                      </div>
 
                      <div className="flex md:justify-end items-start gap-2">
-                        <Button variant="secondary" size="sm" onClick={() => window.print()}>
-                           <Printer className="w-4 h-4 mr-2" /> Chop etish
+                        <Button variant="secondary" size="sm" onClick={() => setIsAssignDoctorModalOpen(true)}>
+                           <UserPlus className="w-4 h-4 mr-2" /> {patient.doctorId ? 'Shifokorni O\'zgartirish' : 'Shifokorga Biriktirish'}
                         </Button>
                         <Button variant="secondary" size="sm" onClick={() => {
                            setMessageType('Custom');
@@ -1792,6 +1815,47 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                </div>
             </div>
          </div >
+
+         {/* Assign Doctor Modal */}
+         <Modal isOpen={isAssignDoctorModalOpen} onClose={() => setIsAssignDoctorModalOpen(false)} title="Shifokorni tanlang">
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+               {doctors.length > 0 ? (
+                  doctors.map(doc => (
+                     <button
+                        key={doc.id}
+                        onClick={() => handleAssignDoctor(doc.id)}
+                        className={`w-full flex items-center justify-between p-4 rounded-lg border transition-all text-left group
+                              ${patient.doctorId === doc.id
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                           }`}
+                     >
+                        <div className="flex items-center gap-3">
+                           <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
+                              {doc.firstName[0]}{doc.lastName[0]}
+                           </div>
+                           <div>
+                              <p className="font-bold text-gray-900 dark:text-white">Dr. {doc.firstName} {doc.lastName}</p>
+                              <p className="text-xs text-gray-500">{doc.specialty}</p>
+                           </div>
+                        </div>
+                        {patient.doctorId === doc.id && (
+                           <div className="bg-blue-500 text-white p-1 rounded-full">
+                              <UserCheck className="w-4 h-4" />
+                           </div>
+                        )}
+                     </button>
+                  ))
+               ) : (
+                  <div className="text-center py-8 text-gray-500">
+                     Shifokorlar mavjud emas
+                  </div>
+               )}
+            </div>
+            <div className="flex justify-end pt-4 mt-2 border-t border-gray-100 dark:border-gray-700">
+               <Button variant="secondary" onClick={() => setIsAssignDoctorModalOpen(false)}>Yopish</Button>
+            </div>
+         </Modal>
       </>
    );
 };
