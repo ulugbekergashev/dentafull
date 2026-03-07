@@ -25,6 +25,7 @@ const { botManager } = require('./botManager');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -172,8 +173,11 @@ app.post('/api/auth/login', async (req, res) => {
         let userPayload = null;
         let responseData = null;
 
-        // Check for super admin
-        if (cleanUsername === 'superadminulugbek' && cleanPassword === 'superadminpassword') {
+        // Check for super admin (uses env variables with fallback)
+        const superAdminUsername = process.env.SUPERADMIN_USERNAME || 'superadminulugbek';
+        const superAdminPassword = process.env.SUPERADMIN_PASSWORD || 'superadminpassword';
+
+        if (cleanUsername === superAdminUsername && cleanPassword === superAdminPassword) {
             userPayload = { role: 'SUPER_ADMIN', name: 'Ulugbek (Super Admin)' };
             responseData = {
                 success: true,
@@ -181,13 +185,42 @@ app.post('/api/auth/login', async (req, res) => {
                 name: 'Ulugbek (Super Admin)'
             };
         } else {
+            // Helper function to verify and seamlessly upgrade passwords
+            const verifyAndUpgradePassword = async (user: any, modelName: string, idField: string = 'id') => {
+                let isValid = false;
+                if (!user.password) return false;
+
+                // Check if it's already a bcrypt hash (starts with $2a$, $2b$, $2y$)
+                if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+                    isValid = await bcrypt.compare(cleanPassword, user.password);
+                } else {
+                    // Legacy plaintext check
+                    if (user.password === cleanPassword) {
+                        isValid = true;
+                        // Seamless upgrade: hash the plaintext password and save it
+                        try {
+                            const salt = await bcrypt.genSalt(10);
+                            const hashedPassword = await bcrypt.hash(cleanPassword, salt);
+                            await (prisma[modelName] as any).update({
+                                where: { [idField]: user[idField] },
+                                data: { password: hashedPassword }
+                            });
+                            console.log(`Seamlessly upgraded password mapping for ${modelName} ${user.username}`);
+                        } catch (e) {
+                            console.error(`Failed to upgrade password for ${modelName} ${user.username}`, e);
+                        }
+                    }
+                }
+                return isValid;
+            };
+
             // Check for clinic admin in database
             const clinic = await prisma.clinic.findUnique({
                 where: { username: cleanUsername },
                 include: { plan: true }
             });
 
-            if (clinic && clinic.password === cleanPassword) {
+            if (clinic && await verifyAndUpgradePassword(clinic, 'clinic')) {
                 if (clinic.status !== 'Active') {
                     return res.status(403).json({
                         success: false,
@@ -210,9 +243,12 @@ app.post('/api/auth/login', async (req, res) => {
                     include: { clinic: true }
                 });
 
-                if (doctor && doctor.password === cleanPassword) {
+                if (doctor && await verifyAndUpgradePassword(doctor, 'doctor')) {
                     if (doctor.status !== 'Active') {
                         return res.status(403).json({ success: false, error: 'Shifokor bloklangan' });
+                    }
+                    if (doctor.clinic && doctor.clinic.status === 'Deleted') {
+                        return res.status(403).json({ success: false, error: 'Klinika tizimdan o\'chirilgan' });
                     }
                     userPayload = { role: 'DOCTOR', name: `${doctor.firstName} ${doctor.lastName}`, clinicId: doctor.clinicId, doctorId: doctor.id };
                     responseData = {
@@ -225,12 +261,16 @@ app.post('/api/auth/login', async (req, res) => {
                 } else {
                     // Check for receptionist
                     const receptionist = await prisma.receptionist.findUnique({
-                        where: { username: cleanUsername }
+                        where: { username: cleanUsername },
+                        include: { clinic: true }
                     });
 
-                    if (receptionist && receptionist.password === cleanPassword) {
+                    if (receptionist && await verifyAndUpgradePassword(receptionist, 'receptionist')) {
                         if (receptionist.status !== 'Active') {
                             return res.status(403).json({ success: false, error: 'Resepshn bloklangan' });
+                        }
+                        if (receptionist.clinic && receptionist.clinic.status === 'Deleted') {
+                            return res.status(403).json({ success: false, error: 'Klinika tizimdan o\'chirilgan' });
                         }
                         userPayload = { role: 'RECEPTIONIST', name: `${receptionist.firstName} ${receptionist.lastName}`, clinicId: receptionist.clinicId, receptionistId: receptionist.id };
                         responseData = {
@@ -726,8 +766,13 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
             }
         }
 
+        let passwordData = password;
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            passwordData = await bcrypt.hash(password, salt);
+        }
         const data: any = {
-            firstName, lastName, specialty, phone, status, clinicId, username, password,
+            firstName, lastName, specialty, phone, status, clinicId, username, password: passwordData,
             percentage: percentage || 0
         };
         if (email) data.email = email;
@@ -752,9 +797,14 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
                 return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
             }
         }
+        const updateData = { ...req.body };
+        if (updateData.password) {
+            const salt = await bcrypt.genSalt(10);
+            updateData.password = await bcrypt.hash(updateData.password, salt);
+        }
         const doctor = await prisma.doctor.update({
             where: { id: req.params.id },
-            data: req.body
+            data: updateData
         });
         res.json(doctor);
     } catch (error: any) {
@@ -814,8 +864,13 @@ app.post('/api/receptionists', authenticateToken, async (req, res) => {
             }
         }
 
+        let passwordData = password;
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            passwordData = await bcrypt.hash(password, salt);
+        }
         const data: any = {
-            firstName, lastName, phone, username, password, clinicId,
+            firstName, lastName, phone, username, password: passwordData, clinicId,
             status: 'Active'
         };
 
@@ -839,9 +894,14 @@ app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
                 return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
             }
         }
+        const updateData = { ...req.body };
+        if (updateData.password) {
+            const salt = await bcrypt.genSalt(10);
+            updateData.password = await bcrypt.hash(updateData.password, salt);
+        }
         const receptionist = await prisma.receptionist.update({
             where: { id: req.params.id },
-            data: req.body
+            data: updateData
         });
         res.json(receptionist);
     } catch (error: any) {
@@ -962,6 +1022,9 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
 app.get('/api/clinics', authenticateToken, async (req, res) => {
     try {
         const clinics = await prisma.clinic.findMany({
+            where: {
+                status: { not: 'Deleted' }
+            },
             include: { plan: true }
         });
         res.json(clinics);
@@ -975,12 +1038,17 @@ app.post('/api/clinics', authenticateToken, async (req, res) => {
     try {
         const { name, adminName, username, password, phone, planId, status, subscriptionStartDate, expiryDate, monthlyRevenue } = req.body;
 
+        let passwordData = password ? password.trim() : '';
+        if (passwordData) {
+            const salt = await bcrypt.genSalt(10);
+            passwordData = await bcrypt.hash(passwordData, salt);
+        }
         const clinic = await prisma.clinic.create({
             data: {
                 name,
                 adminName,
                 username: username.trim(),
-                password: password.trim(),
+                password: passwordData,
                 phone,
                 planId,
                 status,
@@ -998,9 +1066,14 @@ app.post('/api/clinics', authenticateToken, async (req, res) => {
 
 app.put('/api/clinics/:id', authenticateToken, async (req, res) => {
     try {
+        const updateData = { ...req.body };
+        if (updateData.password) {
+            const salt = await bcrypt.genSalt(10);
+            updateData.password = await bcrypt.hash(updateData.password, salt);
+        }
         const clinic = await prisma.clinic.update({
             where: { id: req.params.id },
-            data: req.body
+            data: updateData
         });
         res.json(clinic);
     } catch (error) {
@@ -1012,59 +1085,11 @@ app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
     try {
         const clinicId = req.params.id;
 
-        // Use a transaction to delete all related data first (Manual Cascade Delete)
-        await prisma.$transaction([
-            // 1. Delete Inventory Logs (linked to Inventory Items)
-            prisma.inventoryLog.deleteMany({ where: { item: { clinicId: clinicId } } }),
-
-            // 2. Delete Tooth Data (linked to Patients)
-            prisma.toothData.deleteMany({ where: { patient: { clinicId: clinicId } } }),
-
-            // 3. Delete Patient Photos (linked to Patients)
-            prisma.patientPhoto.deleteMany({ where: { patient: { clinicId: clinicId } } }),
-
-            // 4. Delete Treatment Procedures (linked to Visits)
-            prisma.treatmentProcedure.deleteMany({ where: { visit: { clinicId: clinicId } } }),
-
-            // 5. Delete Patient Diagnoses (linked to Clinic/Patient)
-            prisma.patientDiagnosis.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 6. Delete Transactions (linked to Clinic)
-            prisma.transaction.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 7. Delete Reviews (linked to Appointments)
-            prisma.review.deleteMany({ where: { appointment: { clinicId: clinicId } } }),
-
-            // 8. Delete Telegram Logs (linked to Clinic)
-            prisma.telegramLog.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 9. Delete Visits (linked to Clinic)
-            prisma.visit.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 10. Delete Appointments (linked to Clinic)
-            prisma.appointment.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 11. Delete Inventory Items (linked to Clinic)
-            prisma.inventoryItem.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 12. Delete Services (linked to Clinic)
-            prisma.service.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 13. Delete Service Categories (linked to Clinic)
-            prisma.serviceCategory.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 14. Delete Doctors (linked to Clinic)
-            prisma.doctor.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 15. Delete Receptionists (linked to Clinic)
-            prisma.receptionist.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 16. Delete Patients (linked to Clinic)
-            prisma.patient.deleteMany({ where: { clinicId: clinicId } }),
-
-            // 17. Finally, delete the Clinic
-            prisma.clinic.delete({ where: { id: clinicId } })
-        ]);
+        // Soft Delete: Just mark the clinic as Deleted without losing any related data
+        await prisma.clinic.update({
+            where: { id: clinicId },
+            data: { status: 'Deleted' }
+        });
 
         // Stop the bot if it was running
         try {
