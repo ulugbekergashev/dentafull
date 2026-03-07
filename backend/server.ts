@@ -1015,85 +1015,55 @@ app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
         // Use a transaction to delete all related data first (Manual Cascade Delete)
         await prisma.$transaction([
             // 1. Delete Inventory Logs (linked to Inventory Items)
-            prisma.inventoryLog.deleteMany({
-                where: {
-                    item: {
-                        clinicId: clinicId
-                    }
-                }
-            }),
+            prisma.inventoryLog.deleteMany({ where: { item: { clinicId: clinicId } } }),
+
             // 2. Delete Tooth Data (linked to Patients)
-            prisma.toothData.deleteMany({
-                where: {
-                    patient: {
-                        clinicId: clinicId
-                    }
-                }
-            }),
+            prisma.toothData.deleteMany({ where: { patient: { clinicId: clinicId } } }),
+
             // 3. Delete Patient Photos (linked to Patients)
-            prisma.patientPhoto.deleteMany({
-                where: {
-                    patient: {
-                        clinicId: clinicId
-                    }
-                }
-            }),
-            // 4. Delete Patient Diagnoses (linked to Clinic/Patient)
-            prisma.patientDiagnosis.deleteMany({
-                where: {
-                    clinicId: clinicId
-                }
-            }),
-            // 5. Delete Transactions (linked to Clinic)
-            prisma.transaction.deleteMany({
-                where: {
-                    clinicId: clinicId
-                }
-            }),
-            // 6. Delete Appointments (linked to Clinic)
-            prisma.appointment.deleteMany({
-                where: {
-                    clinicId: clinicId
-                }
-            }),
-            // 7. Delete Inventory Items (linked to Clinic)
-            // Note: Logs must be deleted first (Step 1)
-            prisma.inventoryItem.deleteMany({
-                where: {
-                    clinicId: clinicId
-                }
-            }),
-            // 8. Delete Services (linked to Clinic)
-            prisma.service.deleteMany({
-                where: {
-                    clinicId: clinicId
-                }
-            }),
-            // 9. Delete Service Categories (linked to Clinic)
-            // Note: Services must be deleted first (Step 8)
-            prisma.serviceCategory.deleteMany({
-                where: {
-                    clinicId: clinicId
-                }
-            }),
-            // 10. Delete Doctors (linked to Clinic)
-            // Note: Appointments must be deleted first (Step 6)
-            prisma.doctor.deleteMany({
-                where: {
-                    clinicId: clinicId
-                }
-            }),
-            // 11. Delete Patients (linked to Clinic)
-            // Note: Linked data (ToothData, Photos, Diagnoses, Appointments, Transactions) must be deleted first
-            prisma.patient.deleteMany({
-                where: {
-                    clinicId: clinicId
-                }
-            }),
-            // 12. Finally, delete the Clinic
-            prisma.clinic.delete({
-                where: { id: clinicId }
-            })
+            prisma.patientPhoto.deleteMany({ where: { patient: { clinicId: clinicId } } }),
+
+            // 4. Delete Treatment Procedures (linked to Visits)
+            prisma.treatmentProcedure.deleteMany({ where: { visit: { clinicId: clinicId } } }),
+
+            // 5. Delete Patient Diagnoses (linked to Clinic/Patient)
+            prisma.patientDiagnosis.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 6. Delete Transactions (linked to Clinic)
+            prisma.transaction.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 7. Delete Reviews (linked to Appointments)
+            prisma.review.deleteMany({ where: { appointment: { clinicId: clinicId } } }),
+
+            // 8. Delete Telegram Logs (linked to Clinic)
+            prisma.telegramLog.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 9. Delete Visits (linked to Clinic)
+            prisma.visit.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 10. Delete Appointments (linked to Clinic)
+            prisma.appointment.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 11. Delete Inventory Items (linked to Clinic)
+            prisma.inventoryItem.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 12. Delete Services (linked to Clinic)
+            prisma.service.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 13. Delete Service Categories (linked to Clinic)
+            prisma.serviceCategory.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 14. Delete Doctors (linked to Clinic)
+            prisma.doctor.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 15. Delete Receptionists (linked to Clinic)
+            prisma.receptionist.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 16. Delete Patients (linked to Clinic)
+            prisma.patient.deleteMany({ where: { clinicId: clinicId } }),
+
+            // 17. Finally, delete the Clinic
+            prisma.clinic.delete({ where: { id: clinicId } })
         ]);
 
         // Stop the bot if it was running
