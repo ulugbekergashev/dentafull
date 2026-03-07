@@ -55,9 +55,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       return diff;
    };
 
-   // --- Search, Filter, Pagination State ---
    const [searchQuery, setSearchQuery] = useState('');
-   const [filterStatus, setFilterStatus] = useState<'All' | 'Active' | 'Blocked' | 'Expiring'>('All');
+   const [filterStatus, setFilterStatus] = useState<'All' | 'Active' | 'Blocked' | 'Expiring' | 'Expired' | 'NotExpired'>('All');
    const [currentPage, setCurrentPage] = useState(1);
    const itemsPerPage = 10;
 
@@ -79,11 +78,19 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const activeClinics = clinics.filter(c => c.status === 'Active').length;
    const totalClinics = clinics.length;
 
-   // Analytics Calculations
-   const expiringSoonCount = clinics.filter(c => {
+   // Pre-calculate counts for filters
+   const allCount = totalClinics;
+   const activeCount = activeClinics;
+   const blockedCount = clinics.filter(c => c.status === 'Blocked').length;
+   const expiringCount = clinics.filter(c => {
       const days = getDaysRemaining(c.expiryDate);
       return days <= 3 && days > 0;
    }).length;
+   const expiredCount = clinics.filter(c => getDaysRemaining(c.expiryDate) <= 0).length;
+   const notExpiredCount = clinics.filter(c => getDaysRemaining(c.expiryDate) > 0).length;
+
+   // Analytics Calculations
+   const expiringSoonCount = expiringCount;
 
    const newClinicsThisMonth = clinics.filter(c => {
       const start = new Date(c.subscriptionStartDate);
@@ -100,11 +107,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
       const daysLeft = getDaysRemaining(clinic.expiryDate);
       const isExpiring = daysLeft <= 3 && daysLeft > 0;
+      const isExpired = daysLeft <= 0;
+      const isNotExpired = daysLeft > 0;
 
       if (filterStatus === 'All') return matchesSearch;
       if (filterStatus === 'Active') return matchesSearch && clinic.status === 'Active';
       if (filterStatus === 'Blocked') return matchesSearch && clinic.status === 'Blocked';
       if (filterStatus === 'Expiring') return matchesSearch && isExpiring;
+      if (filterStatus === 'Expired') return matchesSearch && isExpired;
+      if (filterStatus === 'NotExpired') return matchesSearch && isNotExpired;
 
       return matchesSearch;
    });
@@ -361,10 +372,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         value={filterStatus}
                         onChange={(e) => { setFilterStatus(e.target.value as any); setCurrentPage(1); }}
                      >
-                        <option value="All">Barchasi</option>
-                        <option value="Active">Faol</option>
-                        <option value="Blocked">Bloklangan</option>
-                        <option value="Expiring">Tugayotganlar</option>
+                        <option value="All">Barchasi ({allCount})</option>
+                        <option value="NotExpired">Hali tugamagan ({notExpiredCount})</option>
+                        <option value="Active">Faol ({activeCount})</option>
+                        <option value="Blocked">Bloklangan ({blockedCount})</option>
+                        <option value="Expiring">Tugayotganlar ({expiringCount})</option>
+                        <option value="Expired">Muddati tugagan ({expiredCount})</option>
                      </select>
                      <Button onClick={() => setIsAddClinicModalOpen(true)}>
                         <Plus className="w-4 h-4 mr-2" /> Qo'shish
