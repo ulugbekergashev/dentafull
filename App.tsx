@@ -73,6 +73,7 @@ const AppContent: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [currentClinic, setCurrentClinic] = useState<Clinic | undefined>();
+  const [clinics, setClinics] = useState<Clinic[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [receptionists, setReceptionists] = useState<Receptionist[]>([]);
@@ -161,8 +162,12 @@ const AppContent: React.FC = () => {
           setPlans([DEMO_PLAN]);
           setInventoryItems([]);
         } else if (userRole === UserRole.SUPER_ADMIN) {
-          const plns = await api.plans.getAll();
+          const [plns, clns] = await Promise.all([
+            api.plans.getAll(),
+            api.clinics.getAll()
+          ]);
           setPlans(plns);
+          setClinics(clns);
         } else if (clinicId) {
           const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs] = await Promise.all([
             api.patients.getAll(clinicId),
@@ -250,8 +255,12 @@ const AppContent: React.FC = () => {
     setError(null);
     try {
       if (userRole === UserRole.SUPER_ADMIN) {
-        const plns = await api.plans.getAll();
+        const [plns, clns] = await Promise.all([
+          api.plans.getAll(),
+          api.clinics.getAll()
+        ]);
         setPlans(plns);
+        setClinics(clns);
       } else if (clinicId) {
         const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs] = await Promise.all([
           api.patients.getAll(clinicId),
@@ -533,6 +542,39 @@ const AppContent: React.FC = () => {
       setCategories(prev => prev.filter(c => c.id !== id));
       addToast('info', 'Kategoriya o\'chirildi.');
     } catch (e) { addToast('error', 'Xatolik yuz berdi'); }
+  };
+
+  // --- Super Admin Actions ---
+  const addClinic = async (clinic: Omit<Clinic, 'id'>) => {
+    try {
+      const newClinic = await api.clinics.create(clinic);
+      setClinics(prev => [...prev, newClinic]);
+      addToast('success', 'Yangi klinika yaratildi!');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const updateClinic = async (id: string, data: Partial<Clinic>) => {
+    try {
+      const updated = await api.clinics.update(id, data);
+      setClinics(prev => prev.map(c => c.id === id ? updated : c));
+      addToast('success', 'Klinika yangilandi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const deleteClinic = async (id: string) => {
+    try {
+      await api.clinics.delete(id);
+      setClinics(prev => prev.filter(c => c.id !== id));
+      addToast('info', "Klinika o'chirildi.");
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const updatePlan = async (id: string, data: Partial<SubscriptionPlan>) => {
+    try {
+      const updated = await api.plans.update(id, data);
+      setPlans(prev => prev.map(p => p.id === id ? updated : p));
+      addToast('success', 'Tarif yangilandi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
   // --- Navigation ---
@@ -880,8 +922,22 @@ const AppContent: React.FC = () => {
           <Routes>
 
             <>
-              {/* Receptionist default */}
-              {userRole === UserRole.RECEPTIONIST ? (
+              {/* Role-based default routes */}
+              {userRole === UserRole.SUPER_ADMIN ? (
+                <>
+                  <Route path="/" element={<Navigate to="/admin" replace />} />
+                  <Route path="/admin" element={
+                    <SuperAdminDashboard
+                      clinics={clinics}
+                      plans={plans}
+                      onAddClinic={addClinic}
+                      onUpdateClinic={updateClinic}
+                      onUpdatePlan={updatePlan}
+                      onDeleteClinic={deleteClinic}
+                    />
+                  } />
+                </>
+              ) : userRole === UserRole.RECEPTIONIST ? (
                 <Route path="/" element={<Navigate to="/patients" replace />} />
               ) : (
                 <Route path="/" element={
