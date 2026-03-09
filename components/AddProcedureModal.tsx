@@ -115,17 +115,18 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
             <div className="flex flex-col lg:flex-row gap-6 min-h-[60vh] lg:h-[80vh]">
 
                 {/* Left Side: Teeth Chart */}
-                <div className="lg:w-1/2 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-auto min-h-[400px]">
+                <div className="lg:w-1/2 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-hidden min-h-[400px]">
                     <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2">
                         1. Tishni tanlang
                     </h4>
-                    <TeethChart
-                        initialData={[]}
-                        // When a tooth is clicked, just update state
-                        onToothClick={(tooth) => setSelectedTooth(tooth === selectedTooth ? null : tooth)}
-                        selectedTooth={selectedTooth}
-                    />
-                    <div className="mt-4 text-center">
+                    <div className="origin-top-left" style={{ transform: 'scale(0.52)', width: '192%' }}>
+                        <TeethChart
+                            initialData={[]}
+                            onToothClick={(tooth) => setSelectedTooth(tooth === selectedTooth ? null : tooth)}
+                            selectedTooth={selectedTooth}
+                        />
+                    </div>
+                    <div className="mt-2 text-center">
                         <p className="text-sm text-gray-500">
                             Tanlangan tish: {selectedTooth ? <span className="font-bold text-blue-600 px-2 py-1 bg-blue-100 rounded-md">#{selectedTooth}</span> : 'Umumiy'}
                         </p>

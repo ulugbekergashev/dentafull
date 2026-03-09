@@ -419,12 +419,12 @@ export const TeethChart: React.FC<TeethChartProps> = ({
       </div>
 
       {/* Chart Container */}
-      <div className="flex flex-col items-start lg:items-center gap-4 sm:gap-8 overflow-x-auto pb-6 select-none bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-800/50 dark:to-gray-900 rounded-3xl p-4 sm:p-6 border border-gray-100 dark:border-gray-700/50 min-w-0">
+      <div className="flex flex-col items-center gap-4 sm:gap-8 overflow-visible pb-6 select-none bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-800/50 dark:to-gray-900 rounded-3xl p-4 sm:p-6 border border-gray-100 dark:border-gray-700/50">
 
         {/* Upper Jaw */}
-        <div className="relative min-w-max px-8">
-          <div className="text-left lg:text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0 pl-2 lg:pl-0">Yuqori Jag'</div>
-          <div className="flex gap-1.5 sm:gap-2 justify-start lg:justify-center pr-8">
+        <div className="relative min-w-max px-2">
+          <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Yuqori Jag'</div>
+          <div className="flex gap-0.5 sm:gap-1 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.upper : PRIMARY_TOOTH_NUMBERS.upper).map(num => (
               <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
                 <RealisticTooth
@@ -440,10 +440,10 @@ export const TeethChart: React.FC<TeethChartProps> = ({
         </div>
 
         {/* Lower Jaw */}
-        <div className="relative min-w-max px-8 flex flex-col items-start lg:items-center">
-          <div className="w-full border-t-2 border-dashed border-gray-100 dark:border-gray-700/50 my-6 sm:my-8 pr-12"></div>
-          <div className="text-left lg:text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 sticky left-0 pl-2 lg:pl-0">Pastki Jag'</div>
-          <div className="flex gap-1.5 sm:gap-2 justify-start lg:justify-center pr-8">
+        <div className="relative min-w-max px-2 flex flex-col items-center">
+          <div className="w-full border-t-2 border-dashed border-gray-100 dark:border-gray-700/50 my-4 sm:my-6"></div>
+          <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Pastki Jag'</div>
+          <div className="flex gap-0.5 sm:gap-1 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.lower : PRIMARY_TOOTH_NUMBERS.lower).map(num => (
               <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
                 <RealisticTooth
