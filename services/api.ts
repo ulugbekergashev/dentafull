@@ -1,5 +1,5 @@
 import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead } from '../types';
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, saveDemoData } from './demoData';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -691,7 +691,7 @@ export const api = {
     },
     leads: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve([]);
+            if (isDemoMode()) return Promise.resolve([...DEMO_LEADS]);
             return fetchJson<Lead[]>(`/leads?clinicId=${clinicId}`);
         },
         create: (data: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -702,8 +702,8 @@ export const api = {
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 } as Lead;
-                // DEMO_LEADS.push(newLead);
-                // saveDemoData();
+                DEMO_LEADS.push(newLead);
+                saveDemoData();
                 return Promise.resolve(newLead);
             }
             return fetchJson<Lead>('/leads', {
@@ -714,7 +714,13 @@ export const api = {
         },
         update: (id: string, data: Partial<Lead>) => {
             if (isDemoMode()) {
-                return Promise.reject("Demo mode not supported for leads update yet.");
+                const index = DEMO_LEADS.findIndex(l => l.id === id);
+                if (index !== -1) {
+                    DEMO_LEADS[index] = { ...DEMO_LEADS[index], ...data, updatedAt: new Date().toISOString() };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_LEADS[index]);
+                }
+                return Promise.reject('Lead not found');
             }
             return fetchJson<Lead>(`/leads/${id}`, {
                 method: 'PUT',
@@ -723,7 +729,12 @@ export const api = {
             });
         },
         delete: (id: string) => {
-            if (isDemoMode()) return Promise.resolve({ success: true });
+            if (isDemoMode()) {
+                const idx = DEMO_LEADS.findIndex(l => l.id === id);
+                if (idx !== -1) DEMO_LEADS.splice(idx, 1);
+                saveDemoData();
+                return Promise.resolve({ success: true as const });
+            }
             return fetchJson<{ success: true }>(`/leads/${id}`, {
                 method: 'DELETE',
             });

@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead } from '../types';
 
 // --- PERSISTENCE HELPERS ---
 const STORAGE_KEY = 'dentalflow_demo_data';
@@ -40,7 +40,8 @@ export const saveDemoData = () => {
             diagnoses: DEMO_DIAGNOSES,
             inventory: DEMO_INVENTORY,
             logs: DEMO_INVENTORY_LOGS,
-            categories: DEMO_CATEGORIES
+            categories: DEMO_CATEGORIES,
+            leads: DEMO_LEADS
         };
         const stringified = JSON.stringify(data);
         localStorage.setItem(STORAGE_KEY, stringified);
@@ -399,4 +400,5 @@ export let DEMO_INVENTORY_LOGS: InventoryLog[] = savedData?.logs || [
     }
 ];
 
-
+// Demo Leads
+export let DEMO_LEADS: Lead[] = savedData?.leads || [];
