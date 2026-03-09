@@ -95,6 +95,8 @@ export interface Transaction {
   doctorId?: string;      // Optional - for backward compatibility
   doctorName?: string;    // Optional - for backward compatibility
   patientId?: string;     // Optional - for backward compatibility
+  discountPercent?: number; // Chegirma foizi (0-100)
+  discountAmount?: number;  // Chegirma summasi
 }
 
 export interface Service {

@@ -184,6 +184,8 @@ model Transaction {
   visit       Visit?   @relation(fields: [visitId], references: [id])
   clinicId    String
   clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  discountPercent Float? @default(0) // Chegirma foizi
+  discountAmount  Float? @default(0) // Chegirma summasi
 
 }
 

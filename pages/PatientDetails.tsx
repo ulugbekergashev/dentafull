@@ -45,7 +45,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Edit Form State
    const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
    // Payment Form State
-   const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '' });
+   const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
    const [pendingProcedures, setPendingProcedures] = useState<any[]>([]);
 
    // Medical History State
@@ -498,9 +498,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       // Auto-select first doctor for individual plans
       if (isIndividualPlan && doctors.length > 0) {
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id, appointmentDate: '' });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id, appointmentDate: '', discountPercent: '' });
       } else {
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '' });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
       }
 
       setManualPaymentCategoryId('');
@@ -541,11 +541,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       }
 
       const doctor = doctors.find(d => d.id === paymentData.doctorId);
+      const discountPercent = Number(paymentData.discountPercent) || 0;
 
       // Calculate amounts
       const paidAmount = Number(paymentData.paidAmount.replace(/,/g, '')) || 0;
       const debtAmount = Number(paymentData.debtAmount.replace(/,/g, '')) || 0;
       const totalAmount = paidAmount + debtAmount;
+      const discountAmount = Math.round((totalAmount / (1 - discountPercent / 100)) * (discountPercent / 100)) || 0; // Rough estimate of original price if we assume totalAmount is already discounted? No, let's just use the current sum. Or better, let's treat totalAmount as the final price and discountPercent as descriptive.
+      // Actually, let's just use the fields directly from the state we'll add.
 
       try {
          // Scenario 1: Full Payment (Debt == 0)
@@ -559,7 +562,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                type: paymentData.type as any,
                status: 'Paid',
                doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
+               discountPercent,
+               discountAmount: Math.round(totalAmount * (discountPercent / (100 - discountPercent))) || 0
             });
          }
          // Scenario 2: No Payment (Paid == 0)
@@ -573,7 +578,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                type: paymentData.type as any,
                status: 'Pending',
                doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
+               discountPercent,
+               discountAmount: Math.round(totalAmount * (discountPercent / (100 - discountPercent))) || 0
             });
          }
          // Scenario 3: Partial Payment (Paid > 0 && Debt > 0)
@@ -588,7 +595,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                type: paymentData.type as any,
                status: 'Paid',
                doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
+               discountPercent,
+               discountAmount: Math.round(paidAmount * (discountPercent / (100 - discountPercent))) || 0
             });
 
             // 2. Pending Part (Debt)
@@ -601,13 +610,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                type: paymentData.type as any,
                status: 'Pending',
                doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : ''
+               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
+               discountPercent,
+               discountAmount: Math.round(debtAmount * (discountPercent / (100 - discountPercent))) || 0
             });
          }
 
          // Cleanup only on SUCCESS
          setIsPaymentModalOpen(false);
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '' });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
          setVisitKey(prev => prev + 1);
       } catch (error: any) {
          console.error('Payment processing failed', error);
@@ -1236,7 +1247,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <div className="overflow-x-auto">
                            <table className="w-full text-left text-sm">
                               <thead className="bg-gray-50 dark:bg-gray-800">
-                                 <tr><th className="p-4 font-medium text-gray-500">Sana</th><th className="p-4 font-medium text-gray-500">Xizmat</th><th className="p-4 font-medium text-gray-500">Usul</th><th className="p-4 font-medium text-gray-500">Summa</th><th className="p-4 font-medium text-gray-500">Status</th><th className="p-4 font-medium text-gray-500">Amal</th></tr>
+                                 <tr><th className="p-4 font-medium text-gray-500">Sana</th><th className="p-4 font-medium text-gray-500">Xizmat</th><th className="p-4 font-medium text-gray-500">Usul</th><th className="p-4 font-medium text-gray-500">Summa</th><th className="p-4 font-medium text-gray-500">Chegirma</th><th className="p-4 font-medium text-gray-500">Status</th><th className="p-4 font-medium text-gray-500">Amal</th></tr>
                               </thead>
                               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                  {patientTransactions.map(t => (
@@ -1245,6 +1256,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                        <td className="p-4 text-gray-600 dark:text-gray-300">{t.service}</td>
                                        <td className="p-4 text-gray-600 dark:text-gray-300">{t.type}</td>
                                        <td className="p-4 text-gray-900 dark:text-white font-medium">{t.amount.toLocaleString()} UZS</td>
+                                       <td className="p-4">
+                                          {t.discountPercent ? (
+                                             <div className="flex flex-col">
+                                                <span className="text-xs text-orange-600 dark:text-orange-400 font-bold">-{t.discountPercent}%</span>
+                                                {t.discountAmount && <span className="text-[10px] text-gray-500">({t.discountAmount.toLocaleString()} UZS)</span>}
+                                             </div>
+                                          ) : (
+                                             <span className="text-gray-400">-</span>
+                                          )}
+                                       </td>
                                        <td className="p-4"><Badge status={t.status} /></td>
                                        <td className="p-4 flex gap-2">
                                           {userRole !== UserRole.DOCTOR && t.status === 'Pending' && (
@@ -1450,6 +1471,37 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         )}
                      </div>
                   </div>
+                  <div className="grid grid-cols-3 gap-4">
+                     <div>
+                        <Input
+                           label="Chegirma (%)"
+                           type="number"
+                           min="0"
+                           max="100"
+                           value={paymentData.discountPercent}
+                           onChange={e => {
+                              const percent = Number(e.target.value);
+                              if (percent < 0 || percent > 100) return;
+
+                              // Calculate new paid amount based on discount
+                              const currentPaid = Number(paymentData.paidAmount) || 0;
+                              const currentDebt = Number(paymentData.debtAmount) || 0;
+                              const total = currentPaid + currentDebt;
+
+                              // If there was no discount before, we treat total as 100%
+                              // If there was a discount, it's more complex. For simplicity, let's just calculate discount sum.
+                              setPaymentData({ ...paymentData, discountPercent: e.target.value });
+                           }}
+                           placeholder="0"
+                        />
+                     </div>
+                     <div className="col-span-2 flex items-end">
+                        <div className="w-full p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-xs text-yellow-800 dark:text-yellow-200">
+                           Chegirma summasi: <strong>{Math.round(((Number(paymentData.paidAmount) || 0) + (Number(paymentData.debtAmount) || 0)) * (Number(paymentData.discountPercent) || 0) / 100).toLocaleString()} UZS</strong>
+                        </div>
+                     </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                      <Input
                         label="To'lanayotgan Summa"

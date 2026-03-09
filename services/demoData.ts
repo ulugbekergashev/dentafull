@@ -286,7 +286,9 @@ export let DEMO_TRANSACTIONS: Transaction[] = savedData?.transactions || [
         status: 'Paid',
         clinicId: 'demo-clinic-1',
         doctorId: 'demo-doctor-1',
-        doctorName: 'Dr. Kamola Ahmedova'
+        doctorName: 'Dr. Kamola Ahmedova',
+        discountPercent: 0,
+        discountAmount: 0
     },
     {
         id: 'demo-tx-2',
@@ -299,7 +301,9 @@ export let DEMO_TRANSACTIONS: Transaction[] = savedData?.transactions || [
         status: 'Paid',
         clinicId: 'demo-clinic-1',
         doctorId: 'demo-doctor-2',
-        doctorName: 'Dr. Jamshid Karimov'
+        doctorName: 'Dr. Jamshid Karimov',
+        discountPercent: 0,
+        discountAmount: 0
     },
     {
         id: 'demo-tx-3',
@@ -312,7 +316,9 @@ export let DEMO_TRANSACTIONS: Transaction[] = savedData?.transactions || [
         status: 'Pending',
         clinicId: 'demo-clinic-1',
         doctorId: 'demo-doctor-1',
-        doctorName: 'Dr. Kamola Ahmedova'
+        doctorName: 'Dr. Kamola Ahmedova',
+        discountPercent: 0,
+        discountAmount: 0
     },
     {
         id: 'demo-tx-4',
@@ -325,7 +331,9 @@ export let DEMO_TRANSACTIONS: Transaction[] = savedData?.transactions || [
         status: 'Paid',
         clinicId: 'demo-clinic-1',
         doctorId: 'demo-doctor-1',
-        doctorName: 'Dr. Kamola Ahmedova'
+        doctorName: 'Dr. Kamola Ahmedova',
+        discountPercent: 0,
+        discountAmount: 0
     },
 ];
 
