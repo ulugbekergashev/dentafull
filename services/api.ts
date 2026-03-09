@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead } from '../types';
 import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
@@ -687,6 +687,46 @@ export const api = {
         getAll: (clinicId: string) => {
             if (isDemoMode()) return Promise.resolve([]);
             return fetchJson<any[]>(`/clinics/${clinicId}/reviews`);
+        }
+    },
+    leads: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([]);
+            return fetchJson<Lead[]>(`/leads?clinicId=${clinicId}`);
+        },
+        create: (data: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => {
+            if (isDemoMode()) {
+                const newLead: Lead = {
+                    ...data,
+                    id: `demo-lead-${Date.now()}`,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                } as Lead;
+                // DEMO_LEADS.push(newLead);
+                // saveDemoData();
+                return Promise.resolve(newLead);
+            }
+            return fetchJson<Lead>('/leads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<Lead>) => {
+            if (isDemoMode()) {
+                return Promise.reject("Demo mode not supported for leads update yet.");
+            }
+            return fetchJson<Lead>(`/leads/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) return Promise.resolve({ success: true });
+            return fetchJson<{ success: true }>(`/leads/${id}`, {
+                method: 'DELETE',
+            });
         }
     }
 };

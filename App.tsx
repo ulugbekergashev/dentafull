@@ -11,13 +11,14 @@ import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
 import { Calendar } from './pages/Calendar';
 import { Finance } from './pages/Finance';
+import { Leads } from './pages/Leads';
 import { Settings } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
 import { DoctorDetails } from './pages/DoctorDetails';
 import { Inventory } from './pages/Inventory';
-import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory } from './types';
+import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
@@ -26,6 +27,7 @@ import { api } from './services/api';
 // Navigation config for Clinic Admin and Doctors
 const CLINIC_NAVIGATION: NavItem[] = [
   { id: 'dashboard', label: 'Boshqaruv Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+  { id: 'leads', label: 'Lidlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'patients', label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: 'calendar', label: 'Kalendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: 'finance', label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
@@ -41,6 +43,7 @@ const SUPER_ADMIN_NAVIGATION: NavItem[] = [
 // Helper: get page label from path
 const getPageLabel = (pathname: string): string => {
   if (pathname === '/' || pathname === '/dashboard') return 'Boshqaruv Paneli';
+  if (pathname === '/leads') return 'Lidlar';
   if (pathname.startsWith('/patients/')) return 'Bemor Profili';
   if (pathname === '/patients') return 'Bemorlar';
   if (pathname === '/calendar') return 'Kalendar';
@@ -74,6 +77,7 @@ const AppContent: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [currentClinic, setCurrentClinic] = useState<Clinic | undefined>();
   const [clinics, setClinics] = useState<Clinic[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [receptionists, setReceptionists] = useState<Receptionist[]>([]);
@@ -169,7 +173,7 @@ const AppContent: React.FC = () => {
           setPlans(plns);
           setClinics(clns);
         } else if (clinicId) {
-          const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs] = await Promise.all([
+          const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs, leadsData] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
@@ -179,7 +183,8 @@ const AppContent: React.FC = () => {
             api.plans.getAll(),
             api.inventory.getAll(clinicId),
             api.categories.getAll(clinicId),
-            api.reviews.getAll(clinicId)
+            api.reviews.getAll(clinicId),
+            api.leads.getAll(clinicId)
           ]);
           setPatients(pts);
           setAppointments(appts);
@@ -192,6 +197,7 @@ const AppContent: React.FC = () => {
           // @ts-ignore
           setCategories(cats);
           setReviews(revs || []);
+          setLeads(leadsData || []);
         }
       } catch (error: any) {
         console.error('Failed to load data:', error);
@@ -262,7 +268,7 @@ const AppContent: React.FC = () => {
         setPlans(plns);
         setClinics(clns);
       } else if (clinicId) {
-        const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs] = await Promise.all([
+        const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs, leadsData] = await Promise.all([
           api.patients.getAll(clinicId),
           api.appointments.getAll(clinicId),
           api.transactions.getAll(clinicId),
@@ -272,7 +278,8 @@ const AppContent: React.FC = () => {
           api.plans.getAll(),
           api.inventory.getAll(clinicId),
           api.categories.getAll(clinicId),
-          api.reviews.getAll(clinicId)
+          api.reviews.getAll(clinicId),
+          api.leads.getAll(clinicId)
         ]);
         setPatients(pts);
         setAppointments(appts);
@@ -285,6 +292,7 @@ const AppContent: React.FC = () => {
         setCategories(cats);
         // @ts-ignore
         setReviews(revs || []);
+        setLeads(leadsData || []);
       }
       addToast('success', 'Ma\'lumotlar muvaffaqiyatli yuklandi!');
     } catch (error) {
@@ -420,6 +428,91 @@ const AppContent: React.FC = () => {
     } catch (e: any) {
       console.error('Transaction update error:', e);
       addToast('error', e.message || 'Xatolik yuz berdi');
+    }
+  };
+
+  // Leads Actions
+  const addLead = async (lead: Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const newLead = await api.leads.create({ ...lead, clinicId });
+      setLeads(prev => [newLead, ...prev]);
+      addToast('success', 'Yangi lid qo\'shildi.');
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+    }
+  };
+
+  const updateLead = async (id: string, data: Partial<Lead>) => {
+    try {
+      const updated = await api.leads.update(id, data);
+      setLeads(prev => prev.map(l => l.id === id ? updated : l));
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+    }
+  };
+
+  const deleteLead = async (id: string) => {
+    try {
+      await api.leads.delete(id);
+      setLeads(prev => prev.filter(l => l.id !== id));
+      addToast('info', 'Lid o\'chirildi.');
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+    }
+  };
+
+  const convertLeadToPatient = async (leadId: string, appointmentData: Partial<Appointment>) => {
+    try {
+      const lead = leads.find(l => l.id === leadId);
+      if (!lead) return;
+
+      // 1. Create Patient
+      const nameParts = lead.name.split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+      const newPatient = await api.patients.create({
+        firstName,
+        lastName,
+        phone: lead.phone,
+        dob: '',
+        gender: 'Male',
+        status: 'Active',
+        lastVisit: 'Never',
+        medicalHistory: lead.notes || '',
+        clinicId,
+      });
+
+      setPatients(prev => {
+        if (prev.find(p => p.id === newPatient.id)) return prev;
+        return [newPatient, ...prev];
+      });
+
+      // 2. Schedule Appointment
+      const doctor = doctors.find(d => d.id === appointmentData.doctorId);
+      if (doctor) {
+        await addAppointment({
+          patientId: newPatient.id,
+          patientName: `${newPatient.lastName} ${newPatient.firstName}`,
+          doctorId: doctor.id,
+          doctorName: `Dr. ${doctor.lastName} ${doctor.firstName}`,
+          type: appointmentData.type || 'Konsultatsiya',
+          date: appointmentData.date || new Date().toISOString().split('T')[0],
+          time: appointmentData.time || '12:00',
+          duration: appointmentData.duration || 60,
+          status: 'Pending',
+          notes: lead.service ? `Qiziqish bildirdi: ${lead.service}` : '',
+          clinicId,
+          categoryId: null
+        });
+      }
+
+      // 3. Update Lead Status
+      await updateLead(leadId, { status: 'Booked' });
+
+      addToast('success', 'Lid mijozga aylantirildi va qabulga yozildi!');
+    } catch (e: any) {
+      addToast('error', e.message || 'Lidni aylantirishda xatolik yuz berdi');
     }
   };
 
@@ -963,6 +1056,19 @@ const AppContent: React.FC = () => {
                   onAddPatient={addPatient}
                   onDeletePatient={deletePatient}
                   onUpdatePatient={updatePatient}
+                />
+              } />
+
+              <Route path="/leads" element={
+                <Leads
+                  leads={leads}
+                  doctors={doctors}
+                  categories={categories}
+                  services={services}
+                  onAddLead={addLead}
+                  onUpdateLead={updateLead}
+                  onDeleteLead={deleteLead}
+                  onConvertLead={convertLeadToPatient}
                 />
               } />
 

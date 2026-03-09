@@ -1022,6 +1022,59 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
 });
 
 // --- Super Admin: Clinics & Plans ---
+
+// --- Leads ---
+app.get('/api/leads', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const leads = await prisma.lead.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(leads);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch leads' });
+    }
+});
+
+app.post('/api/leads', authenticateToken, async (req, res) => {
+    try {
+        const lead = await prisma.lead.create({
+            data: req.body
+        });
+        res.json(lead);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create lead' });
+    }
+});
+
+app.put('/api/leads/:id', authenticateToken, async (req, res) => {
+    try {
+        const lead = await prisma.lead.update({
+            where: { id: req.params.id },
+            data: req.body
+        });
+        res.json(lead);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update lead' });
+    }
+});
+
+app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.lead.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete lead' });
+    }
+});
+
 app.get('/api/clinics', authenticateToken, async (req, res) => {
     try {
         const clinics = await prisma.clinic.findMany({

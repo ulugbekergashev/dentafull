@@ -268,3 +268,16 @@ export interface Review {
   createdAt: string;
   appointment?: Appointment;
 }
+
+export interface Lead {
+  id: string;
+  name: string;
+  phone: string;
+  service?: string;
+  source?: string;
+  notes?: string;
+  status: 'New' | 'Contacted' | 'Thinking' | 'Booked' | 'Cancelled';
+  createdAt: string;
+  updatedAt: string;
+  clinicId: string;
+}
