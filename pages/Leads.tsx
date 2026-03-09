@@ -35,6 +35,7 @@ export const Leads: React.FC<LeadsProps> = ({
     const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
     const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -110,6 +111,42 @@ export const Leads: React.FC<LeadsProps> = ({
         setConvertingLeadId(null);
     };
 
+    const handleDragStart = (e: React.DragEvent, id: string) => {
+        setDraggedLeadId(id);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', id);
+
+        if (e.target instanceof HTMLElement) {
+            e.target.style.opacity = '0.4';
+        }
+    };
+
+    const handleDragEnd = (e: React.DragEvent) => {
+        setDraggedLeadId(null);
+        if (e.target instanceof HTMLElement) {
+            e.target.style.opacity = '1';
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e: React.DragEvent, statusId: string) => {
+        e.preventDefault();
+        const id = e.dataTransfer.getData('text/plain') || draggedLeadId;
+
+        if (id) {
+            if (statusId === 'Booked') {
+                handleConvertClick(id);
+            } else {
+                moveLead(id, statusId);
+            }
+        }
+        setDraggedLeadId(null);
+    };
+
     return (
         <div className="space-y-6 h-full flex flex-col">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm shrink-0">
@@ -147,10 +184,17 @@ export const Leads: React.FC<LeadsProps> = ({
                     {STAGES.map(stage => {
                         const columnLeads = filteredLeads.filter(l => l.status === stage.id);
 
+                        const isDragOverTarget = draggedLeadId !== null;
+
                         return (
-                            <div key={stage.id} className="w-80 flex flex-col bg-gray-50/50 dark:bg-gray-800/30 rounded-xl border border-gray-200/50 dark:border-gray-700/50">
-                                <div className={`p-3 border-b border-gray-200/50 dark:border-gray-700/50 rounded-t-xl`}>
-                                    <div className="flex items-center justify-between">
+                            <div
+                                key={stage.id}
+                                className="w-80 flex flex-col bg-gray-50/50 dark:bg-gray-800/30 rounded-xl border border-gray-200/50 dark:border-gray-700/50"
+                                onDragOver={handleDragOver}
+                                onDrop={(e) => handleDrop(e, stage.id)}
+                            >
+                                <div className={`p-3 border-b border-gray-200/50 dark:border-gray-700/50 rounded-t-xl transition-colors ${isDragOverTarget ? 'bg-gray-100 dark:bg-gray-700/50' : ''}`}>
+                                    <div className="flex items-center justify-between pointer-events-none">
                                         <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${stage.color}`}>
                                             {stage.label}
                                         </span>
@@ -160,10 +204,16 @@ export const Leads: React.FC<LeadsProps> = ({
                                     </div>
                                 </div>
 
-                                <div className="flex-1 p-3 space-y-3 overflow-y-auto min-h-[500px]">
+                                <div className={`flex-1 p-3 space-y-3 overflow-y-auto min-h-[500px] transition-colors ${isDragOverTarget ? 'bg-gray-100/30 dark:bg-gray-800/50 ring-2 ring-inset ring-blue-500/20 rounded-b-xl' : ''}`}>
                                     {columnLeads.map(lead => (
-                                        <div key={lead.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group relative">
-                                            <div className="flex justify-between items-start mb-2">
+                                        <div
+                                            key={lead.id}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, lead.id)}
+                                            onDragEnd={handleDragEnd}
+                                            className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group relative cursor-grab active:cursor-grabbing"
+                                        >
+                                            <div className="flex justify-between items-start mb-2 pointer-events-none">
                                                 <h4 className="font-bold text-gray-900 dark:text-white text-sm">{lead.name}</h4>
                                                 <button
                                                     onClick={() => onDeleteLead(lead.id)}
