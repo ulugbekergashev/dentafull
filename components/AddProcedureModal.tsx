@@ -115,7 +115,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
             <div className="flex flex-col lg:flex-row gap-6 min-h-[60vh] lg:h-[80vh]">
 
                 {/* Left Side: Teeth Chart */}
-                <div className="lg:w-1/2 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-y-auto min-h-[400px]">
+                <div className="lg:w-1/2 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-auto min-h-[400px]">
                     <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2">
                         1. Tishni tanlang
                     </h4>

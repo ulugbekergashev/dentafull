@@ -371,7 +371,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
   const [showLegend, setShowLegend] = useState(false);
 
   return (
-    <div className="p-2 sm:p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+    <div className="p-2 sm:p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-auto">
 
       {/* Tooth Type Toggle */}
       <div className="flex justify-center mb-4 sm:mb-6">
@@ -419,7 +419,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
       </div>
 
       {/* Chart Container */}
-      <div className="flex flex-col items-start lg:items-center gap-4 sm:gap-8 overflow-x-auto pb-6 select-none bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-800/50 dark:to-gray-900 rounded-3xl p-4 sm:p-6 border border-gray-100 dark:border-gray-700/50">
+      <div className="flex flex-col items-start lg:items-center gap-4 sm:gap-8 overflow-x-auto pb-6 select-none bg-gradient-to-b from-gray-50/50 to-white dark:from-gray-800/50 dark:to-gray-900 rounded-3xl p-4 sm:p-6 border border-gray-100 dark:border-gray-700/50 min-w-0">
 
         {/* Upper Jaw */}
         <div className="relative min-w-max px-8">
