@@ -753,9 +753,12 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
             }
         });
 
-        if (currentDoctorCount >= clinic.plan.maxDoctors) {
+        const planMaxDoctors = clinic.plan?.maxDoctors || 10;
+        const planName = clinic.plan?.name || 'Standart';
+
+        if (currentDoctorCount >= planMaxDoctors) {
             return res.status(403).json({
-                error: `Sizning "${clinic.plan.name}" tarifingizda maksimal ${clinic.plan.maxDoctors} ta shifokor qo'shish mumkin. Limitga yetdingiz. Tarifni o'zgartirish uchun biz bilan bog'laning.`
+                error: `Sizning "${planName}" tarifingizda maksimal ${planMaxDoctors} ta shifokor qo'shish mumkin. Limitga yetdingiz. Tarifni o'zgartirish uchun biz bilan bog'laning.`
             });
         }
 

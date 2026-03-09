@@ -226,7 +226,7 @@ export const Settings: React.FC<SettingsProps> = ({
          // Adding new doctor - check limit
          const currentPlanId = currentClinic?.planId;
          const currentPlan = plans?.find(p => p.id === currentPlanId);
-         const maxDoctors = currentPlan?.maxDoctors || 0;
+         const maxDoctors = currentPlan?.maxDoctors || 10;
 
          if (doctors.length >= maxDoctors) {
             setIsUpgradeModalOpen(true);
