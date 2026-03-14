@@ -22,6 +22,8 @@ model Doctor {
   password       String?
   telegramChatId String?
   percentage     Float    @default(0) // Revenue share percentage
+  secondaryPhone String?
+  color          String?
   clinicId       String
   clinic         Clinic   @relation(fields: [clinicId], references: [id])
   appointments   Appointment[]
@@ -52,6 +54,7 @@ model Patient {
   gender         String // 'Male' | 'Female'
   medicalHistory String
   address        String? // Optional address
+  secondaryPhone String?
   telegramChatId String?
   clinicId       String
   clinic         Clinic        @relation(fields: [clinicId], references: [id])

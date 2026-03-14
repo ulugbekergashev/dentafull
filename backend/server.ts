@@ -370,11 +370,25 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
     }
 });
 
-app.put('/api/patients/:id', authenticateToken, async (req, res) => {
-    try {
+        // Sanitize body to only include valid Patient fields
+        const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId } = req.body;
+        const updateData: any = {};
+        if (firstName !== undefined) updateData.firstName = firstName;
+        if (lastName !== undefined) updateData.lastName = lastName;
+        if (phone !== undefined) updateData.phone = phone;
+        if (dob !== undefined) updateData.dob = dob;
+        if (lastVisit !== undefined) updateData.lastVisit = lastVisit;
+        if (status !== undefined) updateData.status = status;
+        if (gender !== undefined) updateData.gender = gender;
+        if (medicalHistory !== undefined) updateData.medicalHistory = medicalHistory;
+        if (address !== undefined) updateData.address = address;
+        if (telegramChatId !== undefined) updateData.telegramChatId = telegramChatId;
+        if (secondaryPhone !== undefined) updateData.secondaryPhone = secondaryPhone;
+        if (clinicId !== undefined) updateData.clinicId = clinicId;
+
         const patient = await prisma.patient.update({
             where: { id: req.params.id },
-            data: req.body
+            data: updateData
         });
         res.json(patient);
     } catch (error) {
@@ -800,11 +814,26 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
                 return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
             }
         }
-        const updateData = { ...req.body };
-        if (updateData.password) {
+        // Sanitize body to only include valid Doctor fields
+        const { firstName, lastName, specialty, phone, email, status, username, password, percentage, secondaryPhone, color, clinicId } = req.body;
+        const updateData: any = {};
+        if (firstName !== undefined) updateData.firstName = firstName;
+        if (lastName !== undefined) updateData.lastName = lastName;
+        if (specialty !== undefined) updateData.specialty = specialty;
+        if (phone !== undefined) updateData.phone = phone;
+        if (email !== undefined) updateData.email = email;
+        if (status !== undefined) updateData.status = status;
+        if (username !== undefined) updateData.username = username;
+        if (percentage !== undefined) updateData.percentage = percentage;
+        if (secondaryPhone !== undefined) updateData.secondaryPhone = secondaryPhone;
+        if (color !== undefined) updateData.color = color;
+        if (clinicId !== undefined) updateData.clinicId = clinicId;
+
+        if (password) {
             const salt = await bcrypt.genSalt(10);
-            updateData.password = await bcrypt.hash(updateData.password, salt);
+            updateData.password = await bcrypt.hash(password, salt);
         }
+        
         const doctor = await prisma.doctor.update({
             where: { id: req.params.id },
             data: updateData

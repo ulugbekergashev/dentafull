@@ -89,14 +89,14 @@ export const Calendar: React.FC<CalendarProps> = ({
   }, []);
 
   // Open Add Modal with default values selected if available
-  const openAddModal = (initialDate?: string, initialTime?: string) => {
+  const openAddModal = (initialDate?: string, initialTime?: string, initialDoctorId?: string) => {
     setEditingApptId(null);
     // Check if clinic is on individual plan
     const isIndividualPlan = currentClinic?.planId === 'individual';
 
     setFormData({
       patientId: patients.length > 0 ? patients[0].id : '',
-      doctorId: doctors.length > 0 ? doctors[0].id : '', // Auto-select first doctor
+      doctorId: initialDoctorId || (doctors.length > 0 ? doctors[0].id : ''), // Use provided doctorId or auto-select first
       date: initialDate || new Date().toISOString().split('T')[0],
       time: initialTime || '09:00',
       duration: 60,
@@ -149,7 +149,11 @@ export const Calendar: React.FC<CalendarProps> = ({
   const displayDays = getDisplayDays(currentDate, view);
 
   const activeDoctors = doctors.filter(d => d.status === 'Active');
-  const gridColsClass = view === 'week' ? 'grid-cols-8' : 'grid-cols-[60px_1fr]';
+  const gridColsClass = view === 'week' 
+    ? 'grid-cols-8' 
+    : activeDoctors.length > 0 
+      ? `grid-cols-[60px_repeat(${activeDoctors.length},minmax(200px,1fr))]` 
+      : 'grid-cols-[60px_1fr]';
 
   // Handlers
   const handlePrev = () => {
@@ -507,19 +511,38 @@ export const Calendar: React.FC<CalendarProps> = ({
       {/* Calendar Grid */}
       <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col relative">
         <div className="flex-1 overflow-auto">
-          <div className={`h-full relative ${view === 'week' ? 'min-w-[1000px]' : 'w-full'}`}>
+          <div className={`h-full relative ${view === 'week' ? 'min-w-[1000px]' : activeDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
             {/* Header Row */}
             <div className={`grid ${gridColsClass} border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 bg-white dark:bg-gray-800`}>
               <div className="p-4 border-r border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-40"></div>
-              {displayDays.map((day, i) => {
-                const isToday = day.toDateString() === new Date().toDateString();
-                return (
-                  <div key={i} className={`p-4 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
-                    <p className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-900 dark:text-white'}`}>{dayNames[day.getDay()]}</p>
-                    <p className={`text-xs ${isToday ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>{day.getDate()}</p>
+              {view === 'week' ? (
+                displayDays.map((day, i) => {
+                  const isToday = day.toDateString() === new Date().toDateString();
+                  return (
+                    <div key={i} className={`p-4 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                      <p className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-900 dark:text-white'}`}>{dayNames[day.getDay()]}</p>
+                      <p className={`text-xs ${isToday ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>{day.getDate()}</p>
+                    </div>
+                  );
+                })
+              ) : (
+                activeDoctors.length > 0 ? (
+                  activeDoctors.map((doc, i) => (
+                    <div key={doc.id} className="p-3 text-center border-r border-gray-100 dark:border-gray-700 last:border-0">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: doc.color || '#3B82F6' }} />
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">Dr. {doc.lastName}</p>
+                      </div>
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{doc.specialty}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center border-r border-gray-100 dark:border-gray-700">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{dayNames[displayDays[0].getDay()]}</p>
+                    <p className="text-xs text-gray-500">{displayDays[0].getDate()}</p>
                   </div>
-                );
-              })}
+                )
+              )}
             </div>
 
             {/* Body */}
@@ -534,29 +557,69 @@ export const Calendar: React.FC<CalendarProps> = ({
                 ))}
               </div>
 
-              {/* Days Columns */}
-              {displayDays.map((day, i) => {
-                const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-                return (
-                  <div key={i} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
+              {/* Days/Doctors Columns */}
+              {view === 'week' ? (
+                displayDays.map((day, i) => {
+                  const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+                  return (
+                    <div key={i} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
+                      {HOURS.map(hour => {
+                        const formattedHour = hour.toString().padStart(2, '0');
+                        return (
+                          <React.Fragment key={hour}>
+                            <div
+                              className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                              onClick={() => openAddModal(dateStr, `${formattedHour}:00`)}
+                            ></div>
+                            <div
+                              className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                              onClick={() => openAddModal(dateStr, `${formattedHour}:30`)}
+                            ></div>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  );
+                })
+              ) : (
+                activeDoctors.length > 0 ? (
+                  activeDoctors.map((doc, i) => {
+                    const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+                    return (
+                      <div key={doc.id} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
+                        {HOURS.map(hour => {
+                          const formattedHour = hour.toString().padStart(2, '0');
+                          return (
+                            <React.Fragment key={hour}>
+                              <div
+                                className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                                onClick={() => openAddModal(dateStr, `${formattedHour}:00`, doc.id)}
+                              ></div>
+                              <div
+                                className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                                onClick={() => openAddModal(dateStr, `${formattedHour}:30`, doc.id)}
+                              ></div>
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
                     {HOURS.map(hour => {
                       const formattedHour = hour.toString().padStart(2, '0');
+                      const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
                       return (
                         <React.Fragment key={hour}>
-                          <div
-                            className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
-                            onClick={() => openAddModal(dateStr, `${formattedHour}:00`)}
-                          ></div>
-                          <div
-                            className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
-                            onClick={() => openAddModal(dateStr, `${formattedHour}:30`)}
-                          ></div>
+                          <div className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer" onClick={() => openAddModal(dateStr, `${formattedHour}:00`)}></div>
+                          <div className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer" onClick={() => openAddModal(dateStr, `${formattedHour}:30`)}></div>
                         </React.Fragment>
                       );
                     })}
                   </div>
-                );
-              })}
+                )
+              )}
 
               {/* Appointments Overlay */}
               {/* Appointments Overlay */}
@@ -564,11 +627,13 @@ export const Calendar: React.FC<CalendarProps> = ({
                 // Calculate layout data for overlapping appointments
                 const layoutData: Record<string, { col: number; total: number }> = {};
 
-                // Group by day to handle overlaps independently per day
+                // Group by day (+ doctor if in day view) to handle overlaps independently
+                const getGroupKey = (app: Appointment) => view === 'day' ? `${app.date}-${app.doctorId}` : app.date;
                 const dayGroups: Record<string, Appointment[]> = {};
                 filteredAppointments.forEach(app => {
-                  if (!dayGroups[app.date]) dayGroups[app.date] = [];
-                  dayGroups[app.date].push(app);
+                  const key = getGroupKey(app);
+                  if (!dayGroups[key]) dayGroups[key] = [];
+                  dayGroups[key].push(app);
                 });
 
                 Object.values(dayGroups).forEach(dayAppts => {
@@ -579,7 +644,6 @@ export const Calendar: React.FC<CalendarProps> = ({
                     let placed = false;
                     for (const group of groups) {
                       const overlaps = group.some(other => {
-
                         const startA = new Date(`${app.date}T${app.time}`).getTime();
                         const endA = startA + app.duration * 60000;
                         const startB = new Date(`${other.date}T${other.time}`).getTime();
@@ -618,7 +682,8 @@ export const Calendar: React.FC<CalendarProps> = ({
                 return filteredAppointments.map(app => {
                   const appDate = new Date(app.date);
                   const dayIndex = displayDays.findIndex(d => d.toDateString() === appDate.toDateString());
-                  if (dayIndex === -1) return null;
+                  if (dayIndex === -1 && view === 'week') return null;
+                  if (view === 'day' && app.date !== currentDate.toISOString().split('T')[0]) return null;
 
                   const [h, m] = app.time.split(':').map(Number);
                   if (isNaN(h)) return null;
@@ -630,13 +695,22 @@ export const Calendar: React.FC<CalendarProps> = ({
                   const colWidth = 100 / total;
                   const colOffset = col * colWidth;
 
-                  const left = view === 'week'
-                    ? `calc(${(dayIndex + 1) * (100 / 8)}% + 2px + ${(colOffset / 100) * (100 / 8)}%)`
-                    : `calc(62px + ${(colOffset / 100) * 100}%)`;
+                  let left = '';
+                  let width = '';
 
-                  const width = view === 'week'
-                    ? `calc(${(colWidth / 100) * (100 / 8)}% - 4px)`
-                    : `calc(${(colWidth / 100) * 100}% - 68px)`;
+                  if (view === 'week') {
+                    left = `calc(${(dayIndex + 1) * (100 / 8)}% + 2px + ${(colOffset / 100) * (100 / 8)}%)`;
+                    width = `calc(${(colWidth / 100) * (100 / 8)}% - 4px)`;
+                  } else {
+                    const docIndex = activeDoctors.findIndex(d => d.id === app.doctorId);
+                    if (docIndex === -1 && activeDoctors.length > 0) return null; // Shouldn't happen with filtered appointments
+
+                    const numDocs = Math.max(1, activeDoctors.length);
+                    const docColumnWidth = `(100% - 60px) / ${numDocs}`;
+                    
+                    left = `calc(60px + (${docIndex === -1 ? 0 : docIndex} * (${docColumnWidth})) + ${(colOffset / 100)} * (${docColumnWidth}) + 2px)`;
+                    width = `calc(${(colWidth / 100)} * (${docColumnWidth}) - 4px)`;
+                  }
 
                   const doctor = doctors.find(d => d.id === app.doctorId);
                   const doctorColor = doctor?.color || '#3B82F6';
