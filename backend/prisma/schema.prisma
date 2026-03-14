@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,23 +8,23 @@ datasource db {
 }
 
 model Doctor {
-  id             String   @id @default(uuid())
+  id             String        @id @default(uuid())
   firstName      String
   lastName       String
   specialty      String
   phone          String
   email          String?
-  status         String // 'Active' | 'On Leave'
-  username       String?  @unique
+  status         String
+  username       String?       @unique
   password       String?
-  telegramChatId String?
-  percentage     Float    @default(0) // Revenue share percentage
-  secondaryPhone String?
-  color          String?
   clinicId       String
-  clinic         Clinic   @relation(fields: [clinicId], references: [id])
+  telegramChatId String?
+  percentage     Float         @default(0)
+  color          String?
+  secondaryPhone String?
   appointments   Appointment[]
-  
+  clinic         Clinic        @relation(fields: [clinicId], references: [id])
+
   @@unique([clinicId, telegramChatId])
 }
 
@@ -38,48 +35,48 @@ model Receptionist {
   phone     String
   username  String @unique
   password  String
-  status    String // 'Active' | 'Inactive' | 'Deleted'
+  status    String
   clinicId  String
   clinic    Clinic @relation(fields: [clinicId], references: [id])
 }
 
 model Patient {
-  id             String        @id @default(uuid())
+  id             String             @id @default(uuid())
   firstName      String
   lastName       String
   phone          String
   dob            String
   lastVisit      String
-  status         String // 'Active' | 'Archived'
-  gender         String // 'Male' | 'Female'
+  status         String
+  gender         String
   medicalHistory String
-  address        String? // Optional address
-  secondaryPhone String?
-  telegramChatId String?
   clinicId       String
-  clinic         Clinic        @relation(fields: [clinicId], references: [id])
+  telegramChatId String?
+  address        String?
+  createdAt      DateTime           @default(now())
+  secondaryPhone String?
   appointments   Appointment[]
+  inventoryLogs  InventoryLog[]
+  clinic         Clinic             @relation(fields: [clinicId], references: [id])
   diagnoses      PatientDiagnosis[]
-  visits         Visit[]       // New relation
-  
-  @@unique([clinicId, telegramChatId])
-  @@index([phone]) // Optimize phone lookup
   photos         PatientPhoto[]
+  telegramLogs   TelegramLog[]
   teeth          ToothData[]
   transactions   Transaction[]
-  inventoryLogs  InventoryLog[]
-  telegramLogs   TelegramLog[]
-  createdAt      DateTime      @default(now())
+  visits         Visit[]
+
+  @@unique([clinicId, telegramChatId])
+  @@index([phone])
 }
 
 model ToothData {
-  id          Int      @id @default(autoincrement())
-  patientId   String
-  patient     Patient  @relation(fields: [patientId], references: [id])
-  number      Int
-  conditions  String   // JSON string of ToothStatus[]
-  notes       String?
-  updatedAt   DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  patientId  String
+  number     Int
+  conditions String
+  notes      String?
+  updatedAt  DateTime @updatedAt
+  patient    Patient  @relation(fields: [patientId], references: [id])
 
   @@unique([patientId, number])
 }
@@ -87,121 +84,115 @@ model ToothData {
 model PatientPhoto {
   id          String   @id @default(uuid())
   patientId   String
-  patient     Patient  @relation(fields: [patientId], references: [id])
-  url         String   // Path to the file
+  url         String
   description String?
-  category    String   // 'Before', 'After', 'X-Ray', 'Other'
+  category    String
   date        DateTime @default(now())
   createdAt   DateTime @default(now())
+  patient     Patient  @relation(fields: [patientId], references: [id])
 }
 
 model Appointment {
-  id          String   @id @default(uuid())
-  patientId   String
-  patient     Patient  @relation(fields: [patientId], references: [id])
-  patientName String
-  doctorId    String
-  doctor      Doctor   @relation(fields: [doctorId], references: [id])
-  doctorName  String
-  type        String
-  date        String
-  time        String
-  duration    Int
-  status      String // 'Confirmed' | 'Pending' | 'Completed' | 'Cancelled' | 'No-Show' | 'Checked-In'
+  id           String  @id @default(uuid())
+  patientId    String
+  patientName  String
+  doctorId     String
+  doctorName   String
+  type         String
+  date         String
+  time         String
+  duration     Int
+  status       String
+  notes        String?
+  clinicId     String
   reminderSent Boolean @default(false)
-  notes       String?
-  clinicId    String
-  clinic      Clinic   @relation(fields: [clinicId], references: [id])
-  visits      Visit[]  // New relation
-  review      Review?  // Changed to 1-to-1
-  
+  clinic       Clinic  @relation(fields: [clinicId], references: [id])
+  doctor       Doctor  @relation(fields: [doctorId], references: [id])
+  patient      Patient @relation(fields: [patientId], references: [id])
+  review       Review?
+  visits       Visit[]
+
   @@unique([patientId, date], name: "unique_patient_date")
   @@index([date])
   @@index([patientId])
 }
 
-// Visit/Session - Tracks each patient visit from check-in to checkout
 model Visit {
-  id             String                @id @default(uuid())
-  patientId      String
-  patient        Patient               @relation(fields: [patientId], references: [id])
-  appointmentId  String?               // Optional link to appointment
-  appointment    Appointment?          @relation(fields: [appointmentId], references: [id])
-  date           String                // Visit date
-  checkInTime    DateTime              @default(now())
-  checkOutTime   DateTime?
-  status         String                @default("Waiting") // 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled'
-  complaints     String?               // Chief complaint
-  vitalSigns     String?               // JSON: { bloodPressure, pulse, etc. }
-  notes          String?               // General visit notes
-  clinicId       String
-  clinic         Clinic                @relation(fields: [clinicId], references: [id])
-  
-  // Relations
-  diagnoses      PatientDiagnosis[]
-  procedures     TreatmentProcedure[]
-  transactions   Transaction[]
-  
+  id            String               @id @default(uuid())
+  patientId     String
+  appointmentId String?
+  date          String
+  checkInTime   DateTime             @default(now())
+  checkOutTime  DateTime?
+  status        String               @default("Waiting")
+  complaints    String?
+  vitalSigns    String?
+  notes         String?
+  clinicId      String
+  diagnoses     PatientDiagnosis[]
+  transactions  Transaction[]
+  procedures    TreatmentProcedure[]
+  appointment   Appointment?         @relation(fields: [appointmentId], references: [id])
+  clinic        Clinic               @relation(fields: [clinicId], references: [id])
+  patient       Patient              @relation(fields: [patientId], references: [id])
+
   @@index([patientId])
   @@index([date])
 }
 
-// Treatment Procedure - Individual procedures performed during a visit
 model TreatmentProcedure {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   visitId       String
-  visit         Visit    @relation(fields: [visitId], references: [id])
   procedureName String
-  toothNumber   Int?     // 1-32, optional for general procedures
-  toothSurface  String?  // e.g., "Mesial", "Distal", "Occlusal"
-  status        String   @default("Planned") // 'Planned' | 'In Progress' | 'Completed' | 'Cancelled'
+  toothNumber   Int?
+  toothSurface  String?
+  status        String    @default("Planned")
   basePrice     Float
-  discount      Float    @default(0)
+  discount      Float     @default(0)
   finalPrice    Float
-  materialsUsed String?  // JSON array of materials
+  materialsUsed String?
   notes         String?
-  duration      Int?     // in minutes
+  duration      Int?
   doctorId      String
   doctorName    String
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
   completedAt   DateTime?
-  
+  visit         Visit     @relation(fields: [visitId], references: [id])
+
   @@index([visitId])
   @@index([toothNumber])
 }
 
-
 model Transaction {
-  id          String   @id @default(uuid())
-  patientName String
-  date        String
-  amount      Float
-  type        String // 'Cash' | 'Card' | 'Insurance'
-  service     String
-  status      String // 'Paid' | 'Pending' | 'Overdue'
-  doctorId    String?  // Optional - for backward compatibility
-  doctorName  String?  // Optional - for backward compatibility
-  patientId   String?  // Optional initially to support existing data
-  patient     Patient? @relation(fields: [patientId], references: [id])
-  visitId     String?  // New field - optional for backward compatibility
-  visit       Visit?   @relation(fields: [visitId], references: [id])
-  clinicId    String
-  clinic      Clinic   @relation(fields: [clinicId], references: [id])
-  discountPercent Float? @default(0) // Chegirma foizi
-  discountAmount  Float? @default(0) // Chegirma summasi
-
+  id              String   @id @default(uuid())
+  patientName     String
+  date            String
+  amount          Float
+  type            String
+  service         String
+  status          String
+  clinicId        String
+  doctorId        String?
+  doctorName      String?
+  patientId       String?
+  visitId         String?
+  discountAmount  Float?   @default(0)
+  discountPercent Float?   @default(0)
+  clinic          Clinic   @relation(fields: [clinicId], references: [id])
+  patient         Patient? @relation(fields: [patientId], references: [id])
+  visit           Visit?   @relation(fields: [visitId], references: [id])
 }
 
 model Service {
-  id       Int    @id @default(autoincrement())
-  name     String
-  price    Float
-  cost     Float  @default(0) // Service cost (e.g., technician fee)
-  duration Int
-  clinicId String
-  clinic   Clinic @relation(fields: [clinicId], references: [id])
+  id         Int              @id @default(autoincrement())
+  name       String
+  price      Float
+  duration   Int
+  clinicId   String
+  cost       Float            @default(0)
   categoryId String?
   category   ServiceCategory? @relation(fields: [categoryId], references: [id])
+  clinic     Clinic           @relation(fields: [clinicId], references: [id])
 }
 
 model SubscriptionPlan {
@@ -209,48 +200,44 @@ model SubscriptionPlan {
   name       String
   price      Float
   maxDoctors Int
-  features   String // Stored as JSON string or comma-separated
+  features   String
   clinics    Clinic[]
 }
 
 model Clinic {
-  id                    String           @id @default(uuid())
+  id                    String             @id @default(uuid())
   name                  String
   adminName             String
-  username              String           @unique
+  username              String             @unique
   password              String?
   phone                 String
-  ownerPhone            String? // Dedicated phone for clinic owner to receive reports
-  status                String // 'Active' | 'Blocked' | 'Pending'
-  telegramChatId        String?
-  botToken              String? // Token for the clinic's own bot
+  status                String
   planId                String
-  plan                  SubscriptionPlan @relation(fields: [planId], references: [id])
   subscriptionStartDate String
   expiryDate            String
   monthlyRevenue        Float
-  subscriptionType      String           @default("Paid") // 'Paid' | 'Trial'
-  
-  // SMS settings (Added to match production schema)
-  smsBalance            Float            @default(0)
-  smsLimit              Int              @default(0)
-  smsUsedThisMonth      Int              @default(0)
+  telegramChatId        String?
+  botToken              String?
+  subscriptionType      String             @default("Paid")
+  smsBalance            Float              @default(0)
+  smsLimit              Int                @default(0)
+  smsUsedThisMonth      Int                @default(0)
+  ownerPhone            String?
+  appointments          Appointment[]
+  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
+  doctors               Doctor[]
+  inventoryItems        InventoryItem[]
+  leads                 Lead[]
+  patients              Patient[]
+  diagnoses             PatientDiagnosis[]
+  receptionists         Receptionist[]
+  services              Service[]
+  serviceCategories     ServiceCategory[]
+  telegramLogs          TelegramLog[]
+  transactions          Transaction[]
+  visits                Visit[]
 
-  // Relations
-  doctors       Doctor[]
-  receptionists Receptionist[]
-  patients      Patient[]
-  appointments  Appointment[]
-  visits        Visit[]       // New relation
-  transactions  Transaction[]
-  services      Service[]
-  serviceCategories ServiceCategory[]
-  diagnoses     PatientDiagnosis[]
-  inventoryItems InventoryItem[]
-  telegramLogs  TelegramLog[]
-  leads         Lead[]
-
-  @@index([botToken]) // Optimize bot startup
+  @@index([botToken])
 }
 
 model Lead {
@@ -258,14 +245,14 @@ model Lead {
   name      String
   phone     String
   service   String?
-  source    String?   // 'Instagram', 'Telegram', 'Tavsiya', etc.
+  source    String?
   notes     String?
-  status    String   @default("New") // 'New', 'Contacted', 'Thinking', 'Booked', 'Cancelled'
+  status    String   @default("New")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   clinicId  String
   clinic    Clinic   @relation(fields: [clinicId], references: [id])
-  
+
   @@index([clinicId])
   @@index([status])
 }
@@ -273,51 +260,51 @@ model Lead {
 model ICD10Code {
   code        String             @id
   name        String
-  category    String?            // New field for grouping
   description String?
+  category    String?
   diagnoses   PatientDiagnosis[]
 }
 
 model PatientDiagnosis {
-  id          String    @id @default(uuid())
-  patientId   String
-  patient     Patient   @relation(fields: [patientId], references: [id])
-  code        String
-  icd10       ICD10Code @relation(fields: [code], references: [code])
-  date        String
-  notes       String?
-  status      String // 'Active' | 'Resolved' | 'Chronic'
-  visitId     String?   // New field - optional for backward compatibility
-  visit       Visit?    @relation(fields: [visitId], references: [id])
-  clinicId    String
-  clinic      Clinic    @relation(fields: [clinicId], references: [id])
+  id        String    @id @default(uuid())
+  patientId String
+  code      String
+  date      String
+  notes     String?
+  status    String
+  clinicId  String
+  visitId   String?
+  clinic    Clinic    @relation(fields: [clinicId], references: [id])
+  icd10     ICD10Code @relation(fields: [code], references: [code])
+  patient   Patient   @relation(fields: [patientId], references: [id])
+  visit     Visit?    @relation(fields: [visitId], references: [id])
 }
 
 model InventoryItem {
   id          String         @id @default(uuid())
   name        String
-  unit        String         // e.g., 'pcs', 'mg', 'ml'
+  unit        String
   quantity    Float          @default(0)
-  minQuantity Float          @default(0) // Minimum stock level for alerts
+  minQuantity Float          @default(0)
   clinicId    String
-  clinic      Clinic         @relation(fields: [clinicId], references: [id])
-  logs        InventoryLog[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+  clinic      Clinic         @relation(fields: [clinicId], references: [id])
+  logs        InventoryLog[]
 }
 
 model InventoryLog {
   id        String        @id @default(uuid())
   itemId    String
-  item      InventoryItem @relation(fields: [itemId], references: [id])
-  change    Float         // Positive for IN, negative for OUT
-  type      String        // 'IN' | 'OUT'
+  change    Float
+  type      String
   note      String?
   date      DateTime      @default(now())
-  userName  String        // Who made the change
+  userName  String
   patientId String?
+  item      InventoryItem @relation(fields: [itemId], references: [id])
   patient   Patient?      @relation(fields: [patientId], references: [id])
-  
+
   @@index([itemId])
   @@index([patientId])
 }
@@ -326,8 +313,8 @@ model ServiceCategory {
   id       String    @id @default(uuid())
   name     String
   clinicId String
-  clinic   Clinic    @relation(fields: [clinicId], references: [id])
   services Service[]
+  clinic   Clinic    @relation(fields: [clinicId], references: [id])
 
   @@unique([clinicId, name])
 }
@@ -335,23 +322,23 @@ model ServiceCategory {
 model Review {
   id            String      @id @default(uuid())
   appointmentId String      @unique
-  appointment   Appointment @relation(fields: [appointmentId], references: [id])
-  rating        Int         // 1-5
+  rating        Int
   comment       String?
   createdAt     DateTime    @default(now())
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
 }
 
 model TelegramLog {
   id        String   @id @default(uuid())
   clinicId  String
-  clinic    Clinic   @relation(fields: [clinicId], references: [id])
   patientId String?
-  patient   Patient? @relation(fields: [patientId], references: [id])
-  type      String   // 'Reminder' | 'Rating' | 'Manual' | 'Debt'
-  status    String   // 'Sent' | 'Failed'
+  type      String
+  status    String
   message   String?
   error     String?
   sentAt    DateTime @default(now())
+  clinic    Clinic   @relation(fields: [clinicId], references: [id])
+  patient   Patient? @relation(fields: [patientId], references: [id])
 
   @@index([clinicId])
   @@index([patientId])

@@ -12,8 +12,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // IMMEDIATE HEALTH CHECK
-app.get('/health', (req, res) => res.status(200).send('OK'));
-app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP!'));
+app.get('/health', (req, res) => res.status(200).send('OK - v1.0.1'));
+app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.0.1'));
 
 app.listen(PORT, () => {
     console.log(`✅ Server successfully started on port ${PORT}`);
@@ -370,6 +370,8 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
     }
 });
 
+app.put('/api/patients/:id', authenticateToken, async (req, res) => {
+    try {
         // Sanitize body to only include valid Patient fields
         const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId } = req.body;
         const updateData: any = {};
@@ -815,7 +817,7 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
             }
         }
         // Sanitize body to only include valid Doctor fields
-        const { firstName, lastName, specialty, phone, email, status, username, password, percentage, secondaryPhone, color, clinicId } = req.body;
+        const { firstName, lastName, specialty, phone, email, status, password, percentage, secondaryPhone, color, clinicId } = req.body;
         const updateData: any = {};
         if (firstName !== undefined) updateData.firstName = firstName;
         if (lastName !== undefined) updateData.lastName = lastName;
