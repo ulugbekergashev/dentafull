@@ -1127,6 +1127,23 @@ app.get('/api/clinics', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/clinics/:id', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = req.params.id;
+        const clinic = await prisma.clinic.findUnique({
+            where: { id: clinicId },
+            include: { plan: true }
+        });
+        if (!clinic) {
+            return res.status(404).json({ error: 'Klinika topilmadi' });
+        }
+        res.json(clinic);
+    } catch (error: any) {
+        console.error('Failed to fetch clinic by ID:', error);
+        res.status(500).json({ error: 'Failed to fetch clinic details', details: error.message });
+    }
+});
+
 app.post('/api/clinics', authenticateToken, async (req, res) => {
     try {
         const { name, adminName, username, password, phone, planId, status, subscriptionStartDate, expiryDate, monthlyRevenue } = req.body;
