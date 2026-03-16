@@ -231,7 +231,15 @@ export const Leads: React.FC<LeadsProps> = ({
         setIsFBLoading(true);
         try {
             const { url } = await api.facebook.getAuthUrl(currentClinic.id);
-            window.location.href = url;
+            const width = 600;
+            const height = 700;
+            const left = Math.max(0, (window.screen.width / 2) - (width / 2));
+            const top = Math.max(0, (window.screen.height / 2) - (height / 2));
+            window.open(
+                url,
+                'FacebookLogin',
+                `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes`
+            );
         } catch (error: any) {
             console.error('FB Connect error:', error);
             alert(`Facebook ulanishda xatolik: ${error.message}`);
