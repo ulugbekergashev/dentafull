@@ -94,14 +94,7 @@ app.get('/', (req, res) => {
     res.send('Dental CRM Backend is running!');
 });
 
-// --- Middleware ---
-// Prefix-stripping middleware (makes routes work with or without /api/)
-app.use((req, res, next) => {
-    if (req.url.startsWith('/api/')) {
-        req.url = req.url.replace('/api/', '/');
-    }
-    next();
-});
+
 
 const authenticateToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers['authorization'];
@@ -1533,7 +1526,7 @@ const FB_APP_SECRET = process.env.FACEBOOK_APP_SECRET;
 const FB_REDIRECT_URI = process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/facebook/callback';
 
 // Unified Facebook config check
-app.get('/facebook/config-check', authenticateToken, (req, res) => {
+app.get('/api/facebook/config-check', authenticateToken, (req, res) => {
     res.json({
         isConfigured: !!process.env.FACEBOOK_APP_ID && !!process.env.FACEBOOK_APP_SECRET,
         appId: process.env.FACEBOOK_APP_ID ? `${process.env.FACEBOOK_APP_ID.substring(0, 4)}...` : null,
@@ -1541,7 +1534,7 @@ app.get('/facebook/config-check', authenticateToken, (req, res) => {
     });
 });
 
-app.post('/facebook/save-config', authenticateToken, async (req, res) => {
+app.post('/api/facebook/save-config', authenticateToken, async (req, res) => {
     const { appId, appSecret } = req.body;
     if (!appId || !appSecret) return res.status(400).json({ error: 'appId and appSecret are required' });
 
@@ -1576,7 +1569,7 @@ app.post('/facebook/save-config', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/facebook/auth-url', authenticateToken, (req, res) => {
+app.get('/api/facebook/auth-url', authenticateToken, (req, res) => {
     const { clinicId } = req.query;
     if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
