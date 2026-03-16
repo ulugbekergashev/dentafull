@@ -409,4 +409,17 @@ export let DEMO_INVENTORY_LOGS: InventoryLog[] = savedData?.logs || [
 ];
 
 // Demo Leads
-export let DEMO_LEADS: Lead[] = savedData?.leads || [];
+export let DEMO_LEADS: Lead[] = savedData?.leads || [
+    {
+        id: 'demo-lead-1',
+        name: 'Facebook Mijoz (Test)',
+        phone: '+998 90 123 45 67',
+        service: 'Implantatsiya',
+        source: 'Facebook',
+        notes: 'Facebook-dan kelgan test arizasi',
+        status: 'New',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        clinicId: 'demo-clinic-1'
+    }
+];

@@ -159,6 +159,9 @@ export interface Clinic {
   botToken?: string; // Telegram bot token
   customPrice?: number; // Optional custom pricing for special offers
   subscriptionType: 'Paid' | 'Trial';
+  facebookPageId?: string;
+  facebookPageAccessToken?: string;
+  facebookPageName?: string;
 }
 
 export interface ICD10Code {

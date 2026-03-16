@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
 import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 
 const DOCTOR_COLORS = [
@@ -40,7 +40,7 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({
    userRole, services, categories, doctors, receptionists = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans, reviews
 }) => {
-   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot'>('services');
+   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot' | 'facebook'>('services');
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
    const [categoryForm, setCategoryForm] = useState({ name: '' });
@@ -86,6 +86,11 @@ export const Settings: React.FC<SettingsProps> = ({
 
    const [botLogs, setBotLogs] = useState<any[]>([]);
    const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+   // Facebook State
+   const [facebookPages, setFacebookPages] = useState<any[]>([]);
+   const [isFBPageModalOpen, setIsFBPageModalOpen] = useState(false);
+   const [isFBLoading, setIsFBLoading] = useState(false);
 
    // Clinic overall rating calculation
    const clinicAvgRating = useMemo(() => {
@@ -168,6 +173,72 @@ export const Settings: React.FC<SettingsProps> = ({
       };
       fetchBotUsername();
    }, [currentClinic?.id, currentClinic?.botToken]);
+
+   // Handle Facebook Redirect success
+   React.useEffect(() => {
+       const urlParams = new URLSearchParams(window.location.search);
+       if (urlParams.get('connected') === 'true' && urlParams.get('tab') === 'facebook') {
+           setActiveTab('facebook');
+           handleFetchFBPages();
+           // Clear search params
+           window.history.replaceState({}, '', window.location.pathname);
+       }
+   }, []);
+
+   const handleFetchFBPages = async () => {
+       if (!currentClinic?.id) return;
+       setIsFBLoading(true);
+       try {
+           const pages = await api.facebook.getPages(currentClinic.id);
+           setFacebookPages(pages);
+           setIsFBPageModalOpen(true);
+       } catch (error) {
+           console.error('Failed to fetch FB pages:', error);
+           alert('Facebook sahifalarini yuklashda xatolik yuz berdi');
+       } finally {
+           setIsFBLoading(false);
+       }
+   };
+
+   const handleConnectFB = async () => {
+       if (!currentClinic?.id) return;
+       try {
+           const { url } = await api.facebook.getAuthUrl(currentClinic.id);
+           window.location.href = url;
+       } catch (error) {
+           console.error('Failed to get FB auth URL:', error);
+           alert('Facebook-ga bog\'lanishda xatolik yuz berdi');
+       }
+   };
+
+   const handleSelectFBPage = async (page: any) => {
+       if (!currentClinic?.id) return;
+       try {
+           await api.facebook.selectPage({
+               clinicId: currentClinic.id,
+               pageId: page.id,
+               pageAccessToken: page.access_token,
+               pageName: page.name
+           });
+           setIsFBPageModalOpen(false);
+           alert('Sahifa muvaffaqiyatli bog\'landi!');
+           window.location.reload(); // Refresh to get updated clinic data
+       } catch (error) {
+           console.error('Failed to select FB page:', error);
+           alert('Sahifani saqlashda xatolik yuz berdi');
+       }
+   };
+
+   const handleDisconnectFB = async () => {
+       if (!currentClinic?.id || !window.confirm('Facebook-ni uzmoqchimisiz?')) return;
+       try {
+           await api.facebook.disconnect(currentClinic.id);
+           alert('Facebook muvaffaqiyatli uzildi');
+           window.location.reload();
+       } catch (error) {
+           console.error('Failed to disconnect FB:', error);
+       }
+   };
 
    // Categories effect removed as it's now in App.tsx
 
@@ -635,9 +706,6 @@ export const Settings: React.FC<SettingsProps> = ({
                      </div>
                   </Card>
                )}
-
-
-
             </div>
          </div>
 
@@ -862,6 +930,39 @@ export const Settings: React.FC<SettingsProps> = ({
                   >
                      Ha, O'chirish
                   </Button>
+               </div>
+            </div>
+         </Modal>
+         {/* Facebook Page Selection Modal */}
+         <Modal isOpen={isFBPageModalOpen} onClose={() => setIsFBPageModalOpen(false)} title="Facebook Sahifasini Tanlang">
+            <div className="space-y-4">
+               <p className="text-sm text-gray-500 mb-4">
+                  Quyidagi sahifalardan birini tanlang. Ushbu sahifaga kelgan arizalar tizimga avtomatik tushadi.
+               </p>
+               <div className="max-h-60 overflow-y-auto space-y-2">
+                  {facebookPages.map(page => (
+                     <button
+                        key={page.id}
+                        onClick={() => handleSelectFBPage(page)}
+                        className="w-full flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                     >
+                        <div className="flex items-center gap-3">
+                           <div className="h-8 w-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-blue-600">
+                              <Facebook className="w-4 h-4" />
+                           </div>
+                           <span className="font-medium text-gray-900 dark:text-white">{page.name}</span>
+                        </div>
+                        <Plus className="w-4 h-4 text-gray-400" />
+                     </button>
+                  ))}
+                  {facebookPages.length === 0 && (
+                     <div className="text-center py-8 text-gray-500">
+                        Hech qanday sahifa topilmadi
+                     </div>
+                  )}
+               </div>
+               <div className="flex justify-end pt-4">
+                  <Button variant="secondary" onClick={() => setIsFBPageModalOpen(false)}>Yopish</Button>
                </div>
             </div>
          </Modal>

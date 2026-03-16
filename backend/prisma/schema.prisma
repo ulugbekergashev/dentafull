@@ -223,6 +223,10 @@ model Clinic {
   smsLimit              Int                @default(0)
   smsUsedThisMonth      Int                @default(0)
   ownerPhone            String?
+  facebookPageId        String?
+  facebookPageAccessToken String?
+  facebookUserAccessToken String?
+  facebookPageName      String?
   appointments          Appointment[]
   plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors               Doctor[]

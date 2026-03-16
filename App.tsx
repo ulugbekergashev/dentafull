@@ -157,6 +157,7 @@ const AppContent: React.FC = () => {
 
         if (isDemo && clinicId === 'demo-clinic-1') {
           const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN, DEMO_CATEGORIES } = await import('./services/demoData');
+          setCurrentClinic(DEMO_CLINIC);
           setPatients(DEMO_PATIENTS);
           setAppointments(DEMO_APPOINTMENTS);
           setTransactions(DEMO_TRANSACTIONS);
@@ -173,7 +174,7 @@ const AppContent: React.FC = () => {
           setPlans(plns);
           setClinics(clns);
         } else if (clinicId) {
-          const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs, leadsData] = await Promise.all([
+          const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
@@ -184,8 +185,10 @@ const AppContent: React.FC = () => {
             api.inventory.getAll(clinicId),
             api.categories.getAll(clinicId),
             api.reviews.getAll(clinicId),
-            api.leads.getAll(clinicId)
+            api.leads.getAll(clinicId),
+            api.clinics.getById(clinicId)
           ]);
+          setCurrentClinic(clinicData);
           setPatients(pts);
           setAppointments(appts);
           setTransactions(txs);
@@ -503,7 +506,6 @@ const AppContent: React.FC = () => {
           status: 'Pending',
           notes: lead.service ? `Qiziqish bildirdi: ${lead.service}` : '',
           clinicId,
-          categoryId: null
         });
       }
 
@@ -1065,6 +1067,7 @@ const AppContent: React.FC = () => {
                   doctors={doctors}
                   categories={categories}
                   services={services}
+                  currentClinic={currentClinic}
                   onAddLead={addLead}
                   onUpdateLead={updateLead}
                   onDeleteLead={deleteLead}

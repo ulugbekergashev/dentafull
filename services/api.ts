@@ -3,9 +3,12 @@ import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
-export const API_URL = isProduction
-    ? 'https://dentafull-production.up.railway.app/api'
-    : (import.meta.env.VITE_API_URL || 'http://localhost:3001/api');
+const getBaseUrl = () => {
+    if (isProduction) return 'https://dentafull-production.up.railway.app/api';
+    const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    return envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
+};
+export const API_URL = getBaseUrl();
 
 console.log('🔌 API Configuration:', {
     hostname: window.location.hostname,
@@ -13,7 +16,7 @@ console.log('🔌 API Configuration:', {
     API_URL
 });
 
-const isDemoMode = () => {
+export const isDemoMode = () => {
     try {
         const stored = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
         if (stored) {
@@ -67,7 +70,13 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
     const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
     if (storedAuth) {
         try {
-            const { token } = JSON.parse(storedAuth);
+            const { token, isDemo } = JSON.parse(storedAuth);
+            console.log('📡 Fetch Request:', { 
+                url: `${API_URL}${url}`, 
+                hasToken: !!token, 
+                tokenPreview: token ? `${token.substring(0, 10)}...` : 'NONE',
+                isDemo: !!isDemo
+            });
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }
@@ -737,6 +746,55 @@ export const api = {
             }
             return fetchJson<{ success: true }>(`/leads/${id}`, {
                 method: 'DELETE',
+            });
+        }
+    },
+    facebook: {
+        checkConfig: () => {
+            return fetchJson<{ isConfigured: boolean, appId: string | null, redirectUri: string }>('/facebook/config-check');
+        },
+        saveConfig: (data: { appId: string, appSecret: string }) => {
+            return fetchJson<{ success: true }>('/facebook/save-config', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+        },
+        getAuthUrl: (clinicId: string) => {
+            return fetchJson<{ url: string }>(`/facebook/auth-url?clinicId=${clinicId}`);
+        },
+        getPages: (clinicId: string) => {
+            if (isDemoMode()) {
+                return Promise.resolve([
+                    { id: '1', name: 'Biznes Sahifa (Test)', access_token: 'dummy_token' },
+                    { id: '2', name: 'Klinika Sahifasi (Test)', access_token: 'dummy_token_2' }
+                ]);
+            }
+            return fetchJson<any[]>(`/facebook/pages?clinicId=${clinicId}`);
+        },
+        selectPage: (data: { clinicId: string, pageId: string, pageAccessToken: string, pageName: string }) => {
+            if (isDemoMode()) {
+                DEMO_CLINIC.facebookPageId = data.pageId;
+                DEMO_CLINIC.facebookPageName = data.pageName;
+                DEMO_CLINIC.facebookPageAccessToken = data.pageAccessToken;
+                saveDemoData();
+                return Promise.resolve({ success: true as const });
+            }
+            return fetchJson<{ success: true }>('/facebook/select-page', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+        },
+        disconnect: (clinicId: string) => {
+            if (isDemoMode()) {
+                DEMO_CLINIC.facebookPageId = null as any;
+                DEMO_CLINIC.facebookPageName = null as any;
+                DEMO_CLINIC.facebookPageAccessToken = null as any;
+                saveDemoData();
+                return Promise.resolve({ success: true as const });
+            }
+            return fetchJson<{ success: true }>('/facebook/disconnect', {
+                method: 'POST',
+                body: JSON.stringify({ clinicId })
             });
         }
     }

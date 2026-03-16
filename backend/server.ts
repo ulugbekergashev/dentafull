@@ -13,16 +13,14 @@ const PORT = process.env.PORT || 3001;
 
 // IMMEDIATE HEALTH CHECK
 app.get('/health', (req, res) => res.status(200).send('OK - v1.0.1'));
+app.get('/test-fb', (req, res) => res.status(200).send('FB-TEST-OK'));
 app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.0.1'));
 
-app.listen(PORT, () => {
-    console.log(`✅ Server successfully started on port ${PORT}`);
-});
-
-// Load everything else AFTER the server is ready
+// Load everything else
 const cron = require('node-cron');
 const { botManager } = require('./botManager');
 const cors = require('cors');
+const axios = require('axios');
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -97,6 +95,14 @@ app.get('/', (req, res) => {
 });
 
 // --- Middleware ---
+// Prefix-stripping middleware (makes routes work with or without /api/)
+app.use((req, res, next) => {
+    if (req.url.startsWith('/api/')) {
+        req.url = req.url.replace('/api/', '/');
+    }
+    next();
+});
+
 const authenticateToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -1503,6 +1509,278 @@ app.post('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
     }
 });
 
+
+// --- Facebook Integration ---
+const FB_APP_ID = process.env.FACEBOOK_APP_ID;
+const FB_APP_SECRET = process.env.FACEBOOK_APP_SECRET;
+const FB_REDIRECT_URI = process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/facebook/callback';
+
+// Unified Facebook config check
+app.get('/facebook/config-check', authenticateToken, (req, res) => {
+    res.json({
+        isConfigured: !!process.env.FACEBOOK_APP_ID && !!process.env.FACEBOOK_APP_SECRET,
+        appId: process.env.FACEBOOK_APP_ID ? `${process.env.FACEBOOK_APP_ID.substring(0, 4)}...` : null,
+        redirectUri: process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/facebook/callback'
+    });
+});
+
+app.post('/facebook/save-config', authenticateToken, async (req, res) => {
+    const { appId, appSecret } = req.body;
+    if (!appId || !appSecret) return res.status(400).json({ error: 'appId and appSecret are required' });
+
+    try {
+        // Update process.env for current session
+        process.env.FACEBOOK_APP_ID = appId;
+        process.env.FACEBOOK_APP_SECRET = appSecret;
+        
+        // Also try to update .env file if it exists
+        const envPath = path.join(__dirname, '.env');
+        if (fs.existsSync(envPath)) {
+            let envContent = fs.readFileSync(envPath, 'utf8');
+            
+            const updateOrAdd = (key: string, value: string) => {
+                const regex = new RegExp(`^${key}=.*`, 'm');
+                if (regex.test(envContent)) {
+                    envContent = envContent.replace(regex, `${key}=${value}`);
+                } else {
+                    envContent += `\n${key}=${value}`;
+                }
+            };
+
+            updateOrAdd('FACEBOOK_APP_ID', appId);
+            updateOrAdd('FACEBOOK_APP_SECRET', appSecret);
+            fs.writeFileSync(envPath, envContent);
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Save FB config error:', error);
+        res.status(500).json({ error: 'Failed to save configuration' });
+    }
+});
+
+app.get('/facebook/auth-url', authenticateToken, (req, res) => {
+    const { clinicId } = req.query;
+    if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+    const appId = process.env.FACEBOOK_APP_ID;
+    const redirectUri = process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/facebook/callback';
+
+    if (!appId) {
+        return res.status(500).json({ error: 'Facebook App ID topilmadi. Iltimos, .env faylida FACEBOOK_APP_ID ni kiriting.' });
+    }
+
+    const scopes = ['pages_show_list', 'pages_read_engagement', 'pages_manage_metadata', 'pages_manage_posts', 'pages_manage_instant_articles', 'public_profile'];
+    const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes.join(',')}&state=${clinicId}`;
+
+    res.json({ url });
+});
+
+app.get('/api/facebook/callback', async (req, res) => {
+    const { code, state: clinicId } = req.query;
+
+    if (!code) {
+        return res.status(400).send('Facebook authorization failed: No code provided');
+    }
+
+    try {
+        // 1. Exchange code for user access token
+        const tokenRes = await axios.get(`https://graph.facebook.com/v18.0/oauth_token`, {
+            params: {
+                client_id: process.env.FACEBOOK_APP_ID,
+                client_secret: process.env.FACEBOOK_APP_SECRET,
+                redirect_uri: process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/facebook/callback',
+                code
+            }
+        });
+
+        const userAccessToken = tokenRes.data.access_token;
+
+        // 2. Save user token temporarily (or update clinic)
+        await prisma.clinic.update({
+            where: { id: clinicId as string },
+            data: { facebookUserAccessToken: userAccessToken }
+        });
+
+        // 3. Return script to notify opener and close popup
+        res.send(`
+            <html>
+                <body style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; background: #f3f4f6;">
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 12px; shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        <p style="color: #111827; font-weight: 600;">Muvaffaqiyatli ulandi!</p>
+                        <p style="color: #6b7280; font-size: 14px;">Oyna avtomatik yopilmoqda...</p>
+                    </div>
+                    <script>
+                        if (window.opener) {
+                            window.opener.postMessage({ type: 'FB_CONNECTED' }, '*');
+                        }
+                        setTimeout(() => window.close(), 1000);
+                    </script>
+                </body>
+            </html>
+        `);
+    } catch (error: any) {
+        console.error('FB Callback error:', error.response?.data || error.message);
+        res.status(500).send('Failed to connect Facebook');
+    }
+});
+
+app.get('/api/facebook/pages', authenticateToken, async (req, res) => {
+    const { clinicId } = req.query;
+    if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+    try {
+        const clinic = await prisma.clinic.findUnique({
+            where: { id: clinicId as string }
+        });
+
+        if (!clinic || !clinic.facebookUserAccessToken) {
+            return res.status(404).json({ error: 'Facebook not connected' });
+        }
+
+        const pagesRes = await axios.get(`https://graph.facebook.com/v18.0/me/accounts`, {
+            params: { access_token: clinic.facebookUserAccessToken }
+        });
+
+        res.json(pagesRes.data.data);
+    } catch (error: any) {
+        console.error('Fetch FB Pages error:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Failed to fetch Facebook pages' });
+    }
+});
+
+app.post('/api/facebook/select-page', authenticateToken, async (req, res) => {
+    const { clinicId, pageId, pageAccessToken, pageName } = req.body;
+
+    if (!clinicId || !pageId || !pageAccessToken) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+        await prisma.clinic.update({
+            where: { id: clinicId },
+            data: {
+                facebookPageId: pageId,
+                facebookPageAccessToken: pageAccessToken,
+                facebookPageName: pageName
+            }
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Select FB Page error:', error);
+        res.status(500).json({ error: 'Failed to save selected page' });
+    }
+});
+
+app.post('/api/facebook/disconnect', authenticateToken, async (req, res) => {
+    const { clinicId } = req.body;
+    if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+    try {
+        await prisma.clinic.update({
+            where: { id: clinicId },
+            data: {
+                facebookPageId: null,
+                facebookPageAccessToken: null,
+                facebookUserAccessToken: null,
+                facebookPageName: null
+            }
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Disconnect FB error:', error);
+        res.status(500).json({ error: 'Failed to disconnect Facebook' });
+    }
+});
+
+// --- Facebook Leads Webhook ---
+const FB_WEBHOOK_VERIFY_TOKEN = process.env.FB_WEBHOOK_VERIFY_TOKEN || 'denta_leads_secret';
+
+// 1. Webhook Verification (GET)
+app.get('/api/facebook/webhook', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === FB_WEBHOOK_VERIFY_TOKEN) {
+        console.log('✅ FB Webhook verified');
+        res.status(200).send(challenge);
+    } else {
+        res.sendStatus(403);
+    }
+});
+
+// 2. Lead Processing (POST)
+app.post('/api/facebook/webhook', async (req, res) => {
+    const body = req.body;
+
+    if (body.object === 'page') {
+        body.entry.forEach(async (entry: any) => {
+            entry.changes.forEach(async (change: any) => {
+                if (change.field === 'leadgen') {
+                    const { leadgen_id, page_id } = change.value;
+                    console.log(`📩 New FB Lead Notification: ID ${leadgen_id} for Page ${page_id}`);
+                    
+                    try {
+                        // Find clinic
+                        const clinic = await prisma.clinic.findFirst({
+                            where: { facebookPageId: page_id }
+                        });
+
+                        if (!clinic || !clinic.facebookPageAccessToken) {
+                            console.error(`❌ Clinic not found for FB Page ${page_id}`);
+                            return;
+                        }
+
+                        // Fetch Lead Details
+                        let leadData;
+                        if (clinic.facebookPageAccessToken === 'test_token') {
+                            leadData = {
+                                field_data: [
+                                    { name: 'full_name', values: ['Test FB User'] },
+                                    { name: 'phone_number', values: ['+998901234567'] }
+                                ]
+                            };
+                        } else {
+                            const leadRes = await axios.get(`https://graph.facebook.com/v18.0/${leadgen_id}`, {
+                                params: { access_token: clinic.facebookPageAccessToken }
+                            });
+                            leadData = leadRes.data;
+                        }
+
+                        const fieldData: any = {};
+                        leadData.field_data.forEach((f: any) => {
+                            fieldData[f.name] = f.values[0];
+                        });
+
+                        // Create Lead in CRM
+                        await prisma.lead.create({
+                            data: {
+                                name: fieldData.full_name || 'Facebook User',
+                                phone: fieldData.phone_number || 'N/A',
+                                source: 'Facebook',
+                                service: clinic.facebookPageName || 'Facebook Lead',
+                                notes: `FB Lead ID: ${leadgen_id}`,
+                                clinicId: clinic.id,
+                                status: 'New'
+                            }
+                        });
+
+                        console.log(`✅ FB Lead saved: ${fieldData.full_name}`);
+                    } catch (err: any) {
+                        console.error('❌ Error processing FB lead:', err.response?.data || err.message);
+                    }
+                }
+            });
+        });
+
+        res.status(200).send('EVENT_RECEIVED');
+    } else {
+        res.sendStatus(404);
+    }
+});
+
 // --- Inventory Management ---
 app.get('/api/inventory', authenticateToken, async (req, res) => {
     try {
@@ -2183,6 +2461,10 @@ app.post('/api/test/send-daily-reports', authenticateToken, async (req, res) => 
         res.status(500).json({ error: error.message });
     }
 });
+
+
+
+
 
 // ============================================
 // START SERVER
