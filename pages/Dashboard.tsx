@@ -1,14 +1,15 @@
+```
 import React, { useState, useMemo } from 'react';
 import { Card, Badge, Input } from '../components/Common';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
-  CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star
+  CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
-import { Patient, Appointment, Transaction, UserRole, Doctor } from '../types';
+import { Patient, Appointment, Transaction, UserRole, Doctor, Lead } from '../types';
 
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
@@ -24,6 +25,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads }) => {
+  const [selectedMonthForIntensity, setSelectedMonthForIntensity] = useState<string | null>(null);
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -137,28 +139,60 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     filteredTransactions.filter(t => t.status === 'Pending').reduce((acc, t) => acc + t.amount, 0)
   , [filteredTransactions]);
 
-  // Seasonal Intensity Data (Last 6 Months)
+  // Seasonal Intensity Data
   const intensityData = useMemo(() => {
-    const months: { [key: string]: number } = {};
-    const now = new Date();
-    
-    // Initialize last 6 months
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthLabel = d.toLocaleString('uz-UZ', { month: 'short' });
-      months[monthLabel] = 0;
-    }
+    if (selectedMonthForIntensity) {
+      // Daily Drill-down view
+      const days: { [key: string]: number } = {};
+      const [monthName, yearStr] = selectedMonthForIntensity.split(' ');
+      const year = parseInt(yearStr);
+      
+      // Get month index from name
+      const monthIndex = Array.from({ length: 12 }, (_, i) => 
+        new Date(2000, i, 1).toLocaleString('uz-UZ', { month: 'long' })
+      ).indexOf(monthName);
 
-    appointments.forEach(a => {
-      const apptDate = new Date(a.date);
-      const monthLabel = apptDate.toLocaleString('uz-UZ', { month: 'short' });
-      if (months[monthLabel] !== undefined) {
-        months[monthLabel]++;
+      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+      
+      for (let i = 1; i <= daysInMonth; i++) {
+        days[i.toString()] = 0;
       }
-    });
 
-    return Object.entries(months).map(([name, count]) => ({ name, count }));
-  }, [appointments]);
+      appointments.forEach(a => {
+        const d = new Date(a.date);
+        if (d.getFullYear() === year && d.getMonth() === monthIndex) {
+          days[d.getDate().toString()]++;
+        }
+      });
+
+      return Object.entries(days).map(([name, count]) => ({ name, count }));
+    } else {
+      // 12-Month Overview
+      const months: { [key: string]: { count: number, fullKey: string } } = {};
+      const now = new Date();
+      
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = d.toLocaleString('uz-UZ', { month: 'long' });
+        const fullKey = `${label} ${d.getFullYear()}`;
+        months[label] = { count: 0, fullKey };
+      }
+
+      appointments.forEach(a => {
+        const apptDate = new Date(a.date);
+        const label = apptDate.toLocaleString('uz-UZ', { month: 'long' });
+        if (months[label]) {
+          months[label].count++;
+        }
+      });
+
+      return Object.entries(months).map(([name, data]) => ({ 
+        name, 
+        count: data.count,
+        fullKey: data.fullKey 
+      }));
+    }
+  }, [appointments, selectedMonthForIntensity]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -581,15 +615,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
         {/* Seasonal Intensity Chart */}
         <Card className="p-8 rounded-[2rem]">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-black text-gray-900 dark:text-white">
-              Qabullar <span className="text-rose-600">Intensivligi</span>
-            </h3>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Oxirgi 6 oy bo'yicha</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+            <div>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">
+                Qabullar <span className="text-rose-600">Intensivligi</span>
+              </h3>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
+                {selectedMonthForIntensity ? `${selectedMonthForIntensity} oyi bo'yicha` : "Oxirgi 12 oy davomida"}
+              </p>
+            </div>
+            {selectedMonthForIntensity && (
+              <button 
+                onClick={() => setSelectedMonthForIntensity(null)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-bold transition-colors w-fit"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Orqaga
+              </button>
+            )}
           </div>
-          <div className="h-64 w-full">
+          <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={intensityData}>
+              <BarChart 
+                data={intensityData}
+                onClick={(data) => {
+                  if (!selectedMonthForIntensity && data && data.activePayload) {
+                    setSelectedMonthForIntensity(data.activePayload[0].payload.fullKey);
+                  }
+                }}
+              >
                 <defs>
                   <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#FB7185" stopOpacity={1} />
@@ -601,7 +655,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   dataKey="name" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 700 }} 
+                  tick={{ fill: '#9CA3AF', fontSize: selectedMonthForIntensity ? 10 : 9, fontWeight: 700 }} 
+                  interval={selectedMonthForIntensity ? 1 : 0}
                 />
                 <YAxis 
                   axisLine={false} 
@@ -609,21 +664,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 700 }} 
                 />
                 <Tooltip
-                  cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                  cursor={{ fill: 'rgba(0,0,0,0.05)', radius: [8, 8, 4, 4] }}
                   contentStyle={{ backgroundColor: '#1F2937', borderRadius: '12px', border: 'none', color: '#fff' }}
+                  labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
                 />
                 <Bar 
                   dataKey="count" 
                   fill="url(#barGradient)" 
                   radius={[8, 8, 4, 4]} 
-                  barSize={40}
+                  barSize={selectedMonthForIntensity ? 12 : 32}
+                  className={!selectedMonthForIntensity ? "cursor-pointer" : ""}
                 />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-4 flex items-center gap-2 text-xs text-gray-500 font-medium bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700/50">
-            <AlertCircle className="w-4 h-4 text-rose-500" />
-            <span>Klinika faolligi mavsumga qarab o'zgarishi mumkin. Yuqori qizil barlar intensivlik yuqori bo'lgan davrlarni anglatadi.</span>
+          <div className="mt-6 flex items-start gap-3 text-xs text-gray-500 font-medium bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
+            <div className="p-1.5 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-rose-500" />
+            </div>
+            <p className="leading-relaxed">
+              {!selectedMonthForIntensity 
+                ? "Oylik tahlil klinika faolligini mavsumga qarab ko'rsatadi. Kunlik tahlilni ko'rish uchun oy ustiga bosing."
+                : "Ushbu oy uchun kunlik qabullar soni. Bu qaysi kunlarda klinika eng band bo'lishini tushunishga yordam beradi."}
+            </p>
           </div>
         </Card>
       </>)}
