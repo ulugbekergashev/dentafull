@@ -1674,6 +1674,7 @@ app.post('/api/facebook/select-page', authenticateToken, async (req, res) => {
     }
 
     try {
+        // 1. Update Database
         await prisma.clinic.update({
             where: { id: clinicId },
             data: {
@@ -1682,6 +1683,23 @@ app.post('/api/facebook/select-page', authenticateToken, async (req, res) => {
                 facebookPageName: pageName
             }
         });
+
+        // 2. Automatically subscribe the App to the Page's Leadgen events
+        // This avoids the user having to manually add the app to the page in Meta settings
+        try {
+            console.log(`🔗 Attempting to subscribe App to FB Page ${pageId}...`);
+            await axios.post(`https://graph.facebook.com/v18.0/${pageId}/subscribed_apps`, null, {
+                params: {
+                    access_token: pageAccessToken,
+                    subscribed_fields: 'leadgen'
+                }
+            });
+            console.log(`✅ App successfully subscribed to Page ${pageId}`);
+        } catch (subError: any) {
+            console.error('⚠️ FB Page Subscription warning:', subError.response?.data || subError.message);
+            // We don't fail the whole request if subscription fails, 
+            // as it might be already subscribed or handled manually
+        }
 
         res.json({ success: true });
     } catch (error) {
