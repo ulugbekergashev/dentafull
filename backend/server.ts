@@ -1580,8 +1580,8 @@ app.get('/api/facebook/auth-url', authenticateToken, (req, res) => {
         return res.status(500).json({ error: 'Facebook App ID topilmadi. Iltimos, .env faylida FACEBOOK_APP_ID ni kiriting.' });
     }
 
-    // Updated scopes to focus ONLY on Lead Ads as requested
-    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata'];
+    // Updated scopes to include business management and profile for better visibility
+    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata', 'public_profile', 'business_management'];
     const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes.join(',')}&state=${clinicId}`;
 
     res.json({ url });
@@ -1606,6 +1606,7 @@ app.get('/api/facebook/callback', async (req, res) => {
         });
 
         const userAccessToken = tokenRes.data.access_token;
+        console.log('✅ FB Token Exchange Success. Token starts with:', userAccessToken.substring(0, 10));
 
         // 2. Save user token temporarily (or update clinic)
         await prisma.clinic.update({
@@ -1651,6 +1652,11 @@ app.get('/api/facebook/pages', authenticateToken, async (req, res) => {
 
         const pagesRes = await axios.get(`https://graph.facebook.com/v18.0/me/accounts`, {
             params: { access_token: clinic.facebookUserAccessToken }
+        });
+
+        console.log(`📊 FB Pages Response for Clinic ${clinicId}:`, {
+            count: pagesRes.data.data?.length || 0,
+            pages: pagesRes.data.data?.map((p: any) => ({ name: p.name, id: p.id, tasks: p.tasks }))
         });
 
         res.json(pagesRes.data.data);

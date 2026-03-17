@@ -204,7 +204,15 @@ export const Settings: React.FC<SettingsProps> = ({
        if (!currentClinic?.id) return;
        try {
            const { url } = await api.facebook.getAuthUrl(currentClinic.id);
-           window.location.href = url;
+           const width = 700;
+           const height = 850;
+           const left = Math.max(0, (window.screen.width / 2) - (width / 2));
+           const top = Math.max(0, (window.screen.height / 2) - (height / 2));
+           window.open(
+               url,
+               'FacebookLogin',
+               `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes`
+           );
        } catch (error) {
            console.error('Failed to get FB auth URL:', error);
            alert('Facebook-ga bog\'lanishda xatolik yuz berdi');
@@ -446,6 +454,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   { id: 'doctors', name: 'Shifokorlar', icon: Users },
                   { id: 'receptionists', name: 'Resepshnlar', icon: Phone },
                   { id: 'bot', name: 'Telegram Bot', icon: Bot },
+                  { id: 'facebook', name: 'Facebook', icon: Facebook },
                ].map((item) => (
                   <button
                      key={item.id}
@@ -939,25 +948,33 @@ export const Settings: React.FC<SettingsProps> = ({
                <p className="text-sm text-gray-500 mb-4">
                   Quyidagi sahifalardan birini tanlang. Ushbu sahifaga kelgan arizalar tizimga avtomatik tushadi.
                </p>
-               <div className="max-h-60 overflow-y-auto space-y-2">
+               <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
                   {facebookPages.map(page => (
                      <button
                         key={page.id}
                         onClick={() => handleSelectFBPage(page)}
-                        className="w-full flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-gray-100 dark:border-gray-700 rounded-xl transition-all group"
                      >
-                        <div className="flex items-center gap-3">
-                           <div className="h-8 w-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center text-blue-600">
-                              <Facebook className="w-4 h-4" />
+                        <div className="flex items-center gap-3 text-left">
+                           <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400">
+                              <Facebook className="w-6 h-6" />
                            </div>
-                           <span className="font-medium text-gray-900 dark:text-white">{page.name}</span>
+                           <div>
+                              <div className="font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                 {page.name}
+                               </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">ID: {page.id}</div>
+                           </div>
                         </div>
-                        <Plus className="w-4 h-4 text-gray-400" />
+                        <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 flex items-center justify-center group-hover:border-blue-500 transition-colors">
+                           <Plus className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
+                        </div>
                      </button>
                   ))}
                   {facebookPages.length === 0 && (
-                     <div className="text-center py-8 text-gray-500">
-                        Hech qanday sahifa topilmadi
+                     <div className="py-8 text-center bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+                        <Facebook className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">Hech qanday sahifa topilmadi</p>
                      </div>
                   )}
                </div>

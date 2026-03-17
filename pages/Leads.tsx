@@ -238,7 +238,7 @@ export const Leads: React.FC<LeadsProps> = ({
             window.open(
                 url,
                 'FacebookLogin',
-                `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes`
+                `width=700,height=850,left=${left},top=${top},status=yes,scrollbars=yes`
             );
         } catch (error: any) {
             console.error('FB Connect error:', error);
@@ -681,7 +681,7 @@ export const Leads: React.FC<LeadsProps> = ({
                             </button>
                         </div>
 
-                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
                             {facebookPages.map((page) => (
                                 <button
                                     key={page.id}
