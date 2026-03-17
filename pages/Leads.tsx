@@ -310,6 +310,18 @@ export const Leads: React.FC<LeadsProps> = ({
                                 >
                                     <RefreshCw className="w-3.5 h-3.5" />
                                 </button>
+                                <button
+                                    onClick={async () => {
+                                        if (window.confirm('Facebook bog\'lanishini uzishni tasdiqlaysizmi?')) {
+                                            await api.facebook.disconnect(currentClinic.id);
+                                            window.location.reload();
+                                        }
+                                    }}
+                                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                                    title="Bog'lanishni uzish"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                             </div>
                         ) : (
                             <button
