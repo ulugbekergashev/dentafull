@@ -235,24 +235,31 @@ export const Patients: React.FC<PatientsProps> = ({
   ].filter(Boolean).length;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in px-2 sm:px-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bemorlar</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Jami: <span className="font-semibold text-gray-700 dark:text-gray-300">{stats.total}</span> ta bemor
+          <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+            Bemorlar <span className="text-blue-600">Boshqaruvi</span>
+          </h1>
+          <div className="flex items-center gap-4 mt-2">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-bold border border-blue-100 dark:border-blue-800">
+              <UsersIcon className="w-3.5 h-3.5" />
+              {stats.total} ta bemor
+            </div>
             {unassignedCount > 0 && (
-              <span className="ml-2 inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs font-bold border border-amber-100 dark:border-amber-800">
                 <AlertCircle className="w-3.5 h-3.5" />
-                {unassignedCount} ta biriktirilmagan
-              </span>
+                {unassignedCount} biriktirilmagan
+              </div>
             )}
-          </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        
+        <div className="flex flex-wrap gap-3 w-full lg:w-auto">
           <Button
             variant="secondary"
+            className="flex-1 lg:flex-none justify-center gap-2 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all active:scale-95 py-2.5"
             onClick={async () => {
               if (confirm('Barcha qarzdor bemorlarga eslatma yuborilsinmi?')) {
                 try {
@@ -265,82 +272,129 @@ export const Patients: React.FC<PatientsProps> = ({
               }
             }}
           >
-            <MoreHorizontal className="w-4 h-4 mr-2" /> Qarzdorlarga eslatma
+            <MoreHorizontal className="w-4 h-4" /> 
+            <span className="whitespace-nowrap">Qarzdorlarga eslatma</span>
           </Button>
-          <Button variant="secondary" onClick={handleExport}>
-            <Download className="w-4 h-4 mr-2" /> Eksport (CSV)
+          
+          <Button 
+            variant="secondary" 
+            className="flex-1 lg:flex-none justify-center gap-2 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all active:scale-95 py-2.5"
+            onClick={handleExport}
+          >
+            <Download className="w-4 h-4" />
+            <span className="whitespace-nowrap">Eksport</span>
           </Button>
-          <Button onClick={() => setIsAddModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" /> Bemor qo'shish
+          
+          <Button 
+            className="flex-1 lg:flex-none justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25 transition-all active:scale-95 py-2.5 border-none"
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            <Plus className="w-4 h-4" /> 
+            <span className="whitespace-nowrap">Bemor qo'shish</span>
           </Button>
         </div>
       </div>
 
       {/* Stats Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <button
-          onClick={() => setActiveStatFilter(activeStatFilter === null ? null : null)} // Basically reset or keep null
-          className={`text-left transition-all duration-200 ${activeStatFilter === null ? 'ring-2 ring-blue-500 transform scale-[1.02]' : 'hover:scale-[1.01]'}`}
-          onClickCapture={() => setActiveStatFilter(null)}
+          onClick={() => setActiveStatFilter(null)}
+          className={`relative overflow-hidden group p-5 rounded-3xl border transition-all duration-300 text-left ${
+            activeStatFilter === null 
+              ? 'bg-blue-600 border-blue-500 shadow-xl shadow-blue-500/20 translate-y-[-4px]' 
+              : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-lg hover:translate-y-[-2px]'
+          }`}
         >
-          <Card className="p-4 flex items-center justify-between border-none shadow-sm h-full">
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">BARCHA BEMORLAR</p>
-              <h3 className="text-2xl font-bold text-blue-500 mt-1">{stats.total}</h3>
-              <p className="text-[10px] text-gray-400 mt-1">Barcha vaqt</p>
+          <div className={`absolute top-0 right-0 p-6 opacity-10 transition-transform duration-500 group-hover:scale-110 ${activeStatFilter === null ? 'text-white' : 'text-blue-500'}`}>
+            <UsersIcon className="w-24 h-24" />
+          </div>
+          <div className="relative z-10 flex flex-col h-full justify-between">
+            <div className={`p-3 w-fit rounded-2xl ${activeStatFilter === null ? 'bg-white/20' : 'bg-blue-50 dark:bg-blue-900/40'}`}>
+              <UsersIcon className={`w-6 h-6 ${activeStatFilter === null ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
             </div>
-            <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <UsersIcon className="w-5 h-5 text-blue-500" />
+            <div className="mt-8">
+              <p className={`text-xs font-bold uppercase tracking-widest ${activeStatFilter === null ? 'text-blue-100' : 'text-gray-400'}`}>BARCHA BEMORLAR</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <h3 className={`text-3xl font-black ${activeStatFilter === null ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{stats.total}</h3>
+                <span className={`text-[10px] font-bold ${activeStatFilter === null ? 'text-blue-200' : 'text-gray-400'}`}>Barcha vaqt</span>
+              </div>
             </div>
-          </Card>
+          </div>
         </button>
 
         <button
           onClick={() => setActiveStatFilter(activeStatFilter === 'new' ? null : 'new')}
-          className={`text-left transition-all duration-200 ${activeStatFilter === 'new' ? 'ring-2 ring-yellow-500 transform scale-[1.02]' : 'hover:scale-[1.01]'}`}
+          className={`relative overflow-hidden group p-5 rounded-3xl border transition-all duration-300 text-left ${
+            activeStatFilter === 'new' 
+              ? 'bg-amber-500 border-amber-400 shadow-xl shadow-amber-500/20 translate-y-[-4px]' 
+              : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:translate-y-[-2px]'
+          }`}
         >
-          <Card className="p-4 flex items-center justify-between border-none shadow-sm h-full">
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">YANGI BEMORLAR</p>
-              <h3 className="text-2xl font-bold text-yellow-500 mt-1">{stats.newPatients}</h3>
-              <p className="text-[10px] text-gray-400 mt-1">Oxirgi 7 kun</p>
+          <div className={`absolute top-0 right-0 p-6 opacity-10 transition-transform duration-500 group-hover:scale-110 ${activeStatFilter === 'new' ? 'text-white' : 'text-amber-500'}`}>
+            <UserPlusIcon className="w-24 h-24" />
+          </div>
+          <div className="relative z-10 flex flex-col h-full justify-between">
+            <div className={`p-3 w-fit rounded-2xl ${activeStatFilter === 'new' ? 'bg-white/20' : 'bg-amber-50 dark:bg-amber-900/40'}`}>
+              <UserPlusIcon className={`w-6 h-6 ${activeStatFilter === 'new' ? 'text-white' : 'text-amber-600 dark:text-amber-400'}`} />
             </div>
-            <div className="p-2.5 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-              <UserPlusIcon className="w-5 h-5 text-yellow-500" />
+            <div className="mt-8">
+              <p className={`text-xs font-bold uppercase tracking-widest ${activeStatFilter === 'new' ? 'text-amber-100' : 'text-gray-400'}`}>YANGI BEMORLAR</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <h3 className={`text-3xl font-black ${activeStatFilter === 'new' ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{stats.newPatients}</h3>
+                <span className={`text-[10px] font-bold ${activeStatFilter === 'new' ? 'text-amber-200' : 'text-gray-400'}`}>Oxirgi 7 kun</span>
+              </div>
             </div>
-          </Card>
+          </div>
         </button>
 
         <button
           onClick={() => setActiveStatFilter(activeStatFilter === 'debtor' ? null : 'debtor')}
-          className={`text-left transition-all duration-200 ${activeStatFilter === 'debtor' ? 'ring-2 ring-emerald-500 transform scale-[1.02]' : 'hover:scale-[1.01]'}`}
+          className={`relative overflow-hidden group p-5 rounded-3xl border transition-all duration-300 text-left ${
+            activeStatFilter === 'debtor' 
+              ? 'bg-emerald-600 border-emerald-500 shadow-xl shadow-emerald-500/20 translate-y-[-4px]' 
+              : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:translate-y-[-2px]'
+          }`}
         >
-          <Card className="p-4 flex items-center justify-between border-none shadow-sm h-full">
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">QARZDOR BEMORLAR</p>
-              <h3 className="text-2xl font-bold text-emerald-500 mt-1">{stats.debtors}</h3>
-              <p className="text-[10px] text-gray-400 mt-1">&nbsp;</p>
+          <div className={`absolute top-0 right-0 p-6 opacity-10 transition-transform duration-500 group-hover:scale-110 ${activeStatFilter === 'debtor' ? 'text-white' : 'text-emerald-500'}`}>
+            <Wallet className="w-24 h-24" />
+          </div>
+          <div className="relative z-10 flex flex-col h-full justify-between">
+            <div className={`p-3 w-fit rounded-2xl ${activeStatFilter === 'debtor' ? 'bg-white/20' : 'bg-emerald-50 dark:bg-emerald-900/40'}`}>
+              <Wallet className={`w-6 h-6 ${activeStatFilter === 'debtor' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`} />
             </div>
-            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
-              <Wallet className="w-5 h-5 text-emerald-500" />
+            <div className="mt-8">
+              <p className={`text-xs font-bold uppercase tracking-widest ${activeStatFilter === 'debtor' ? 'text-emerald-100' : 'text-gray-400'}`}>QARZDOR BEMORLAR</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <h3 className={`text-3xl font-black ${activeStatFilter === 'debtor' ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{stats.debtors}</h3>
+                <span className={`text-[10px] font-bold ${activeStatFilter === 'debtor' ? 'text-emerald-200' : 'text-gray-400'}`}>Faol qarz</span>
+              </div>
             </div>
-          </Card>
+          </div>
         </button>
 
         <button
           onClick={() => setActiveStatFilter(activeStatFilter === 'waiting' ? null : 'waiting')}
-          className={`text-left transition-all duration-200 ${activeStatFilter === 'waiting' ? 'ring-2 ring-red-500 transform scale-[1.02]' : 'hover:scale-[1.01]'}`}
+          className={`relative overflow-hidden group p-5 rounded-3xl border transition-all duration-300 text-left ${
+            activeStatFilter === 'waiting' 
+              ? 'bg-rose-600 border-rose-500 shadow-xl shadow-rose-500/20 translate-y-[-4px]' 
+              : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:translate-y-[-2px]'
+          }`}
         >
-          <Card className="p-4 flex items-center justify-between border-none shadow-sm h-full">
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">KUTILMOQDA</p>
-              <h3 className="text-2xl font-bold text-red-500 mt-1">{stats.waiting}</h3>
-              <p className="text-[10px] text-gray-400 mt-1">To'lov kutilmoqda</p>
+          <div className={`absolute top-0 right-0 p-6 opacity-10 transition-transform duration-500 group-hover:scale-110 ${activeStatFilter === 'waiting' ? 'text-white' : 'text-rose-500'}`}>
+            <AlertCircle className="w-24 h-24" />
+          </div>
+          <div className="relative z-10 flex flex-col h-full justify-between">
+            <div className={`p-3 w-fit rounded-2xl ${activeStatFilter === 'waiting' ? 'bg-white/20' : 'bg-rose-50 dark:bg-rose-900/40'}`}>
+              <AlertCircle className={`w-6 h-6 ${activeStatFilter === 'waiting' ? 'text-white' : 'text-rose-600 dark:text-rose-400'}`} />
             </div>
-            <div className="p-2.5 bg-red-50 dark:bg-red-900/20 rounded-lg">
-              <Wallet className="w-5 h-5 text-red-500" />
+            <div className="mt-8">
+              <p className={`text-xs font-bold uppercase tracking-widest ${activeStatFilter === 'waiting' ? 'text-rose-100' : 'text-gray-400'}`}>KUTILMOQDA</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <h3 className={`text-3xl font-black ${activeStatFilter === 'waiting' ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{stats.waiting}</h3>
+                <span className={`text-[10px] font-bold ${activeStatFilter === 'waiting' ? 'text-rose-200' : 'text-gray-400'}`}>To'lov kutilmoqda</span>
+              </div>
             </div>
-          </Card>
+          </div>
         </button>
       </div>
 
