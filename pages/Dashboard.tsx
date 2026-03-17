@@ -1,4 +1,3 @@
-```
 import React, { useState, useMemo } from 'react';
 import { Card, Badge, Input } from '../components/Common';
 import {
