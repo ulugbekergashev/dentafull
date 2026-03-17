@@ -1596,7 +1596,7 @@ app.get('/api/facebook/callback', async (req, res) => {
 
     try {
         // 1. Exchange code for user access token
-        const tokenRes = await axios.get(`https://graph.facebook.com/v18.0/oauth_token`, {
+        const tokenRes = await axios.get(`https://graph.facebook.com/v18.0/oauth/access_token`, {
             params: {
                 client_id: process.env.FACEBOOK_APP_ID,
                 client_secret: process.env.FACEBOOK_APP_SECRET,
