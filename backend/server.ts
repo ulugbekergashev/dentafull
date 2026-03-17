@@ -1580,7 +1580,8 @@ app.get('/api/facebook/auth-url', authenticateToken, (req, res) => {
         return res.status(500).json({ error: 'Facebook App ID topilmadi. Iltimos, .env faylida FACEBOOK_APP_ID ni kiriting.' });
     }
 
-    const scopes = ['pages_show_list', 'pages_read_engagement', 'pages_manage_metadata', 'pages_manage_posts', 'pages_manage_instant_articles', 'public_profile'];
+    // Updated scopes based on Meta API v18.0 requirements for page reading and messaging
+    const scopes = ['pages_show_list', 'pages_messaging', 'pages_read_engagement', 'pages_manage_metadata'];
     const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes.join(',')}&state=${clinicId}`;
 
     res.json({ url });
