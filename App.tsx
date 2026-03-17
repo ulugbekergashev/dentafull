@@ -1044,6 +1044,7 @@ const AppContent: React.FC = () => {
                     userRole={userRole}
                     doctorId={doctorId}
                     doctors={doctors}
+                    leads={leads}
                   />
                 } />
               )}

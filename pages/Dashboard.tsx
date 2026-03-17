@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
 import { Patient, Appointment, Transaction, UserRole, Doctor } from '../types';
 
@@ -20,9 +20,10 @@ interface DashboardProps {
   userRole: UserRole;
   doctorId?: string;
   doctors: Doctor[];
+  leads: Lead[];
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads }) => {
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -124,6 +125,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     return result.length > 0 ? result : [];
   }, [filteredTransactions, filteredAppointments]);
 
+  // New Stats Calculation
+  const newLeadsCount = useMemo(() => leads.filter(l => l.status === 'New').length, [leads]);
+  
+  const avgCheck = useMemo(() => {
+    const completed = filteredAppointments.filter(a => a.status === 'Completed').length;
+    return completed > 0 ? Math.round(totalRevenue / completed) : 0;
+  }, [totalRevenue, filteredAppointments]);
+
+  const pendingRevenue = useMemo(() => 
+    filteredTransactions.filter(t => t.status === 'Pending').reduce((acc, t) => acc + t.amount, 0)
+  , [filteredTransactions]);
+
+  // Seasonal Intensity Data (Last 6 Months)
+  const intensityData = useMemo(() => {
+    const months: { [key: string]: number } = {};
+    const now = new Date();
+    
+    // Initialize last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthLabel = d.toLocaleString('uz-UZ', { month: 'short' });
+      months[monthLabel] = 0;
+    }
+
+    appointments.forEach(a => {
+      const apptDate = new Date(a.date);
+      const monthLabel = apptDate.toLocaleString('uz-UZ', { month: 'short' });
+      if (months[monthLabel] !== undefined) {
+        months[monthLabel]++;
+      }
+    });
+
+    return Object.entries(months).map(([name, count]) => ({ name, count }));
+  }, [appointments]);
+
   return (
     <div className="space-y-6 animate-fade-in">
 
@@ -162,109 +198,130 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         )}
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {userRole === UserRole.CLINIC_ADMIN && !isReceptionist && (
-          <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all duration-300 hover:translate-y-[-4px]">
-            <div className="absolute top-0 right-0 p-6 opacity-10 text-blue-600 transition-transform duration-500 group-hover:scale-110">
-              <Users className="w-20 h-20" />
-            </div>
-            <div className="relative z-10">
-              <div className="p-3 w-fit bg-blue-50 dark:bg-blue-900/30 rounded-2xl">
-                <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div className="mt-8">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">JAMI BEMORLAR</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <h3 className="text-3xl font-black text-gray-900 dark:text-white">{totalPatients.toLocaleString()}</h3>
-                </div>
-                <div className="mt-4 flex items-center text-xs">
-                  <span className="flex items-center font-bold text-green-600 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full">
-                    <TrendingUp className="w-3 h-3 mr-1" /> +{activePatients}
-                  </span>
-                  <span className="text-gray-500 ml-2 font-medium">faol bemorlar</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all duration-300 hover:translate-y-[-4px]">
-          <div className="absolute top-0 right-0 p-6 opacity-10 text-purple-600 transition-transform duration-500 group-hover:scale-110">
-            <Calendar className="w-20 h-20" />
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        {/* Jami Bemorlar */}
+        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-blue-600 transition-transform duration-500 group-hover:scale-110">
+            <Users className="w-16 h-16" />
           </div>
           <div className="relative z-10">
-            <div className="p-3 w-fit bg-purple-50 dark:bg-purple-900/30 rounded-2xl">
-              <Calendar className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            <div className="p-2 w-fit bg-blue-50 dark:bg-blue-900/30 rounded-xl">
+              <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <div className="mt-8">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                {userRole === UserRole.DOCTOR ? 'MENING QABULLARIM' : 'QABULLAR'}
-              </p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <h3 className="text-3xl font-black text-gray-900 dark:text-white">{periodAppointmentsCount}</h3>
-              </div>
-              <div className="mt-4 flex items-center gap-2">
-                <span className="text-xs text-gray-500 font-medium">
-                  {startDate || endDate ? 'Tanlangan davrda' : 'Jami'}
+            <div className="mt-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">JAMI BEMORLAR</p>
+              <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{totalPatients.toLocaleString()}</h3>
+              <div className="mt-3 flex items-center text-[10px]">
+                <span className="flex items-center font-bold text-green-600 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full">
+                  +{activePatients}
                 </span>
-                {pendingAppointments > 0 && (
-                  <span className="px-2 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded-full text-[10px] font-bold uppercase tracking-tight flex items-center border border-amber-100 dark:border-amber-800/50">
+                <span className="text-gray-500 ml-1.5 font-medium">faol</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Qabullar */}
+        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-purple-600 transition-transform duration-500 group-hover:scale-110">
+            <Calendar className="w-16 h-16" />
+          </div>
+          <div className="relative z-10">
+            <div className="p-2 w-fit bg-purple-50 dark:bg-purple-900/30 rounded-xl">
+              <Calendar className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div className="mt-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">QABULLAR</p>
+              <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{periodAppointmentsCount}</h3>
+              <div className="mt-3">
+                {pendingAppointments > 0 ? (
+                  <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded-full text-[9px] font-bold uppercase border border-amber-100 dark:border-amber-800/50">
                     {pendingAppointments} KUTILMOQDA
                   </span>
+                ) : (
+                  <span className="text-[10px] text-gray-400 font-medium">Hammasi tartibda</span>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="relative group overflow-hidden bg-emerald-600 p-6 rounded-[2rem] border-none shadow-lg shadow-emerald-500/20 hover:shadow-2xl hover:shadow-emerald-500/30 transition-all duration-300 hover:translate-y-[-4px]">
-          <div className="absolute top-0 right-0 p-6 opacity-20 text-white transition-transform duration-500 group-hover:scale-110">
-            <DollarSign className="w-20 h-20" />
+        {/* Yangi Lidlar */}
+        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-indigo-600 transition-transform duration-500 group-hover:scale-110">
+            <Star className="w-16 h-16" />
           </div>
-          <div className="relative z-10 h-full flex flex-col justify-between">
-            <div className="p-3 w-fit bg-white/20 rounded-2xl backdrop-blur-md">
-              <DollarSign className="w-6 h-6 text-white" />
+          <div className="relative z-10">
+            <div className="p-2 w-fit bg-indigo-50 dark:bg-indigo-900/30 rounded-xl">
+              <Star className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </div>
-            <div className="mt-8">
-              <p className="text-[10px] font-black text-emerald-100 uppercase tracking-[0.2em]">DAROMAD</p>
-              <div className="mt-1">
-                <h3 className="text-2xl font-black text-white">{totalRevenue.toLocaleString()} <span className="text-sm font-bold opacity-80">UZS</span></h3>
+            <div className="mt-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">YANGI LIDLAR</p>
+              <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{newLeadsCount}</h3>
+              <div className="mt-3">
+                <span className="text-[10px] text-gray-500 font-medium">Reklamadan tushgan</span>
               </div>
-              <p className="mt-4 text-[11px] font-bold text-emerald-100/80">
-                {isReceptionist ? today : (startDate || endDate ? 'Tanlangan davr uchun' : 'Barcha vaqt uchun')}
-              </p>
             </div>
           </div>
         </div>
 
-        {!isReceptionist && (
-          <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all duration-300 hover:translate-y-[-4px]">
-            <div className="absolute top-0 right-0 p-6 opacity-10 text-indigo-600 transition-transform duration-500 group-hover:scale-110">
-              <CheckCircle className="w-20 h-20" />
+        {/* O'rtacha Chek */}
+        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-rose-600 transition-transform duration-500 group-hover:scale-110">
+            <TrendingUp className="w-16 h-16" />
+          </div>
+          <div className="relative z-10">
+            <div className="p-2 w-fit bg-rose-50 dark:bg-rose-900/30 rounded-xl">
+              <TrendingUp className="w-5 h-5 text-rose-600 dark:text-rose-400" />
             </div>
-            <div className="relative z-10">
-              <div className="p-3 w-fit bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl">
-                <CheckCircle className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <div className="mt-8">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">SAMARADORLIK</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <h3 className="text-3xl font-black text-gray-900 dark:text-white">
-                    {periodAppointmentsCount > 0
-                      ? `${Math.round((filteredAppointments.filter(a => a.status === 'Completed').length / periodAppointmentsCount) * 100)}% `
-                      : '0%'
-                    }
-                  </h3>
-                </div>
-                <div className="mt-4 text-xs font-medium text-gray-500">
-                  <span className="text-indigo-600 dark:text-indigo-400 font-bold">{filteredAppointments.filter(a => a.status === 'Completed').length}</span>{" "}
-                  ta yakunlangan qabul
-                </div>
+            <div className="mt-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">O'RTACHA CHEK</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-1 leading-none">{avgCheck.toLocaleString()} <span className="text-[10px] opacity-50 font-bold">UZS</span></h3>
+              <div className="mt-3">
+                <span className="text-[10px] text-gray-500 font-medium">Bitta bemorga</span>
               </div>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Kutilayotgan To'lov */}
+        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-amber-600 transition-transform duration-500 group-hover:scale-110">
+            <Clock className="w-16 h-16" />
+          </div>
+          <div className="relative z-10">
+            <div className="p-2 w-fit bg-amber-50 dark:bg-amber-900/30 rounded-xl">
+              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="mt-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">KUTILMOQDA</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-1 leading-none">{pendingRevenue.toLocaleString()} <span className="text-[10px] opacity-50 font-bold">UZS</span></h3>
+              <div className="mt-3">
+                <span className="text-[10px] text-gray-500 font-medium">To'lanmagan</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Jami Daromad */}
+        <div className="relative group overflow-hidden bg-emerald-600 p-5 rounded-[1.5rem] shadow-lg shadow-emerald-600/10 hover:shadow-2xl hover:shadow-emerald-600/20 transition-all duration-300">
+          <div className="absolute -top-2 -right-2 p-4 opacity-10 text-white transition-transform duration-500 group-hover:scale-110">
+            <DollarSign className="w-16 h-16" />
+          </div>
+          <div className="relative z-10">
+            <div className="p-2 w-fit bg-white/20 rounded-xl backdrop-blur-sm">
+              <DollarSign className="w-5 h-5 text-white" />
+            </div>
+            <div className="mt-4">
+              <p className="text-[10px] font-black text-emerald-100 uppercase tracking-widest leading-none">DAROMAD</p>
+              <h3 className="text-xl font-black text-white mt-1 leading-none">{totalRevenue.toLocaleString()} <span className="text-[10px] opacity-80">UZS</span></h3>
+              <div className="mt-3">
+                <p className="text-[9px] font-bold text-emerald-100/80 uppercase">TANLANGAN DAVR</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Charts Row - hidden for receptionist */}
@@ -521,6 +578,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             </div >
           </Card >
         </div >
+
+        {/* Seasonal Intensity Chart */}
+        <Card className="p-8 rounded-[2rem]">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-xl font-black text-gray-900 dark:text-white">
+              Qabullar <span className="text-rose-600">Intensivligi</span>
+            </h3>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Oxirgi 6 oy bo'yicha</p>
+          </div>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={intensityData}>
+                <defs>
+                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#FB7185" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#E11D48" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark:stroke="#374151" strokeOpacity={0.4} />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 700 }} 
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 700 }} 
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                  contentStyle={{ backgroundColor: '#1F2937', borderRadius: '12px', border: 'none', color: '#fff' }}
+                />
+                <Bar 
+                  dataKey="count" 
+                  fill="url(#barGradient)" 
+                  radius={[8, 8, 4, 4]} 
+                  barSize={40}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 flex items-center gap-2 text-xs text-gray-500 font-medium bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700/50">
+            <AlertCircle className="w-4 h-4 text-rose-500" />
+            <span>Klinika faolligi mavsumga qarab o'zgarishi mumkin. Yuqori qizil barlar intensivlik yuqori bo'lgan davrlarni anglatadi.</span>
+          </div>
+        </Card>
       </>)}
     </div>
   );
