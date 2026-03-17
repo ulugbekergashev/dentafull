@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
 import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 
 const DOCTOR_COLORS = [
@@ -454,7 +454,6 @@ export const Settings: React.FC<SettingsProps> = ({
                   { id: 'doctors', name: 'Shifokorlar', icon: Users },
                   { id: 'receptionists', name: 'Resepshnlar', icon: Phone },
                   { id: 'bot', name: 'Telegram Bot', icon: Bot },
-                  { id: 'facebook', name: 'Facebook', icon: Facebook },
                ].map((item) => (
                   <button
                      key={item.id}
@@ -712,89 +711,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   </Card>
                )}
 
-               {/* Facebook Tab */}
-               {activeTab === 'facebook' && (
-                  <Card className="p-6">
-                     <div className="flex items-center gap-4 mb-6">
-                        <div className="p-3 bg-blue-600 rounded-xl text-white">
-                           <Facebook className="w-8 h-8 fill-current" />
-                        </div>
-                        <div>
-                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">Facebook Integratsiyasi</h3>
-                           <p className="text-sm text-gray-500">Arizalarni avtomatik qabul qilish</p>
-                        </div>
-                     </div>
 
-                     <div className="space-y-6">
-                        {currentClinic?.facebookPageId ? (
-                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
-                              <div className="p-6">
-                                 <div className="flex items-center justify-between mb-6">
-                                    <div className="flex items-center gap-4">
-                                       <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600">
-                                          <Facebook className="w-6 h-6 fill-current" />
-                                       </div>
-                                       <div>
-                                          <h4 className="font-bold text-gray-900 dark:text-white text-lg">{currentClinic.facebookPageName}</h4>
-                                          <p className="text-sm text-gray-500">ID: {currentClinic.facebookPageId}</p>
-                                       </div>
-                                    </div>
-                                    <span className="px-3 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 rounded-full text-xs font-bold flex items-center gap-1.5">
-                                       <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                       Ulandi
-                                    </span>
-                                 </div>
-
-                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <button 
-                                       onClick={() => handleFetchFBPages()}
-                                       className="flex items-center justify-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl font-medium transition-colors text-gray-700 dark:text-gray-200"
-                                    >
-                                       <RefreshCw className="w-4 h-4" />
-                                       Sahifani almashtirish
-                                    </button>
-                                    <button 
-                                       onClick={async () => {
-                                          if (window.confirm('Facebook-ni uzishni tasdiqlaysizmi?')) {
-                                             await api.facebook.disconnect(currentClinic.id);
-                                             window.location.reload();
-                                          }
-                                       }}
-                                       className="flex items-center justify-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 rounded-xl font-medium transition-colors"
-                                    >
-                                       <Trash2 className="w-4 h-4" />
-                                       Bog'lanishni uzish
-                                    </button>
-                                 </div>
-                              </div>
-                              <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-800">
-                                 <p className="text-xs text-gray-500 flex items-center gap-2">
-                                    <Activity className="w-3 h-3" />
-                                    Arizalar har 5 daqiqada yoki Webhook orqali avtomatik keladi.
-                                 </p>
-                              </div>
-                           </div>
-                        ) : (
-                           <div className="text-center py-12 px-6 bg-gray-50 dark:bg-gray-800/50 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700">
-                              <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-600 dark:text-blue-400">
-                                 <Facebook className="w-10 h-10 fill-current" />
-                              </div>
-                              <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Facebook-ni bog'lang</h4>
-                              <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto mb-8">
-                                 Facebook-da kelayotgan arizalarni avtomatik CRM-ga tushirish uchun hisobingizni bog'lang.
-                              </p>
-                              <button 
-                                 onClick={handleConnectFB}
-                                 className="inline-flex items-center gap-2 px-8 py-4 bg-[#1877F2] hover:bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/20 transition-all hover:-translate-y-1 active:scale-95"
-                              >
-                                 <Facebook className="w-5 h-5 fill-current" />
-                                 Facebook-ni ulash
-                              </button>
-                           </div>
-                        )}
-                     </div>
-                  </Card>
-               )}
             </div>
          </div>
 
