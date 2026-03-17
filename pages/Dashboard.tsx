@@ -24,7 +24,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads }) => {
-  const [selectedMonthForIntensity, setSelectedMonthForIntensity] = useState<string | null>(null);
+  const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -140,18 +140,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
   // Seasonal Intensity Data
   const intensityData = useMemo(() => {
-    if (selectedMonthForIntensity) {
-      // Daily Drill-down view
-      const days: { [key: string]: number } = {};
-      const [monthName, yearStr] = selectedMonthForIntensity.split(' ');
-      const year = parseInt(yearStr);
-      
-      // Get month index from name
-      const monthIndex = Array.from({ length: 12 }, (_, i) => 
-        new Date(2000, i, 1).toLocaleString('uz-UZ', { month: 'long' })
-      ).indexOf(monthName);
+    const uzMonths = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+    const now = new Date();
 
-      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    if (intensityView === 'month') {
+      // Current Month Daily Distribution
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const days: { [key: string]: number } = {};
       
       for (let i = 1; i <= daysInMonth; i++) {
         days[i.toString()] = 0;
@@ -159,39 +154,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       appointments.forEach(a => {
         const d = new Date(a.date);
-        if (d.getFullYear() === year && d.getMonth() === monthIndex) {
+        if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
           days[d.getDate().toString()]++;
         }
       });
 
       return Object.entries(days).map(([name, count]) => ({ name, count }));
     } else {
-      // 12-Month Overview
-      const months: { [key: string]: { count: number, fullKey: string } } = {};
-      const now = new Date();
+      // Last 12 Months Overview
+      const result: { name: string, count: number, monthIndex: number, year: number }[] = [];
       
       for (let i = 11; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const label = d.toLocaleString('uz-UZ', { month: 'long' });
-        const fullKey = `${label} ${d.getFullYear()}`;
-        months[label] = { count: 0, fullKey };
+        result.push({
+          name: uzMonths[d.getMonth()],
+          count: 0,
+          monthIndex: d.getMonth(),
+          year: d.getFullYear()
+        });
       }
 
       appointments.forEach(a => {
         const apptDate = new Date(a.date);
-        const label = apptDate.toLocaleString('uz-UZ', { month: 'long' });
-        if (months[label]) {
-          months[label].count++;
+        const item = result.find(r => r.monthIndex === apptDate.getMonth() && r.year === apptDate.getFullYear());
+        if (item) {
+          item.count++;
         }
       });
 
-      return Object.entries(months).map(([name, data]) => ({ 
-        name, 
-        count: data.count,
-        fullKey: data.fullKey 
-      }));
+      return result;
     }
-  }, [appointments, selectedMonthForIntensity]);
+  }, [appointments, intensityView]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -620,29 +613,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 Qabullar <span className="text-rose-600">Intensivligi</span>
               </h3>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
-                {selectedMonthForIntensity ? `${selectedMonthForIntensity} oyi bo'yicha` : "Oxirgi 12 oy davomida"}
+                {intensityView === 'month' ? "Joriy oy kunlari bo'yicha" : "Oxirgi 12 oy davomida"}
               </p>
             </div>
-            {selectedMonthForIntensity && (
-              <button 
-                onClick={() => setSelectedMonthForIntensity(null)}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-bold transition-colors w-fit"
+            
+            {/* View Toggle */}
+            <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
+              <button
+                onClick={() => setIntensityView('month')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                  intensityView === 'month' 
+                    ? 'bg-white dark:bg-gray-700 text-rose-600 shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
               >
-                <ArrowLeft className="w-4 h-4" />
-                Orqaga
+                OYLIK
               </button>
-            )}
+              <button
+                onClick={() => setIntensityView('year')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                  intensityView === 'year' 
+                    ? 'bg-white dark:bg-gray-700 text-rose-600 shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                YILLIK
+              </button>
+            </div>
           </div>
+          
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={intensityData}
-                onClick={(data) => {
-                  if (!selectedMonthForIntensity && data && data.activePayload) {
-                    setSelectedMonthForIntensity(data.activePayload[0].payload.fullKey);
-                  }
-                }}
-              >
+              <BarChart data={intensityData}>
                 <defs>
                   <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#FB7185" stopOpacity={1} />
@@ -654,8 +656,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   dataKey="name" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#9CA3AF', fontSize: selectedMonthForIntensity ? 10 : 9, fontWeight: 700 }} 
-                  interval={selectedMonthForIntensity ? 1 : 0}
+                  tick={{ fill: '#9CA3AF', fontSize: 9, fontWeight: 700 }} 
+                  interval={intensityView === 'month' ? 1 : 0}
                 />
                 <YAxis 
                   axisLine={false} 
@@ -671,8 +673,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   dataKey="count" 
                   fill="url(#barGradient)" 
                   radius={[8, 8, 4, 4]} 
-                  barSize={selectedMonthForIntensity ? 12 : 32}
-                  className={!selectedMonthForIntensity ? "cursor-pointer" : ""}
+                  barSize={intensityView === 'month' ? 12 : 32}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -682,9 +683,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <AlertCircle className="w-4 h-4 text-rose-500" />
             </div>
             <p className="leading-relaxed">
-              {!selectedMonthForIntensity 
-                ? "Oylik tahlil klinika faolligini mavsumga qarab ko'rsatadi. Kunlik tahlilni ko'rish uchun oy ustiga bosing."
-                : "Ushbu oy uchun kunlik qabullar soni. Bu qaysi kunlarda klinika eng band bo'lishini tushunishga yordam beradi."}
+              {intensityView === 'year' 
+                ? "Yillik tahlil klinika faolligini oylar kesimida ko'rsatadi. Kunlik tahlilga o'tish uchun tepadan 'OYLIK' tugmasini bosing."
+                : "Joriy oy uchun kunlik qabullar soni. Bu qaysi kunlarda klinika yuklamasi yuqori ekanini ko'rsatadi."}
             </p>
           </div>
         </Card>
