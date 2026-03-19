@@ -59,6 +59,7 @@ app.use((req, res, next) => {
     const allowedOrigins = [
         'http://localhost:5173',
         'http://localhost:3000',
+        'http://localhost:3005',
         'https://dentafull-production.up.railway.app',
         'https://dentafull.vercel.app',
         'https://dentacrm.uz',

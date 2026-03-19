@@ -23,6 +23,7 @@ import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
 import { api } from './services/api';
+import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
 
 // Navigation config for Clinic Admin and Doctors
 const CLINIC_NAVIGATION: NavItem[] = [
@@ -106,6 +107,22 @@ const AppContent: React.FC = () => {
 
     return { patients: filteredPatients, doctors: filteredDoctors };
   }, [searchBarTerm, patients, doctors]);
+
+  // Subscription Block Logic
+  const isSubscriptionBlocked = useMemo(() => {
+    if (!isAuthenticated || !currentClinic || userRole === UserRole.SUPER_ADMIN) return false;
+    
+    // Check Status
+    if (currentClinic.status === 'Blocked') return true;
+    
+    // Check Expiry
+    if (currentClinic.expiryDate) {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      return currentClinic.expiryDate < today;
+    }
+    
+    return false;
+  }, [isAuthenticated, currentClinic, userRole]);
 
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
 
@@ -658,9 +675,9 @@ const AppContent: React.FC = () => {
 
   const deleteClinic = async (id: string) => {
     try {
-      await api.clinics.delete(id);
-      setClinics(prev => prev.filter(c => c.id !== id));
-      addToast('info', "Klinika o'chirildi.");
+      const updated = await api.clinics.update(id, { status: 'Blocked' });
+      setClinics(prev => prev.map(c => c.id === id ? updated : c));
+      addToast('info', "Klinika bloklandi va savatga o'tkazildi.");
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
@@ -1203,6 +1220,9 @@ const AppContent: React.FC = () => {
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
+
+      {/* Subscription Block Modal */}
+      <SubscriptionBlockModal isOpen={isSubscriptionBlocked} />
     </div>
   );
 };

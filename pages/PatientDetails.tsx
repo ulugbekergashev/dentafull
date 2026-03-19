@@ -344,36 +344,48 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       if (!appointmentNotes) return { total: 0, breakdown: '' };
 
       let total = 0;
+      let breakdown = '';
       const lines = appointmentNotes.split('\n');
-      const breakdownLines: string[] = [];
 
-      for (const line of lines) {
-         // Skip header lines and empty lines
-         if (line.includes('Bajarilgan ishlar:') || line.includes("Qo'shimcha") || line.trim() === '') {
-            continue;
+      lines.forEach(line => {
+         const trimmedLine = line.trim();
+         if (!trimmedLine || trimmedLine.includes('Bajarilgan ishlar:') || trimmedLine.includes("Qo'shimcha")) {
+            return;
          }
 
-         // Extract service name from format like "- Konsultatsiya (Tish #11)"
-         const match = line.match(/^[\s-]*(.+?)\s*\(/);
-         const serviceName = match ? match[1].trim() : line.replace(/^[\s-]*/, '').trim();
+         // 1. Try to parse price from brackets [100 000 UZS]
+         const priceMatch = trimmedLine.match(/\[([\d\s]+)\s*UZS\]/i);
+         if (priceMatch) {
+            const priceStr = priceMatch[1].replace(/\s/g, '');
+            const price = parseFloat(priceStr);
+            if (!isNaN(price)) {
+               total += price;
+               breakdown += `${trimmedLine}\n`;
+               return; // Skip to next line
+            }
+         }
 
-         if (!serviceName) continue;
+         // 2. Fallback: Try fuzzy matching with service list (for old format)
+         const cleanLine = trimmedLine.toLowerCase();
+         // Sort services by name length descending to match most specific first
+         const sortedServices = [...services].sort((a, b) => b.name.length - a.name.length);
 
-         // Try to match service names
-         for (const service of services) {
-            if (serviceName.includes(service.name) || service.name.includes(serviceName)) {
+         let matched = false;
+         for (const service of sortedServices) {
+            const serviceNameLower = service.name.toLowerCase();
+            if (cleanLine.includes(serviceNameLower) || serviceNameLower.includes(cleanLine)) {
                total += service.price;
-               breakdownLines.push(`${service.name}|${service.price.toLocaleString()}`);
+               breakdown += `${service.name}: ${service.price.toLocaleString()} UZS\n`;
+               matched = true;
                break;
             }
          }
-      }
 
-      if (breakdownLines.length === 0) {
-         return { total: 0, breakdown: '' };
-      }
+         if (!matched) {
+            breakdown += `Noma'lum: ${trimmedLine}\n`;
+         }
+      });
 
-      const breakdown = breakdownLines.join('||') + '||TOTAL||' + total.toLocaleString();
       return { total, breakdown };
    };
 
@@ -735,7 +747,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       let finalDoctorId = doctors.length > 0 ? doctors[0].id : '';
       let finalDoctorName = doctors.length > 0 ? `Dr. ${doctors[0].lastName}` : 'Doctor';
 
-      const proceduresText = procedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'})`).join('\n');
+      // Create a text summary of procedures for the appointment notes with explicit prices
+      const proceduresText = procedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'}) [${p.price.toLocaleString().replace(/,/g, ' ')} UZS]`).join('\n');
 
       try {
          // ENSURE DOCTOR EXISTS (especially for new clinics or individual plans)

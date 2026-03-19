@@ -16,7 +16,7 @@ interface SuperAdminDashboardProps {
 export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    clinics, plans, onAddClinic, onUpdateClinic, onUpdatePlan, onDeleteClinic
 }) => {
-   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans'>('overview');
+   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked'>('overview');
 
    // Create Clinic State
    const [isAddClinicModalOpen, setIsAddClinicModalOpen] = useState(false);
@@ -74,14 +74,21 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       }
    }, [selectedClinic]);
 
-   const totalRevenue = clinics.reduce((acc, c) => acc + (plans.find(p => p.id === c.planId)?.price || 0), 0);
+   const totalRevenue = clinics
+      .filter(c => c.status === 'Active') // Only active clinics contribute to revenue
+      .reduce((acc, c) => {
+         const plan = plans.find(p => p.id === c.planId);
+         const price = c.customPrice !== undefined ? c.customPrice : (plan?.price || 0);
+         return acc + price;
+      }, 0);
+
    const activeClinics = clinics.filter(c => c.status === 'Active').length;
-   const totalClinics = clinics.length;
+   const totalClinics = clinics.filter(c => c.status !== 'Blocked').length; // "Total" clinics are now only non-blocked ones
+   const blockedCount = clinics.filter(c => c.status === 'Blocked').length;
 
    // Pre-calculate counts for filters
    const allCount = totalClinics;
    const activeCount = activeClinics;
-   const blockedCount = clinics.filter(c => c.status === 'Blocked').length;
    const expiringCount = clinics.filter(c => {
       const days = getDaysRemaining(c.expiryDate);
       return days <= 3 && days > 0;
@@ -109,6 +116,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       const isExpiring = daysLeft <= 3 && daysLeft > 0;
       const isExpired = daysLeft <= 0;
       const isNotExpired = daysLeft > 0;
+
+      // Tab specific filtering
+      if (activeTab === 'clinics' && clinic.status === 'Blocked') return false;
+      if (activeTab === 'blocked' && clinic.status !== 'Blocked') return false;
 
       if (filterStatus === 'All') return matchesSearch;
       if (filterStatus === 'Active') return matchesSearch && clinic.status === 'Active';
@@ -265,6 +276,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
                   Tariflar
+               </button>
+               <button
+                  onClick={() => setActiveTab('blocked')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
+               >
+                  Blokdagilar ({blockedCount})
                </button>
             </div>
          </div>
@@ -490,6 +507,83 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </div>
                   </div>
                )}
+            </Card>
+         )}
+
+         {/* BLOCKED/TRASH TAB */}
+         {activeTab === 'blocked' && (
+            <Card className="p-6">
+               <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                  <div>
+                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bloklangan Klinikalar (Savat)</h3>
+                     <p className="text-sm text-gray-500">Ushbu klinikalar bloklangan va tushum hisobiga kirmaydi.</p>
+                  </div>
+
+                  <div className="flex flex-1 w-full md:w-auto gap-3">
+                     <div className="relative flex-1 md:w-64">
+                        <Input
+                           placeholder="Qidirish..."
+                           value={searchQuery}
+                           onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                           className="w-full"
+                        />
+                     </div>
+                  </div>
+               </div>
+
+               <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                     <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                           <th className="p-4 font-medium text-gray-500">Klinika Nomi</th>
+                           <th className="p-4 font-medium text-gray-500">Tarif</th>
+                           <th className="p-4 font-medium text-gray-500">Sana</th>
+                           <th className="p-4 font-medium text-gray-500">Status</th>
+                           <th className="p-4 font-medium text-gray-500 text-right">Amallar</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {paginatedClinics.length === 0 ? (
+                           <tr>
+                              <td colSpan={5} className="p-8 text-center text-gray-500">
+                                 Bloklangan klinikalar yo'q
+                              </td>
+                           </tr>
+                        ) : (
+                           paginatedClinics.map(clinic => (
+                              <tr key={clinic.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                 <td className="p-4">
+                                    <div className="font-medium text-gray-900 dark:text-white">{clinic.name}</div>
+                                    <div className="text-xs text-gray-500">{clinic.phone}</div>
+                                 </td>
+                                 <td className="p-4">
+                                    <span className="px-2 py-1 rounded-md text-xs font-bold uppercase bg-gray-100 text-gray-600">
+                                       {plans.find(p => p.id === clinic.planId)?.name}
+                                    </span>
+                                 </td>
+                                 <td className="p-4 text-xs text-gray-500">
+                                    {clinic.expiryDate} (tugagan)
+                                 </td>
+                                 <td className="p-4">
+                                    <Badge status="blocked" />
+                                 </td>
+                                 <td className="p-4 text-right">
+                                    <div className="flex justify-end gap-2">
+                                       <Button
+                                          size="sm"
+                                          variant="secondary"
+                                          onClick={() => onUpdateClinic(clinic.id, { status: 'Active' })}
+                                       >
+                                          Aktivlashtirish
+                                       </Button>
+                                    </div>
+                                 </td>
+                              </tr>
+                           ))
+                        )}
+                     </tbody>
+                  </table>
+               </div>
             </Card>
          )}
 
@@ -802,13 +896,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <div className="pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between gap-3">
                      <Button
                         variant="secondary"
-                        className="bg-red-50 text-red-600 hover:bg-red-100 border-red-200"
+                        className="bg-orange-50 text-orange-600 hover:bg-orange-100 border-orange-200"
                         onClick={() => {
                            setDeleteConfirmClinic(selectedClinic);
                            setSelectedClinic(null);
                         }}
                      >
-                        Klinikani O'chirish
+                        Bloklash va Savatga o'tish
                      </Button>
                      <div className="flex gap-3">
                         <Button
@@ -860,20 +954,20 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             </div>
          </Modal>
 
-         {/* Delete Confirmation Modal */}
-         <Modal isOpen={!!deleteConfirmClinic} onClose={() => setDeleteConfirmClinic(null)} title="Klinikani O'chirish">
+         {/* Delete (Block) Confirmation Modal */}
+         <Modal isOpen={!!deleteConfirmClinic} onClose={() => setDeleteConfirmClinic(null)} title="Klinikani Bloklash">
             <div className="text-center space-y-4">
-               <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <Ban className="w-6 h-6 text-red-600" />
+               <div className="mx-auto w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                  <Ban className="w-6 h-6 text-orange-600" />
                </div>
                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
                <p className="text-gray-600 dark:text-gray-300">
-                  <strong>{deleteConfirmClinic?.name}</strong> klinikasini o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi va barcha ma'lumotlar o'chib ketadi.
+                  <strong>{deleteConfirmClinic?.name}</strong> klinikasini bloklamoqchimisiz? U bloklanganlar ro'yxatiga (savatga) o'tkaziladi.
                </p>
                <div className="flex justify-center gap-3 pt-4">
                   <Button variant="secondary" onClick={() => setDeleteConfirmClinic(null)}>Bekor qilish</Button>
                   <Button
-                     className="bg-red-600 hover:bg-red-700 text-white border-none"
+                     className="bg-orange-600 hover:bg-orange-700 text-white border-none"
                      onClick={() => {
                         if (deleteConfirmClinic) {
                            onDeleteClinic(deleteConfirmClinic.id);
@@ -881,7 +975,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         }
                      }}
                   >
-                     Ha, O'chirish
+                     Ha, Bloklash
                   </Button>
                </div>
             </div>
