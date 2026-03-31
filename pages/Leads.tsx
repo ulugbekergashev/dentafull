@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Lead, Doctor, Appointment, ServiceCategory, Service, Clinic } from '../types';
 import { api, isDemoMode } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 
 interface LeadsProps {
     leads: Lead[];
@@ -20,11 +21,11 @@ interface LeadsProps {
 }
 
 const STAGES = [
-    { id: 'New', label: 'Yangi', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' },
-    { id: 'Contacted', label: 'Bog\'lanildi', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' },
-    { id: 'Thinking', label: 'O\'ylab ko\'radi', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400' },
-    { id: 'Booked', label: 'Qabulga yozildi', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
-    { id: 'Cancelled', label: 'Rad etdi', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' }
+    { id: 'New', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' },
+    { id: 'Contacted', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' },
+    { id: 'Thinking', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400' },
+    { id: 'Booked', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
+    { id: 'Cancelled', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' }
 ];
 
 export const Leads: React.FC<LeadsProps> = ({
@@ -38,6 +39,7 @@ export const Leads: React.FC<LeadsProps> = ({
     onDeleteLead,
     onConvertLead
 }) => {
+    const { t } = useLanguage();
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
     const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export const Leads: React.FC<LeadsProps> = ({
         doctorId: '',
         date: new Date().toISOString().split('T')[0],
         time: '09:00',
-        type: 'Konsultatsiya',
+        type: t('leads.convertModal.procedure'),
         categoryId: '',
         duration: 60,
         notes: ''
@@ -106,7 +108,7 @@ export const Leads: React.FC<LeadsProps> = ({
         e.preventDefault();
         if (!convertingLeadId) return;
         if (!apptData.doctorId) {
-            alert('Iltimos, shifokorni tanlang!');
+            alert(t('leads.alerts.selectDoctor'));
             return;
         }
 
@@ -198,9 +200,9 @@ export const Leads: React.FC<LeadsProps> = ({
             const pages = await api.facebook.getPages(currentClinic.id);
             setFacebookPages(pages);
             setIsFBPageModalOpen(true);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to fetch FB pages:', error);
-            alert('Facebook sahifalarini yuklashda xatolik yuz berdi');
+            alert(`${t('leads.alerts.fbFetchError')}: ${error.message || ''}`);
         } finally {
             setIsFBLoading(false);
         }
@@ -208,7 +210,7 @@ export const Leads: React.FC<LeadsProps> = ({
 
     const handleConnectFB = async () => {
         if (!currentClinic?.id) {
-            alert('Klinika ID topilmadi. Tizimdan chiqib qaytadan kiring.');
+            alert(t('leads.alerts.fbConfigError'));
             return;
         }
 
@@ -221,7 +223,7 @@ export const Leads: React.FC<LeadsProps> = ({
                 setIsFBPageModalOpen(true);
             } catch (error: any) {
                 console.error('FB Demo pages error:', error);
-                alert(`Facebook sahifalarini yuklashda xatolik: ${error.message}`);
+                alert(`${t('leads.alerts.fbFetchError')}: ${error.message || ''}`);
             } finally {
                 setIsFBLoading(false);
             }
@@ -242,7 +244,7 @@ export const Leads: React.FC<LeadsProps> = ({
             );
         } catch (error: any) {
             console.error('FB Connect error:', error);
-            alert(`Facebook ulanishda xatolik: ${error.message}`);
+            alert(`${t('leads.alerts.fbConnectError')}: ${error.message || ''}`);
         } finally {
             setIsFBLoading(false);
         }
@@ -259,11 +261,11 @@ export const Leads: React.FC<LeadsProps> = ({
                 pageName: page.name
             });
             setIsFBPageModalOpen(false);
-            alert('Sahifa muvaffaqiyatli bog\'landi!');
+            alert(t('leads.alerts.fbSuccess'));
             window.location.reload();
         } catch (error) {
             console.error('Failed to select FB page:', error);
-            alert('Sahifani saqlashda xatolik yuz berdi');
+            alert(t('leads.alerts.fbFetchError'));
         }
     };
 
@@ -277,8 +279,8 @@ export const Leads: React.FC<LeadsProps> = ({
                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-6 animate-bounce">
                     <CheckCircle className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Muvaffaqiyatli ulandi!</h1>
-                <p className="text-gray-500 dark:text-gray-400">Facebook hisobingiz tizimga bog'landi. Ushbu oyna hozir yopiladi...</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t('leads.success.connectedTitle')}</h1>
+                <p className="text-gray-500 dark:text-gray-400">{t('leads.success.connectedDesc')}</p>
             </div>
         );
     }
@@ -289,9 +291,9 @@ export const Leads: React.FC<LeadsProps> = ({
                 <div className="flex items-center gap-4">
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                            Lidlar <span className="text-[#1B6AFB] dark:text-blue-400">Voronkasi</span>
+                            {t('leads.title').split(' ')[0]} <span className="text-[#1B6AFB] dark:text-blue-400">{t('leads.title').split(' ').slice(1).join(' ')}</span>
                         </h1>
-                        <p className="text-sm text-gray-500 mt-1">Potensial mijozlar bilan ishlash</p>
+                        <p className="text-sm text-gray-500 mt-1">{t('leads.subtitle')}</p>
                     </div>
 
                     {/* Facebook Integration Quick Status */}
@@ -306,19 +308,19 @@ export const Leads: React.FC<LeadsProps> = ({
                                 <button
                                     onClick={() => handleFetchFBPages()}
                                     className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                                    title="Sahifani almashtirish"
+                                    title={t('leads.tooltips.changePage')}
                                 >
                                     <RefreshCw className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                     onClick={async () => {
-                                        if (window.confirm('Facebook bog\'lanishini uzishni tasdiqlaysizmi?')) {
-                                            await api.facebook.disconnect(currentClinic.id);
+                                        if (window.confirm(t('leads.alerts.fbDisconnectConfirm'))) {
+                                            await api.facebook.disconnect(currentClinic!.id);
                                             window.location.reload();
                                         }
                                     }}
                                     className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                                    title="Bog'lanishni uzish"
+                                    title={t('leads.tooltips.disconnect')}
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -330,7 +332,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                 className="flex items-center gap-2 px-4 py-2 bg-[#1877F2] hover:bg-blue-600 text-white rounded-xl text-sm font-bold shadow-md transition-all disabled:opacity-50 active:scale-95"
                             >
                                 {isFBLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Facebook className="w-4 h-4 fill-current" />}
-                                <span>Facebook-ni ulash</span>
+                                <span>{t('leads.connectFb')}</span>
                             </button>
                         )}
                     </div>
@@ -341,7 +343,7 @@ export const Leads: React.FC<LeadsProps> = ({
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="Qidiruv..."
+                            placeholder={t('leads.search')}
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-[#1B6AFB]/20 outline-none transition-all dark:text-white"
@@ -352,7 +354,7 @@ export const Leads: React.FC<LeadsProps> = ({
                         className="flex items-center justify-center gap-2 bg-[#1B6AFB] hover:bg-blue-600 active:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap"
                     >
                         <Plus className="w-5 h-5" />
-                        <span className="hidden sm:inline">Yangi Lid</span>
+                        <span className="hidden sm:inline">{t('leads.newLead')}</span>
                     </button>
                 </div>
             </div>
@@ -375,7 +377,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                 <div className={`p-3 border-b border-gray-200/50 dark:border-gray-700/50 rounded-t-xl transition-colors ${isDragOverTarget ? 'bg-gray-100 dark:bg-gray-700/50' : ''}`}>
                                     <div className="flex items-center justify-between pointer-events-none">
                                         <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${stage.color}`}>
-                                            {stage.label}
+                                            {t(`leads.stages.${stage.id.toLowerCase()}`)}
                                         </span>
                                         <span className="text-xs font-medium text-gray-500 bg-white dark:bg-gray-800 px-2 py-0.5 rounded-full shadow-sm border border-gray-100 dark:border-gray-700">
                                             {columnLeads.length}
@@ -409,12 +411,12 @@ export const Leads: React.FC<LeadsProps> = ({
                                                 </div>
                                                 {lead.service && (
                                                     <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded w-fit">
-                                                        Murojaat: {lead.service}
+                                                        {t('leads.service')}: {lead.service}
                                                     </span>
                                                 )}
                                                 {lead.source && (
                                                     <span className="text-[10px] text-gray-400">
-                                                        Manba: {lead.source}
+                                                        {t('leads.source')}: {lead.source}
                                                     </span>
                                                 )}
                                             </div>
@@ -431,7 +433,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                                         }
                                                     >
                                                         {s.id === 'Booked' ? <UserPlus className="w-3 h-3 inline-block mr-0.5" /> : <ArrowRight className="w-3 h-3 inline-block mr-0.5" />}
-                                                        {s.label}
+                                                        {t(`leads.stages.${s.id.toLowerCase()}`)}
                                                     </button>
                                                 ))}
                                             </div>
@@ -440,7 +442,7 @@ export const Leads: React.FC<LeadsProps> = ({
 
                                     {columnLeads.length === 0 && (
                                         <div className="h-24 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-center">
-                                            <span className="text-xs text-gray-400">Bo'sh</span>
+                                            <span className="text-xs text-gray-400">{t('leads.empty')}</span>
                                         </div>
                                     )}
                                 </div>
@@ -454,7 +456,7 @@ export const Leads: React.FC<LeadsProps> = ({
                 <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl p-6 transform transition-all">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Yangi Lid Qo'shish</h2>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('leads.addLeadModal.title')}</h2>
                             <button
                                 onClick={() => setIsAddModalOpen(false)}
                                 className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
@@ -465,7 +467,7 @@ export const Leads: React.FC<LeadsProps> = ({
                         <form onSubmit={handleAddSubmit} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                                    Mijoz Ismi *
+                                    {t('leads.addLeadModal.name')} *
                                 </label>
                                 <input
                                     type="text"
@@ -477,7 +479,7 @@ export const Leads: React.FC<LeadsProps> = ({
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                                    Telefon Raqami *
+                                    {t('leads.addLeadModal.phone')} *
                                 </label>
                                 <input
                                     type="tel"
@@ -489,11 +491,11 @@ export const Leads: React.FC<LeadsProps> = ({
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                                    Qiziqayotgan Xizmat (Ixtiyoriy)
+                                    {t('leads.addLeadModal.service')}
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="Masalan: Implant, Breket"
+                                    placeholder={t('leads.addLeadModal.servicePlaceholder')}
                                     value={formData.service}
                                     onChange={(e) => setFormData({ ...formData, service: e.target.value })}
                                     className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:text-white"
@@ -501,24 +503,24 @@ export const Leads: React.FC<LeadsProps> = ({
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                                    Murojaat Manbasi (Source)
+                                    {t('leads.addLeadModal.source')}
                                 </label>
                                 <select
                                     value={formData.source}
                                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                                     className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:text-white"
                                 >
-                                    <option value="">Tanlang...</option>
-                                    <option value="Instagram">Instagram</option>
-                                    <option value="Telegram">Telegram</option>
-                                    <option value="Tavsiya">Tavsiya</option>
-                                    <option value="Tashqari">Tashqaridan keldi (Banner)</option>
-                                    <option value="Boshqa">Boshqa</option>
+                                    <option value="">{t('common.select')}...</option>
+                                    <option value="Instagram">{t('leads.sources.instagram')}</option>
+                                    <option value="Telegram">{t('leads.sources.telegram')}</option>
+                                    <option value="Tavsiya">{t('leads.sources.recommendation')}</option>
+                                    <option value="Tashqari">{t('leads.sources.banner')}</option>
+                                    <option value="Boshqa">{t('leads.sources.other')}</option>
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                                    Qo'shimcha Izoh
+                                    {t('leads.addLeadModal.notes')}
                                 </label>
                                 <textarea
                                     value={formData.notes}
@@ -534,13 +536,13 @@ export const Leads: React.FC<LeadsProps> = ({
                                     onClick={() => setIsAddModalOpen(false)}
                                     className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-colors"
                                 >
-                                    Bekor qilish
+                                    {t('leads.addLeadModal.cancel')}
                                 </button>
                                 <button
                                     type="submit"
                                     className="flex-1 px-4 py-2.5 bg-[#1B6AFB] text-white rounded-xl hover:bg-blue-600 font-medium shadow-sm transition-all"
                                 >
-                                    Saqlash
+                                    {t('leads.addLeadModal.save')}
                                 </button>
                             </div>
                         </form>
@@ -553,8 +555,8 @@ export const Leads: React.FC<LeadsProps> = ({
                     <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl p-6 transform transition-all">
                         <div className="flex items-center justify-between mb-6">
                             <div>
-                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Bemorga Aylantirish</h2>
-                                <p className="text-sm text-gray-500">Mijozni tizimga qo'shib qabulga yozish</p>
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('leads.convertModal.title')}</h2>
+                                <p className="text-sm text-gray-500">{t('leads.convertModal.subtitle')}</p>
                             </div>
                             <button
                                 onClick={() => {
@@ -569,14 +571,14 @@ export const Leads: React.FC<LeadsProps> = ({
 
                         <form onSubmit={handleConvertSubmit} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Shifokorni tanlang *</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('leads.convertModal.selectDoctor')} *</label>
                                 <select
                                     required
                                     value={apptData.doctorId}
                                     onChange={(e) => setApptData({ ...apptData, doctorId: e.target.value })}
                                     className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500 outline-none"
                                 >
-                                    <option value="">— Shifokor tanlang —</option>
+                                    <option value="">— {t('leads.convertModal.selectDoctor')} —</option>
                                     {doctors.map((d) => (
                                         <option key={d.id} value={d.id}>Dr. {d.lastName} {d.firstName}</option>
                                     ))}
@@ -584,7 +586,7 @@ export const Leads: React.FC<LeadsProps> = ({
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sana *</label>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('leads.convertModal.date')} *</label>
                                     <input
                                         type="date"
                                         required
@@ -594,7 +596,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vaqt *</label>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('leads.convertModal.time')} *</label>
                                     <input
                                         type="time"
                                         required
@@ -607,13 +609,13 @@ export const Leads: React.FC<LeadsProps> = ({
 
                             {categories.length > 0 && (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Xizmat kategoriyasi</label>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('leads.convertModal.category')}</label>
                                     <select
                                         value={apptData.categoryId}
                                         onChange={(e) => setApptData({ ...apptData, categoryId: e.target.value, type: '' })}
                                         className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500 outline-none"
                                     >
-                                        <option value="">Barcha kategoriyalar</option>
+                                        <option value="">{t('leads.convertModal.allCategories')}</option>
                                         {categories.map(c => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
@@ -622,7 +624,7 @@ export const Leads: React.FC<LeadsProps> = ({
                             )}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Muolaja turi</label>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('leads.convertModal.procedure')}</label>
                                     <select
                                         value={apptData.type}
                                         onChange={e => {
@@ -643,7 +645,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Davomiylik (daq)</label>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('leads.convertModal.duration')}</label>
                                     <input
                                         type="number"
                                         required
@@ -663,13 +665,13 @@ export const Leads: React.FC<LeadsProps> = ({
                                     }}
                                     className="px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-colors"
                                 >
-                                    Bekor qilish
+                                    {t('leads.convertModal.cancel')}
                                 </button>
                                 <button
                                     type="submit"
                                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-sm transition-all"
                                 >
-                                    Mijozga Aylantirish
+                                    {t('leads.convertModal.convert')}
                                 </button>
                             </div>
                         </form>
@@ -682,8 +684,8 @@ export const Leads: React.FC<LeadsProps> = ({
                     <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md shadow-2xl p-6 transform transition-all">
                         <div className="flex items-center justify-between mb-6">
                             <div>
-                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Facebook Sahifasini Tanlang</h2>
-                                <p className="text-sm text-gray-500">Lidlar tushadigan sahifani biriktiring</p>
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('leads.fbModal.title')}</h2>
+                                <p className="text-sm text-gray-500">{t('leads.fbModal.subtitle')}</p>
                             </div>
                             <button
                                 onClick={() => setIsFBPageModalOpen(false)}
@@ -720,7 +722,7 @@ export const Leads: React.FC<LeadsProps> = ({
                             {facebookPages.length === 0 && (
                                 <div className="py-8 text-center bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
                                     <Facebook className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                                    <p className="text-sm text-gray-500">Hech qanday sahifa topilmadi</p>
+                                    <p className="text-sm text-gray-500">{t('leads.fbModal.noPages')}</p>
                                 </div>
                             )}
                         </div>
@@ -730,7 +732,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                 onClick={() => setIsFBPageModalOpen(false)}
                                 className="w-full py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-bold transition-colors"
                             >
-                                Yopish
+                                {t('leads.fbModal.close')}
                             </button>
                         </div>
                     </div>

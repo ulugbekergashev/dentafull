@@ -9,8 +9,8 @@ import {
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
 import { Patient, Appointment, Transaction, UserRole, Doctor, Lead } from '../types';
-
 import { getCurrentMonthRange } from '../utils/dateUtils';
+import { useLanguage } from '../context/LanguageContext';
 
 interface DashboardProps {
   patients: Patient[];
@@ -24,6 +24,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads }) => {
+  const { t } = useLanguage();
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
@@ -193,10 +194,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-2">
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-            Dashboard <span className="text-blue-600">Overview</span>
+            {t('dashboard.overview')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
-            {userRole === UserRole.DOCTOR ? 'Shaxsiy statistika va natijalar' : isReceptionist ? 'Bugungi kunlik hisobot' : 'Klinika faoliyati bo\'yicha tahliliy hisobot'}
+            {userRole === UserRole.DOCTOR ? t('dashboard.doctorDesc') : isReceptionist ? t('dashboard.receptionistDesc') : t('dashboard.overviewDesc')}
           </p>
         </div>
 
@@ -236,13 +237,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">JAMI BEMORLAR</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.totalPatients')}</p>
               <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{totalPatients.toLocaleString()}</h3>
               <div className="mt-3 flex items-center text-[10px]">
                 <span className="flex items-center font-bold text-green-600 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full">
                   +{activePatients}
                 </span>
-                <span className="text-gray-500 ml-1.5 font-medium">faol</span>
+                <span className="text-gray-500 ml-1.5 font-medium">{t('dashboard.active')}</span>
               </div>
             </div>
           </div>
@@ -258,15 +259,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <Calendar className="w-5 h-5 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">QABULLAR</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.todayAppointments')}</p>
               <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{periodAppointmentsCount}</h3>
               <div className="mt-3">
                 {pendingAppointments > 0 ? (
                   <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded-full text-[9px] font-bold uppercase border border-amber-100 dark:border-amber-800/50">
-                    {pendingAppointments} KUTILMOQDA
+                    {pendingAppointments} {t('dashboard.pending')}
                   </span>
                 ) : (
-                  <span className="text-[10px] text-gray-400 font-medium">Hammasi tartibda</span>
+                  <span className="text-[10px] text-gray-400 font-medium">{t('dashboard.allOk')}</span>
                 )}
               </div>
             </div>
@@ -283,10 +284,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <Star className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">YANGI LIDLAR</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.newLeads')}</p>
               <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{newLeadsCount}</h3>
               <div className="mt-3">
-                <span className="text-[10px] text-gray-500 font-medium">Reklamadan tushgan</span>
+                <span className="text-[10px] text-gray-500 font-medium">{t('dashboard.fromAds')}</span>
               </div>
             </div>
           </div>
@@ -302,10 +303,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <TrendingUp className="w-5 h-5 text-rose-600 dark:text-rose-400" />
             </div>
             <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">O'RTACHA CHEK</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.avgCheck')}</p>
               <h3 className="text-xl font-black text-gray-900 dark:text-white mt-1 leading-none">{avgCheck.toLocaleString()} <span className="text-[10px] opacity-50 font-bold">UZS</span></h3>
               <div className="mt-3">
-                <span className="text-[10px] text-gray-500 font-medium">Bitta bemorga</span>
+                <span className="text-[10px] text-gray-500 font-medium">{t('dashboard.perPatient')}</span>
               </div>
             </div>
           </div>
@@ -321,10 +322,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             </div>
             <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">KUTILMOQDA</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.pending')}</p>
               <h3 className="text-xl font-black text-gray-900 dark:text-white mt-1 leading-none">{pendingRevenue.toLocaleString()} <span className="text-[10px] opacity-50 font-bold">UZS</span></h3>
               <div className="mt-3">
-                <span className="text-[10px] text-gray-500 font-medium">To'lanmagan</span>
+                <span className="text-[10px] text-gray-500 font-medium">{t('dashboard.unpaid')}</span>
               </div>
             </div>
           </div>
@@ -340,10 +341,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <DollarSign className="w-5 h-5 text-white" />
             </div>
             <div className="mt-4">
-              <p className="text-[10px] font-black text-emerald-100 uppercase tracking-widest leading-none">DAROMAD</p>
+              <p className="text-[10px] font-black text-emerald-100 uppercase tracking-widest leading-none">{t('dashboard.todayRevenue')}</p>
               <h3 className="text-xl font-black text-white mt-1 leading-none">{totalRevenue.toLocaleString()} <span className="text-[10px] opacity-80">UZS</span></h3>
               <div className="mt-3">
-                <p className="text-[9px] font-bold text-emerald-100/80 uppercase">TANLANGAN DAVR</p>
+                <p className="text-[9px] font-bold text-emerald-100/80 uppercase">{t('dashboard.selectedPeriod')}</p>
               </div>
             </div>
           </div>
@@ -357,14 +358,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           <Card className="p-8 lg:col-span-2 rounded-[2rem]">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">
-                Moliyaviy <span className="text-blue-600">Oqim</span>
+                {t('dashboard.financialFlow')}
               </h3>
               <div className="flex gap-4">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400">
-                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Daromad
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500" /> {t('dashboard.income')}
                 </div>
                 <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Qabullar
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> {t('dashboard.visits')}
                 </div>
               </div>
             </div>
@@ -428,7 +429,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
           {/* Service Distribution */}
           <Card className="p-8 rounded-[2rem]">
-            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-8">Mutaxassislik</h3>
+            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-8">{t('dashboard.specialty')}</h3>
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -516,7 +517,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </Card>
 
           <Card className="p-8 rounded-[2rem]">
-            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-8">So'nggi <span className="text-emerald-600">Faoliyat</span></h3>
+            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-8">{t('dashboard.recentAppointments')}</h3>
             <div className="space-y-8 relative before:absolute before:inset-0 before:left-4 before:h-full before:w-0.5 before:bg-gray-100 dark:before:bg-gray-700">
               {(() => {
                 // Combine recent activities from all sources
@@ -569,8 +570,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
                 // Helper function to format time ago
                 const getTimeAgo = (date: Date) => {
+                  if (!date || isNaN(date.getTime())) return 'Yaqinda';
                   const now = new Date();
                   const diffMs = now.getTime() - date.getTime();
+                  if (diffMs < 0) return 'Hozirgina'; // Handle future dates gracefully
                   const diffMins = Math.floor(diffMs / 60000);
                   const diffHours = Math.floor(diffMs / 3600000);
                   const diffDays = Math.floor(diffMs / 86400000);
@@ -590,8 +593,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 }
 
                 return sortedActivities.map((item, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${item.color}`}>
+                  <div key={i} className="flex gap-4 relative z-10">
+                    <div className={`mt-0.5 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${item.color} border-4 border-white dark:border-gray-800 shadow-sm transition-transform hover:scale-110`}>
                       <item.icon className="w-4 h-4" />
                     </div>
                     <div>

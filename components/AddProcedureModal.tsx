@@ -3,6 +3,7 @@ import { X, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { Modal, Button, Select, Input, Badge } from './Common';
 import { TeethChart } from './TeethChart';
 import { Service, ServiceCategory } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ProcedureItem {
     id: string;
@@ -30,6 +31,8 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     onAddProcedure,
     onAddProcedures
 }) => {
+    const { t } = useLanguage();
+    
     // Draft Queue State
     const [queue, setQueue] = useState<Omit<ProcedureItem, 'id'>[]>([]);
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
@@ -49,7 +52,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
 
     const addToQueue = () => {
         if (!selectedServiceId) {
-            alert('Iltimos, xizmatni tanlang!');
+            alert(t('patients.details.alerts.selectServiceReq'));
             return;
         }
 
@@ -80,7 +83,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
 
     const handleSaveAll = () => {
         if (queue.length === 0) {
-            alert("Ro'yxat bo'sh!");
+            alert(t('patients.details.alerts.listEmpty'));
             return;
         }
 
@@ -111,13 +114,13 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     const highlightedTeeth = selectedTooth ? [...queuedTeeth, selectedTooth] : queuedTeeth;
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title="Protsedura Qo'shish" className="max-w-6xl">
+        <Modal isOpen={isOpen} onClose={handleClose} title={t('patients.details.modals.addProcedureTitle')} className="max-w-6xl">
             <div className="flex flex-col lg:flex-row gap-6 min-h-[60vh] lg:h-[80vh]">
 
                 {/* Left Side: Teeth Chart */}
                 <div className="lg:w-1/2 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-hidden min-h-[400px]">
                     <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2">
-                        1. Tishni tanlang
+                        1. {t('patients.details.modals.stepSelectTooth')}
                     </h4>
                     <div className="origin-top-left" style={{ transform: 'scale(0.52)', width: '192%' }}>
                         <TeethChart
@@ -128,7 +131,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                     </div>
                     <div className="mt-2 text-center">
                         <p className="text-sm text-gray-500">
-                            Tanlangan tish: {selectedTooth ? <span className="font-bold text-blue-600 px-2 py-1 bg-blue-100 rounded-md">#{selectedTooth}</span> : 'Umumiy'}
+                            {t('patients.details.modals.selectedTooth')} {selectedTooth ? <span className="font-bold text-blue-600 px-2 py-1 bg-blue-100 rounded-md">#{selectedTooth}</span> : t('patients.details.modals.common')}
                         </p>
                     </div>
                 </div>
@@ -139,14 +142,14 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                     {/* Input Area */}
                     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm mb-4 shrink-0">
                         <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 flex items-center justify-between">
-                            <span>2. Xizmat qo'shish {selectedTooth ? `(#${selectedTooth})` : '(Umumiy)'}</span>
-                            {selectedTooth && <button onClick={() => setSelectedTooth(null)} className="text-xs text-blue-500 hover:underline">Umumiyga o'tish</button>}
+                            <span>2. {t('patients.details.modals.stepAddService')} {selectedTooth ? `(#${selectedTooth})` : `(${t('patients.details.modals.common')})`}</span>
+                            {selectedTooth && <button onClick={() => setSelectedTooth(null)} className="text-xs text-blue-500 hover:underline">{t('patients.details.modals.switchToCommon')}</button>}
                         </h4>
 
                         <div className="space-y-4">
                             {categories && categories.length > 0 && (
                                 <Select
-                                    label="Kategoriya"
+                                    label={t('patients.details.modals.category')}
                                     value={selectedCategoryId}
                                     onChange={(e) => {
                                         setSelectedCategoryId(e.target.value);
@@ -154,7 +157,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                         setPrice('');
                                     }}
                                 >
-                                    <option value="">Barcha kategoriyalar</option>
+                                    <option value="">{t('patients.details.modals.allCategories')}</option>
                                     {categories.map(cat => (
                                         <option key={cat.id} value={cat.id}>{cat.name}</option>
                                     ))}
@@ -162,11 +165,11 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                             )}
 
                             <Select
-                                label="Xizmat"
+                                label={t('patients.details.modals.service')}
                                 value={selectedServiceId?.toString() || ''}
                                 onChange={(e) => handleServiceChange(parseInt(e.target.value))}
                             >
-                                <option value="">Xizmatni tanlang...</option>
+                                <option value="">{t('patients.details.modals.selectService')}</option>
                                 {(services || [])
                                     .filter(s => !selectedCategoryId || (s as any).categoryId === selectedCategoryId)
                                     .map(service => (
@@ -178,7 +181,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
 
                             <div className="flex gap-4">
                                 <div className="flex-1">
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Narx</label>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">{t('patients.details.modals.price')}</label>
                                     <Input
                                         type="number"
                                         value={price}
@@ -187,17 +190,17 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                     />
                                 </div>
                                 <div className="flex-[2]">
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Izoh</label>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">{t('patients.details.modals.notes')}</label>
                                     <Input
                                         value={notes}
                                         onChange={(e) => setNotes(e.target.value)}
-                                        placeholder="Izoh..."
+                                        placeholder={`${t('patients.details.modals.notes')}...`}
                                     />
                                 </div>
                             </div>
 
                             <Button onClick={addToQueue} className="w-full" disabled={!selectedServiceId}>
-                                <Plus className="w-4 h-4 mr-2" /> Ro'yxatga qo'shish
+                                <Plus className="w-4 h-4 mr-2" /> {t('patients.details.modals.addToList')}
                             </Button>
                         </div>
                     </div>
@@ -205,7 +208,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                     {/* Queue List */}
                     <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-xl p-4 overflow-hidden flex flex-col">
                         <h4 className="text-sm font-bold text-gray-500 uppercase mb-3 flex items-center justify-between">
-                            <span>Jami Ro'yxat ({queue.length})</span>
+                            <span>{t('patients.details.modals.totalList')} ({queue.length})</span>
                             <span className="text-blue-600 font-bold">
                                 {queue.reduce((sum, item) => sum + item.price, 0).toLocaleString()} UZS
                             </span>
@@ -215,7 +218,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                             {queue.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-gray-400 text-sm dashed border-2 border-gray-200 rounded-lg">
                                     <Plus className="w-8 h-8 mb-2 opacity-20" />
-                                    <p>Hali hech narsa qo'shilmadi</p>
+                                    <p>{t('patients.details.modals.nothingAdded')}</p>
                                 </div>
                             ) : (
                                 queue.map((item, idx) => (
@@ -227,7 +230,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                                 </span>
                                             ) : (
                                                 <span className="w-8 h-8 flex items-center justify-center bg-gray-100 text-gray-600 text-xs font-bold rounded-lg shrink-0">
-                                                    Um
+                                                    {t('patients.details.modals.common').substring(0, 2)}
                                                 </span>
                                             )}
                                             <div>
@@ -249,10 +252,10 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                         {/* Footer Actions */}
                         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                             <Button variant="secondary" onClick={handleClose} className="flex-1">
-                                Bekor qilish
+                                {t('common.cancel')}
                             </Button>
                             <Button onClick={handleSaveAll} className="flex-[2]" disabled={queue.length === 0}>
-                                <ArrowRight className="w-4 h-4 mr-2" /> Saqlash va Yakunlash
+                                <ArrowRight className="w-4 h-4 mr-2" /> {t('patients.details.modals.saveAndFinish')}
                             </Button>
                         </div>
                     </div>

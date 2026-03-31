@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Download } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { IOSInstallModal } from './IOSInstallModal';
+import { useLanguage } from '../context/LanguageContext';
 
 export const InstallPWAButton = () => {
+    const { t } = useLanguage();
     const { isInstallable, install, isIOS, isStandalone } = usePWAInstall();
     const [showIOSModal, setShowIOSModal] = useState(false);
 
@@ -35,7 +37,7 @@ export const InstallPWAButton = () => {
                 className="fixed bottom-4 right-4 z-50 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full shadow-lg transition-all duration-300 animate-fade-in hover:scale-105 active:scale-95"
             >
                 <Download size={20} />
-                <span>Ilovani o'rnatish</span>
+                <span>{t('app.install')}</span>
             </button>
             <IOSInstallModal isOpen={showIOSModal} onClose={() => setShowIOSModal(false)} />
         </>

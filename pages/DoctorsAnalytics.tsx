@@ -5,6 +5,8 @@ import { DollarSign, Calendar, Award, Users, Star } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { calculateDoctorSalary } from '../utils/financialCalculations';
 import { Link, useNavigate } from 'react-router-dom';
+import { useLanguage } from '../context/LanguageContext';
+import { TranslationKey } from '../i18n/translations';
 
 interface DoctorsAnalyticsProps {
     doctors: Doctor[];
@@ -19,6 +21,7 @@ type DateRange = 'month' | '3months' | '6months' | 'year' | 'all' | 'custom';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
 export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions, reviews }) => {
+    const { t } = useLanguage();
     const navigate = useNavigate();
     const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
     const [dateRange, setDateRange] = useState<DateRange>('month');
@@ -176,8 +179,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 dayCount[day] = (dayCount[day] || 0) + 1;
             });
             const busiestDay = Object.entries(dayCount).sort((a, b) => b[1] - a[1])[0];
-            const dayNames = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
-            const busiestDayName = busiestDay ? dayNames[parseInt(busiestDay[0])] : '-';
+            const busiestDayName = busiestDay ? t(`common.days.${busiestDay[0]}` as TranslationKey) : '-';
 
             return {
                 ...doctor,
@@ -196,7 +198,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 name: `Dr. ${doctor.lastName}` // For charts
             };
         }).sort((a, b) => b.revenue - a.revenue);
-    }, [doctors, filteredAppointments, filteredTransactions]);
+    }, [doctors, filteredAppointments, filteredTransactions, t]);
 
     const totalRevenue = filteredTransactions.reduce((acc, t) => acc + t.amount, 0);
     const totalAppointments = analyticsData.reduce((sum, d) => sum + d.totalAppts, 0);
@@ -204,12 +206,12 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
     const topPerformer = analyticsData.length > 0 ? analyticsData[0] : null;
 
     const dateRangeOptions = [
-        { value: 'month' as DateRange, label: 'Bu Oy' },
-        { value: '3months' as DateRange, label: 'Oxirgi 3 Oy' },
-        { value: '6months' as DateRange, label: 'Oxirgi 6 Oy' },
-        { value: 'year' as DateRange, label: 'Bu Yil' },
-        { value: 'custom' as DateRange, label: 'Maxsus' },
-        { value: 'all' as DateRange, label: 'Barchasi' },
+        { value: 'month' as DateRange, label: t('common.range.month') },
+        { value: '3months' as DateRange, label: t('common.range.3months') },
+        { value: '6months' as DateRange, label: t('common.range.6months') },
+        { value: 'year' as DateRange, label: t('common.range.year') },
+        { value: 'custom' as DateRange, label: t('common.range.custom') },
+        { value: 'all' as DateRange, label: t('common.range.all') },
     ];
 
     const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1'];
@@ -218,12 +220,12 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
         <div className="space-y-6 animate-fade-in">
             {/* Header with Date Range Filter */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Shifokorlar Statistikasi</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('doctors.analytics.title')}</h1>
 
                 <div className="flex gap-3">
                     <Input
                         type="date"
-                        label="Boshlanish sanasi"
+                        label={t('doctors.analytics.startDate')}
                         value={customStartDate}
                         onChange={(e) => {
                             setCustomStartDate(e.target.value);
@@ -233,7 +235,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                     />
                     <Input
                         type="date"
-                        label="Tugash sanasi"
+                        label={t('doctors.analytics.endDate')}
                         value={customEndDate}
                         onChange={(e) => {
                             setCustomEndDate(e.target.value);
@@ -246,23 +248,23 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
             {/* Detailed Table Moved to Top */}
             <Card className="overflow-hidden bg-white dark:bg-gray-800">
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Batafsil Ko'rsatkichlar</h3>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('doctors.analytics.detailedMetrics')}</h3>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider">
-                                <th className="p-4 font-medium">Shifokor</th>
-                                <th className="p-4 font-medium">Mutaxassislik</th>
-                                <th className="p-4 font-medium text-center">Bemorlar</th>
-                                <th className="p-4 font-medium text-center">Qabullar</th>
-                                <th className="p-4 font-medium">Top Xizmat</th>
-                                <th className="p-4 font-medium text-right">Jami Tushum</th>
-                                <th className="p-4 font-medium text-right">Shifokor Ulushi</th>
-                                <th className="p-4 font-medium text-right">O'rtacha</th>
-                                <th className="p-4 font-medium text-center">Baho</th>
-                                <th className="p-4 font-medium text-center">Eng Band Kun</th>
-                                <th className="p-4 font-medium text-center">Samaradorlik</th>
+                                <th className="p-4 font-medium">{t('doctors.analytics.thDoctor')}</th>
+                                <th className="p-4 font-medium">{t('doctors.analytics.thSpecialty')}</th>
+                                <th className="p-4 font-medium text-center">{t('doctors.analytics.thPatients')}</th>
+                                <th className="p-4 font-medium text-center">{t('doctors.analytics.thAppointments')}</th>
+                                <th className="p-4 font-medium">{t('doctors.analytics.thTopService')}</th>
+                                <th className="p-4 font-medium text-right">{t('doctors.analytics.thTotalRevenue')}</th>
+                                <th className="p-4 font-medium text-right">{t('doctors.analytics.thDoctorShare')}</th>
+                                <th className="p-4 font-medium text-right">{t('doctors.analytics.thAverage')}</th>
+                                <th className="p-4 font-medium text-center">{t('doctors.analytics.thRating')}</th>
+                                <th className="p-4 font-medium text-center">{t('doctors.analytics.thBusiestDay')}</th>
+                                <th className="p-4 font-medium text-center">{t('doctors.analytics.thEfficiency')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -296,7 +298,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                     </td>
                                     <td className="p-4">
                                         <div className="text-sm text-gray-900 dark:text-white">{doc.topService}</div>
-                                        <div className="text-xs text-gray-500">{doc.topServiceCount} marta</div>
+                                        <div className="text-xs text-gray-500">{doc.topServiceCount} {t('common.times')}</div>
                                     </td>
                                     <td className="p-4 text-right font-bold text-gray-900 dark:text-white">
                                         {doc.revenue.toLocaleString()} UZS
@@ -343,7 +345,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                             {analyticsData.length === 0 && (
                                 <tr>
                                     <td colSpan={11} className="p-8 text-center text-gray-500">
-                                        Hozircha ma'lumot yo'q
+                                        {t('doctors.analytics.noData')}
                                     </td>
                                 </tr>
                             )}
@@ -357,7 +359,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-none">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-blue-100 text-sm font-medium mb-1">Jami Tushum</p>
+                            <p className="text-blue-100 text-sm font-medium mb-1">{t('doctors.analytics.thTotalRevenue')}</p>
                             <h3 className="text-3xl font-bold">{totalRevenue.toLocaleString()} UZS</h3>
                         </div>
                         <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
@@ -369,7 +371,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 <Card className="p-6 bg-white dark:bg-gray-800">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-1">Jami Qabullar</p>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-1">{t('doctors.analytics.totalAppointments')}</p>
                             <h3 className="text-3xl font-bold text-gray-900 dark:text-white">{totalAppointments}</h3>
                         </div>
                         <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
@@ -381,7 +383,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 <Card className="p-6 bg-white dark:bg-gray-800">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-1">Jami Bemorlar</p>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-1">{t('doctors.analytics.totalPatients')}</p>
                             <h3 className="text-3xl font-bold text-gray-900 dark:text-white">{totalPatients}</h3>
                         </div>
                         <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
@@ -393,7 +395,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                 <Card className="p-6 bg-white dark:bg-gray-800">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-1">Eng Faol</p>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-1">{t('doctors.analytics.mostActive')}</p>
                             <h3 className="text-xl font-bold text-gray-900 dark:text-white truncate max-w-[180px]">
                                 {topPerformer ? `Dr. ${topPerformer.lastName}` : '-'}
                             </h3>
@@ -418,10 +420,10 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                             </div>
                             <div className="flex-1">
                                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                                    Individual tarif rejimi
+                                    {t('doctors.analytics.individualMode')}
                                 </p>
                                 <p className="text-xs text-blue-600 dark:text-blue-400">
-                                    Barcha {filteredTransactions.length} ta tranzaksiya avtomatik biriktirildi
+                                    {t('doctors.analytics.individualModeDesc').replace('{count}', filteredTransactions.length.toString())}
                                 </p>
                             </div>
                         </div>
@@ -433,7 +435,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Revenue Comparison Chart */}
                 <Card className="p-6 bg-white dark:bg-gray-800">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Tushum Taqqoslash</h3>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{t('doctors.analytics.revenueComparison')}</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={analyticsData} layout="vertical">
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -454,7 +456,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
 
                 {/* Appointments Comparison Chart */}
                 <Card className="p-6 bg-white dark:bg-gray-800">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Qabullar Taqqoslash</h3>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{t('doctors.analytics.appointmentsComparison')}</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={analyticsData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -464,15 +466,15 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                 contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                             />
                             <Legend />
-                            <Bar dataKey="totalAppts" name="Jami" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
-                            <Bar dataKey="completedAppts" name="Yakunlangan" fill="#10b981" radius={[8, 8, 0, 0]} />
+                            <Bar dataKey="totalAppts" name={t('doctors.analytics.chartTotal')} fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                            <Bar dataKey="completedAppts" name={t('doctors.analytics.chartCompleted')} fill="#10b981" radius={[8, 8, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 </Card>
 
                 {/* Completion Rate Chart */}
                 <Card className="p-6 bg-white dark:bg-gray-800">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Samaradorlik Foizi</h3>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{t('doctors.analytics.efficiencyRate')}</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={analyticsData.map(d => ({
                             ...d,
@@ -485,7 +487,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                 contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                                 formatter={(value: number) => `${value}%`}
                             />
-                            <Bar dataKey="completionRate" name="Samaradorlik" fill="#3b82f6" radius={[8, 8, 0, 0]}>
+                            <Bar dataKey="completionRate" name={t('doctors.analytics.thEfficiency')} fill="#3b82f6" radius={[8, 8, 0, 0]}>
                                 {analyticsData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
@@ -496,7 +498,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
 
                 {/* Average Revenue Chart */}
                 <Card className="p-6 bg-white dark:bg-gray-800">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">O'rtacha Tushum (Qabul)</h3>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{t('doctors.analytics.averageRevenuePerAppt')}</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={analyticsData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -506,7 +508,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                 contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                                 formatter={(value: number) => `${value.toLocaleString()} UZS`}
                             />
-                            <Bar dataKey="avgRevenue" name="O'rtacha" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+                            <Bar dataKey="avgRevenue" name={t('doctors.analytics.thAverage')} fill="#f59e0b" radius={[8, 8, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 </Card>

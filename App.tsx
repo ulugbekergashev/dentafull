@@ -18,47 +18,50 @@ import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
 import { DoctorDetails } from './pages/DoctorDetails';
 import { Inventory } from './pages/Inventory';
-import { NavItem, UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead } from './types';
+import { UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
 import { api } from './services/api';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
+import { LanguageProvider, useLanguage } from './context/LanguageContext';
+import { Language } from './i18n/translations';
 
 // Navigation config for Clinic Admin and Doctors
-const CLINIC_NAVIGATION: NavItem[] = [
-  { id: 'dashboard', label: 'Boshqaruv Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
-  { id: 'leads', label: 'Lidlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-  { id: 'patients', label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
-  { id: 'calendar', label: 'Kalendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
-  { id: 'finance', label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
-  { id: 'doctors', label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-  { id: 'inventory', label: 'Ombor', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-  { id: 'settings', label: 'Sozlamalar', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
+const CLINIC_NAVIGATION = [
+  { id: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+  { id: 'leads', labelKey: 'nav.leads', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
+  { id: 'patients', labelKey: 'nav.patients', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
+  { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
+  { id: 'finance', labelKey: 'nav.finance', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
+  { id: 'doctors', labelKey: 'nav.doctors', icon: Activity, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
+  { id: 'inventory', labelKey: 'inventory.title', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
+  { id: 'settings', labelKey: 'nav.settings', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
 ];
 
-const SUPER_ADMIN_NAVIGATION: NavItem[] = [
-  { id: 'admin', label: 'SaaS Dashboard', icon: Building2, roles: [UserRole.SUPER_ADMIN] },
+const SUPER_ADMIN_NAVIGATION = [
+  { id: 'admin', labelKey: 'nav.saas', icon: Building2, roles: [UserRole.SUPER_ADMIN] },
 ];
 
-// Helper: get page label from path
-const getPageLabel = (pathname: string): string => {
-  if (pathname === '/' || pathname === '/dashboard') return 'Boshqaruv Paneli';
-  if (pathname === '/leads') return 'Lidlar';
-  if (pathname.startsWith('/patients/')) return 'Bemor Profili';
-  if (pathname === '/patients') return 'Bemorlar';
-  if (pathname === '/calendar') return 'Kalendar';
-  if (pathname === '/finance') return 'Moliya';
-  if (pathname === '/doctors') return 'Shifokorlar';
-  if (pathname === '/inventory') return 'Ombor';
-  if (pathname === '/settings') return 'Sozlamalar';
-  if (pathname === '/admin') return 'Super Admin';
-  return 'DentaCRM';
+// Helper: get page label key from path
+const getPageLabelKey = (pathname: string): any => {
+  if (pathname === '/' || pathname === '/dashboard') return 'nav.dashboard';
+  if (pathname === '/leads') return 'nav.leads';
+  if (pathname.startsWith('/patients/')) return 'nav.patients'; // Will translate as "Patients", detail page handles own title
+  if (pathname === '/patients') return 'nav.patients';
+  if (pathname === '/calendar') return 'nav.calendar';
+  if (pathname === '/finance') return 'nav.finance';
+  if (pathname === '/doctors') return 'nav.doctors';
+  if (pathname === '/inventory') return 'inventory.title';
+  if (pathname === '/settings') return 'nav.settings';
+  if (pathname === '/admin') return 'nav.saas';
+  return 'nav.dashboard';
 };
 
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t, language, setLanguage } = useLanguage();
 
   // --- Global State ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -716,8 +719,8 @@ const AppContent: React.FC = () => {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-blue-600 dark:text-blue-400 animate-spin mx-auto mb-4" />
-          <p className="text-lg font-medium text-gray-700 dark:text-gray-300">Ma'lumotlar yuklanmoqda...</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Iltimos, kuting</p>
+          <p className="text-lg font-medium text-gray-700 dark:text-gray-300">{t('common.loading')}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{t('common.pleaseWait')}</p>
         </div>
       </div>
     );
@@ -731,7 +734,7 @@ const AppContent: React.FC = () => {
           <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Xatolik yuz berdi</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('common.error')}</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
           <div className="space-y-3">
             <button
@@ -740,13 +743,13 @@ const AppContent: React.FC = () => {
               className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors"
             >
               <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-              {isLoading ? 'Yuklanmoqda...' : 'Qayta yuklash'}
+              {isLoading ? t('common.loading') : t('common.retry')}
             </button>
             <button
               onClick={handleLogout}
               className="w-full px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
             >
-              Chiqish
+              {t('common.logout')}
             </button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-6">
@@ -757,7 +760,7 @@ const AppContent: React.FC = () => {
     );
   }
 
-  const pageLabel = getPageLabel(location.pathname);
+  const pageLabel = t(getPageLabelKey(location.pathname));
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
@@ -812,7 +815,7 @@ const AppContent: React.FC = () => {
                     ? 'text-[#1B6AFB] dark:text-blue-400'
                     : 'text-gray-400 group-hover:text-gray-500'
                     }`} />
-                  {item.label}
+                  {t(item.labelKey as any)}
                 </NavLink>
               );
             })}
@@ -864,7 +867,7 @@ const AppContent: React.FC = () => {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                   <input
                     type="text"
-                    placeholder="Bemor yoki shifokor..."
+                    placeholder={t('header.search')}
                     value={searchBarTerm}
                     onChange={(e) => setSearchBarTerm(e.target.value)}
                     onFocus={() => setIsSearchFocused(true)}
@@ -971,6 +974,19 @@ const AppContent: React.FC = () => {
                 {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
 
+              {/* Language Switcher */}
+              <button
+                onClick={() => setLanguage(language === 'uz' ? 'ru' : 'uz')}
+                className="flex items-center justify-center p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                title={language === 'uz' ? "Русский язык" : "O'zbek tili"}
+              >
+                <img 
+                  src={language === 'uz' ? "https://flagcdn.com/w40/uz.png" : "https://flagcdn.com/w40/ru.png"} 
+                  alt={language === 'uz' ? "O'zbek tili" : "Русский язык"} 
+                  className="w-6 h-4 rounded-sm object-cover shadow-sm" 
+                />
+              </button>
+
               {/* User Profile Info */}
               <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700 ml-2">
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm uppercase shadow-sm ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-[#1B6AFB]'}`}>
@@ -979,13 +995,14 @@ const AppContent: React.FC = () => {
                 <div className="flex flex-col">
                   <span className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{userName}</span>
                   <span className="text-xs text-gray-500 capitalize leading-tight">
-                    {userRole === UserRole.SUPER_ADMIN ? 'SaaS Owner' : userRole === UserRole.CLINIC_ADMIN ? 'Administrator' : userRole === UserRole.RECEPTIONIST ? 'Resepshn' : 'Shifokor'}
+                    {userRole === UserRole.SUPER_ADMIN ? t('roles.superAdmin') : userRole === UserRole.CLINIC_ADMIN ? t('roles.admin') : userRole === UserRole.RECEPTIONIST ? t('roles.receptionist') : t('roles.doctor')}
                   </span>
                 </div>
-                <button onClick={handleLogout} className="ml-2 p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Chiqish">
+                <button onClick={handleLogout} className="ml-2 p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title={t('common.logout')}>
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>
+
             </div>
           </div>
         </div>
@@ -1014,7 +1031,7 @@ const AppContent: React.FC = () => {
                       return (
                         <>
                           <item.icon className={`w-4 h-4 mr-2 ${active ? 'text-[#1B6AFB] dark:text-blue-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
-                          {item.label}
+                          {t(item.labelKey as any)}
                           {active && (
                             <span className="absolute bottom-0 left-0 w-full h-0.5 bg-[#1B6AFB] dark:bg-blue-400 rounded-t-full"></span>
                           )}
@@ -1228,7 +1245,11 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  return <AppContent />;
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
+  );
 };
 
 export default App;

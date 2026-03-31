@@ -3,6 +3,7 @@ import { Activity, Trash2 } from 'lucide-react';
 import { Button, Card, Badge } from '../components/Common';
 import { Transaction, Service, ServiceCategory } from '../types';
 import { AddProcedureModal } from './AddProcedureModal';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ProcedureItem {
     id: string;
@@ -30,6 +31,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     onProceduresChange,
     initialProcedures = []
 }) => {
+    const { t } = useLanguage();
     const [procedures, setProcedures] = useState<ProcedureItem[]>(initialProcedures);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -71,7 +73,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
 
     const handleCompleteVisit = async () => {
         if (procedures.length === 0) {
-            alert('Protsedura qo\'shing!');
+            alert(t('patients.details.procedures.addProcedureReq'));
             return;
         }
 
@@ -91,10 +93,10 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
             <Card className="p-6 space-y-4">
                 <div className="flex justify-between items-center">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Activity className="w-5 h-5" /> Bugungi Qabul
+                        <Activity className="w-5 h-5" /> {t('patients.details.procedures.todayVisit')}
                     </h3>
                     <Button onClick={() => setIsModalOpen(true)} disabled={isSubmitting} className="px-5 py-2">
-                        + Protsedura Qo'shish
+                        {t('patients.details.procedures.addProcedure')}
                     </Button>
                 </div>
 
@@ -102,7 +104,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                 <div className="space-y-2">
                     {procedures.length === 0 && (
                         <div className="text-center py-8 text-gray-500">
-                            Protsedura qo'shish uchun yuqoridagi tugmani bosing
+                            {t('patients.details.procedures.clickToAdd')}
                         </div>
                     )}
 
@@ -144,7 +146,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
                         <div className="flex justify-between items-center">
                             <span className="text-lg font-medium text-gray-700 dark:text-gray-300">
-                                Jami:
+                                {t('patients.details.procedures.total')}
                             </span>
                             <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                                 {total.toLocaleString()} UZS
@@ -155,7 +157,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                             className="w-full"
                             disabled={isSubmitting}
                         >
-                            {isSubmitting ? 'Saqlanmoqda...' : 'Qabulni yakunlash'}
+                            {isSubmitting ? t('patients.details.procedures.saving') : t('patients.details.procedures.completeVisit')}
                         </Button>
                     </div>
                 )}
@@ -186,6 +188,8 @@ export const ProceduresSection: React.FC<ProceduresSectionProps> = ({
     onAddProcedure,
     onViewAll
 }) => {
+    const { t } = useLanguage();
+    
     // Get last 5 procedures
     const recentTransactions = [...transactions]
         .filter(t => t.status === 'Paid' || t.status === 'Pending')
@@ -196,16 +200,16 @@ export const ProceduresSection: React.FC<ProceduresSectionProps> = ({
         <Card className="p-6 space-y-4">
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Activity className="w-5 h-5" /> Protseduralar
+                    <Activity className="w-5 h-5" /> {t('patients.details.procedures.title')}
                 </h3>
                 <Button onClick={onAddProcedure} size="sm">
-                    + Protsedura
+                    {t('patients.details.procedures.addBtn')}
                 </Button>
             </div>
 
             <div className="space-y-3">
                 {recentTransactions.length === 0 ? (
-                    <p className="text-center py-4 text-gray-500 text-sm">Protseduralar topilmadi</p>
+                    <p className="text-center py-4 text-gray-500 text-sm">{t('patients.details.procedures.notFound')}</p>
                 ) : (
                     recentTransactions.map((tx) => (
                         <div key={tx.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700">
@@ -229,7 +233,7 @@ export const ProceduresSection: React.FC<ProceduresSectionProps> = ({
                     onClick={onViewAll}
                     className="w-full text-center text-sm text-blue-600 dark:text-blue-400 hover:underline pt-2 border-t border-gray-100 dark:border-gray-700"
                 >
-                    Barchasini ko'rish
+                    {t('patients.details.procedures.viewAll')}
                 </button>
             )}
         </Card>

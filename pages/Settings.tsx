@@ -4,6 +4,7 @@ import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw } from 'lucide-react';
 import { api, API_URL } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 
 const DOCTOR_COLORS = [
    { name: 'Ko\'k', value: '#3B82F6' },
@@ -40,6 +41,7 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({
    userRole, services, categories, doctors, receptionists = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans, reviews
 }) => {
+   const { t } = useLanguage();
    const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot' | 'facebook'>('services');
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -408,32 +410,32 @@ export const Settings: React.FC<SettingsProps> = ({
          }
       } catch (error) {
          console.error('Failed to save general settings:', error);
-         alert('Xatolik yuz berdi');
+         alert(t('common.error'));
       }
    };
 
    if (userRole === UserRole.DOCTOR) {
       return (
          <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mening Profilim</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('settings.general.myProfile')}</h1>
             <Card className="p-6">
                <div className="flex items-center gap-6 mb-6">
                   <div className="h-20 w-20 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
                      <User className="w-10 h-10 text-gray-400" />
                   </div>
                   <div>
-                     <Button variant="secondary" size="sm">Rasmni o'zgartirish</Button>
+                     <Button variant="secondary" size="sm">{t('settings.general.changePhoto')}</Button>
                   </div>
                </div>
                <form className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
-                     <Input label="Ism" defaultValue="Alisher" />
-                     <Input label="Familiya" defaultValue="Sobirov" />
+                     <Input label={t('settings.staff.firstName')} defaultValue="Alisher" />
+                     <Input label={t('settings.staff.lastName')} defaultValue="Sobirov" />
                   </div>
-                  <Input label="Email" type="email" defaultValue="dr.sobirov@clinic.com" />
-                  <Input label="Mutaxassislik" disabled defaultValue="Terapevt" />
+                  <Input label={t('settings.general.email')} type="email" defaultValue="dr.sobirov@clinic.com" />
+                  <Input label={t('settings.staff.specialty')} disabled defaultValue="Terapevt" />
                   <div className="pt-4">
-                     <Button onClick={(e) => { e.preventDefault(); alert('Profil yangilandi!'); }}>Saqlash</Button>
+                     <Button onClick={(e) => { e.preventDefault(); alert(t('settings.general.saved')); }}>{t('common.save')}</Button>
                   </div>
                </form>
             </Card>
@@ -443,17 +445,17 @@ export const Settings: React.FC<SettingsProps> = ({
 
    return (
       <div className="space-y-6 animate-fade-in">
-         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Klinika Sozlamalari</h1>
+         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
 
          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Sidebar Tabs */}
             <Card className="col-span-1 h-fit p-2">
                {[
-                  { id: 'general', name: 'Umumiy', icon: User },
-                  { id: 'services', name: 'Xizmatlar va Narxlar', icon: DollarSign },
-                  { id: 'doctors', name: 'Shifokorlar', icon: Users },
-                  { id: 'receptionists', name: 'Resepshnlar', icon: Phone },
-                  { id: 'bot', name: 'Telegram Bot', icon: Bot },
+                  { id: 'general', name: t('settings.tabs.general'), icon: User },
+                  { id: 'services', name: t('settings.tabs.services'), icon: DollarSign },
+                  { id: 'doctors', name: t('settings.tabs.doctors'), icon: Users },
+                  { id: 'receptionists', name: t('settings.tabs.receptionists'), icon: Phone },
+                  { id: 'bot', name: t('settings.tabs.bot'), icon: Bot },
                ].map((item) => (
                   <button
                      key={item.id}
@@ -472,13 +474,13 @@ export const Settings: React.FC<SettingsProps> = ({
 
             <div className="lg:col-span-3 space-y-6">
 
-               {/* General Tab */}
+                {/* General Tab */}
                {activeTab === 'general' && (
                   <div className="space-y-6">
                      <Card className="p-6">
                         <div className="flex items-center justify-between">
                            <div>
-                              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Klinika Reytingi</p>
+                              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('settings.general.rating')}</p>
                               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                                  {clinicAvgRating > 0 ? clinicAvgRating.toFixed(1) : '0.0'}
                               </h3>
@@ -493,29 +495,29 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <Star key={i} className={`w-3 h-3 ${i < Math.round(clinicAvgRating) ? 'fill-current' : 'text-gray-200'}`} />
                               ))}
                            </span>
-                           {reviews.length} ta fikr
+                           {reviews.length} {t('settings.general.reviewsSuffix')}
                         </div>
                      </Card>
 
                      <Card className="p-6">
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">Umumiy Ma'lumotlar</h3>
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">{t('settings.general.info')}</h3>
                         <form onSubmit={handleGeneralSave} className="space-y-4">
-                           <Input label="Klinika Nomi" value={generalForm.clinicName} onChange={e => setGeneralForm({ ...generalForm, clinicName: e.target.value })} />
-                           <Input label="Manzil" value={generalForm.address} onChange={e => setGeneralForm({ ...generalForm, address: e.target.value })} />
+                           <Input label={t('settings.general.clinicName')} value={generalForm.clinicName} onChange={e => setGeneralForm({ ...generalForm, clinicName: e.target.value })} />
+                           <Input label={t('settings.general.address')} value={generalForm.address} onChange={e => setGeneralForm({ ...generalForm, address: e.target.value })} />
                            <div className="grid grid-cols-2 gap-4">
-                              <Input label="Telefon" value={generalForm.phone} onChange={e => setGeneralForm({ ...generalForm, phone: e.target.value })} />
-                              <Input label="Email" value={generalForm.email} onChange={e => setGeneralForm({ ...generalForm, email: e.target.value })} />
+                              <Input label={t('settings.general.phone')} value={generalForm.phone} onChange={e => setGeneralForm({ ...generalForm, phone: e.target.value })} />
+                              <Input label={t('settings.general.email')} value={generalForm.email} onChange={e => setGeneralForm({ ...generalForm, email: e.target.value })} />
                            </div>
                            <Input
-                              label="Klinika Egasi Telefoni (Hisobotlar uchun)"
+                              label={t('settings.general.ownerPhone')}
                               value={generalForm.ownerPhone}
                               onChange={e => setGeneralForm({ ...generalForm, ownerPhone: e.target.value })}
                               placeholder="998901234567"
-                              helperText="Ushbu raqam Telegram bot orqali bog'langanda hisobotlarni qabul qiladi."
+                              helperText={t('settings.general.ownerPhoneHelp')}
                            />
                            <div className="pt-4 flex items-center gap-4">
-                              <Button type="submit">Saqlash</Button>
-                              {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> Saqlandi!</span>}
+                              <Button type="submit">{t('common.save')}</Button>
+                              {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
                            </div>
                         </form>
                      </Card>
@@ -529,7 +531,7 @@ export const Settings: React.FC<SettingsProps> = ({
                      {/* Categories Sidebar */}
                      <Card className="col-span-1 h-fit p-4">
                         <div className="flex justify-between items-center mb-4">
-                           <h3 className="font-medium text-gray-900 dark:text-white">Kategoriyalar</h3>
+                           <h3 className="font-medium text-gray-900 dark:text-white">{t('settings.services.categories')}</h3>
                            <Button size="sm" variant="secondary" onClick={() => setIsCategoryModalOpen(true)}>+</Button>
                         </div>
                         <div className="space-y-1">
@@ -537,7 +539,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               onClick={() => setSelectedCategory(null)}
                               className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${!selectedCategory ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
                            >
-                              Barcha Xizmatlar
+                              {t('settings.services.all')}
                            </button>
                            {categories.map(cat => (
                               <div key={cat.id} className="group flex items-center justify-between">
@@ -560,8 +562,8 @@ export const Settings: React.FC<SettingsProps> = ({
                         <Card className="p-6">
                            <div className="flex justify-between items-center mb-6">
                               <div>
-                                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">Xizmatlar va Narxlar</h3>
-                                 <p className="text-sm text-gray-500">Davolash turlari va narxlarini boshqarish.</p>
+                                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('settings.services.title')}</h3>
+                                 <p className="text-sm text-gray-500">{t('settings.services.subtitle')}</p>
                               </div>
                               <Button size="sm" onClick={() => handleOpenServiceModal()}>Xizmat Qo'shish</Button>
                            </div>
@@ -570,9 +572,9 @@ export const Settings: React.FC<SettingsProps> = ({
                               <table className="w-full text-left text-sm">
                                  <thead className="bg-gray-50 dark:bg-gray-800">
                                     <tr>
-                                       <th className="px-4 py-3 font-medium text-gray-500">Xizmat Nomi</th>
-                                       <th className="px-4 py-3 font-medium text-gray-500">Narxi</th>
-                                       <th className="px-4 py-3 font-medium text-gray-500 text-right">Amal</th>
+                                       <th className="px-4 py-3 font-medium text-gray-500">{t('settings.services.thName')}</th>
+                                       <th className="px-4 py-3 font-medium text-gray-500">{t('settings.services.thPrice')}</th>
+                                       <th className="px-4 py-3 font-medium text-gray-500 text-right">{t('settings.services.thAction')}</th>
                                     </tr>
                                  </thead>
                                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -595,7 +597,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                     {services.filter(s => !selectedCategory || s.categoryId === selectedCategory).length === 0 && (
                                        <tr>
                                           <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
-                                             Xizmatlar topilmadi
+                                             {t('settings.services.notFound')}
                                           </td>
                                        </tr>
                                     )}
@@ -605,7 +607,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         </Card>
 
                         <Card className="p-6">
-                           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Joriy Tarif</h3>
+                           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.services.currentPlan')}</h3>
                            <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg border border-indigo-100 dark:border-indigo-800">
                               <div>
                                  <p className="font-bold text-indigo-900 dark:text-indigo-200">{plans?.find(p => p.id === currentClinic?.planId)?.name || 'Standart Tarif'}</p>
@@ -616,7 +618,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  className="bg-indigo-600 hover:bg-indigo-700 text-white border-none"
                                  onClick={() => setIsUpgradeModalOpen(true)}
                               >
-                                 Tarifni Yangilash
+                                 {t('settings.services.upgrade')}
                               </Button>
                            </div>
                         </Card>
@@ -629,10 +631,10 @@ export const Settings: React.FC<SettingsProps> = ({
                   <Card className="p-6">
                      <div className="flex justify-between items-center mb-6">
                         <div>
-                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">Shifokorlar Boshqaruvi</h3>
-                           <p className="text-sm text-gray-500">Klinika xodimlarini boshqarish.</p>
+                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('settings.staff.doctorsTitle')}</h3>
+                           <p className="text-sm text-gray-500">{t('settings.staff.doctorsSubtitle')}</p>
                         </div>
-                        <Button size="sm" onClick={() => handleOpenDoctorModal()}>Shifokor Qo'shish</Button>
+                        <Button size="sm" onClick={() => handleOpenDoctorModal()}>{t('settings.staff.addDoctor')}</Button>
                      </div>
                      <div className="grid grid-cols-1 gap-4">
                         {doctors.map(doc => (
@@ -647,7 +649,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{doc.status === 'Active' ? 'Faol' : 'Ta\'tilda'}</span>
+                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{doc.status === 'Active' ? t('settings.staff.statusActive') : t('settings.staff.statusVoc')}</span>
                                  <button
                                     onClick={() => handleOpenDoctorModal(doc)}
                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
@@ -675,14 +677,14 @@ export const Settings: React.FC<SettingsProps> = ({
                            <Bot className="w-8 h-8" />
                         </div>
                         <div>
-                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">Telegram Bot Sozlamalari</h3>
-                           <p className="text-sm text-gray-500">Klinika va bemorlar uchun bildirishnomalar</p>
+                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('settings.bot.title')}</h3>
+                           <p className="text-sm text-gray-500">{t('settings.bot.subtitle')}</p>
                         </div>
                      </div>
 
                      <div className="space-y-6">
                         <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
-                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">Botni ulashtirish</h4>
+                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">{t('settings.bot.connectTitle')}</h4>
                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                               Telegram-da @DentaFullBot ni toping va unga `/start` buyrug'ini yuboring. Keyin quyidagi ID ni botga yuboring:
                            </p>
@@ -696,7 +698,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               <div className="flex items-center gap-3">
                                  <CheckCircle className="w-5 h-5 text-emerald-500" />
                                  <div>
-                                    <p className="text-sm font-bold text-emerald-900 dark:text-emerald-200">Bot faol</p>
+                                    <p className="text-sm font-bold text-emerald-900 dark:text-emerald-200">{t('settings.bot.active')}</p>
                                     <p className="text-xs text-emerald-700 dark:text-emerald-400">Siz har kuni soat 22:00 da hisobotlarni qabul qilasiz.</p>
                                  </div>
                               </div>
@@ -704,7 +706,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         ) : (
                            <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 rounded-xl">
                               <Activity className="w-5 h-5 text-amber-500" />
-                              <p className="text-sm text-amber-900 dark:text-amber-200">Bot hali ulanmagan</p>
+                              <p className="text-sm text-amber-900 dark:text-amber-200">{t('settings.bot.notConnected')}</p>
                            </div>
                         )}
                      </div>
@@ -716,9 +718,9 @@ export const Settings: React.FC<SettingsProps> = ({
          </div>
 
          {/* Add/Edit Service Modal */}
-         <Modal isOpen={isServiceModalOpen} onClose={() => setIsServiceModalOpen(false)} title={editingServiceIndex !== null ? "Xizmatni Tahrirlash" : "Yangi Xizmat Qo'shish"}>
+         <Modal isOpen={isServiceModalOpen} onClose={() => setIsServiceModalOpen(false)} title={editingServiceIndex !== null ? t('settings.services.edit') : t('settings.services.addModal')}>
             <form onSubmit={handleServiceSubmit} className="space-y-4">
-               <Input label="Xizmat Nomi" value={serviceForm.name} onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} required />
+               <Input label={t('settings.services.thName')} value={serviceForm.name} onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} required />
 
                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kategoriya</label>
@@ -732,23 +734,23 @@ export const Settings: React.FC<SettingsProps> = ({
                   />
                </div>
                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Narxi" type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
+                  <Input label={t('settings.services.thPrice')} type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
                   <Input label="Texniklar xarajati" type="number" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} placeholder="0" />
                </div>
                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="secondary" onClick={() => setIsServiceModalOpen(false)}>Bekor qilish</Button>
-                  <Button type="submit">Saqlash</Button>
+                  <Button type="button" variant="secondary" onClick={() => setIsServiceModalOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit">{t('common.save')}</Button>
                </div>
             </form>
          </Modal>
 
          {/* Add Category Modal */}
-         <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title="Yangi Kategoriya Qo'shish">
+         <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title={t('settings.services.addCategory')}>
             <form onSubmit={handleCategorySubmit} className="space-y-4">
-               <Input label="Kategoriya Nomi" value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })} required />
+               <Input label={t('settings.services.categoryName')} value={categoryForm.name} onChange={e => setCategoryForm({ ...categoryForm, name: e.target.value })} required />
                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="secondary" onClick={() => setIsCategoryModalOpen(false)}>Bekor qilish</Button>
-                  <Button type="submit">Saqlash</Button>
+                  <Button type="button" variant="secondary" onClick={() => setIsCategoryModalOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit">{t('common.save')}</Button>
                </div>
             </form>
          </Modal>
@@ -756,20 +758,20 @@ export const Settings: React.FC<SettingsProps> = ({
 
 
          {/* Add/Edit Doctor Modal */}
-         <Modal isOpen={isDoctorModalOpen} onClose={() => setIsDoctorModalOpen(false)} title={editingDoctorId ? "Shifokorni Tahrirlash" : "Yangi Shifokor Qo'shish"}>
+         <Modal isOpen={isDoctorModalOpen} onClose={() => setIsDoctorModalOpen(false)} title={editingDoctorId ? t('settings.staff.editDoctor') : t('settings.staff.addDoctorModal')}>
             <form onSubmit={handleDoctorSubmit} className="space-y-4">
                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Ism" value={doctorForm.firstName} onChange={e => setDoctorForm({ ...doctorForm, firstName: e.target.value })} required />
-                  <Input label="Familiya" value={doctorForm.lastName} onChange={e => setDoctorForm({ ...doctorForm, lastName: e.target.value })} required />
+                  <Input label={t('settings.staff.firstName')} value={doctorForm.firstName} onChange={e => setDoctorForm({ ...doctorForm, firstName: e.target.value })} required />
+                  <Input label={t('settings.staff.lastName')} value={doctorForm.lastName} onChange={e => setDoctorForm({ ...doctorForm, lastName: e.target.value })} required />
                </div>
-               <Input label="Mutaxassislik" value={doctorForm.specialty} onChange={e => setDoctorForm({ ...doctorForm, specialty: e.target.value })} required />
+               <Input label={t('settings.staff.specialty')} value={doctorForm.specialty} onChange={e => setDoctorForm({ ...doctorForm, specialty: e.target.value })} required />
                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Telefon" value={doctorForm.phone} onChange={e => setDoctorForm({ ...doctorForm, phone: e.target.value })} required />
+                  <Input label={t('settings.staff.phone')} value={doctorForm.phone} onChange={e => setDoctorForm({ ...doctorForm, phone: e.target.value })} required />
                   <Input label="Qo'shimcha raqam (Ixtiyoriy)" value={doctorForm.secondaryPhone} onChange={e => setDoctorForm({ ...doctorForm, secondaryPhone: e.target.value })} />
                </div>
 
                <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Tizimga kirish ma'lumotlari</h4>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">{t('settings.staff.authTitle')}</h4>
                   <div className="grid grid-cols-2 gap-4">
                      <Input
                         label="Login (Username)"
@@ -779,7 +781,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         placeholder="shifokor_login"
                      />
                      <Input
-                        label="Parol"
+                        label={t('settings.staff.password')}
                         type="password"
                         value={doctorForm.password}
                         onChange={e => setDoctorForm({ ...doctorForm, password: e.target.value })}
@@ -814,14 +816,14 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                </div>
                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="secondary" onClick={() => setIsDoctorModalOpen(false)}>Bekor qilish</Button>
-                  <Button type="submit">Saqlash</Button>
+                  <Button type="button" variant="secondary" onClick={() => setIsDoctorModalOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit">{t('common.save')}</Button>
                </div>
             </form>
          </Modal>
 
          {/* Upgrade Plan Modal */}
-         <Modal isOpen={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} title="Tarifni Yangilash">
+         <Modal isOpen={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} title="{t('settings.services.upgrade')}">
             <div className="text-center py-4 space-y-4">
                <div className="mx-auto w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-4">
                   <Users className="w-6 h-6 text-indigo-600" />
@@ -851,17 +853,18 @@ export const Settings: React.FC<SettingsProps> = ({
          </Modal>
 
          {/* Delete Doctor Confirmation Modal */}
-         <Modal isOpen={!!deleteConfirmDoctor} onClose={() => setDeleteConfirmDoctor(null)} title="Shifokorni O'chirish">
+         <Modal isOpen={!!deleteConfirmDoctor} onClose={() => setDeleteConfirmDoctor(null)} title={t('settings.staff.deleteDoctorConfirm')}>
             <div className="text-center space-y-4">
                <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                   <Trash2 className="w-6 h-6 text-red-600" />
                </div>
                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
                <p className="text-gray-600 dark:text-gray-300">
-                  <strong>Dr. {deleteConfirmDoctor?.firstName} {deleteConfirmDoctor?.lastName}</strong> ni o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.
+                  {t('settings.staff.deleteDoctorConfirm')} <br />
+                   <strong>Dr. {deleteConfirmDoctor?.firstName} {deleteConfirmDoctor?.lastName}</strong>. {t('common.confirmDeleteDesc')}
                </p>
                <div className="flex justify-center gap-3 pt-4">
-                  <Button variant="secondary" onClick={() => setDeleteConfirmDoctor(null)}>Bekor qilish</Button>
+                  <Button variant="secondary" onClick={() => setDeleteConfirmDoctor(null)}>{t('common.cancel')}</Button>
                   <Button
                      className="bg-red-600 hover:bg-red-700 text-white border-none"
                      onClick={() => {
@@ -878,16 +881,16 @@ export const Settings: React.FC<SettingsProps> = ({
          </Modal>
 
          {/* Add/Edit Receptionist Modal */}
-         <Modal isOpen={isReceptionistModalOpen} onClose={() => setIsReceptionistModalOpen(false)} title={editingReceptionistId ? "Resepshnni Tahrirlash" : "Yangi Resepshn Qo'shish"}>
+         <Modal isOpen={isReceptionistModalOpen} onClose={() => setIsReceptionistModalOpen(false)} title={editingReceptionistId ? t('settings.staff.editReceptionist') : t('settings.staff.addReceptionistModal')}>
             <form onSubmit={handleReceptionistSubmit} className="space-y-4">
                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Ism" value={receptionistForm.firstName} onChange={e => setReceptionistForm({ ...receptionistForm, firstName: e.target.value })} required />
-                  <Input label="Familiya" value={receptionistForm.lastName} onChange={e => setReceptionistForm({ ...receptionistForm, lastName: e.target.value })} required />
+                  <Input label={t('settings.staff.firstName')} value={receptionistForm.firstName} onChange={e => setReceptionistForm({ ...receptionistForm, firstName: e.target.value })} required />
+                  <Input label={t('settings.staff.lastName')} value={receptionistForm.lastName} onChange={e => setReceptionistForm({ ...receptionistForm, lastName: e.target.value })} required />
                </div>
-               <Input label="Telefon" value={receptionistForm.phone} onChange={e => setReceptionistForm({ ...receptionistForm, phone: e.target.value })} required />
+               <Input label={t('settings.staff.phone')} value={receptionistForm.phone} onChange={e => setReceptionistForm({ ...receptionistForm, phone: e.target.value })} required />
 
                <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Tizimga kirish ma'lumotlari</h4>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">{t('settings.staff.authTitle')}</h4>
                   <div className="grid grid-cols-2 gap-4">
                      <Input
                         label="Login (Username)"
@@ -897,7 +900,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         placeholder="resepshn_login"
                      />
                      <Input
-                        label="Parol"
+                        label={t('settings.staff.password')}
                         type="password"
                         value={receptionistForm.password}
                         onChange={e => setReceptionistForm({ ...receptionistForm, password: e.target.value })}
@@ -907,24 +910,25 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                </div>
                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="secondary" onClick={() => setIsReceptionistModalOpen(false)}>Bekor qilish</Button>
-                  <Button type="submit">Saqlash</Button>
+                  <Button type="button" variant="secondary" onClick={() => setIsReceptionistModalOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit">{t('common.save')}</Button>
                </div>
             </form>
          </Modal>
 
          {/* Delete Receptionist Confirmation Modal */}
-         <Modal isOpen={!!deleteConfirmReceptionist} onClose={() => setDeleteConfirmReceptionist(null)} title="Resepshnni O'chirish">
+         <Modal isOpen={!!deleteConfirmReceptionist} onClose={() => setDeleteConfirmReceptionist(null)} title={t('settings.staff.deleteReceptionistConfirm')}>
             <div className="text-center space-y-4">
                <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                   <Trash2 className="w-6 h-6 text-red-600" />
                </div>
                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
                <p className="text-gray-600 dark:text-gray-300">
-                  <strong>{deleteConfirmReceptionist?.firstName} {deleteConfirmReceptionist?.lastName}</strong> ni o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi.
+                  {t('settings.staff.deleteReceptionistConfirm')} <br />
+                   <strong>{deleteConfirmReceptionist?.firstName} {deleteConfirmReceptionist?.lastName}</strong>. {t('common.confirmDeleteDesc')}
                </p>
                <div className="flex justify-center gap-3 pt-4">
-                  <Button variant="secondary" onClick={() => setDeleteConfirmReceptionist(null)}>Bekor qilish</Button>
+                  <Button variant="secondary" onClick={() => setDeleteConfirmReceptionist(null)}>{t('common.cancel')}</Button>
                   <Button
                      className="bg-red-600 hover:bg-red-700 text-white border-none"
                      onClick={() => {

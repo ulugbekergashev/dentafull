@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Share, PlusSquare, Smartphone } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface IOSInstallModalProps {
     isOpen: boolean;
@@ -7,6 +8,7 @@ interface IOSInstallModalProps {
 }
 
 export const IOSInstallModal: React.FC<IOSInstallModalProps> = ({ isOpen, onClose }) => {
+    const { t } = useLanguage();
     if (!isOpen) return null;
 
     return (
@@ -18,7 +20,7 @@ export const IOSInstallModal: React.FC<IOSInstallModalProps> = ({ isOpen, onClos
                             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
                                 <Smartphone size={24} />
                             </div>
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Ilovani o'rnatish</h2>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('app.install')}</h2>
                         </div>
                         <button
                             onClick={onClose}

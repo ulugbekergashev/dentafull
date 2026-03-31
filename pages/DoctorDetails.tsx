@@ -5,6 +5,7 @@ import { Card, Button, Badge } from '../components/Common';
 import { ArrowLeft, Phone, Mail, Award, Calendar, DollarSign, Users, Star } from 'lucide-react';
 import { calculateDoctorSalary } from '../utils/financialCalculations';
 import { getCurrentMonthRange } from '../utils/dateUtils';
+import { useLanguage } from '../context/LanguageContext';
 
 interface DoctorDetailsProps {
     doctors: Doctor[];
@@ -25,6 +26,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
     onBack,
     onPatientClick
 }) => {
+    const { t } = useLanguage();
     const { doctorId } = useParams<{ doctorId: string }>();
     const [activeTab, setActiveTab] = useState<'appointments' | 'upcoming_appointments' | 'transactions' | 'patients'>('upcoming_appointments');
     const doctor = doctors.find(d => d.id === doctorId);
@@ -105,8 +107,8 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
     if (!doctor) {
         return (
             <div className="flex flex-col items-center justify-center h-96">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Shifokor topilmadi</h2>
-                <Button onClick={onBack}>Ortga qaytish</Button>
+                <h2 className="text-xl font-bold text-gray-900 mb-4">{t('doctors.details.notFound')}</h2>
+                <Button onClick={onBack}>{t('common.back') || 'Ortga qaytish'}</Button>
             </div>
         );
     }
@@ -128,10 +130,10 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
                             : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800'
                             }`}>
-                            {doctor.status === 'Active' ? 'Faol' : 'Ta\'tilda'}
+                            {doctor.status === 'Active' ? t('doctors.status.active') : t('doctors.status.inactive')}
                         </span>
                     </h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{doctor.specialty} • {doctor.percentage || 0}% ulush</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{doctor.specialty} • {doctor.percentage || 0}% {t('doctors.details.share')}</p>
                 </div>
             </div>
 
@@ -139,14 +141,14 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Contact info card */}
                 <Card className="p-6">
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">Aloqa ma'lumotlari</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">{t('doctors.details.contactInfo')}</h3>
                     <div className="space-y-4">
                         <div className="flex items-center gap-3 text-sm">
                             <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
                                 <Phone className="w-4 h-4" />
                             </div>
                             <div>
-                                <p className="text-gray-500 dark:text-gray-400 text-xs">Asosiy Telefon</p>
+                                <p className="text-gray-500 dark:text-gray-400 text-xs">{t('doctors.details.primaryPhone')}</p>
                                 <p className="font-medium text-gray-900 dark:text-white">{doctor.phone}</p>
                             </div>
                         </div>
@@ -156,7 +158,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                     <Phone className="w-4 h-4" />
                                 </div>
                                 <div>
-                                    <p className="text-gray-500 dark:text-gray-400 text-xs">Qo'shimcha Telefon</p>
+                                    <p className="text-gray-500 dark:text-gray-400 text-xs">{t('doctors.details.secondaryPhone')}</p>
                                     <p className="font-medium text-gray-900 dark:text-white">{doctor.secondaryPhone}</p>
                                 </div>
                             </div>
@@ -167,7 +169,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                     <Mail className="w-4 h-4" />
                                 </div>
                                 <div>
-                                    <p className="text-gray-500 dark:text-gray-400 text-xs">Elektron pochta</p>
+                                    <p className="text-gray-500 dark:text-gray-400 text-xs">{t('doctors.details.email')}</p>
                                     <p className="font-medium text-gray-900 dark:text-white">{doctor.email}</p>
                                 </div>
                             </div>
@@ -177,7 +179,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                 <Award className="w-4 h-4" />
                             </div>
                             <div>
-                                <p className="text-gray-500 dark:text-gray-400 text-xs">Mutaxassislik</p>
+                                <p className="text-gray-500 dark:text-gray-400 text-xs">{t('doctors.details.specialty')}</p>
                                 <p className="font-medium text-gray-900 dark:text-white">{doctor.specialty}</p>
                             </div>
                         </div>
@@ -189,7 +191,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <Card className="p-4 flex flex-col justify-center">
                         <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
                             <Calendar className="w-4 h-4" />
-                            <span className="text-xs font-medium uppercase tracking-wider">Shu oy qabullar</span>
+                            <span className="text-xs font-medium uppercase tracking-wider">{t('doctors.details.monthAppts')}</span>
                         </div>
                         <p className="text-2xl font-bold text-gray-900 dark:text-white">{currentMonthStats.apptCount}</p>
                     </Card>
@@ -197,7 +199,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <Card className="p-4 flex flex-col justify-center">
                         <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
                             <Users className="w-4 h-4" />
-                            <span className="text-xs font-medium uppercase tracking-wider">Unikal bemorlar</span>
+                            <span className="text-xs font-medium uppercase tracking-wider">{t('doctors.details.uniquePatients')}</span>
                         </div>
                         <p className="text-2xl font-bold text-gray-900 dark:text-white">{currentMonthStats.uniquePatients}</p>
                     </Card>
@@ -205,7 +207,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <Card className="p-4 flex flex-col justify-center">
                         <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
                             <DollarSign className="w-4 h-4 text-green-500" />
-                            <span className="text-xs font-medium uppercase tracking-wider">Tushum (Oy)</span>
+                            <span className="text-xs font-medium uppercase tracking-wider">{t('doctors.details.monthGross')}</span>
                         </div>
                         <p className="text-xl font-bold text-gray-900 dark:text-white">{currentMonthStats.gross.toLocaleString()} UZS</p>
                     </Card>
@@ -213,7 +215,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <Card className="p-4 flex flex-col justify-center bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30">
                         <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mb-2">
                             <DollarSign className="w-4 h-4" />
-                            <span className="text-xs font-medium uppercase tracking-wider">Oy maoshi</span>
+                            <span className="text-xs font-medium uppercase tracking-wider">{t('doctors.details.monthSalary')}</span>
                         </div>
                         <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{currentMonthStats.salary.toLocaleString()} UZS</p>
                     </Card>
@@ -230,7 +232,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                     >
-                        Kelgusi Qabullar ({upcomingAppts.length})
+                        {t('doctors.details.tabUpcoming')} ({upcomingAppts.length})
                     </button>
                     <button
                         onClick={() => setActiveTab('appointments')}
@@ -239,7 +241,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                     >
-                        Qabullar Tarixi ({pastAppts.length})
+                        {t('doctors.details.tabHistory')} ({pastAppts.length})
                     </button>
                     <button
                         onClick={() => setActiveTab('transactions')}
@@ -248,7 +250,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                     >
-                        Tranzaksiyalar ({doctorTransactions.length})
+                        {t('doctors.details.tabTransactions')} ({doctorTransactions.length})
                     </button>
                     <button
                         onClick={() => setActiveTab('patients')}
@@ -257,7 +259,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                     >
-                        Bemorlari ({doctorPatients.length})
+                        {t('doctors.details.tabPatients')} ({doctorPatients.length})
                     </button>
                 </nav>
             </div>
@@ -269,24 +271,24 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                         <thead className="bg-gray-50 dark:bg-gray-900/50">
                             <tr className="border-b border-gray-200 dark:border-gray-700">
                                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    {activeTab === 'patients' ? 'Ism familiyasi' : 'Sana'}
+                                    {activeTab === 'patients' ? t('doctors.details.thName') : t('doctors.details.thDate')}
                                 </th>
                                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    {activeTab === 'patients' ? 'Telefon' : 'Bemor'}
+                                    {activeTab === 'patients' ? t('doctors.details.thPhone') : t('doctors.details.thPatient')}
                                 </th>
                                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    {activeTab === 'patients' ? 'So\'nggi tashrif' : 'Xizmat turi'}
+                                    {activeTab === 'patients' ? t('doctors.details.thLastVisit') : t('doctors.details.thService')}
                                 </th>
                                 {(activeTab === 'appointments' || activeTab === 'upcoming_appointments') && (
-                                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('doctors.details.thStatus')}</th>
                                 )}
                                 {activeTab === 'patients' && (
-                                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">Status</th>
+                                    <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">{t('doctors.details.thStatus')}</th>
                                 )}
                                 {activeTab === 'transactions' && (
                                     <>
-                                        <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">Summa</th>
-                                        <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">To'lov turi</th>
+                                        <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">{t('doctors.details.thAmount')}</th>
+                                        <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('doctors.details.thPaymentType')}</th>
                                     </>
                                 )}
                             </tr>
@@ -299,7 +301,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                         <tr key={appt.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-white">{appt.date}</div>
-                                                <div className="text-xs text-gray-500">{appt.time} ({appt.duration} daq)</div>
+                                                <div className="text-xs text-gray-500">{appt.time} ({appt.duration} {t('common.min') || 'daq'})</div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <button
@@ -333,7 +335,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${p.status === 'Active' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
                                                 }`}>
-                                                {p.status === 'Active' ? 'Faol' : 'Arxiv'}
+                                                {p.status === 'Active' ? t('doctors.status.active') : t('doctors.status.inactive')}
                                             </span>
                                         </td>
                                     </tr>
@@ -356,7 +358,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                                 tx.type === 'Card' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
                                                     'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
                                                 }`}>
-                                                {tx.type === 'Cash' ? 'Naqd' : tx.type === 'Card' ? 'Karta' : 'Sug\'urta'}
+                                                {tx.type === 'Cash' ? t('doctors.details.valCash') : tx.type === 'Card' ? t('doctors.details.valCard') : t('doctors.details.valInsurance')}
                                             </span>
                                         </td>
                                     </tr>
@@ -368,7 +370,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                 (activeTab === 'patients' && doctorPatients.length === 0)) && (
                                     <tr>
                                         <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                                            Hech narsa topilmadi.
+                                            {t('common.noData')}
                                         </td>
                                     </tr>
                                 )}

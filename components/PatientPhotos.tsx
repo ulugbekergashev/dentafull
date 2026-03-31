@@ -3,6 +3,7 @@ import { Camera, Upload, Trash2, X, ZoomIn } from 'lucide-react';
 import { Button, Card, Modal, Input, Select, Badge } from './Common';
 import { PatientPhoto } from '../types';
 import { API_URL } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 
 const BASE_URL = API_URL.replace('/api', '');
 
@@ -13,6 +14,7 @@ interface PatientPhotosProps {
 }
 
 export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicId, token }) => {
+    const { t } = useLanguage();
     const [photos, setPhotos] = useState<PatientPhoto[]>([]);
     const [loading, setLoading] = useState(true);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -98,7 +100,7 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
     };
 
     const handleDelete = async (photoId: string) => {
-        if (!confirm('Rostdan ham bu rasmni o\'chirmoqchimisiz?')) return;
+        if (!confirm(t('patients.details.photos.deleteConfirm'))) return;
 
         try {
             const response = await fetch(`${API_URL}/photos/${photoId}`, {
@@ -126,30 +128,30 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
     };
 
     const categories = [
-        { value: 'Before', label: 'Davolashdan oldin' },
-        { value: 'After', label: 'Davolashdan keyin' },
-        { value: 'X-Ray', label: 'Rentgen' },
-        { value: 'Other', label: 'Boshqa' }
+        { value: 'Before', label: t('patients.details.photos.catBefore') },
+        { value: 'After', label: t('patients.details.photos.catAfter') },
+        { value: 'X-Ray', label: t('patients.details.photos.catXRay') },
+        { value: 'Other', label: t('patients.details.photos.catOther') }
     ];
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Bemor rasmlari</h3>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('patients.details.photos.title')}</h3>
                 <Button onClick={() => setIsUploadModalOpen(true)}>
                     <Upload className="w-4 h-4 mr-2" />
-                    Rasm yuklash
+                    {t('patients.details.photos.uploadBtn')}
                 </Button>
             </div>
 
             {loading ? (
-                <div className="text-center py-10 text-gray-500">Yuklanmoqda...</div>
+                <div className="text-center py-10 text-gray-500">{t('common.loading')}</div>
             ) : photos.length === 0 ? (
                 <div className="text-center py-10 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-gray-300 dark:border-gray-700">
                     <Camera className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-                    <p className="text-gray-500">Rasmlar mavjud emas</p>
+                    <p className="text-gray-500">{t('patients.details.photos.noPhotos')}</p>
                     <Button variant="ghost" size="sm" className="mt-2" onClick={() => setIsUploadModalOpen(true)}>
-                        Birinchi rasmni yuklash
+                        {t('patients.details.photos.uploadFirst')}
                     </Button>
                 </div>
             ) : (
@@ -192,7 +194,7 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
             <Modal
                 isOpen={isUploadModalOpen}
                 onClose={handleCloseModal}
-                title="Rasm yuklash"
+                title={t('patients.details.photos.uploadModalTitle')}
             >
                 <div className="space-y-4">
                     <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer relative">
@@ -219,30 +221,30 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                         ) : (
                             <div className="py-4">
                                 <Upload className="w-12 h-12 mx-auto text-gray-400 mb-2" />
-                                <p className="text-sm text-gray-500">Rasm tanlash uchun bosing</p>
+                                <p className="text-sm text-gray-500">{t('patients.details.photos.clickToSelect')}</p>
                                 <p className="text-xs text-gray-400 mt-1">PNG, JPG, JPEG</p>
                             </div>
                         )}
                     </div>
 
                     <Select
-                        label="Kategoriya"
+                        label={t('patients.details.photos.category')}
                         value={category}
                         onChange={(e) => setCategory(e.target.value)}
                         options={categories}
                     />
 
                     <Input
-                        label="Izoh (ixtiyoriy)"
+                        label={t('patients.details.photos.description')}
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Masalan: Yuqori o'ng 6-tish"
+                        placeholder={t('patients.details.photos.descPlaceholder')}
                     />
 
                     <div className="flex justify-end gap-3 pt-4">
-                        <Button variant="secondary" onClick={handleCloseModal}>Bekor qilish</Button>
+                        <Button variant="secondary" onClick={handleCloseModal}>{t('common.cancel')}</Button>
                         <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
-                            {uploading ? 'Yuklanmoqda...' : 'Yuklash'}
+                            {uploading ? t('common.loading') : t('patients.details.photos.uploadBtn')}
                         </Button>
                     </div>
                 </div>
@@ -283,7 +285,7 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                                     onClick={() => handleDelete(viewPhoto.id)}
                                 >
                                     <Trash2 className="w-4 h-4 mr-2" />
-                                    O'chirish
+                                    {t('common.delete')}
                                 </Button>
                             </div>
                         </div>

@@ -5,6 +5,7 @@ import { UserRole, Transaction, Appointment, Patient } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users } from 'lucide-react';
 import { api } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 import { calculateTotalFinancials } from '../utils/financialCalculations';
 
 interface FinanceProps {
@@ -22,6 +23,7 @@ import { Doctor } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
 export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors }) => {
+  const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -281,9 +283,9 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Moliya</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('finance.title')}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {isReceptionist ? 'Bugungi daromad ko\'rsatkichi' : 'Daromad, xarajatlar va yo\'qotishlar tahlili'}
+            {isReceptionist ? t('finance.todayIncome') : t('finance.subtitle')}
           </p>
         </div>
 
@@ -292,7 +294,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
             <div className="w-full sm:w-40">
               <Input
                 type="date"
-                label="Boshlash sanasi"
+                label={t('finance.startDate')}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="h-9"
@@ -301,13 +303,13 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
             <div className="w-full sm:w-40">
               <Input
                 type="date"
-                label="Tugash sanasi"
+                label={t('finance.endDate')}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="h-9"
               />
             </div>
-            <Button variant="secondary" onClick={handleExport} className="h-10 mt-6 sm:mt-0"><Download className="w-4 h-4 mr-2" /> CSV</Button>
+            <Button variant="secondary" onClick={handleExport} className="h-10 mt-6 sm:mt-0"><Download className="w-4 h-4 mr-2" /> {t('finance.exportCsv')}</Button>
           </div>
         )}
       </div>
@@ -315,11 +317,11 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
       {/* Main Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-none">
-          <p className="text-blue-100 text-sm font-medium">{isReceptionist ? 'Bugungi Daromad' : 'Jami Daromad'}</p>
+          <p className="text-blue-100 text-sm font-medium">{isReceptionist ? t('finance.todayIncomeCard') : t('finance.totalIncome')}</p>
           <h3 className="text-3xl font-bold mt-2">{totalRevenue.toLocaleString()} UZS</h3>
           <div className="mt-4 flex items-center text-sm text-blue-100">
             <Calendar className="w-4 h-4 mr-1" />
-            {isReceptionist ? today : (startDate || endDate ? 'Tanlangan davr uchun' : 'Barcha vaqt uchun')}
+            {isReceptionist ? today : (startDate || endDate ? t('finance.selectedPeriod') : t('finance.allTime'))}
           </div>
         </Card>
         {!isReceptionist && (
@@ -329,7 +331,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 <Wallet className="w-6 h-6 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Qarzdorlik</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.debt')}</p>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{totalDebt.toLocaleString()} UZS</h3>
               </div>
             </div>
@@ -342,7 +344,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 <CreditCard className="w-6 h-6 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">O'rtacha Chek</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.avgCheck')}</p>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
                   {filteredTransactions.length ? Math.round(totalRevenue / filteredTransactions.length).toLocaleString() : 0} UZS
                 </h3>
@@ -359,7 +361,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-red-500">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Texniklar Xarajati</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.techCosts')}</p>
                 <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{technicianCosts.toLocaleString()} UZS</h3>
               </div>
               <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
@@ -371,7 +373,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-blue-500">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Shifokorlar Oyligi</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.doctorSalary')}</p>
                 <h3 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{doctorSalaries.toLocaleString()} UZS</h3>
               </div>
               <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
@@ -383,7 +385,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-green-500">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Sof Foyda</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.netProfit')}</p>
                 <h3 className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{netProfit.toLocaleString()} UZS</h3>
               </div>
               <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
@@ -394,27 +396,27 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
         </div>
 
         {/* Loss Analysis Section */}
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white pt-4">Yo'qotishlar Tahlili (No-Shows)</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white pt-4">{t('finance.lossAnalysis')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Financial Loss */}
           <Card className="p-6 border-l-4 border-red-500">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Yo'qotilgan Daromad</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.lostRevenue')}</p>
                 <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{lostRevenue.toLocaleString()} UZS</h3>
               </div>
               <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
                 <TrendingDown className="w-6 h-6 text-red-600 dark:text-red-400" />
               </div>
             </div>
-            <p className="text-xs text-gray-500">Tanlangan davrda bemor kelmaganligi sababli yo'qotish.</p>
+            <p className="text-xs text-gray-500">{t('finance.lossDesc')}</p>
           </Card>
 
           {/* Missed Appointments Count */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Jami "Kelmadi"</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.totalNoShow')}</p>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{noShowAppointments.length} ta</h3>
               </div>
               <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-full">
@@ -422,7 +424,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               </div>
             </div>
             <div className="text-xs text-gray-500 flex items-center gap-1">
-              <span className="font-semibold text-gray-700 dark:text-gray-300">{uniqueNoShowPatients}</span> ta unikal bemor
+              <span className="font-semibold text-gray-700 dark:text-gray-300">{uniqueNoShowPatients}</span> {t('finance.uniqueNoShow')}
             </div>
           </Card>
 
@@ -430,7 +432,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           <Card className="p-6 border-l-4 border-green-500">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Qaytarilgan Mijozlar</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.recoveredPatients')}</p>
                 <h3 className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{recoveredCount} ta</h3>
               </div>
               <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
@@ -438,8 +440,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              "Kelmadi" bo'lgan, lekin keyinchalik qaytib kelgan bemorlar.
-              <span className="block mt-1 text-red-500 font-medium">Yo'qotilganlar: {lostCustomersCount} ta</span>
+              {t('finance.recoveredDesc')}
+              <span className="block mt-1 text-red-500 font-medium">{t('finance.lostCustomers')}: {lostCustomersCount} ta</span>
             </p>
           </Card>
         </div>
@@ -447,7 +449,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Chart */}
           <Card className="p-6 lg:col-span-2">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">To'lov Usullari</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">{t('finance.paymentMethods')}</h3>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={PAYMENT_METHOD_DATA} layout="vertical">
@@ -467,18 +469,18 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
 
           {/* Debtors List (Mini) */}
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Qarzdorlar</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{t('finance.debtors')}</h3>
             <div className="space-y-4">
               {DEBTORS.slice(0, 2).map((d, i) => (
                 <div key={i} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">{d.name}</p>
-                    <p className="text-xs text-red-500 font-medium">{d.days} kun kechikkan</p>
+                    <p className="text-xs text-red-500 font-medium">{d.days} {t('finance.daysLate')}</p>
                   </div>
                   <span className="font-bold text-gray-900 dark:text-white">{d.amount.toLocaleString()}</span>
                 </div>
               ))}
-              <Button variant="ghost" className="w-full text-sm mt-2" onClick={() => setIsDebtorModalOpen(true)}>Barchasini ko'rish</Button>
+              <Button variant="ghost" className="w-full text-sm mt-2" onClick={() => setIsDebtorModalOpen(true)}>{t('finance.viewAll')}</Button>
             </div>
           </Card>
         </div>
@@ -486,7 +488,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
         {/* Transaction Table */}
         <Card className="overflow-hidden">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-            <h3 className="font-semibold text-gray-900 dark:text-white">Tranzaksiyalar</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-white">{t('finance.transactions')}</h3>
             <div className="relative">
               <Button variant="secondary" size="sm" onClick={() => setIsFilterOpen(!isFilterOpen)}>
                 <Filter className="w-4 h-4 mr-2" /> {filterStatus}
@@ -510,13 +512,13 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
             <table className="w-full text-left border-collapse">
               <thead className="bg-gray-50 dark:bg-gray-800/50">
                 <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Sana</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Bemor</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Shifokor</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Xizmat</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Usul</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Summa</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.date')}</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.patient')}</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.doctor')}</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.service')}</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.method')}</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.amount')}</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.status')}</th>
                 </tr>
               </thead>
               <tbody className="text-sm text-gray-700 dark:text-gray-300">

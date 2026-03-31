@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { ToothData, ToothStatus } from '../types';
 import { Modal, Button } from './Common';
 import { Save } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface TeethChartProps {
   initialData?: ToothData[];
@@ -26,20 +27,6 @@ const toRomanNumeral = (num: number): string => {
   return romanNumerals[lastDigit] || num.toString();
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  [ToothStatus.HEALTHY]: 'Sog\'lom',
-  [ToothStatus.CAVITY]: 'Karies',
-  [ToothStatus.FILLED]: 'Plombalangan',
-  [ToothStatus.MISSING]: 'Yo\'q (Missing)',
-  [ToothStatus.CROWN]: 'Qoplama (Crown)',
-  [ToothStatus.PULPITIS]: 'Pulpit',
-  [ToothStatus.PERIODONTITIS]: 'Periodontit',
-  [ToothStatus.ABSCESS]: 'Absses',
-  [ToothStatus.PHLEGMON]: 'Flegmona',
-  [ToothStatus.OSTEOMYELITIS]: 'Osteomiyelit',
-  [ToothStatus.ADENTIA]: 'Adentiya',
-  [ToothStatus.IMPLANT]: 'Implant',
-};
 
 // Physical states can combine with diseases
 const PHYSICAL_STATES = [ToothStatus.FILLED, ToothStatus.MISSING, ToothStatus.CROWN, ToothStatus.IMPLANT];
@@ -276,6 +263,23 @@ export const TeethChart: React.FC<TeethChartProps> = ({
   selectedTooth: externalSelectedTooth,
   procedures = []
 }) => {
+  const { t } = useLanguage();
+
+  const STATUS_LABELS: Record<string, string> = {
+    [ToothStatus.HEALTHY]: t('patients.details.teethChart.healthy'),
+    [ToothStatus.CAVITY]: t('patients.details.teethChart.cavity'),
+    [ToothStatus.FILLED]: t('patients.details.teethChart.filled'),
+    [ToothStatus.MISSING]: t('patients.details.teethChart.missing'),
+    [ToothStatus.CROWN]: t('patients.details.teethChart.crown'),
+    [ToothStatus.PULPITIS]: t('patients.details.teethChart.pulpitis'),
+    [ToothStatus.PERIODONTITIS]: t('patients.details.teethChart.periodontitis'),
+    [ToothStatus.ABSCESS]: t('patients.details.teethChart.abscess'),
+    [ToothStatus.PHLEGMON]: t('patients.details.teethChart.phlegmon'),
+    [ToothStatus.OSTEOMYELITIS]: t('patients.details.teethChart.osteomyelitis'),
+    [ToothStatus.ADENTIA]: t('patients.details.teethChart.adentia'),
+    [ToothStatus.IMPLANT]: t('patients.details.teethChart.implant'),
+  };
+
   const [toothType, setToothType] = useState<'permanent' | 'primary'>('permanent');
 
   const [teethData, setTeethData] = useState<Record<number, { conditions: ToothStatus[]; notes: string }>>(() => {
@@ -383,7 +387,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
           >
-            Doimiy (32)
+            {t('patients.details.teethChart.permanent')}
           </button>
           <button
             onClick={() => setToothType('primary')}
@@ -392,7 +396,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
           >
-            Sut (20)
+            {t('patients.details.teethChart.primary')}
           </button>
         </div>
       </div>
@@ -403,19 +407,19 @@ export const TeethChart: React.FC<TeethChartProps> = ({
           onClick={() => setShowLegend(!showLegend)}
           className="text-xs text-blue-600 font-medium px-3 py-1 rounded-full bg-blue-50 border border-blue-100"
         >
-          {showLegend ? 'Izohlarni yashirish' : 'Holat izohlarini ko\'rish'}
+          {showLegend ? t('patients.details.teethChart.hideLegend') : t('patients.details.teethChart.showLegend')}
         </button>
       </div>
 
       {/* Legend */}
       <div className={`${showLegend ? 'flex' : 'hidden sm:flex'} flex-wrap justify-center gap-2 sm:gap-6 mb-6 sm:mb-10 text-[10px] sm:text-sm font-medium text-gray-600 dark:text-gray-300 select-none pb-4 border-b border-gray-50 border-hidden sm:border-solid`}>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-gray-100 border border-gray-300 shadow-sm"></div> Sog'lom</div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#3f0808] border border-red-900"></div> Karies</div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-gray-500 border border-gray-600"></div> Plombalangan</div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-yellow-500 border border-yellow-600"></div> Qoplama</div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full border-2 border-dashed border-gray-400 opacity-50"></div> Yo'q</div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500 border border-red-600"></div> Pulpit</div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-700 border border-red-800"></div> Periodontit</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-gray-100 border border-gray-300 shadow-sm"></div> {t('patients.details.teethChart.healthy')}</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-[#3f0808] border border-red-900"></div> {t('patients.details.teethChart.cavity')}</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-gray-500 border border-gray-600"></div> {t('patients.details.teethChart.filled')}</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-yellow-500 border border-yellow-600"></div> {t('patients.details.teethChart.crownShort')}</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full border-2 border-dashed border-gray-400 opacity-50"></div> {t('patients.details.teethChart.missingShort')}</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500 border border-red-600"></div> {t('patients.details.teethChart.pulpitis')}</div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-700 border border-red-800"></div> {t('patients.details.teethChart.periodontitis')}</div>
       </div>
 
       {/* Chart Container */}
@@ -423,7 +427,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
 
         {/* Upper Jaw */}
         <div className="relative min-w-max px-2">
-          <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Yuqori Jag'</div>
+          <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">{t('patients.details.teethChart.upperJaw')}</div>
           <div className="flex gap-0.5 sm:gap-1 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.upper : PRIMARY_TOOTH_NUMBERS.upper).map(num => (
               <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
@@ -442,7 +446,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
         {/* Lower Jaw */}
         <div className="relative min-w-max px-2 flex flex-col items-center">
           <div className="w-full border-t-2 border-dashed border-gray-100 dark:border-gray-700/50 my-4 sm:my-6"></div>
-          <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Pastki Jag'</div>
+          <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">{t('patients.details.teethChart.lowerJaw')}</div>
           <div className="flex gap-0.5 sm:gap-1 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.lower : PRIMARY_TOOTH_NUMBERS.lower).map(num => (
               <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
@@ -464,7 +468,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
         <Modal
           isOpen={!!internalSelectedTooth}
           onClose={() => setInternalSelectedTooth(null)}
-          title={`Tish №${toothType === 'primary' ? toRomanNumeral(internalSelectedTooth) : internalSelectedTooth} holati`}
+          title={`${t('patients.details.teethChart.toothStatusTitle')} ${toothType === 'primary' ? toRomanNumeral(internalSelectedTooth) : internalSelectedTooth}`}
         >
           <div className="flex flex-col md:flex-row gap-8">
 
@@ -480,9 +484,9 @@ export const TeethChart: React.FC<TeethChartProps> = ({
                 />
               </div>
               <div className="text-center mt-6 w-full border-t border-gray-100 dark:border-gray-700 pt-4">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tanlangan Holatlar</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('patients.details.teethChart.selectedConditions')}</span>
                 <p className="font-bold text-sm text-gray-900 dark:text-white mt-1">
-                  {tempConditions.length === 0 ? "Sog'lom" : tempConditions.map(c => STATUS_LABELS[c]).join(', ')}
+                  {tempConditions.length === 0 ? t('patients.details.teethChart.healthy') : tempConditions.map(c => STATUS_LABELS[c]).join(', ')}
                 </p>
               </div>
             </div>
@@ -491,12 +495,12 @@ export const TeethChart: React.FC<TeethChartProps> = ({
             <div className="flex-1 space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Tish holatini o'zgartirish
+                  {t('patients.details.teethChart.changeStatus')}
                 </label>
 
                 {/* Physical States Group */}
                 <div className="mb-4">
-                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Jismoniy Holat</h4>
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">{t('patients.details.teethChart.physicalState')}</h4>
                   <div className="grid grid-cols-2 gap-2">
                     {PHYSICAL_STATES.map((s) => (
                       <button
@@ -520,7 +524,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
 
                 {/* Disease States Group */}
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Kasallik Darajasi (Faqat bittasini tanlang)</h4>
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">{t('patients.details.teethChart.diseaseState')}</h4>
                   <div className="grid grid-cols-2 gap-2">
                     {DISEASE_STATES.map((s) => (
                       <button
@@ -550,11 +554,11 @@ export const TeethChart: React.FC<TeethChartProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Shifokor izohi
+                  {t('patients.details.teethChart.doctorNote')}
                 </label>
                 <textarea
                   className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm h-28 dark:border-gray-600 dark:bg-gray-800/50 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none transition-shadow focus:shadow-md"
-                  placeholder="Tishdagi muammolar, o'tkazilgan muolajalar haqida izoh..."
+                  placeholder={t('patients.details.teethChart.notePlaceholder')}
                   value={tempNotes}
                   onChange={(e) => setTempNotes(e.target.value)}
                 />
@@ -563,11 +567,11 @@ export const TeethChart: React.FC<TeethChartProps> = ({
               {/* Performed Procedures Section */}
               <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Qilingan protseduralar
+                  {t('patients.details.teethChart.performedProcedures')}
                 </label>
                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                   {procedures.filter(p => p.toothNumber === internalSelectedTooth).length === 0 ? (
-                    <p className="text-xs text-gray-500 italic">Hozircha protseduralar yo'q</p>
+                    <p className="text-xs text-gray-500 italic">{t('patients.details.teethChart.noProcedures')}</p>
                   ) : (
                     procedures
                       .filter(p => p.toothNumber === internalSelectedTooth)
@@ -582,9 +586,9 @@ export const TeethChart: React.FC<TeethChartProps> = ({
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
-                <Button variant="secondary" onClick={() => setInternalSelectedTooth(null)}>Bekor qilish</Button>
+                <Button variant="secondary" onClick={() => setInternalSelectedTooth(null)}>{t('common.cancel')}</Button>
                 <Button onClick={saveChanges} className="px-6">
-                  <Save className="w-4 h-4 mr-2" /> Saqlash
+                  <Save className="w-4 h-4 mr-2" /> {t('common.save')}
                 </Button>
               </div>
             </div>

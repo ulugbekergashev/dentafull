@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan } from '../types';
 import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface SuperAdminDashboardProps {
    clinics: Clinic[];
@@ -16,6 +17,7 @@ interface SuperAdminDashboardProps {
 export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    clinics, plans, onAddClinic, onUpdateClinic, onUpdatePlan, onDeleteClinic
 }) => {
+   const { t } = useLanguage();
    const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked'>('overview');
 
    // Create Clinic State
@@ -255,33 +257,33 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          {/* Header */}
          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SaaS Boshqaruv Paneli (v2.0)</h1>
-               <p className="text-sm text-gray-500 dark:text-gray-400">Super Admin uchun boshqaruv markazi</p>
+               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('superAdmin.title')}</h1>
+               <p className="text-sm text-gray-500 dark:text-gray-400">{t('superAdmin.subtitle')}</p>
             </div>
             <div className="flex bg-white dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
                <button
                   onClick={() => setActiveTab('overview')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
-                  Umumiy
+                  {t('superAdmin.tabs.overview')}
                </button>
                <button
                   onClick={() => setActiveTab('clinics')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'clinics' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
-                  Klinikalar
+                  {t('superAdmin.tabs.clinics')}
                </button>
                <button
                   onClick={() => setActiveTab('plans')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
-                  Tariflar
+                  {t('superAdmin.tabs.plans')}
                </button>
                <button
                   onClick={() => setActiveTab('blocked')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
-                  Blokdagilar ({blockedCount})
+                  {t('superAdmin.tabs.blocked')} ({blockedCount})
                </button>
             </div>
          </div>
@@ -292,7 +294,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <Card className="p-6 bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-none">
                   <div className="flex justify-between items-start">
                      <div>
-                        <p className="text-indigo-100 font-medium">Oylik Obuna Tushumi</p>
+                        <p className="text-indigo-100 font-medium">{t('superAdmin.stats.revenue')}</p>
                         <h3 className="text-3xl font-bold mt-2">{totalRevenue.toLocaleString()} UZS</h3>
                         <p className="text-xs text-indigo-200 mt-2">+12% o'tgan oyga nisbatan</p>
                      </div>
@@ -305,7 +307,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <Card className="p-6">
                   <div className="flex justify-between items-start">
                      <div>
-                        <p className="text-gray-500 dark:text-gray-400 font-medium">Jami Klinikalar</p>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">Jami {t('superAdmin.tabs.clinics')}</p>
                         <h3 className="text-3xl font-bold mt-2 text-gray-900 dark:text-white">{totalClinics}</h3>
                         <div className="flex gap-3 mt-3 text-xs">
                            <span className="text-green-600 font-medium flex items-center"><CheckCircle className="w-3 h-3 mr-1" /> {activeClinics} Faol</span>
@@ -321,7 +323,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <Card className="p-6">
                   <div className="flex justify-between items-start">
                      <div>
-                        <p className="text-gray-500 dark:text-gray-400 font-medium">Faol Tariflar</p>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">Faol {t('superAdmin.tabs.plans')}</p>
                         <div className="mt-3 space-y-2">
                            {plans.map(plan => {
                               const count = clinics.filter(c => c.planId === plan.id).length;
@@ -373,12 +375,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          {activeTab === 'clinics' && (
             <Card className="p-6">
                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Klinikalar Ro'yxati</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('superAdmin.tabs.clinics')} Ro'yxati</h3>
 
                   <div className="flex flex-1 w-full md:w-auto gap-3">
                      <div className="relative flex-1 md:w-64">
                         <Input
-                           placeholder="Qidirish..."
+                           placeholder={t('superAdmin.clinics.search')}
                            value={searchQuery}
                            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                            className="w-full"
@@ -397,7 +399,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <option value="Expired">Muddati tugagan ({expiredCount})</option>
                      </select>
                      <Button onClick={() => setIsAddClinicModalOpen(true)}>
-                        <Plus className="w-4 h-4 mr-2" /> Qo'shish
+                        <Plus className="w-4 h-4 mr-2" /> {t('superAdmin.clinics.add')}
                      </Button>
                   </div>
                </div>
@@ -406,18 +408,18 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <table className="w-full text-left text-sm">
                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                           <th className="p-4 font-medium text-gray-500">Klinika Nomi</th>
-                           <th className="p-4 font-medium text-gray-500">Tarif</th>
-                           <th className="p-4 font-medium text-gray-500">Obuna Muddati</th>
-                           <th className="p-4 font-medium text-gray-500">Status</th>
-                           <th className="p-4 font-medium text-gray-500 text-right">Amallar</th>
+                           <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thName')}</th>
+                           <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thPlan')}</th>
+                           <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thExpiry')}</th>
+                           <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thStatus')}</th>
+                           <th className="p-4 font-medium text-gray-500 text-right">{t('superAdmin.clinics.thAction')}</th>
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {paginatedClinics.length === 0 ? (
                            <tr>
                               <td colSpan={5} className="p-8 text-center text-gray-500">
-                                 Ma'lumot topilmadi
+                                 {t('common.noData')}
                               </td>
                            </tr>
                         ) : (
@@ -471,7 +473,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                           variant="secondary"
                                           onClick={() => setSelectedClinic(clinic)}
                                        >
-                                          Boshqarish
+                                          {t('superAdmin.clinics.manage')}
                                        </Button>
                                     </td>
                                  </tr>
@@ -515,14 +517,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             <Card className="p-6">
                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                   <div>
-                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bloklangan Klinikalar (Savat)</h3>
+                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bloklangan {t('superAdmin.tabs.clinics')} (Savat)</h3>
                      <p className="text-sm text-gray-500">Ushbu klinikalar bloklangan va tushum hisobiga kirmaydi.</p>
                   </div>
 
                   <div className="flex flex-1 w-full md:w-auto gap-3">
                      <div className="relative flex-1 md:w-64">
                         <Input
-                           placeholder="Qidirish..."
+                           placeholder={t('superAdmin.clinics.search')}
                            value={searchQuery}
                            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                            className="w-full"
@@ -535,11 +537,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <table className="w-full text-left text-sm">
                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                           <th className="p-4 font-medium text-gray-500">Klinika Nomi</th>
-                           <th className="p-4 font-medium text-gray-500">Tarif</th>
+                           <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thName')}</th>
+                           <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thPlan')}</th>
                            <th className="p-4 font-medium text-gray-500">Sana</th>
-                           <th className="p-4 font-medium text-gray-500">Status</th>
-                           <th className="p-4 font-medium text-gray-500 text-right">Amallar</th>
+                           <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thStatus')}</th>
+                           <th className="p-4 font-medium text-gray-500 text-right">{t('superAdmin.clinics.thAction')}</th>
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -569,13 +571,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  </td>
                                  <td className="p-4 text-right">
                                     <div className="flex justify-end gap-2">
-                                       <Button
-                                          size="sm"
-                                          variant="secondary"
-                                          onClick={() => onUpdateClinic(clinic.id, { status: 'Active' })}
-                                       >
-                                          Aktivlashtirish
-                                       </Button>
+                                          <Button
+                                             size="sm"
+                                             variant="secondary"
+                                             onClick={() => onUpdateClinic(clinic.id, { status: 'Active' })}
+                                          >
+                                             {t('superAdmin.clinics.activate')}
+                                          </Button>
                                     </div>
                                  </td>
                               </tr>
@@ -608,7 +610,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <div className="space-y-3 flex-1">
                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                               <Users className="w-4 h-4 text-blue-500" />
-                              <span>{plan.maxDoctors} tagacha shifokor</span>
+                              <span>{plan.maxDoctors} {t('superAdmin.plans.maxDoctors')}</span>
                            </div>
                            {plan.features.map((feat, i) => (
                               <div key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
@@ -644,7 +646,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         </div>
 
                         <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-                           <Button variant="secondary" className="w-full" onClick={() => alert('Tarifni tahrirlash hozircha mavjud emas')}>Tahrirlash</Button>
+                           <Button variant="secondary" className="w-full" onClick={() => alert('Tarifni tahrirlash hozircha mavjud emas')}>{t('common.edit')}</Button>
                         </div>
                      </Card>
                   );
@@ -653,20 +655,20 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          )}
 
          {/* Add Clinic Modal */}
-         <Modal isOpen={isAddClinicModalOpen} onClose={() => setIsAddClinicModalOpen(false)} title="Yangi Klinika Qo'shish">
+         <Modal isOpen={isAddClinicModalOpen} onClose={() => setIsAddClinicModalOpen(false)} title={t('superAdmin.modals.addClinic')}>
             <form onSubmit={handleAddClinicSubmit} className="space-y-4">
-               <Input label="Klinika Nomi" value={newClinicForm.name} onChange={e => setNewClinicForm({ ...newClinicForm, name: e.target.value })} required />
+               <Input label={t('superAdmin.clinics.thName')} value={newClinicForm.name} onChange={e => setNewClinicForm({ ...newClinicForm, name: e.target.value })} required />
                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Admin Ismi" value={newClinicForm.adminName} onChange={e => setNewClinicForm({ ...newClinicForm, adminName: e.target.value })} required />
-                  <Input label="Telefon" value={newClinicForm.phone} onChange={e => setNewClinicForm({ ...newClinicForm, phone: e.target.value })} required />
+                  <Input label={t('superAdmin.forms.adminName')} value={newClinicForm.adminName} onChange={e => setNewClinicForm({ ...newClinicForm, adminName: e.target.value })} required />
+                  <Input label={t('common.phone')} value={newClinicForm.phone} onChange={e => setNewClinicForm({ ...newClinicForm, phone: e.target.value })} required />
                </div>
 
                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4">
                   <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2"><Lock className="w-4 h-4" /> Kirish Ma'lumotlari</h4>
-                  <Input label="Admin Login (Username)" value={newClinicForm.username} onChange={e => setNewClinicForm({ ...newClinicForm, username: e.target.value })} required />
+                  <Input label={t('superAdmin.forms.login')} value={newClinicForm.username} onChange={e => setNewClinicForm({ ...newClinicForm, username: e.target.value })} required />
                   <div className="flex items-end gap-2">
                      <Input label="Parol" type="text" value={newClinicForm.password} onChange={e => setNewClinicForm({ ...newClinicForm, password: e.target.value })} required className="flex-1" />
-                     <Button type="button" variant="secondary" onClick={generatePassword} className="mb-[1px]">Generatsiya</Button>
+                     <Button type="button" variant="secondary" onClick={generatePassword} className="mb-[1px]">{t('superAdmin.forms.generate')}</Button>
                   </div>
                </div>
 
@@ -684,7 +686,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onChange={() => setNewClinicForm({ ...newClinicForm, subscriptionType: 'Paid' })}
                            className="text-blue-600"
                         />
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">To'liq Obuna (Paid)</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{t('superAdmin.forms.paid')}</span>
                      </label>
                      <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -694,12 +696,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onChange={() => setNewClinicForm({ ...newClinicForm, subscriptionType: 'Trial' })}
                            className="text-blue-600"
                         />
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">Sinov Davri (14 kun)</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{t('superAdmin.forms.trial')}</span>
                      </label>
                   </div>
 
                   <Select
-                     label="Tarif Rejasi"
+                     label={t('superAdmin.tabs.plans')} Rejasi
                      options={plans.map(p => ({ value: p.id, label: `${p.name} - ${p.price.toLocaleString()} UZS` }))}
                      value={newClinicForm.planId}
                      onChange={e => {
@@ -717,7 +719,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   {newClinicForm.planId === 'business' && (
                      <div className="animate-fade-in">
                         <Input
-                           label="Shifokorlar Soni"
+                           label={t('superAdmin.forms.doctorCount')}
                            type="number"
                            value={newClinicForm.doctorCount}
                            onChange={e => {
@@ -747,14 +749,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                      />
                      <label htmlFor="useCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">
-                        Maxsus narx belgilash (alohida taklif)
+                        {t('superAdmin.forms.customPrice')}
                      </label>
                   </div>
 
                   {newClinicForm.useCustomPrice && (
                      <div className="animate-fade-in">
                         <Input
-                           label="Maxsus Oylik Narx (UZS)"
+                           label={t('superAdmin.forms.customPriceLabel')}
                            type="number"
                            value={newClinicForm.customPrice}
                            onChange={e => setNewClinicForm({ ...newClinicForm, customPrice: parseInt(e.target.value) || 0 })}
@@ -762,22 +764,22 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            placeholder="Masalan: 800000"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                           💡 Bu narx standart tarif narxi o'rniga ishlatiladi
+                           {t('superAdmin.forms.customPriceHint')}
                         </p>
                      </div>
                   )}
                </div>
 
                <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="secondary" onClick={() => setIsAddClinicModalOpen(false)}>Bekor qilish</Button>
-                  <Button type="submit">Klinikani Yaratish</Button>
+                  <Button type="button" variant="secondary" onClick={() => setIsAddClinicModalOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit">{t('superAdmin.forms.create')}</Button>
                </div>
             </form>
          </Modal>
 
          {/* Clinic Management Modal */}
          {selectedClinic && editClinicData && (
-            <Modal isOpen={!!selectedClinic} onClose={() => setSelectedClinic(null)} title="Obuna Boshqaruvi">
+            <Modal isOpen={!!selectedClinic} onClose={() => setSelectedClinic(null)} title={t('superAdmin.modals.manageSubscription')}>
                <div className="space-y-6">
                   <div className="flex justify-between items-start border-b border-gray-100 dark:border-gray-700 pb-4">
                      <div>
@@ -834,7 +836,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onChange={(e) => setEditClinicData({ ...editClinicData, expiryDate: e.target.value })}
                         />
                         <Select
-                           label="Tarif Rejasi"
+                           label={t('superAdmin.tabs.plans')} Rejasi
                            value={editClinicData.planId}
                            onChange={(e) => setEditClinicData({ ...editClinicData, planId: e.target.value })}
                            options={plans.map(p => ({ value: p.id, label: p.name }))}
@@ -852,7 +854,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  onChange={() => handleSubscriptionTypeChange('Paid')}
                                  className="text-blue-600"
                               />
-                              <span className="text-sm font-medium text-gray-900 dark:text-white">To'liq Obuna (Paid)</span>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">{t('superAdmin.forms.paid')}</span>
                            </label>
                            <label className="flex items-center gap-2 cursor-pointer">
                               <input
@@ -902,7 +904,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            setSelectedClinic(null);
                         }}
                      >
-                        Bloklash va Savatga o'tish
+                        {t('superAdmin.actions.blockAndTrash')}
                      </Button>
                      <div className="flex gap-3">
                         <Button
@@ -912,11 +914,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               setSelectedClinic(null);
                            }}
                         >
-                           <Lock className="w-4 h-4 mr-2" /> Parolni O'zgartirish
+                           <Lock className="w-4 h-4 mr-2" /> {t('superAdmin.modals.changePassword')}
                         </Button>
-                        <Button variant="secondary" onClick={() => setSelectedClinic(null)}>Bekor qilish</Button>
+                        <Button variant="secondary" onClick={() => setSelectedClinic(null)}>{t('common.cancel')}</Button>
                         <Button variant="primary" onClick={handleSaveChanges}>
-                           <Save className="w-4 h-4 mr-2" /> O'zgarishlarni Saqlash
+                           <Save className="w-4 h-4 mr-2" /> {t('superAdmin.actions.saveChanges')}
                         </Button>
                      </div>
                   </div>
@@ -926,46 +928,46 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          }
 
          {/* Credentials Success Modal */}
-         <Modal isOpen={!!createdClinicCreds} onClose={() => setCreatedClinicCreds(null)} title="Klinika Muvaffaqiyatli Yaratildi!">
+         <Modal isOpen={!!createdClinicCreds} onClose={() => setCreatedClinicCreds(null)} title={t('superAdmin.modals.successTitle')}>
             <div className="text-center space-y-4">
                <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
                   <CheckCircle className="w-6 h-6 text-green-600" />
                </div>
                <p className="text-gray-600 dark:text-gray-300">
-                  Quyidagi ma'lumotlarni nusxalab oling va klinika administratoriga bering.
+                  {t('superAdmin.modals.successDesc')}
                </p>
                <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg text-left space-y-2 border border-gray-200 dark:border-gray-700">
                   <div className="flex justify-between">
-                     <span className="text-gray-500 text-sm">Klinika:</span>
+                     <span className="text-gray-500 text-sm">{t('superAdmin.creds.clinic')}</span>
                      <span className="font-bold text-gray-900 dark:text-white">{createdClinicCreds?.name}</span>
                   </div>
                   <div className="flex justify-between">
-                     <span className="text-gray-500 text-sm">Login:</span>
+                     <span className="text-gray-500 text-sm">{t('superAdmin.creds.login')}</span>
                      <span className="font-mono font-bold text-blue-600">{createdClinicCreds?.username}</span>
                   </div>
                   <div className="flex justify-between">
-                     <span className="text-gray-500 text-sm">Parol:</span>
+                     <span className="text-gray-500 text-sm">{t('superAdmin.creds.password')}</span>
                      <span className="font-mono font-bold text-red-600">{createdClinicCreds?.password}</span>
                   </div>
                </div>
                <div className="pt-2">
-                  <Button onClick={() => setCreatedClinicCreds(null)} className="w-full">Yopish</Button>
+                  <Button onClick={() => setCreatedClinicCreds(null)} className="w-full">{t('superAdmin.actions.close')}</Button>
                </div>
             </div>
          </Modal>
 
          {/* Delete (Block) Confirmation Modal */}
-         <Modal isOpen={!!deleteConfirmClinic} onClose={() => setDeleteConfirmClinic(null)} title="Klinikani Bloklash">
+         <Modal isOpen={!!deleteConfirmClinic} onClose={() => setDeleteConfirmClinic(null)} title={t('superAdmin.modals.blockClinic')}>
             <div className="text-center space-y-4">
                <div className="mx-auto w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
                   <Ban className="w-6 h-6 text-orange-600" />
                </div>
-               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
+               <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('common.confirm')}</h3>
                <p className="text-gray-600 dark:text-gray-300">
-                  <strong>{deleteConfirmClinic?.name}</strong> klinikasini bloklamoqchimisiz? U bloklanganlar ro'yxatiga (savatga) o'tkaziladi.
+                  <strong>{deleteConfirmClinic?.name}</strong> {t('superAdmin.modals.blockConfirm')}
                </p>
                <div className="flex justify-center gap-3 pt-4">
-                  <Button variant="secondary" onClick={() => setDeleteConfirmClinic(null)}>Bekor qilish</Button>
+                  <Button variant="secondary" onClick={() => setDeleteConfirmClinic(null)}>{t('common.cancel')}</Button>
                   <Button
                      className="bg-orange-600 hover:bg-orange-700 text-white border-none"
                      onClick={() => {
@@ -975,23 +977,23 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         }
                      }}
                   >
-                     Ha, Bloklash
+                     {t('superAdmin.actions.yesBlock')}
                   </Button>
                </div>
             </div>
          </Modal>
 
          {/* Password Change Modal */}
-         <Modal isOpen={!!passwordChangeClinic} onClose={() => { setPasswordChangeClinic(null); setNewPassword(''); }} title="Parolni O'zgartirish">
+         <Modal isOpen={!!passwordChangeClinic} onClose={() => { setPasswordChangeClinic(null); setNewPassword(''); }} title={t('superAdmin.modals.changePassword')}>
             <div className="space-y-4">
                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
                   <p className="text-sm text-blue-800 dark:text-blue-200">
-                     <strong>{passwordChangeClinic?.name}</strong> uchun yangi parol belgilang.
+                     <strong>{passwordChangeClinic?.name}</strong> {t('superAdmin.modals.passwordDesc')}
                   </p>
                </div>
                <div className="flex items-end gap-2">
                   <Input
-                     label="Yangi Parol"
+                     label={t('superAdmin.forms.newPassword')}
                      type="text"
                      value={newPassword}
                      onChange={(e) => setNewPassword(e.target.value)}
@@ -1011,11 +1013,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      }}
                      className="mb-[1px]"
                   >
-                     Generatsiya
+                     {t('superAdmin.forms.generate')}
                   </Button>
                </div>
                <div className="flex justify-end gap-3 pt-4">
-                  <Button variant="secondary" onClick={() => { setPasswordChangeClinic(null); setNewPassword(''); }}>Bekor qilish</Button>
+                  <Button variant="secondary" onClick={() => { setPasswordChangeClinic(null); setNewPassword(''); }}>{t('common.cancel')}</Button>
                   <Button
                      onClick={() => {
                         if (passwordChangeClinic && newPassword) {

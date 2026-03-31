@@ -4,6 +4,7 @@ import { Card, Button, Modal, Input, Select, Badge, SearchableSelect } from '../
 import { ChevronLeft, ChevronRight, Plus, Clock, User, FileText, XCircle, CheckCircle, Bot, Send, Bell, Edit2, Loader2 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 
 interface CalendarProps {
   appointments: Appointment[];
@@ -27,6 +28,7 @@ const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
 export const Calendar: React.FC<CalendarProps> = ({
   appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, currentClinic, plans, onPatientClick
 }) => {
+  const { t } = useLanguage();
   // Filter appointments for doctors
   const filteredAppointments = userRole === UserRole.DOCTOR && doctorId
     ? appointments.filter(a => a.doctorId === doctorId)
@@ -439,7 +441,11 @@ export const Calendar: React.FC<CalendarProps> = ({
   };
 
   // UI Data
-  const dayNames = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
+  const dayNames = [
+    t('calendar.days.sun'), t('calendar.days.mon'), t('calendar.days.tue'), 
+    t('calendar.days.wed'), t('calendar.days.thu'), t('calendar.days.fri'), 
+    t('calendar.days.sat')
+  ];
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col animate-fade-in">
@@ -447,7 +453,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       {/* Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Jadval</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('calendar.title')}</h1>
           <div className="flex items-center bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 flex-1 sm:flex-none justify-between sm:justify-start">
             <button onClick={handlePrev} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronLeft className="w-4 h-4" /></button>
             <span className="px-4 text-sm font-medium min-w-[140px] text-center">
@@ -464,13 +470,13 @@ export const Calendar: React.FC<CalendarProps> = ({
               onClick={() => setView('day')}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'day' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
-              Kun
+              {t('calendar.day')}
             </button>
             <button
               onClick={() => setView('week')}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'week' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
-              Hafta
+              {t('calendar.week')}
             </button>
           </div>
         </div>
@@ -492,9 +498,9 @@ export const Calendar: React.FC<CalendarProps> = ({
               }
             }}
           >
-            <Bot className="w-4 h-4 mr-2" /> Eslatma yuborish
+            <Bot className="w-4 h-4 mr-2" /> {t('calendar.sendReminder')}
           </Button>
-          <Button onClick={openAddModal} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> Yangi Qabul</Button>
+          <Button onClick={openAddModal} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>
         </div>
       </div>
 
@@ -773,12 +779,12 @@ export const Calendar: React.FC<CalendarProps> = ({
       </div>
 
       {/* Add Appointment Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setEditingApptId(null); }} title={editingApptId ? "Qabulni Tahrirlash" : "Yangi Qabul"}>
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setEditingApptId(null); }} title={editingApptId ? t('calendar.editAppointment') : t('calendar.newAppointment')}>
         <form onSubmit={handleAddSubmit} className="space-y-4">
           <div className="flex items-end gap-2">
             <div className="flex-1">
               <SearchableSelect
-                label="Bemor"
+                label={t('calendar.patient')}
                 options={patients.map(p => ({ value: p.id, label: `${p.lastName} ${p.firstName}` }))}
                 value={formData.patientId}
                 onChange={(val) => setFormData({ ...formData, patientId: val })}
@@ -790,7 +796,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                 variant="secondary"
                 className="mb-1 p-2 h-10 w-10 flex items-center justify-center"
                 onClick={() => setIsAddPatientModalOpen(true)}
-                title="Yangi bemor qo'shish"
+                title={t('patients.modal.addTitle')}
               >
                 <Plus className="w-4 h-4" />
               </Button>
@@ -799,7 +805,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           {/* Hide doctor selection for individual plan clinics */}
           {currentClinic?.planId !== 'individual' && (
             <Select
-              label="Shifokor"
+              label={t('calendar.doctor')}
               options={doctors.map(d => ({ value: d.id, label: `Dr. ${d.firstName} ${d.lastName}` }))}
               value={formData.doctorId}
               onChange={(e) => setFormData({ ...formData, doctorId: e.target.value })}
@@ -807,9 +813,9 @@ export const Calendar: React.FC<CalendarProps> = ({
           )}
           {categories.length > 0 && (
             <Select
-              label="Xizmat kategoriyasi"
+              label={t('calendar.serviceCategory')}
               options={[
-                { value: '', label: 'Barcha kategoriyalar' },
+                { value: '', label: t('calendar.allCategories') },
                 ...categories.map(c => ({ value: c.id, label: c.name }))
               ]}
               value={formData.categoryId}
@@ -818,7 +824,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           )}
           <div className="grid grid-cols-2 gap-4">
             <Select
-              label="Muolaja turi"
+              label={t('calendar.serviceType')}
               options={services
                 .filter(s => !formData.categoryId || (s as any).categoryId === formData.categoryId)
                 .map(s => ({ value: s.name, label: s.name }))}
@@ -832,19 +838,19 @@ export const Calendar: React.FC<CalendarProps> = ({
                 });
               }}
             />
-            <Input label="Davomiyligi (daq)" type="number" value={formData.duration} onChange={e => setFormData({ ...formData, duration: Number(e.target.value) })} />
+            <Input label={t('calendar.duration')} type="number" value={formData.duration} onChange={e => setFormData({ ...formData, duration: Number(e.target.value) })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Sana"
+              label={t('calendar.date')}
               type="date"
               value={formData.date}
               onChange={e => setFormData({ ...formData, date: e.target.value })}
             />
-            <Input label="Vaqt" type="time" value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })} />
+            <Input label={t('calendar.time')} type="time" value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Izohlar</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('calendar.notes')}</label>
             <textarea
               className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm h-20 dark:border-gray-700 dark:text-white"
               value={formData.notes}
@@ -852,15 +858,15 @@ export const Calendar: React.FC<CalendarProps> = ({
             />
           </div>
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="secondary" onClick={() => { setIsAddModalOpen(false); setEditingApptId(null); }}>Bekor qilish</Button>
-            <Button type="submit">{editingApptId ? "Saqlash" : "Band qilish"}</Button>
+            <Button type="button" variant="secondary" onClick={() => { setIsAddModalOpen(false); setEditingApptId(null); }}>{t('common.cancel')}</Button>
+            <Button type="submit">{editingApptId ? t('common.save') : t('calendar.book')}</Button>
           </div>
         </form>
       </Modal>
 
       {/* Appointment Details Modal */}
       {selectedAppointment && (
-        <Modal isOpen={!!selectedAppointment} onClose={() => setSelectedAppointment(null)} title="Qabul Tafsilotlari">
+        <Modal isOpen={!!selectedAppointment} onClose={() => setSelectedAppointment(null)} title={t('calendar.appointmentDetails')}>
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
@@ -921,7 +927,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       onClick={() => openMessageModal(selectedAppointment)}
                     >
                       <Send className="w-4 h-4 mr-2" />
-                      Xabar yuborish
+                      {t('calendar.sendMessage')}
                     </Button>
 
                     <button
@@ -929,7 +935,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700 flex-1"
                     >
                       <XCircle className="w-4 h-4 mr-2 text-red-500" />
-                      Kelmadi
+                      {t('calendar.noShow')}
                     </button>
 
                     <button
@@ -937,7 +943,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       className="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex-1"
                     >
                       <CheckCircle className="w-4 h-4 mr-2" />
-                      Yakunlash
+                      {t('calendar.complete')}
                     </button>
                   </div>
                 )}
@@ -945,7 +951,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                 {/* Read Only States */}
                 {(selectedAppointment.status === 'Completed' || selectedAppointment.status === 'Cancelled' || selectedAppointment.status === 'No-Show') && (
                   <div className="flex gap-2">
-                    <Button variant="secondary" onClick={() => setSelectedAppointment(null)}>Yopish</Button>
+                    <Button variant="secondary" onClick={() => setSelectedAppointment(null)}>{t('common.close')}</Button>
                     <Button
                       variant="ghost"
                       className="text-red-500 hover:text-red-700"
@@ -958,7 +964,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                         }
                       }}
                     >
-                      O'chirish
+                      {t('common.delete')}
                     </Button>
                   </div>
                 )}
@@ -968,10 +974,10 @@ export const Calendar: React.FC<CalendarProps> = ({
         </Modal>
       )}
       {/* Message Modal */}
-      <Modal isOpen={isMessageModalOpen} onClose={() => setIsMessageModalOpen(false)} title="Xabar Yuborish">
+      <Modal isOpen={isMessageModalOpen} onClose={() => setIsMessageModalOpen(false)} title={t('calendar.sendMessage')}>
         <form onSubmit={handleSendMessage} className="space-y-4">
           <Select
-            label="Xabar Turi"
+            label={t('calendar.messageType')}
             value={messageType}
             onChange={(e) => {
               const type = e.target.value;
@@ -981,41 +987,41 @@ export const Calendar: React.FC<CalendarProps> = ({
               if (type === 'Custom') setMessageText('');
             }}
             options={[
-              { value: 'Custom', label: 'Maxsus Xabar' },
-              { value: 'Tomorrow', label: 'Ertangi Qabul' },
-              { value: 'Reminder', label: 'Eslatma' }
+              { value: 'Custom', label: t('calendar.customMessage') },
+              { value: 'Tomorrow', label: t('calendar.tomorrowAppointment') },
+              { value: 'Reminder', label: t('calendar.reminder') }
             ]}
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Xabar Matni</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('calendar.messageText')}</label>
             <textarea
               className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
               rows={4}
-              placeholder="Xabar matnini kiriting..."
+              placeholder={t('calendar.messageText')}
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
               required
             />
           </div>
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsMessageModalOpen(false)}>Bekor qilish</Button>
-            <Button type="submit">Yuborish</Button>
+            <Button type="button" variant="secondary" onClick={() => setIsMessageModalOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit">{t('common.send')}</Button>
           </div>
         </form>
       </Modal>
 
       {/* Add Patient Modal */}
-      <Modal isOpen={isAddPatientModalOpen} onClose={() => setIsAddPatientModalOpen(false)} title="Yangi Bemor Qo'shish">
+      <Modal isOpen={isAddPatientModalOpen} onClose={() => setIsAddPatientModalOpen(false)} title={t('patients.modal.addTitle')}>
         <form onSubmit={handlePatientSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Familiya"
+              label={t('patients.modal.lastName')}
               value={patientFormData.lastName}
               onChange={e => setPatientFormData({ ...patientFormData, lastName: e.target.value })}
               required
             />
             <Input
-              label="Ism"
+              label={t('patients.modal.firstName')}
               value={patientFormData.firstName}
               onChange={e => setPatientFormData({ ...patientFormData, firstName: e.target.value })}
               required
@@ -1023,14 +1029,14 @@ export const Calendar: React.FC<CalendarProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Asosiy Telefon"
+              label={t('patients.modal.phone')}
               value={patientFormData.phone}
               onChange={e => setPatientFormData({ ...patientFormData, phone: e.target.value })}
               placeholder="+998 XX XXX XX XX"
               required
             />
             <Input
-              label="Qo'shimcha Telefon"
+              label={t('patients.modal.secondaryPhone')}
               value={patientFormData.secondaryPhone}
               onChange={e => setPatientFormData({ ...patientFormData, secondaryPhone: e.target.value })}
               placeholder="+998 XX XXX XX XX"
@@ -1038,7 +1044,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Tug'ilgan sana"
+              label={t('patients.modal.dob')}
               type="date"
               value={patientFormData.dob}
               onChange={e => setPatientFormData({ ...patientFormData, dob: e.target.value })}
@@ -1046,13 +1052,13 @@ export const Calendar: React.FC<CalendarProps> = ({
             />
           </div>
           <Input
-            label="Manzil (Ixtiyoriy)"
+            label={t('patients.modal.address')}
             value={patientFormData.address}
             onChange={e => setPatientFormData({ ...patientFormData, address: e.target.value })}
             placeholder="Toshkent sh., Chilonzor t..."
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jins</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.gender')}</label>
             <div className="flex gap-4">
               <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                 <input
@@ -1062,7 +1068,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                   checked={patientFormData.gender === 'Male'}
                   onChange={e => setPatientFormData({ ...patientFormData, gender: e.target.value })}
                   className="text-blue-600 focus:ring-blue-500"
-                /> <span>Erkak</span>
+                /> <span>{t('patients.modal.male')}</span>
               </label>
               <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                 <input
@@ -1072,28 +1078,28 @@ export const Calendar: React.FC<CalendarProps> = ({
                   checked={patientFormData.gender === 'Female'}
                   onChange={e => setPatientFormData({ ...patientFormData, gender: e.target.value })}
                   className="text-blue-600 focus:ring-blue-500"
-                /> <span>Ayol</span>
+                /> <span>{t('patients.modal.female')}</span>
               </label>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tibbiy Tarix</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.medicalHistory')}</label>
             <textarea
               value={patientFormData.medicalHistory}
               onChange={e => setPatientFormData({ ...patientFormData, medicalHistory: e.target.value })}
               className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:text-white h-24 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="Allergiya, surunkali kasalliklar..."
+              placeholder={t('patients.modal.medicalHistoryPlaceholder')}
             ></textarea>
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsAddPatientModalOpen(false)} disabled={isSubmittingPatient}>Bekor qilish</Button>
+            <Button type="button" variant="secondary" onClick={() => setIsAddPatientModalOpen(false)} disabled={isSubmittingPatient}>{t('common.cancel')}</Button>
             <Button type="submit" disabled={isSubmittingPatient}>
               {isSubmittingPatient ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saqlanmoqda...
+                  {t('common.pleaseWait')}
                 </>
-              ) : 'Saqlash'}
+              ) : t('common.save')}
             </Button>
           </div>
         </form>

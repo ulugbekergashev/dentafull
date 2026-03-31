@@ -8,6 +8,7 @@ import { VisitWorkflow, ProceduresSection } from '../components/ProceduresSectio
 import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
+import { useLanguage } from '../context/LanguageContext';
 
 interface PatientDetailsProps {
    patientId: string | null;
@@ -29,13 +30,23 @@ interface PatientDetailsProps {
 }
 
 export const PatientDetails: React.FC<PatientDetailsProps> = ({
-   patientId: patientIdProp, patients, appointments, transactions, doctors, services, categories, currentClinic, plans, userRole,
+   patientId: patientIdProp, 
+   patients = [], 
+   appointments = [], 
+   transactions = [], 
+   doctors = [], 
+   services = [], 
+   categories = [], 
+   currentClinic, 
+   plans = [], 
+   userRole,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment, onUpdateAppointment
 }) => {
    const { patientId: patientIdParam } = useParams<{ patientId: string }>();
    const patientId = patientIdProp || patientIdParam || null;
+   const { t } = useLanguage();
 
-   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'diagnoses' | 'materials'>('overview');
+   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'materials'>('overview');
    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
@@ -213,7 +224,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             doctorId: selectedDoctor.id,
             doctorName: `Dr. ${selectedDoctor.firstName} ${selectedDoctor.lastName}`
          });
-         alert('Shifokor biriktirildi!');
+         alert(t('patients.details.alerts.doctorAssigned'));
       }
       setIsAssignDoctorModalOpen(false);
    };
@@ -308,20 +319,20 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setDiagnosisNote('');
          setIcd10Query('');
          setIcd10Results([]);
-         alert('Tashxis qo\'shildi!');
+         alert(t('patients.details.alerts.diagnosisAdded'));
       } catch (e) {
          console.error('Failed to add diagnosis', e);
-         alert('Xatolik yuz berdi');
+         alert(t('patients.details.alerts.error'));
       }
    };
 
    const handleDeleteDiagnosis = async (id: string) => {
-      if (!confirm('Tashxisni o\'chirishni xohlaysizmi?')) return;
+      if (!confirm(t('patients.details.alerts.deleteDiagnosisConfirm'))) return;
       try {
          await api.diagnoses.delete(id);
          setDiagnoses(diagnoses.filter(d => d.id !== id));
       } catch (e) {
-         alert('Xatolik yuz berdi');
+         alert(t('patients.details.alerts.error'));
       }
    };
 
@@ -335,7 +346,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setTeethData(updatedTeeth);
       } catch (e) {
          console.error('Failed to save tooth data', e);
-         alert('Tish ma\'lumotlarini saqlashda xatolik yuz berdi');
+         alert(t('patients.details.alerts.error'));
       }
    };
 
@@ -343,50 +354,58 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const calculateAppointmentTotal = (appointmentNotes: string): { total: number; breakdown: string } => {
       if (!appointmentNotes) return { total: 0, breakdown: '' };
 
-      let total = 0;
-      let breakdown = '';
-      const lines = appointmentNotes.split('\n');
+      try {
+         const sortedServices = [...(services || [])].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
+         let total = 0;
+         const procedures: string[] = [];
+         const lines = appointmentNotes.split('\n');
 
-      lines.forEach(line => {
-         const trimmedLine = line.trim();
-         if (!trimmedLine || trimmedLine.includes('Bajarilgan ishlar:') || trimmedLine.includes("Qo'shimcha")) {
-            return;
-         }
-
-         // 1. Try to parse price from brackets [100 000 UZS]
-         const priceMatch = trimmedLine.match(/\[([\d\s]+)\s*UZS\]/i);
-         if (priceMatch) {
-            const priceStr = priceMatch[1].replace(/\s/g, '');
-            const price = parseFloat(priceStr);
-            if (!isNaN(price)) {
-               total += price;
-               breakdown += `${trimmedLine}\n`;
-               return; // Skip to next line
+         lines.forEach(line => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || trimmedLine.includes('Bajarilgan ishlar:') || trimmedLine.includes("Qo'shimcha")) {
+               return;
             }
-         }
 
-         // 2. Fallback: Try fuzzy matching with service list (for old format)
-         const cleanLine = trimmedLine.toLowerCase();
-         // Sort services by name length descending to match most specific first
-         const sortedServices = [...services].sort((a, b) => b.name.length - a.name.length);
-
-         let matched = false;
-         for (const service of sortedServices) {
-            const serviceNameLower = service.name.toLowerCase();
-            if (cleanLine.includes(serviceNameLower) || serviceNameLower.includes(cleanLine)) {
-               total += service.price;
-               breakdown += `${service.name}: ${service.price.toLocaleString()} UZS\n`;
-               matched = true;
-               break;
+            // 1. Try to parse price from brackets [100 000 UZS]
+            const priceMatch = trimmedLine.match(/\[([\d\s]+)\s*UZS\]/i);
+            if (priceMatch) {
+               const priceStr = priceMatch[1].replace(/\s/g, '');
+               const price = parseFloat(priceStr);
+               if (!isNaN(price)) {
+                  total += price;
+                  // Extract clean name before the brackets
+                  const nameMatch = trimmedLine.match(/^-\s*(.*?)\s*\[/);
+                  const name = nameMatch ? nameMatch[1].trim() : trimmedLine;
+                  procedures.push(`${name}|${price.toLocaleString().replace(/,/g, ' ')}`);
+                  return; // Skip to next line
+               }
             }
-         }
 
-         if (!matched) {
-            breakdown += `Noma'lum: ${trimmedLine}\n`;
-         }
-      });
+            // 2. Fallback: Try fuzzy matching with service list (for old format)
+            const cleanLine = trimmedLine.toLowerCase();
 
-      return { total, breakdown };
+            let matched = false;
+            for (const service of sortedServices) {
+               const serviceNameLower = service.name.toLowerCase();
+               if (cleanLine.includes(serviceNameLower) || serviceNameLower.includes(cleanLine)) {
+                  total += service.price;
+                  procedures.push(`${service.name}|${service.price.toLocaleString().replace(/,/g, ' ')}`);
+                  matched = true;
+                  break;
+               }
+            }
+
+            if (!matched && trimmedLine.startsWith('- ')) {
+               procedures.push(`${trimmedLine.substring(2)}|0`);
+            }
+         });
+
+         const breakdown = procedures.join('||') + (procedures.length > 0 ? `||TOTAL|${total.toLocaleString().replace(/,/g, ' ')}` : '');
+         return { total, breakdown };
+      } catch (e) {
+         console.error("Error calculating total", e);
+         return { total: 0, breakdown: '' };
+      }
    };
 
    const handleEditPaymentOpen = (transaction: Transaction) => {
@@ -467,21 +486,21 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
          setIsMaterialModalOpen(false);
          setMaterialData({ itemId: '', quantity: '', note: '' });
-         alert('Material sarflandi!');
+         alert(t('patients.details.alerts.materialUsed'));
       } catch (e) {
          console.error('Failed to use material', e);
-         alert('Xatolik yuz berdi');
+         alert(t('patients.details.alerts.error'));
       }
    };
 
 
    if (!patient) {
-      return <div className="p-8 text-center">Bemor topilmadi <Button onClick={onBack}>Ortga</Button></div>;
+      return <div className="p-8 text-center">{t('patients.details.notFound')} <Button onClick={onBack}>{t('common.cancel')}</Button></div>;
    }
 
    // Filter related data
-   const patientAppointments = appointments.filter(a => a.patientId === patient.id);
-   const patientTransactions = transactions.filter(t => {
+   const patientAppointments = (appointments || []).filter(a => a && a.patientId === patient.id);
+   const patientTransactions = (transactions || []).filter(t => {
       // Priority 1: Match by ID (new data)
       if (t.patientId) {
          return t.patientId === patient.id;
@@ -545,7 +564,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       // Validate doctor selection - required for multi-doctor plans, optional for individual with no doctors
       if (!paymentData.doctorId) {
          if (!isIndividualPlan || (isIndividualPlan && doctors.length > 0)) {
-            alert('Iltimos, shifokorni tanlang!');
+            alert(t('patients.details.alerts.selectDoctorReq'));
             isSubmittingRef.current = false;
             setIsPaymentSubmitting(false);
             return;
@@ -634,7 +653,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setVisitKey(prev => prev + 1);
       } catch (error: any) {
          console.error('Payment processing failed', error);
-         alert(`To'lovni saqlashda xatolik yuz berdi: ${error.message || 'Iltimos qaytadan urunib ko\'ring.'}`);
+         alert(`${t('patients.details.alerts.paymentError')} ${error.message || t('common.error')}`);
       } finally {
          isSubmittingRef.current = false;
          setIsPaymentSubmitting(false);
@@ -645,16 +664,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       e.preventDefault();
       try {
          await api.patients.sendMessage(patient.id, messageText);
-         alert('Xabar muvaffaqiyatli yuborildi!');
+         alert(t('patients.details.alerts.messageSent'));
          setIsMessageModalOpen(false);
          setMessageText('');
       } catch (error: any) {
          console.error('Error sending message:', error);
          if (error.message === 'Bot not configured' || error.error === 'Bot not configured') {
             setIsMessageModalOpen(false);
-            alert('⚠️ Bot sozlanmagan. Iltimos, Sozlamalar bo\'limida bot tokenini kiriting.');
+            alert(`⚠️ ${t('patients.details.alerts.botNotConfigured')}`);
          } else {
-            alert(`Xatolik: ${error.message || 'Xabar yuborishda xatolik yuz berdi.'}`);
+            alert(`${t('common.error')}: ${error.message || t('common.error')}`);
          }
       }
    };
@@ -663,13 +682,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       e.preventDefault();
 
       if (!apptData.doctorId) {
-         alert('Iltimos, shifokorni tanlang!');
+         alert(t('patients.details.alerts.selectDoctorReq'));
          return;
       }
 
       const doctor = doctors.find(d => d.id === apptData.doctorId);
       if (!doctor) {
-         alert('Shifokor topilmadi!');
+         alert(t('patients.details.alerts.doctorNotFound'));
          return;
       }
 
@@ -682,7 +701,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       );
 
       if (doctorConflict) {
-         alert('Ushbu vaqtda shifokorda boshqa qabul mavjud! Iltimos, boshqa vaqt tanlang.');
+         alert(t('patients.details.alerts.doctorConflict'));
          return;
       }
 
@@ -695,7 +714,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       );
 
       if (patientConflict) {
-         alert('Ushbu vaqtda bemorda boshqa qabul mavjud! Iltimos, boshqa vaqt tanlang.');
+         alert(t('patients.details.alerts.patientConflict'));
          return;
       }
 
@@ -800,7 +819,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                notes: `Bajarilgan ishlar:\n` + proceduresText,
                clinicId: patient.clinicId
             });
-            alert("Qabul tarixi saqlandi!");
+            alert(t('patients.details.alerts.visitSaved'));
          } else {
             // Update EXISTING Appointment
             const currentNotes = existingAppt.notes || '';
@@ -820,7 +839,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                notes: newNotes,
                status: 'Completed'
             });
-            alert("Qabul tarixi yangilandi!");
+            alert(t('patients.details.alerts.visitUpdated'));
          }
 
          // 2. Cleanup only on SUCCESS
@@ -847,7 +866,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                <Button variant="ghost" onClick={onBack} className="!p-2">
                   <ArrowLeft className="w-5 h-5" />
                </Button>
-               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bemor Profili</h1>
+               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('patients.details.title')}</h1>
             </div>
 
             {/* Header Card */}
@@ -860,7 +879,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <div className="space-y-1">
                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{patient.firstName} {patient.lastName}</h2>
                         <p className="text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                           <span className="capitalize">{patient.gender === 'Male' ? 'Erkak' : 'Ayol'}</span> • {patient.dob ? (new Date().getFullYear() - new Date(patient.dob).getFullYear()) : 'N/A'} yosh{patient.dob && ` (${new Date(patient.dob).toLocaleDateString('uz-UZ')})`}
+                           <span className="capitalize">{patient.gender === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}</span> • {patient.dob ? (new Date().getFullYear() - new Date(patient.dob).getFullYear()) : 'N/A'} {t('patients.details.age')}{patient.dob && ` (${new Date(patient.dob).toLocaleDateString('uz-UZ')})`}
                         </p>
                         <div className="pt-2">
                            <Badge status={patient.status} />
@@ -877,31 +896,31 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            </div>
                         )}
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                           <MapPin className="w-4 h-4" /> {patient.address || 'Manzil kiritilmagan'}
+                           <MapPin className="w-4 h-4" /> {patient.address || t('patients.details.noAddress')}
                         </div>
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                           <Clock className="w-4 h-4" /> Oxirgi tashrif: {patient.lastVisit}
+                           <Clock className="w-4 h-4" /> {t('patients.details.lastVisit')} {patient.lastVisit}
                         </div>
                         {patient.doctorName && (
                            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium">
-                              <User className="w-4 h-4" /> Shifokor: {patient.doctorName}
+                              <User className="w-4 h-4" /> {t('patients.details.doctor')} {patient.doctorName}
                            </div>
                         )}
                      </div>
 
-                     <div className="flex md:justify-end items-start gap-2">
+                     <div className="flex xl:flex-col md:flex-row flex-col justify-end items-start xl:items-end gap-2 text-right">
                         <Button variant="secondary" size="sm" onClick={() => setIsAssignDoctorModalOpen(true)}>
-                           <UserPlus className="w-4 h-4 mr-2" /> {patient.doctorId ? 'Shifokorni O\'zgartirish' : 'Shifokorga Biriktirish'}
+                           <UserPlus className="w-4 h-4 mr-2" /> {patient.doctorId ? t('patients.details.changeDoctor') : t('patients.details.assignDoctor')}
                         </Button>
                         <Button variant="secondary" size="sm" onClick={() => {
                            setMessageType('Custom');
                            setMessageText('');
                            setIsMessageModalOpen(true);
                         }}>
-                           <Send className="w-4 h-4 mr-2" /> Xabar yuborish
+                           <Send className="w-4 h-4 mr-2" /> {t('patients.details.sendMessage')}
                         </Button>
                         <Button variant="secondary" size="sm" onClick={handleEditOpen}>
-                           <Edit className="w-4 h-4 mr-2" /> Tahrirlash
+                           <Edit className="w-4 h-4 mr-2" /> {t('patients.details.editProfile')}
                         </Button>
                      </div>
                   </div>
@@ -912,13 +931,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <div className="border-b border-gray-200 dark:border-gray-700">
                <nav className="-mb-px flex space-x-8 overflow-x-auto">
                   {[
-                     { id: 'overview', label: 'Umumiy', icon: User },
-                     { id: 'diagnoses', label: 'Diagnostika', icon: Activity },
-                     { id: 'chart', label: 'Tish Kartasi', icon: Activity },
-                     { id: 'photos', label: 'Rasmlar', icon: FileText },
-                     { id: 'appointments', label: 'Qabullar', icon: Calendar },
-                     { id: 'payments', label: 'To\'lovlar', icon: CreditCard },
-                     { id: 'materials', label: 'Materiallar', icon: Package },
+                     { id: 'overview', label: t('patients.details.tabs.overview'), icon: User },
+                     { id: 'chart', label: t('patients.details.tabs.chart'), icon: Activity },
+                     { id: 'photos', label: t('patients.details.tabs.photos'), icon: FileText },
+                     { id: 'appointments', label: t('patients.details.tabs.appointments'), icon: Calendar },
+                     { id: 'payments', label: t('patients.details.tabs.payments'), icon: CreditCard },
+                     { id: 'materials', label: t('patients.details.tabs.materials'), icon: Package },
                   ].map(tab => (
                      <button
                         key={tab.id}
@@ -958,21 +976,21 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                      <Card className="p-6 space-y-4">
                         <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                           <Activity className="w-5 h-5" /> Tibbiy Tarix
+                           <Activity className="w-5 h-5" /> {t('patients.details.medicalHistory.title')}
                         </h3>
                         <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-100 dark:border-yellow-800">
                            <div className="flex justify-between items-center mb-2">
-                              <p className="text-yellow-800 dark:text-yellow-200 font-medium">Allergiya va Kasalliklar</p>
+                              <p className="text-yellow-800 dark:text-yellow-200 font-medium">{t('patients.details.medicalHistory.subtitle')}</p>
                               <Button
                                  size="sm"
                                  variant="secondary"
                                  className="h-7 text-xs"
                                  onClick={() => {
                                     onUpdatePatient(patient.id, { medicalHistory: historyText });
-                                    alert('Saqlandi!');
+                                    alert(t('common.save'));
                                  }}
                               >
-                                 Saqlash
+                                 {t('common.save')}
                               </Button>
                            </div>
                            <textarea
@@ -980,13 +998,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               rows={4}
                               value={historyText}
                               onChange={(e) => setHistoryText(e.target.value)}
-                              placeholder="Ma'lumot yo'q. Yozish uchun bosing..."
+                              placeholder={t('patients.details.medicalHistory.placeholder')}
                            />
                         </div>
 
 
                         <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
-                           <p className="font-medium mb-3 text-gray-700 dark:text-gray-300">Tezkor Tanlov (Kasalliklar)</p>
+                           <p className="font-medium mb-3 text-gray-700 dark:text-gray-300">{t('patients.details.medicalHistory.quickSelect')}</p>
                            <div className="flex flex-wrap gap-2">
                               {[
                                  "SOG'LOM(SHIKOYATI YO'Q )",
@@ -1015,7 +1033,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                              medicalHistory: newHistory
                                           });
                                        } else {
-                                          alert('Bu kasallik allaqachon qo\'shilgan!');
+                                          alert(t('patients.details.medicalHistory.alreadyAdded'));
                                        }
                                     }}
                                     className="px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 rounded-full transition-colors border border-blue-100 dark:border-blue-800"
@@ -1029,55 +1047,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   </div>
                )}
 
-               {/* Diagnoses Tab */}
-               {activeTab === 'diagnoses' && (
-                  <div className="space-y-6">
-                     <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bemor Tashxislari</h3>
-                        <Button onClick={() => setIsDiagnosisModalOpen(true)}>+ Tashxis Qo'shish</Button>
-                     </div>
-
-                     <div className="grid grid-cols-1 gap-4">
-                        {diagnoses.length > 0 ? (
-                           diagnoses.map(diagnosis => (
-                              <Card key={diagnosis.id} className="p-4">
-                                 <div className="flex justify-between items-start">
-                                    <div>
-                                       <div className="flex items-center gap-2">
-                                          <span className="font-bold text-lg text-gray-900 dark:text-white">{diagnosis.code}</span>
-                                          <span className="text-gray-600 dark:text-gray-300">{diagnosis.icd10?.name}</span>
-                                       </div>
-                                       <p className="text-sm text-gray-500 mt-1">
-                                          Sana: {diagnosis.date} • Status: <span className="font-medium text-blue-600">{diagnosis.status}</span>
-                                       </p>
-                                       {diagnosis.notes && (
-                                          <div className="text-sm mt-2 bg-gray-50 dark:bg-gray-800 p-2 rounded">
-                                             {formatDiagnosisNotes(diagnosis.notes)}
-                                          </div>
-                                       )}
-                                    </div>
-                                    <Button variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteDiagnosis(diagnosis.id)}>
-                                       O'chirish
-                                    </Button>
-                                 </div>
-                              </Card>
-                           ))
-                        ) : (
-                           <div className="text-center py-10 text-gray-500">
-                              Hozircha tashxislar yo'q.
-                           </div>
-                        )}
-                     </div>
-                  </div>
-               )}
 
                {/* Dental Chart Tab */}
                {activeTab === 'chart' && (
                   <div className="space-y-4">
                      <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Odontogramma</h3>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('patients.details.chart.title')}</h3>
                         <div className="flex gap-2">
-                           <Button variant="secondary" size="sm" onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Chop etish</Button>
+                           <Button variant="secondary" size="sm" onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> {t('patients.details.chart.print')}</Button>
                         </div>
                      </div>
                      <TeethChart
@@ -1098,7 +1075,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <div className="space-y-6">
                      {/* Upcoming Appointments Section */}
                      <Card className="p-6">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Kutilayotgan Qabullar</h3>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{t('patients.details.appointments.upcoming')}</h3>
                         <div className="space-y-3">
                            {patientAppointments
                               .filter(a => {
@@ -1145,18 +1122,18 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      {/* Appointments History */}
                      <Card className="overflow-hidden">
                         <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                           <h3 className="text-lg font-bold text-gray-900 dark:text-white">Qabullar Tarixi</h3>
-                           <Button size="sm" onClick={openApptModal}>+ Yangi</Button>
+                           <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('patients.details.appointments.history')}</h3>
+                           <Button size="sm" onClick={openApptModal}>{t('patients.details.appointments.new')}</Button>
                         </div>
                         <div className="overflow-x-auto">
                            <table className="w-full text-left text-sm">
                               <thead className="bg-gray-50 dark:bg-gray-800">
                                  <tr>
-                                    <th className="p-4 font-medium text-gray-500">Sana</th>
-                                    <th className="p-4 font-medium text-gray-500">Muolaja</th>
-                                    <th className="p-4 font-medium text-gray-500 w-1/3">Bajarilgan ishlar</th>
-                                    <th className="p-4 font-medium text-gray-500">Shifokor</th>
-                                    <th className="p-4 font-medium text-gray-500">Status</th>
+                                    <th className="p-4 font-medium text-gray-500">{t('patients.details.appointments.table.date')}</th>
+                                    <th className="p-4 font-medium text-gray-500">{t('patients.details.appointments.table.procedure')}</th>
+                                    <th className="p-4 font-medium text-gray-500 w-1/3">{t('patients.details.appointments.table.worksDone')}</th>
+                                    <th className="p-4 font-medium text-gray-500">{t('patients.details.appointments.table.doctor')}</th>
+                                    <th className="p-4 font-medium text-gray-500">{t('patients.details.appointments.table.status')}</th>
                                  </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -1188,7 +1165,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               </tbody>
                            </table>
                         </div>
-                        {patientAppointments.length === 0 && <div className="p-8 text-center text-gray-500">Qabullar tarixi topilmadi.</div>}
+                        {patientAppointments.length === 0 && <div className="p-8 text-center text-gray-500">{t('patients.details.appointments.historyEmpty')}</div>}
                      </Card>
                   </div>
                )}
@@ -1200,102 +1177,115 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <Card className="overflow-hidden border-yellow-200 dark:border-yellow-800">
                         <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-100 dark:border-yellow-800 flex justify-between items-center">
                            <div>
-                              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><FileText className="w-5 h-5 text-yellow-600" /> To'lov Kutayotgan Qabullar</h3>
-                              <p className="text-sm text-gray-500">Ushbu qabullar uchun to'lov amalga oshirilmagan</p>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><FileText className="w-5 h-5 text-yellow-600" /> {t('patients.details.payments.pendingTitle')}</h3>
+                              <p className="text-sm text-gray-500">{t('patients.details.payments.pendingDesc')}</p>
                            </div>
                         </div>
                         <div className="overflow-x-auto">
                            <table className="w-full text-left text-sm">
                               <thead className="bg-gray-50 dark:bg-gray-800">
                                  <tr>
-                                    <th className="p-4 font-medium text-gray-500">Sana</th>
-                                    <th className="p-4 font-medium text-gray-500">Muolaja</th>
-                                    <th className="p-4 font-medium text-gray-500 w-1/3">Bajarilgan ishlar</th>
-                                    <th className="p-4 font-medium text-gray-500">Status</th>
-                                    <th className="p-4 font-medium text-gray-500">Amal</th>
+                                    <th className="p-4 font-medium text-gray-500">{t('patients.details.appointments.table.date')}</th>
+                                    <th className="p-4 font-medium text-gray-500">{t('patients.details.appointments.table.procedure')}</th>
+                                    <th className="p-4 font-medium text-gray-500 w-1/3">{t('patients.details.appointments.table.worksDone')}</th>
+                                    <th className="p-4 font-medium text-gray-500">{t('patients.details.appointments.table.status')}</th>
+                                    <th className="p-4 font-medium text-gray-500">{t('common.actions')}</th>
                                  </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                  {patientAppointments.filter(app => {
-                                    // Check if there is any PAID transaction for this date
-                                    // Since we enforce 1 appt/day, date match is sufficient and more robust than text matching
-                                    const isPaid = patientTransactions.some(t => t.date === app.date && t.status === 'Paid');
+                                    if (!app || !app.date) return false;
+                                    const isPaid = (patientTransactions || []).some(t => t && t.date === app.date && (t.status === 'Paid' || t.status === 'paid'));
                                     return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid;
-                                 }).map(app => (
-                                    <tr key={app.id} className="hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-colors">
-                                       <td className="p-4 text-gray-900 dark:text-white font-medium whitespace-nowrap">{new Date(app.date).toLocaleDateString('uz-UZ')} <br /><span className="text-xs text-gray-500 font-normal">{app.time}</span></td>
-                                       <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
-                                       <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
-                                       <td className="p-4"><Badge status="Pending" /></td>
-                                       <td className="p-4"><Button size="sm" onClick={() => {
-                                          const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
-                                          setPaymentData({
-                                             amount: total.toString(),
-                                             paidAmount: total.toString(),
-                                             debtAmount: '0',
-                                             service: breakdown || app.type,
-                                             type: 'Cash',
-                                             status: 'Paid',
-                                             doctorId: app.doctorId,
-                                             appointmentDate: app.date
-                                          });
-                                          setIsPaymentModalOpen(true);
-                                       }}>To'lov</Button></td>
-                                    </tr>
-                                 ))}
+                                 }).map(app => {
+                                    const doctor = (doctors || []).find(d => d && d.id === app.doctorId);
+                                    return (
+                                       <tr key={app.id} className="hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-colors">
+                                          <td className="p-4 text-gray-900 dark:text-white font-medium whitespace-nowrap">
+                                             {app.date ? new Date(app.date).toLocaleDateString('uz-UZ') : 'N/A'} <br />
+                                             <span className="text-xs text-gray-500 font-normal">{app.time}</span>
+                                          </td>
+                                          <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
+                                          <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
+                                          <td className="p-4"><Badge status="Pending" /></td>
+                                          <td className="p-4"><Button size="sm" onClick={() => {
+                                             const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                             setPaymentData({
+                                                amount: total.toString(),
+                                                paidAmount: total.toString(),
+                                                debtAmount: '0',
+                                                service: breakdown || app.type,
+                                                type: 'Cash',
+                                                status: 'Paid',
+                                                doctorId: app.doctorId,
+                                                appointmentDate: app.date
+                                             });
+                                             setIsPaymentModalOpen(true);
+                                          }}>To'lov</Button></td>
+                                       </tr>
+                                    );
+                                 })}
                               </tbody>
                            </table>
                         </div>
-                        {patientAppointments.filter(app => { const isPaid = patientTransactions.some(t => t.date === app.date && t.status === 'Paid'); return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid; }).length === 0 && <div className="p-8 text-center text-gray-500">To'lov kutayotgan qabullar yo'q.</div>}
+                        {patientAppointments.filter(app => { const isPaid = (patientTransactions || []).some(trans => trans && trans.date === app.date && trans.status === 'Paid'); return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid; }).length === 0 && <div className="p-8 text-center text-gray-500">{t('patients.details.payments.pendingEmpty')}</div>}
                      </Card>
                      {/* Transaction History Section */}
                      <Card className="overflow-hidden">
                         <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                           <div><h3 className="text-lg font-bold text-gray-900 dark:text-white">To'lovlar Tarixi</h3><p className="text-sm text-gray-500">Barcha amalga oshirilgan to'lovlar</p></div>
+                           <div><h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('patients.details.payments.historyTitle')}</h3><p className="text-sm text-gray-500">{t('patients.details.payments.historyDesc')}</p></div>
                            <div className="flex items-center gap-6">
-                              <div className="text-right"><p className="text-sm text-gray-500">Jami To'landi</p><p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{patientTransactions.filter(t => t.status === 'Paid').reduce((acc, t) => acc + t.amount, 0).toLocaleString()} UZS</p></div>
-                              <Button size="sm" onClick={handlePaymentModalOpen}>+ To'lov</Button>
+                              <div className="text-right">
+                                 <p className="text-sm text-gray-500">{t('patients.details.payments.totalPaid')}</p>
+                                 <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                                    {(patientTransactions || [])
+                                       .filter(transaction => transaction && transaction.status === 'Paid')
+                                       .reduce((acc, transaction) => acc + (Number(transaction.amount) || 0), 0)
+                                       .toLocaleString()} UZS
+                                 </p>
+                              </div>
+                              <Button size="sm" onClick={handlePaymentModalOpen}>{t('patients.details.payments.newPayment')}</Button>
                            </div>
                         </div>
                         <div className="overflow-x-auto">
                            <table className="w-full text-left text-sm">
                               <thead className="bg-gray-50 dark:bg-gray-800">
-                                 <tr><th className="p-4 font-medium text-gray-500">Sana</th><th className="p-4 font-medium text-gray-500">Xizmat</th><th className="p-4 font-medium text-gray-500">Usul</th><th className="p-4 font-medium text-gray-500">Summa</th><th className="p-4 font-medium text-gray-500">Chegirma</th><th className="p-4 font-medium text-gray-500">Status</th><th className="p-4 font-medium text-gray-500">Amal</th></tr>
+                                 <tr><th className="p-4 font-medium text-gray-500">{t('finance.table.date')}</th><th className="p-4 font-medium text-gray-500">{t('finance.table.service')}</th><th className="p-4 font-medium text-gray-500">{t('finance.table.method')}</th><th className="p-4 font-medium text-gray-500">{t('finance.table.amount')}</th><th className="p-4 font-medium text-gray-500">{t('finance.table.discount')}</th><th className="p-4 font-medium text-gray-500">{t('finance.table.status')}</th><th className="p-4 font-medium text-gray-500">{t('common.actions')}</th></tr>
                               </thead>
                               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                 {patientTransactions.map(t => (
-                                    <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                       <td className="p-4 text-gray-900 dark:text-white">{t.date}</td>
-                                       <td className="p-4 text-gray-600 dark:text-gray-300">{t.service}</td>
-                                       <td className="p-4 text-gray-600 dark:text-gray-300">{t.type}</td>
-                                       <td className="p-4 text-gray-900 dark:text-white font-medium">{t.amount.toLocaleString()} UZS</td>
+                                 {(patientTransactions || []).map(transaction => (
+                                    <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                       <td className="p-4 text-gray-900 dark:text-white">{transaction.date || 'N/A'}</td>
+                                       <td className="p-4 text-gray-600 dark:text-gray-300">{transaction.service}</td>
+                                       <td className="p-4 text-gray-600 dark:text-gray-300">{transaction.type}</td>
+                                       <td className="p-4 text-gray-900 dark:text-white font-medium">{(Number(transaction.amount) || 0).toLocaleString()} UZS</td>
                                        <td className="p-4">
-                                          {t.discountPercent ? (
+                                          {transaction.discountPercent ? (
                                              <div className="flex flex-col">
-                                                <span className="text-xs text-orange-600 dark:text-orange-400 font-bold">-{t.discountPercent}%</span>
-                                                {t.discountAmount && <span className="text-[10px] text-gray-500">({t.discountAmount.toLocaleString()} UZS)</span>}
+                                                <span className="text-xs text-orange-600 dark:text-orange-400 font-bold">-{transaction.discountPercent}%</span>
+                                                {transaction.discountAmount ? <span className="text-[10px] text-gray-500">({(Number(transaction.discountAmount) || 0).toLocaleString()} UZS)</span> : null}
                                              </div>
                                           ) : (
                                              <span className="text-gray-400">-</span>
                                           )}
                                        </td>
-                                       <td className="p-4"><Badge status={t.status} /></td>
+                                       <td className="p-4"><Badge status={transaction.status} /></td>
                                        <td className="p-4 flex gap-2">
-                                          {userRole !== UserRole.DOCTOR && t.status === 'Pending' && (
+                                          {userRole !== UserRole.DOCTOR && transaction.status === 'Pending' && (
                                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
-                                                setEditingTransaction(t);
-                                                setEditPaymentAmount(t.amount.toString());
+                                                setEditingTransaction(transaction);
+                                                setEditPaymentAmount(transaction.amount.toString());
                                                 setEditPaymentStatus('Paid');
                                                 setEditPaymentMethod('Cash');
                                                 setIsPaymentEditModalOpen(true);
-                                             }}>To'lash</Button>
+                                             }}>{t('patients.details.payments.payAction')}</Button>
                                           )}
                                           {userRole !== UserRole.DOCTOR && (
                                              <Button size="sm" variant="secondary" onClick={() => {
-                                                setEditingTransaction(t);
-                                                setEditPaymentAmount(t.amount.toString());
-                                                setEditPaymentStatus(t.status);
-                                                setEditPaymentMethod(t.type);
+                                                setEditingTransaction(transaction);
+                                                setEditPaymentAmount(transaction.amount.toString());
+                                                setEditPaymentStatus(transaction.status);
+                                                setEditPaymentMethod(transaction.type);
                                                 setIsPaymentEditModalOpen(true);
                                              }}><Edit className="w-4 h-4" /></Button>
                                           )}
@@ -1305,25 +1295,25 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               </tbody>
                            </table>
                         </div>
-                        {patientTransactions.length === 0 && <div className="p-8 text-center text-gray-500">To'lovlar tarixi topilmadi.</div>}
+                        {patientTransactions.length === 0 && <div className="p-8 text-center text-gray-500">{t('patients.details.payments.historyEmpty')}</div>}
                      </Card>
                   </div>
                )}
                {activeTab === 'materials' && (
                   <Card className="overflow-hidden">
                      <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                        <h3 className="font-bold text-gray-900 dark:text-white">Ishlatilgan Materiallar</h3>
-                        <Button size="sm" onClick={() => setIsMaterialModalOpen(true)}>+ Material Ishlatish</Button>
+                        <h3 className="font-bold text-gray-900 dark:text-white">{t('patients.details.materials.title')}</h3>
+                        <Button size="sm" onClick={() => setIsMaterialModalOpen(true)}>{t('patients.details.materials.useBtn')}</Button>
                      </div>
                      <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                            <thead className="bg-gray-50 dark:bg-gray-800">
                               <tr>
-                                 <th className="p-4 font-medium text-gray-500">Sana</th>
-                                 <th className="p-4 font-medium text-gray-500">Material</th>
-                                 <th className="p-4 font-medium text-gray-500">Miqdor</th>
-                                 <th className="p-4 font-medium text-gray-500">Izoh</th>
-                                 <th className="p-4 font-medium text-gray-500">Foydalanuvchi</th>
+                                 <th className="p-4 font-medium text-gray-500">{t('patients.details.materials.table.date')}</th>
+                                 <th className="p-4 font-medium text-gray-500">{t('patients.details.materials.table.material')}</th>
+                                 <th className="p-4 font-medium text-gray-500">{t('patients.details.materials.table.quantity')}</th>
+                                 <th className="p-4 font-medium text-gray-500">{t('patients.details.materials.table.note')}</th>
+                                 <th className="p-4 font-medium text-gray-500">{t('patients.details.materials.table.user')}</th>
                               </tr>
                            </thead>
                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -1342,49 +1332,49 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            </tbody>
                         </table>
                      </div>
-                     {materialLogs.length === 0 && <div className="p-8 text-center text-gray-500">Hozircha material ishlatilmagan.</div>}
+                     {materialLogs.length === 0 && <div className="p-8 text-center text-gray-500">{t('patients.details.materials.empty')}</div>}
                   </Card>
                )}
             </div>
 
             {/* Edit Modal */}
-            <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Profilni Tahrirlash">
+            <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={t('patients.details.modals.editProfile')}>
                <form onSubmit={handleEditSave} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
-                     <Input label="Ism" value={editFormData.firstName || ''} onChange={e => setEditFormData({ ...editFormData, firstName: e.target.value })} />
-                     <Input label="Familiya" value={editFormData.lastName || ''} onChange={e => setEditFormData({ ...editFormData, lastName: e.target.value })} />
+                     <Input label={t('patients.modal.firstName')} value={editFormData.firstName || ''} onChange={e => setEditFormData({ ...editFormData, firstName: e.target.value })} />
+                     <Input label={t('patients.modal.lastName')} value={editFormData.lastName || ''} onChange={e => setEditFormData({ ...editFormData, lastName: e.target.value })} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                     <Input label="Asosiy Telefon" value={editFormData.phone || ''} onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })} required />
-                     <Input label="Qo'shimcha Telefon" value={editFormData.secondaryPhone || ''} onChange={(e) => setEditFormData({ ...editFormData, secondaryPhone: e.target.value })} />
+                     <Input label={t('patients.modal.phone')} value={editFormData.phone || ''} onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })} required />
+                     <Input label={t('patients.modal.secondaryPhone')} value={editFormData.secondaryPhone || ''} onChange={(e) => setEditFormData({ ...editFormData, secondaryPhone: e.target.value })} />
                   </div>
-                  <Input label="Manzil" value={editFormData.address || ''} onChange={e => setEditFormData({ ...editFormData, address: e.target.value })} placeholder="Bemor manzilini kiriting..." />
+                  <Input label={t('patients.modal.address')} value={editFormData.address || ''} onChange={e => setEditFormData({ ...editFormData, address: e.target.value })} placeholder="Bemor manzilini kiriting..." />
                   <div className="flex justify-end gap-2 pt-4">
-                     <Button type="button" variant="secondary" onClick={() => setIsEditModalOpen(false)}>Bekor qilish</Button>
-                     <Button type="submit">Saqlash</Button>
+                     <Button type="button" variant="secondary" onClick={() => setIsEditModalOpen(false)}>{t('common.cancel')}</Button>
+                     <Button type="submit">{t('common.save')}</Button>
                   </div>
                </form>
             </Modal>
 
 
             {/* Material Usage Modal */}
-            <Modal isOpen={isMaterialModalOpen} onClose={() => setIsMaterialModalOpen(false)} title="Material Ishlatish">
+            <Modal isOpen={isMaterialModalOpen} onClose={() => setIsMaterialModalOpen(false)} title={t('patients.details.modals.useMaterialTitle')}>
                <form onSubmit={handleMaterialSubmit} className="space-y-4">
                   <Select
-                     label="Material"
+                     label={t('patients.details.materials.table.material')}
                      value={materialData.itemId}
                      onChange={e => setMaterialData({ ...materialData, itemId: e.target.value })}
                      options={[
-                        { value: '', label: 'Materialni tanlang' },
+                        { value: '', label: t('patients.details.modals.selectMaterial') },
                         ...inventoryItems.map(item => ({
                            value: item.id,
-                           label: `${item.name} (${item.quantity} ${item.unit} mavjud)`
+                           label: `${item.name} (${item.quantity} ${item.unit} ${t('patients.details.modals.available')})`
                         }))
                      ]}
                      required
                   />
                   <Input
-                     label="Miqdor"
+                     label={t('patients.details.materials.table.quantity')}
                      type="number"
                      value={materialData.quantity}
                      onChange={e => setMaterialData({ ...materialData, quantity: e.target.value })}
@@ -1392,7 +1382,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      required
                   />
                   <Input
-                     label="Izoh"
+                     label={t('patients.details.materials.table.note')}
                      value={materialData.note}
                      onChange={e => setMaterialData({ ...materialData, note: e.target.value })}
                      placeholder="Qo'shimcha izoh..."
@@ -1496,21 +1486,25 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               const percent = Number(e.target.value);
                               if (percent < 0 || percent > 100) return;
 
-                              // Calculate new paid amount based on discount
-                              const currentPaid = Number(paymentData.paidAmount) || 0;
-                              const currentDebt = Number(paymentData.debtAmount) || 0;
-                              const total = currentPaid + currentDebt;
-
-                              // If there was no discount before, we treat total as 100%
-                              // If there was a discount, it's more complex. For simplicity, let's just calculate discount sum.
-                              setPaymentData({ ...paymentData, discountPercent: e.target.value });
+                              const baseTotal = Number(paymentData.amount) || 0;
+                              if (baseTotal > 0) {
+                                 const discountedTotal = Math.round(baseTotal * (1 - percent / 100));
+                                 setPaymentData({
+                                    ...paymentData,
+                                    discountPercent: e.target.value,
+                                    paidAmount: discountedTotal.toString(),
+                                    debtAmount: '0'
+                                 });
+                              } else {
+                                 setPaymentData({ ...paymentData, discountPercent: e.target.value });
+                              }
                            }}
                            placeholder="0"
                         />
                      </div>
                      <div className="col-span-2 flex items-end">
                         <div className="w-full p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-xs text-yellow-800 dark:text-yellow-200">
-                           Chegirma summasi: <strong>{Math.round(((Number(paymentData.paidAmount) || 0) + (Number(paymentData.debtAmount) || 0)) * (Number(paymentData.discountPercent) || 0) / 100).toLocaleString()} UZS</strong>
+                           Chegirma summasi: <strong>{Math.round((Number(paymentData.amount) || 0) * (Number(paymentData.discountPercent) || 0) / 100).toLocaleString()} UZS</strong>
                         </div>
                      </div>
                   </div>
@@ -1608,10 +1602,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             </Modal>
 
             {/* Message Modal */}
-            <Modal isOpen={isMessageModalOpen} onClose={() => setIsMessageModalOpen(false)} title="Xabar Yuborish">
+            <Modal isOpen={isMessageModalOpen} onClose={() => setIsMessageModalOpen(false)} title={t('patients.details.modals.messageTitle')}>
                <form onSubmit={handleSendMessage} className="space-y-4">
                   <Select
-                     label="Xabar Turi"
+                     label={t('patients.details.modals.messageType')}
                      value={messageType}
                      onChange={(e) => {
                         const type = e.target.value;
@@ -1651,48 +1645,48 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         }
                      }}
                      options={[
-                        { value: 'Custom', label: 'Maxsus Xabar' },
-                        { value: 'Tomorrow', label: 'Ertangi Qabul Eslatmasi' },
-                        { value: 'Debt', label: 'Qarzdorlik Eslatmasi' },
-                        { value: 'Missed', label: 'Qoldirilgan Qabul' }
+                        { value: 'Custom', label: t('patients.details.modals.msgCustom') },
+                        { value: 'Tomorrow', label: t('patients.details.modals.msgTomorrow') },
+                        { value: 'Debt', label: t('patients.details.modals.msgDebt') },
+                        { value: 'Missed', label: t('patients.details.modals.msgMissed') }
                      ]}
                   />
                   <div>
-                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Xabar Matni</label>
+                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.details.modals.msgText')}</label>
                      <textarea
                         className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         rows={4}
-                        placeholder="Xabar matnini kiriting..."
+                        placeholder={t('patients.details.modals.msgPlaceholder')}
                         value={messageText}
                         onChange={(e) => setMessageText(e.target.value)}
                         required
                      />
                   </div>
                   <div className="flex justify-end gap-2 pt-4">
-                     <Button type="button" variant="secondary" onClick={() => setIsMessageModalOpen(false)}>Bekor qilish</Button>
-                     <Button type="submit">Yuborish</Button>
+                     <Button type="button" variant="secondary" onClick={() => setIsMessageModalOpen(false)}>{t('common.cancel')}</Button>
+                     <Button type="submit">{t('patients.details.modals.send')}</Button>
                   </div>
                </form>
             </Modal>
 
             {/* New Appointment Modal */}
-            <Modal isOpen={isApptModalOpen} onClose={() => setIsApptModalOpen(false)} title="Yangi Qabul">
+            <Modal isOpen={isApptModalOpen} onClose={() => setIsApptModalOpen(false)} title={t('patients.details.modals.newAppt')}>
                <form onSubmit={handleApptSubmit} className="space-y-4">
                   <Select
-                     label="Shifokor"
+                     label={t('patients.details.modals.doctor')}
                      options={doctors.map(d => ({ value: d.id, label: `Dr. ${d.firstName} ${d.lastName}` }))}
                      value={apptData.doctorId}
                      onChange={(e) => setApptData({ ...apptData, doctorId: e.target.value })}
                   />
                   <div className="grid grid-cols-2 gap-4">
-                     <Input label="Sana" type="date" value={apptData.date} onChange={e => setApptData({ ...apptData, date: e.target.value })} required />
-                     <Input label="Vaqt" type="time" value={apptData.time} onChange={e => setApptData({ ...apptData, time: e.target.value })} required />
+                     <Input label={t('patients.details.modals.date')} type="date" value={apptData.date} onChange={e => setApptData({ ...apptData, date: e.target.value })} required />
+                     <Input label={t('patients.details.modals.time')} type="time" value={apptData.time} onChange={e => setApptData({ ...apptData, time: e.target.value })} required />
                   </div>
                   {categories.length > 0 && (
                      <Select
-                        label="Xizmat kategoriyasi"
+                        label={t('patients.details.modals.serviceCategory')}
                         options={[
-                           { value: '', label: 'Barcha kategoriyalar' },
+                           { value: '', label: t('patients.details.modals.serviceAllCategories') },
                            ...categories.map(c => ({ value: c.id, label: c.name }))
                         ]}
                         value={apptData.categoryId}
@@ -1701,7 +1695,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   )}
                   <div className="grid grid-cols-2 gap-4">
                      <Select
-                        label="Muolaja turi"
+                        label={t('patients.details.modals.procedureType')}
                         options={services
                            .filter(s => !apptData.categoryId || (s as any).categoryId === apptData.categoryId)
                            .map(s => ({ value: s.name, label: s.name }))}
@@ -1715,10 +1709,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            });
                         }}
                      />
-                     <Input label="Davomiylik (daq)" type="number" value={apptData.duration} onChange={e => setApptData({ ...apptData, duration: Number(e.target.value) })} required />
+                     <Input label={t('patients.details.modals.duration')} type="number" value={apptData.duration} onChange={e => setApptData({ ...apptData, duration: Number(e.target.value) })} required />
                   </div>
                   <div>
-                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Izohlar</label>
+                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.details.modals.notes')}</label>
                      <textarea
                         className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         rows={3}
@@ -1727,14 +1721,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      />
                   </div>
                   <div className="flex justify-end gap-2 pt-4">
-                     <Button type="button" variant="secondary" onClick={() => setIsApptModalOpen(false)}>Bekor qilish</Button>
-                     <Button type="submit">Band qilish</Button>
+                     <Button type="button" variant="secondary" onClick={() => setIsApptModalOpen(false)}>{t('common.cancel')}</Button>
+                     <Button type="submit">{t('patients.details.modals.book')}</Button>
                   </div>
                </form>
             </Modal>
 
             {/* Diagnosis Modal */}
-            <Modal isOpen={isDiagnosisModalOpen} onClose={() => setIsDiagnosisModalOpen(false)} title="Tashxis Qo'shish (MKB-10)">
+            <Modal isOpen={isDiagnosisModalOpen} onClose={() => setIsDiagnosisModalOpen(false)} title={t('patients.details.modals.addDiagnosis')}>
                <form onSubmit={handleAddDiagnosis} className="space-y-4">
                   {!selectedCode ? (
                      <div className="space-y-4">
@@ -1743,7 +1737,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            <div>
                               <div className="flex items-center gap-2 mb-4">
                                  <Button variant="secondary" size="sm" onClick={() => { setIcd10Query(''); setIcd10Results([]); }}>
-                                    <ArrowLeft className="w-4 h-4" /> Ortga
+                                    <ArrowLeft className="w-4 h-4" /> {t('patients.details.modals.back')}
                                  </Button>
                                  <h4 className="font-bold text-gray-900 dark:text-white">{icd10Query}</h4>
                               </div>
@@ -1763,13 +1757,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         ) : (
                            // Show Categories
                            <div className="space-y-2">
-                              <p className="text-sm text-gray-500 mb-2">Kategoriyani tanlang:</p>
+                              <p className="text-sm text-gray-500 mb-2">{t('patients.details.modals.selectCategory')}:</p>
                               {[
-                                 "Og'iz bo'shlig'i kasalliklari",
-                                 "Milk va periodontal kasalliklar",
-                                 "Og'iz bo'shlig'i shilliq qavati va boshqa kasalliklar",
-                                 "Jag' va temporomandibulyar bo'g'im kasalliklari",
-                                 "Tish protezlari va davolash bilan bog'liq asoratlar"
+                                 t('patients.details.modals.cat1'),
+                                 t('patients.details.modals.cat2'),
+                                 t('patients.details.modals.cat3'),
+                                 t('patients.details.modals.cat4'),
+                                 t('patients.details.modals.cat5')
                               ].map(category => (
                                  <div
                                     key={category}
@@ -1791,15 +1785,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               <p className="font-bold text-blue-800 dark:text-blue-200">{selectedCode.code}</p>
                               <p className="text-sm text-blue-700 dark:text-blue-300">{selectedCode.name}</p>
                            </div>
-                           <Button variant="ghost" size="sm" onClick={() => setSelectedCode(null)}>O'zgartirish</Button>
+                           <Button variant="ghost" size="sm" onClick={() => setSelectedCode(null)}>{t('common.change')}</Button>
                         </div>
 
                         <div>
-                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Izoh</label>
+                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.details.modals.notes')}</label>
                            <textarea
                               className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                               rows={3}
-                              placeholder="Qo'shimcha izoh..."
+                              placeholder={t('patients.details.modals.notesPlaceholder')}
                               value={diagnosisNote}
                               onChange={(e) => setDiagnosisNote(e.target.value)}
                            />
@@ -1808,8 +1802,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   )}
 
                   <div className="flex justify-end gap-2 pt-4 border-t dark:border-gray-700">
-                     <Button type="button" variant="secondary" onClick={() => { setIsDiagnosisModalOpen(false); setSelectedCode(null); setIcd10Query(''); }}>Yopish</Button>
-                     {selectedCode && <Button type="submit">Saqlash</Button>}
+                     <Button type="button" variant="secondary" onClick={() => { setIsDiagnosisModalOpen(false); setSelectedCode(null); setIcd10Query(''); }}>{t('common.close')}</Button>
+                     {selectedCode && <Button type="submit">{t('common.save')}</Button>}
                   </div>
                </form>
             </Modal>
@@ -1882,7 +1876,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          </div >
 
          {/* Assign Doctor Modal */}
-         <Modal isOpen={isAssignDoctorModalOpen} onClose={() => setIsAssignDoctorModalOpen(false)} title="Shifokorni tanlang">
+         <Modal isOpen={isAssignDoctorModalOpen} onClose={() => setIsAssignDoctorModalOpen(false)} title={t('patients.details.modals.assignDoctorSelect')}>
             <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                {doctors.length > 0 ? (
                   doctors.map(doc => (
@@ -1913,12 +1907,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   ))
                ) : (
                   <div className="text-center py-8 text-gray-500">
-                     Shifokorlar mavjud emas
+                     {t('patients.details.alerts.doctorNotFound')}
                   </div>
                )}
             </div>
             <div className="flex justify-end pt-4 mt-2 border-t border-gray-100 dark:border-gray-700">
-               <Button variant="secondary" onClick={() => setIsAssignDoctorModalOpen(false)}>Yopish</Button>
+               <Button variant="secondary" onClick={() => setIsAssignDoctorModalOpen(false)}>{t('common.close')}</Button>
             </div>
          </Modal>
       </>

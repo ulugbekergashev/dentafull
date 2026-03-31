@@ -3,12 +3,14 @@ import { Button, Input, Card } from '../components/Common';
 import { UserRole } from '../types';
 import { AlertCircle, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { api } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 
 interface SignInProps {
   onLogin: (role: UserRole, name: string, clinicId?: string, doctorId?: string) => void;
 }
 
 export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
+  const { t } = useLanguage();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -70,10 +72,10 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
 
         onLogin(response.role as UserRole, response.name, response.clinicId, response.doctorId);
       } else {
-        setError(response.error || 'Login yoki parol noto\'g\'ri');
+        setError(response.error || t('auth.errorInvalid'));
       }
     } catch (err) {
-      setError('Tizimga kirishda xatolik yuz berdi');
+      setError(t('auth.errorSystem'));
     } finally {
       setIsLoading(false);
     }
@@ -88,8 +90,8 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">DentaCRM</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-2">Klinika boshqaruv tizimiga kirish</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">{t('auth.title')}</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-2">{t('auth.subtitle')}</p>
         </div>
 
         <Card className="p-8 shadow-xl border-t-4 border-t-blue-600">
@@ -102,7 +104,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
             )}
 
             <div className="space-y-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Login</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('auth.login')}</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <User className="h-5 w-5 text-gray-400" />
@@ -111,7 +113,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
                   type="text"
                   required
                   className="pl-10 block w-full rounded-lg border border-gray-300 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 py-2.5 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
-                  placeholder="Foydalanuvchi nomi"
+                  placeholder={t('auth.usernamePlaceholder')}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
@@ -119,7 +121,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
             </div>
 
             <div className="space-y-1">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Parol</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('auth.password')}</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-gray-400" />
@@ -155,7 +157,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                Meni eslab qol
+                {t('auth.rememberMe')}
               </label>
             </div>
 
@@ -164,7 +166,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
               className="w-full py-2.5 text-base shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 transition-all"
               disabled={isLoading}
             >
-              {isLoading ? 'Tekshirilmoqda...' : 'Tizimga kirish'}
+              {isLoading ? t('auth.checking') : t('auth.signIn')}
             </Button>
           </form>
 
@@ -175,21 +177,21 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
                   🧪 Localhost - Demo rejimi mavjud
                 </p>
                 <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">
-                  Login: <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">demoklinikaadmin</code>
+                  {t('auth.login')}: <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">demoklinikaadmin</code>
                   <br />
-                  Parol: <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">demoklinikaparol</code>
+                  {t('auth.password')}: <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">demoklinikaparol</code>
                 </p>
               </div>
             )}
             <p className="text-xs text-gray-400">
-              Muammo yuzaga kelsa, texnik yordamga murojaat qiling: <br />
+              {t('auth.support')} <br />
               <span className="font-medium text-blue-600">+998 90 824 29 92</span>
             </p>
           </div>
         </Card>
 
         <p className="text-center text-xs text-gray-400 mt-8">
-          &copy; {new Date().getFullYear()} DentaCRM. Barcha huquqlar himoyalangan.
+          &copy; {new Date().getFullYear()} DentaCRM. {t('auth.copyright')}
         </p>
       </div>
     </div>
