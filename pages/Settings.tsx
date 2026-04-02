@@ -669,6 +669,54 @@ export const Settings: React.FC<SettingsProps> = ({
                   </Card>
                )}
 
+                {/* Receptionists Tab */}
+               {activeTab === 'receptionists' && (
+                  <Card className="p-6">
+                     <div className="flex justify-between items-center mb-6">
+                        <div>
+                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">Resepshnlar Boshqaruvi</h3>
+                           <p className="text-sm text-gray-500">Qabul xodimlarini boshqarish.</p>
+                        </div>
+                        <Button size="sm" onClick={() => handleOpenReceptionistModal()}>Resepshn Qo'shish</Button>
+                     </div>
+                     <div className="grid grid-cols-1 gap-4">
+                        {receptionists.map(rec => (
+                           <div key={rec.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
+                              <div className="flex items-center gap-4">
+                                 <div className="h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">
+                                    {rec.firstName[0]}{rec.lastName[0]}
+                                 </div>
+                                 <div>
+                                    <p className="font-medium text-gray-900 dark:text-white">{rec.firstName} {rec.lastName}</p>
+                                    <p className="text-xs text-gray-500">{rec.phone}</p>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{rec.status === 'Active' ? t('settings.staff.statusActive') : t('settings.staff.statusVoc')}</span>
+                                 <button
+                                    onClick={() => handleOpenReceptionistModal(rec)}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                                 >
+                                    <Edit className="w-4 h-4" />
+                                 </button>
+                                 <button
+                                    className="p-2 text-gray-400 hover:text-red-600"
+                                    onClick={() => setDeleteConfirmReceptionist(rec)}
+                                 >
+                                    <Trash2 className="w-4 h-4" />
+                                 </button>
+                              </div>
+                           </div>
+                        ))}
+                        {receptionists.length === 0 && (
+                           <div className="text-center py-8 text-gray-500 text-sm">
+                              Hozircha resepshnlar qo'shilmagan
+                           </div>
+                        )}
+                     </div>
+                  </Card>
+               )}
+
                {/* Bot Tab */}
                {activeTab === 'bot' && (
                   <Card className="p-6">

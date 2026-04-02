@@ -960,6 +960,30 @@ app.delete('/api/receptionists/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Inventory Log Delete ---
+app.delete('/api/inventory/logs/:id', authenticateToken, async (req, res) => {
+    try {
+        const log = await (prisma as any).inventoryLog.findUnique({
+            where: { id: req.params.id }
+        });
+        if (!log) {
+            return res.status(404).json({ error: 'Log not found' });
+        }
+        // Reverse the stock change: if log.change was negative (OUT), adding it back restores stock
+        await (prisma as any).inventoryItem.update({
+            where: { id: log.itemId },
+            data: { quantity: { increment: -log.change } }
+        });
+        await (prisma as any).inventoryLog.delete({
+            where: { id: req.params.id }
+        });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Delete inventory log error:', error);
+        res.status(500).json({ error: error.message || 'Failed to delete inventory log' });
+    }
+});
+
 // --- Service Categories ---
 app.get('/api/categories', authenticateToken, async (req, res) => {
     try {

@@ -681,6 +681,25 @@ export const api = {
             }
             return fetchJson<InventoryLog[]>(`/inventory/logs?clinicId=${clinicId}${patientId ? `&patientId=${patientId}` : ''}`);
         },
+        deleteLog: (logId: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_INVENTORY_LOGS.findIndex(l => l.id === logId);
+                if (index !== -1) {
+                    const log = DEMO_INVENTORY_LOGS[index];
+                    // Restore inventory quantity
+                    const itemIndex = DEMO_INVENTORY.findIndex(i => i.id === log.itemId);
+                    if (itemIndex !== -1) {
+                        DEMO_INVENTORY[itemIndex].quantity += log.change; // change is negative for OUT, so adding restores
+                    }
+                    DEMO_INVENTORY_LOGS.splice(index, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/inventory/logs/${logId}`, {
+                method: 'DELETE',
+            });
+        },
         getAnalytics: (clinicId: string, startDate?: string, endDate?: string) => {
             if (isDemoMode()) return Promise.resolve([]); // Simple empty analytics for demo
             return fetchJson<any[]>(`/inventory/analytics?clinicId=${clinicId}${startDate ? `&startDate=${startDate}` : ''}${endDate ? `&endDate=${endDate}` : ''}`);

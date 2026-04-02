@@ -1314,6 +1314,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  <th className="p-4 font-medium text-gray-500">{t('patients.details.materials.table.quantity')}</th>
                                  <th className="p-4 font-medium text-gray-500">{t('patients.details.materials.table.note')}</th>
                                  <th className="p-4 font-medium text-gray-500">{t('patients.details.materials.table.user')}</th>
+                                 <th className="p-4 font-medium text-gray-500">{t('common.actions')}</th>
                               </tr>
                            </thead>
                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -1327,6 +1328,28 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     <td className="p-4 text-red-600 font-medium">{Math.abs(log.change)}</td>
                                     <td className="p-4 text-gray-600 dark:text-gray-300">{log.note || '-'}</td>
                                     <td className="p-4 text-gray-600 dark:text-gray-300">{log.userName}</td>
+                                    <td className="p-4">
+                                       <button
+                                          onClick={async () => {
+                                             if (!confirm("Ushbu material yozuvini o'chirmoqchimisiz?")) return;
+                                             try {
+                                                await api.inventory.deleteLog(log.id);
+                                                setMaterialLogs(prev => prev.filter(l => l.id !== log.id));
+                                                // Refresh inventory items to restore stock
+                                                if (currentClinic) {
+                                                   const updatedItems = await api.inventory.getAll(currentClinic.id);
+                                                   setInventoryItems(updatedItems);
+                                                }
+                                             } catch (e) {
+                                                alert(t('patients.details.alerts.error'));
+                                             }
+                                          }}
+                                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                          title="O'chirish"
+                                       >
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                       </button>
+                                    </td>
                                  </tr>
                               ))}
                            </tbody>

@@ -822,7 +822,7 @@ const AppContent: React.FC = () => {
           </nav>
 
           <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center overflow-hidden flex-1 mr-2">
                 <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs uppercase ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-[#1B6AFB]'}`}>
                   {userName ? userName.slice(0, 2) : 'A'}
@@ -835,6 +835,27 @@ const AppContent: React.FC = () => {
               <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 flex-shrink-0" title="Chiqish">
                 <LogOut className="w-5 h-5" />
               </button>
+            </div>
+            {/* Language Toggle */}
+            <div className="flex items-center bg-gray-200/70 dark:bg-gray-700/60 rounded-full p-0.5 gap-0.5 border border-gray-200 dark:border-gray-600">
+              {(['uz', 'ru'] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => setLanguage(lang)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                    language === lang
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400'
+                  }`}
+                >
+                  <img
+                    src={lang === 'uz' ? 'https://flagcdn.com/w40/uz.png' : 'https://flagcdn.com/w40/ru.png'}
+                    alt={lang}
+                    className="w-4 h-3 rounded-[2px] object-cover"
+                  />
+                  <span className="uppercase tracking-wide">{lang}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -974,18 +995,27 @@ const AppContent: React.FC = () => {
                 {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
 
-              {/* Language Switcher */}
-              <button
-                onClick={() => setLanguage(language === 'uz' ? 'ru' : 'uz')}
-                className="flex items-center justify-center p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                title={language === 'uz' ? "Русский язык" : "O'zbek tili"}
-              >
-                <img 
-                  src={language === 'uz' ? "https://flagcdn.com/w40/uz.png" : "https://flagcdn.com/w40/ru.png"} 
-                  alt={language === 'uz' ? "O'zbek tili" : "Русский язык"} 
-                  className="w-6 h-4 rounded-sm object-cover shadow-sm" 
-                />
-              </button>
+              {/* Language Switcher - Pill Toggle */}
+              <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 rounded-full p-0.5 gap-0.5 border border-gray-200 dark:border-gray-600">
+                {(['uz', 'ru'] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() => setLanguage(lang)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+                      language === lang
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    <img
+                      src={lang === 'uz' ? 'https://flagcdn.com/w40/uz.png' : 'https://flagcdn.com/w40/ru.png'}
+                      alt={lang}
+                      className="w-4 h-3 rounded-[2px] object-cover"
+                    />
+                    <span className="uppercase tracking-wide">{lang}</span>
+                  </button>
+                ))}
+              </div>
 
               {/* User Profile Info */}
               <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700 ml-2">

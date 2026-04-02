@@ -76,6 +76,9 @@ export const translations = {
 
     // Settings
     'settings.title': 'Klinika Sozlamalari',
+    'settings.tabs.general': 'Umumiy',
+    'settings.tabs.services': 'Xizmatlar',
+    'settings.tabs.doctors': 'Shifokorlar',
     'settings.tabs.receptionists': 'Resepshnlar',
     'settings.tabs.bot': 'Telegram Bot',
     'settings.tabs.facebook': 'Facebook',
@@ -793,6 +796,15 @@ export const translations = {
     'dashboard.todayRevenue': 'ВЫРУЧКА ЗА СЕГОДНЯ',
     'dashboard.monthlyRevenue': 'Выручка за месяц',
     'dashboard.recentAppointments': 'Последняя активность',
+
+    // Settings
+    'settings.title': 'Настройки клиники',
+    'settings.tabs.general': 'Общее',
+    'settings.tabs.services': 'Услуги',
+    'settings.tabs.doctors': 'Врачи',
+    'settings.tabs.receptionists': 'Ресепшн',
+    'settings.tabs.bot': 'Telegram Bot',
+    'settings.tabs.facebook': 'Facebook',
 
     // Settings General
     'settings.general.myProfile': 'Мой профиль',
