@@ -575,6 +575,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       isSubmittingRef.current = true;
       setIsPaymentSubmitting(true);
 
+      // Calculate amounts early for validation
+      const paidAmount = Number(paymentData.paidAmount.toString().replace(/,/g, '')) || 0;
+      const debtAmount = Number(paymentData.debtAmount.toString().replace(/,/g, '')) || 0;
+      const totalAmount = paidAmount + debtAmount;
+
+      // Validate balance if using from-account payment
+      if (paymentData.type === 'Balance' && paidAmount > (patient.balance || 0)) {
+         alert(t('patients.details.alerts.insufficientBalance'));
+         isSubmittingRef.current = false;
+         setIsPaymentSubmitting(false);
+         return;
+      }
+
       // Check if current plan is individual
       const isIndividualPlan = currentClinic?.planId === 'individual';
 
@@ -590,11 +603,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       const doctor = doctors.find(d => d.id === paymentData.doctorId);
       const discountPercent = Number(paymentData.discountPercent) || 0;
-
-      // Calculate amounts
-      const paidAmount = Number(paymentData.paidAmount.replace(/,/g, '')) || 0;
-      const debtAmount = Number(paymentData.debtAmount.replace(/,/g, '')) || 0;
-      const totalAmount = paidAmount + debtAmount;
       const discountAmount = Math.round((totalAmount / (1 - discountPercent / 100)) * (discountPercent / 100)) || 0; // Rough estimate of original price if we assume totalAmount is already discounted? No, let's just use the current sum. Or better, let's treat totalAmount as the final price and discountPercent as descriptive.
       // Actually, let's just use the fields directly from the state we'll add.
 
@@ -1355,6 +1363,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                        .toLocaleString()} UZS
                                  </p>
                               </div>
+                              <div className="text-right">
+                                 <p className="text-sm text-gray-500">{t('patients.details.balance')}</p>
+                                 <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                                    {(patient.balance || 0).toLocaleString()} UZS
+                                 </p>
+                              </div>
                               <div className="flex gap-2">
                                  <Button 
                                     size="sm" 
@@ -1375,7 +1389,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                        setIsPaymentModalOpen(true);
                                     }}
                                  >
-                                    <Plus className="w-4 h-4 mr-2" /> Avans qo'shish
+                                    <Plus className="w-4 h-4 mr-2" /> {t('patients.details.modals.advanceTitle')}
                                  </Button>
                                  <Button size="sm" onClick={handlePaymentModalOpen}>{t('patients.details.payments.newPayment')}</Button>
                               </div>

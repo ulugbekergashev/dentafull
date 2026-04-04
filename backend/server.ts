@@ -710,10 +710,12 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
             data: req.body
         });
 
-        // Update patient balance if patientId is provided
         if (req.body.patientId) {
             const amount = parseFloat(req.body.amount) || 0;
-            const balanceChange = req.body.status === 'Paid' ? amount : -amount;
+            // Paid (Cash/Card) = +amount, Pending/Overdue/Balance = -amount
+            const balanceChange = (req.body.status === 'Paid' && req.body.type !== 'Balance') 
+                ? amount 
+                : -amount;
 
             await prisma.patient.update({
                 where: { id: req.body.patientId },
@@ -741,9 +743,8 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
         if (transaction.patientId) {
             const calculateContribution = (tx: any) => {
                 if (tx.status === 'Paid') {
-                    // Balance type payments don't add "new" money to the overall balance,
-                    // they just settle existing debt which was already decremented.
-                    return tx.type === 'Balance' ? 0 : tx.amount;
+                    // Balance type payments represent a deduction from the patient's account
+                    return tx.type === 'Balance' ? -tx.amount : tx.amount;
                 }
                 // Pending/Overdue transactions represent a cost/debt
                 return -tx.amount;
@@ -777,7 +778,7 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
         if (transaction.patientId) {
             const contribution = (transaction.status === 'Paid' && transaction.type !== 'Balance') 
                 ? transaction.amount 
-                : (transaction.status === 'Pending' || transaction.status === 'Overdue' ? -transaction.amount : 0);
+                : -transaction.amount;
             
             if (contribution !== 0) {
                 await prisma.patient.update({

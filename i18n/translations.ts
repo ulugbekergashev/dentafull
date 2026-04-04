@@ -295,6 +295,7 @@ export const translations = {
     'patients.details.age': 'yosh',
     'patients.details.noAddress': 'Manzil kiritilmagan',
     'patients.details.lastVisit': 'Oxirgi tashrif:',
+    'patients.details.balance': 'Hisob (Avans):',
     'patients.details.doctor': 'Shifokor:',
     'patients.details.assignDoctor': 'Shifokorga Biriktirish',
     'patients.details.changeDoctor': 'Shifokorni O\'zgartirish',
@@ -385,6 +386,7 @@ export const translations = {
     'patients.details.alerts.selectDoctorReq': 'Iltimos, shifokorni tanlang!',
     'patients.details.alerts.paymentError': 'To\'lovni saqlashda xatolik yuz berdi:',
     'patients.details.alerts.messageSent': 'Xabar muvaffaqiyatli yuborildi!',
+    'patients.details.alerts.insufficientBalance': 'Hisobda mablag\' yetarli emas!',
     'patients.details.alerts.botNotConfigured': 'Bot sozlanmagan. Iltimos, Sozlamalar bo\'limida bot tokenini kiriting.',
     'patients.details.alerts.doctorNotFound': 'Shifokor topilmadi!',
     'patients.details.alerts.doctorConflict': 'Ushbu vaqtda shifokorda boshqa qabul mavjud! Iltimos, boshqa vaqt tanlang.',
@@ -682,6 +684,10 @@ export const translations = {
     'finance.table.amount': 'Summa',
     'finance.table.discount': 'Chegirma',
     'finance.table.status': 'Status',
+    'finance.methods.cash': 'Naqd',
+    'finance.methods.card': 'Karta',
+    'finance.methods.insurance': 'Sug\'urta',
+    'finance.methods.balance': 'Hisobdan (Avans)',
     
     // Leads Detail/Modals
     'leads.addLeadModal.title': "Yangi Lid Qo'shish",
@@ -1024,6 +1030,7 @@ export const translations = {
     'patients.details.age': 'лет',
     'patients.details.noAddress': 'Адрес не указан',
     'patients.details.lastVisit': 'Последний визит:',
+    'patients.details.balance': 'Счет (Аванс):',
     'patients.details.doctor': 'Врач:',
     'patients.details.assignDoctor': 'Назначить врачу',
     'patients.details.changeDoctor': 'Изменить врача',
@@ -1130,6 +1137,7 @@ export const translations = {
     'patients.details.modals.saveAndFinish': 'Сохранить и завершить',
     'patients.details.alerts.selectServiceReq': 'Пожалуйста, выберите услугу!',
     'patients.details.alerts.listEmpty': 'Список пуст!',
+    'patients.details.alerts.insufficientBalance': 'На счету недостаточно средств!',
     'patients.details.procedures.todayVisit': 'Сегодняшний прием',
     'patients.details.procedures.addProcedure': '+ Добавить процедуру',
     'patients.details.procedures.clickToAdd': 'Нажмите кнопку выше, чтобы добавить процедуру',
@@ -1355,6 +1363,10 @@ export const translations = {
     'finance.table.amount': 'Сумма',
     'finance.table.discount': 'Скидка',
     'finance.table.status': 'Статус',
+    'finance.methods.cash': 'Наличные',
+    'finance.methods.card': 'Карта',
+    'finance.methods.insurance': 'Страховка',
+    'finance.methods.balance': 'С баланса (Аванс)',
 
     // Leads Detail/Modals
     'leads.addLeadModal.title': 'Добавить новый лид',
