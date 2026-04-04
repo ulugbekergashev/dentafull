@@ -434,6 +434,14 @@ const AppContent: React.FC = () => {
         if (prev.find(t => t.id === newTx.id)) return prev;
         return [newTx, ...prev];
       });
+      
+      // If patientId is linked, refetch patient to get updated balance
+      if (tx.patientId) {
+        api.patients.getById(tx.patientId).then(updatedPatient => {
+          setPatients(prev => prev.map(p => p.id === tx.patientId ? updatedPatient : p));
+        }).catch(err => console.error('Failed to refetch patient after transaction:', err));
+      }
+
       addToast('success', 'To\'lov qabul qilindi.');
     } catch (e: any) {
       console.error('Add transaction error:', e);
@@ -447,6 +455,14 @@ const AppContent: React.FC = () => {
       console.log('Updating transaction:', id, data);
       const updated = await api.transactions.update(id, { ...data });
       setTransactions(prev => prev.map(t => t.id === id ? updated : t));
+
+      // If patientId is linked, refetch patient to get updated balance
+      if (updated.patientId) {
+        api.patients.getById(updated.patientId).then(updatedPatient => {
+          setPatients(prev => prev.map(p => p.id === updated.patientId ? updatedPatient : p));
+        }).catch(err => console.error('Failed to refetch patient after update:', err));
+      }
+
       addToast('success', 'To\'lov holati yangilandi.');
     } catch (e: any) {
       console.error('Transaction update error:', e);

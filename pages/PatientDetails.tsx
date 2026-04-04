@@ -58,6 +58,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Payment Form State
    const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
    const [pendingProcedures, setPendingProcedures] = useState<any[]>([]);
+   const [useBalance, setUseBalance] = useState(false);
 
    // Medical History State
    const [historyText, setHistoryText] = useState('');
@@ -685,29 +686,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       }
    };
 
-   const handleRecalculateBalances = async () => {
-      if (!confirm("Barcha bemorlar balansini qayta hisoblashni xohlaysizmi? Bu bir necha soniya vaqt olishi mumkin.")) return;
-      try {
-         const authData = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
-         const token = authData ? JSON.parse(authData).token : '';
-         
-         const response = await fetch('/api/admin/recalculate-balances', {
-            method: 'POST',
-            headers: {
-               'Authorization': `Bearer ${token}`,
-               'Content-Type': 'application/json'
-            }
-         });
-         const data = await response.json();
-         if (data.success) {
-            alert(`Muvaffaqiyatli! ${data.patientsFixed} ta bemor balansi qayta hisoblandi.`);
-            window.location.reload();
-         }
-      } catch (error) {
-         console.error('Failed to recalculate balances', error);
-         alert(t('common.error'));
+   useEffect(() => {
+      if (!isPaymentModalOpen) {
+         setUseBalance(false);
       }
-   };
+   }, [isPaymentModalOpen]);
 
    const handleSendMessage = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -1352,20 +1335,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                        .toLocaleString()} UZS
                                  </p>
                               </div>
-                              <div className="text-right flex items-center gap-2">
-                                 <div>
-                                    <p className="text-sm text-gray-500">{t('patients.details.balance')}</p>
-                                    <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                                       {(patient.balance || 0).toLocaleString()} UZS
-                                    </p>
-                                 </div>
-                                 <button 
-                                    onClick={handleRecalculateBalances}
-                                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors text-gray-400 hover:text-blue-500"
-                                    title="Balanslarni qayta hisoblash"
-                                 >
-                                    <RefreshCw className="w-4 h-4" />
-                                 </button>
+                              <div className="text-right">
+                                 <p className="text-sm text-gray-500">{t('patients.details.balance')}</p>
+                                 <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                                    {(patient.balance || 0).toLocaleString()} UZS
+                                 </p>
                               </div>
                               <div className="flex gap-2">
                                  <Button 
@@ -1682,6 +1656,37 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </div>
                   )}
 
+                  {paymentData.service !== 'Avans' && (patient?.balance || 0) > 0 && (
+                     <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <input 
+                           type="checkbox" 
+                           id="use-balance" 
+                           checked={useBalance} 
+                           onChange={(e) => {
+                              const checked = e.target.checked;
+                              setUseBalance(checked);
+                              if (checked) {
+                                 const amountToPay = Number(paymentData.amount) || 0;
+                                 const discount = Number(paymentData.discountPercent) || 0;
+                                 const total = Math.round(amountToPay * (1 - discount / 100));
+                                 setPaymentData({ 
+                                    ...paymentData, 
+                                    type: 'Balance',
+                                    paidAmount: total.toString(),
+                                    debtAmount: '0'
+                                 });
+                              } else {
+                                 setPaymentData({ ...paymentData, type: 'Cash' });
+                              }
+                           }}
+                           className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="use-balance" className="text-sm font-medium text-blue-800 dark:text-blue-200 cursor-pointer">
+                           Bemor avansidan yechish (Mavjud: {patient.balance.toLocaleString()} UZS)
+                        </label>
+                     </div>
+                  )}
+
                   <div className={paymentData.service === 'Avans' ? "grid grid-cols-1" : "grid grid-cols-2 gap-4"}>
                      <Input
                         label="To'lanayotgan Summa"
@@ -1723,10 +1728,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               { value: 'Card', label: 'Karta' }
                            ]
                            : [
-                              { value: 'Cash', label: 'Naqd' },
-                              { value: 'Card', label: 'Karta' },
-                              { value: 'Insurance', label: 'Sug\'urta' },
-                              ...(paymentData.service !== 'Avans' ? [{ value: 'Balance', label: 'Hisobdan (Avans)', disabled: (patient?.balance || 0) <= 0 }] : [])
+                              { value: 'Cash', label: 'Naqd', disabled: useBalance },
+                              { value: 'Card', label: 'Karta', disabled: useBalance },
+                              { value: 'Insurance', label: 'Sug\'urta', disabled: useBalance },
+                              ...(paymentData.service !== 'Avans' ? [{ value: 'Balance', label: 'Hisobdan (Avans)', disabled: (patient?.balance || 0) <= 0 || useBalance }] : [])
                            ]
                         }
                      />

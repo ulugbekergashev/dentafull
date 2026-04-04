@@ -370,6 +370,18 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/patients/:id', authenticateToken, async (req, res) => {
+    try {
+        const patient = await prisma.patient.findUnique({
+            where: { id: req.params.id }
+        });
+        if (!patient) return res.status(404).json({ error: 'Patient not found' });
+        res.json(patient);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch patient' });
+    }
+});
+
 app.put('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
         // Sanitize body to only include valid Patient fields

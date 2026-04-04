@@ -122,6 +122,13 @@ export const api = {
             if (isDemoMode()) return Promise.resolve(DEMO_PATIENTS);
             return fetchJson<Patient[]>(`/patients?clinicId=${clinicId}`);
         },
+        getById: (id: string) => {
+            if (isDemoMode()) {
+                const patient = DEMO_PATIENTS.find(p => p.id === id);
+                return patient ? Promise.resolve(patient) : Promise.reject('Patient not found');
+            }
+            return fetchJson<Patient>(`/patients/${id}`);
+        },
         create: (data: Omit<Patient, 'id'>) => {
             if (isDemoMode()) {
                 const newPatient = { ...data, id: `demo - patient - ${Date.now()} -${Math.floor(Math.random() * 1000)} ` } as Patient;
