@@ -1358,7 +1358,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  <p className="text-sm text-gray-500">{t('patients.details.payments.totalPaid')}</p>
                                  <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
                                     {(patientTransactions || [])
-                                       .filter(transaction => transaction && transaction.status === 'Paid' && transaction.service !== 'Avans')
+                                       .filter(transaction => transaction && transaction.status === 'Paid' && transaction.service !== 'Avans' && transaction.type !== 'Balance')
                                        .reduce((acc, transaction) => acc + (Number(transaction.amount) || 0), 0)
                                        .toLocaleString()} UZS
                                  </p>

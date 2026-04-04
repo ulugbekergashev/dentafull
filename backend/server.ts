@@ -710,17 +710,26 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
             data: req.body
         });
 
+        // Only Avans deposits and Balance-type payments affect the advance balance
         if (req.body.patientId) {
             const amount = parseFloat(req.body.amount) || 0;
-            // Paid (Cash/Card) = +amount, Pending/Overdue/Balance = -amount
-            const balanceChange = (req.body.status === 'Paid' && req.body.type !== 'Balance') 
-                ? amount 
-                : -amount;
+            let balanceChange = 0;
 
-            await prisma.patient.update({
-                where: { id: req.body.patientId },
-                data: { balance: { increment: balanceChange } }
-            }).catch((err: any) => console.error('Failed to update patient balance:', err));
+            if (req.body.service === 'Avans' && req.body.status === 'Paid') {
+                // Avans deposit: increase balance
+                balanceChange = amount;
+            } else if (req.body.type === 'Balance' && req.body.status === 'Paid') {
+                // Payment from balance: decrease balance
+                balanceChange = -amount;
+            }
+            // Regular Cash/Card payments do NOT affect the advance balance
+
+            if (balanceChange !== 0) {
+                await prisma.patient.update({
+                    where: { id: req.body.patientId },
+                    data: { balance: { increment: balanceChange } }
+                }).catch((err: any) => console.error('Failed to update patient balance:', err));
+            }
         }
 
         res.json(transaction);
@@ -740,18 +749,16 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
         });
 
         // Update patient balance if patientId is linked
+        // Only Avans deposits and Balance-type payments affect the advance balance
         if (transaction.patientId) {
-            const calculateContribution = (tx: any) => {
-                if (tx.status === 'Paid') {
-                    // Balance type payments represent a deduction from the patient's account
-                    return tx.type === 'Balance' ? -tx.amount : tx.amount;
-                }
-                // Pending/Overdue transactions represent a cost/debt
-                return -tx.amount;
+            const calculateBalanceContribution = (tx: any) => {
+                if (tx.service === 'Avans' && tx.status === 'Paid') return tx.amount;
+                if (tx.type === 'Balance' && tx.status === 'Paid') return -tx.amount;
+                return 0; // Regular payments don't affect balance
             };
 
-            const oldContribution = calculateContribution(oldTx);
-            const newContribution = calculateContribution(transaction);
+            const oldContribution = calculateBalanceContribution(oldTx);
+            const newContribution = calculateBalanceContribution(transaction);
             const adjustment = newContribution - oldContribution;
 
             if (adjustment !== 0) {
@@ -775,11 +782,12 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
         if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
         // Reverse balance contribution
+        // Reverse balance: only for Avans deposits and Balance-type payments
         if (transaction.patientId) {
-            const contribution = (transaction.status === 'Paid' && transaction.type !== 'Balance') 
-                ? transaction.amount 
-                : -transaction.amount;
-            
+            let contribution = 0;
+            if (transaction.service === 'Avans' && transaction.status === 'Paid') contribution = transaction.amount;
+            else if (transaction.type === 'Balance' && transaction.status === 'Paid') contribution = -transaction.amount;
+
             if (contribution !== 0) {
                 await prisma.patient.update({
                     where: { id: transaction.patientId },
