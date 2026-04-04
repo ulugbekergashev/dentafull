@@ -55,6 +55,9 @@ model Patient {
   address        String?
   createdAt      DateTime           @default(now())
   secondaryPhone String?
+  avatarUrl      String?
+  portraitUrl    String?
+  balance        Float              @default(0)
   appointments   Appointment[]
   inventoryLogs  InventoryLog[]
   clinic         Clinic             @relation(fields: [clinicId], references: [id])
@@ -227,6 +230,7 @@ model Clinic {
   facebookPageAccessToken String?
   facebookUserAccessToken String?
   facebookPageName      String?
+  customPrice           Float?
   appointments          Appointment[]
   plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors               Doctor[]

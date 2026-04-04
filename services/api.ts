@@ -180,6 +180,22 @@ export const api = {
                 body: JSON.stringify({ message }),
             });
         },
+        uploadAvatar: (id: string, file: File) => {
+            const formData = new FormData();
+            formData.append('photo', file);
+            return fetchJson<{ success: true, url: string }>(`/patients/${id}/avatar`, {
+                method: 'POST',
+                body: formData,
+            });
+        },
+        uploadPortrait: (id: string, file: File) => {
+            const formData = new FormData();
+            formData.append('photo', file);
+            return fetchJson<{ success: true, url: string }>(`/patients/${id}/portrait`, {
+                method: 'POST',
+                body: formData,
+            });
+        },
     },
     appointments: {
         getAll: (clinicId: string) => {

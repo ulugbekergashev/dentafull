@@ -373,7 +373,7 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
 app.put('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
         // Sanitize body to only include valid Patient fields
-        const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId } = req.body;
+        const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId, avatarUrl, portraitUrl } = req.body;
         const updateData: any = {};
         if (firstName !== undefined) updateData.firstName = firstName;
         if (lastName !== undefined) updateData.lastName = lastName;
@@ -387,6 +387,8 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
         if (telegramChatId !== undefined) updateData.telegramChatId = telegramChatId;
         if (secondaryPhone !== undefined) updateData.secondaryPhone = secondaryPhone;
         if (clinicId !== undefined) updateData.clinicId = clinicId;
+        if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+        if (portraitUrl !== undefined) updateData.portraitUrl = portraitUrl;
 
         const patient = await prisma.patient.update({
             where: { id: req.params.id },
@@ -707,6 +709,18 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
         const transaction = await prisma.transaction.create({
             data: req.body
         });
+
+        // Update patient balance if patientId is provided
+        if (req.body.patientId) {
+            const amount = parseFloat(req.body.amount) || 0;
+            const balanceChange = req.body.status === 'Paid' ? amount : -amount;
+
+            await prisma.patient.update({
+                where: { id: req.body.patientId },
+                data: { balance: { increment: balanceChange } }
+            }).catch((err: any) => console.error('Failed to update patient balance:', err));
+        }
+
         res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: 'Failed to create transaction' });
@@ -715,16 +729,69 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 
 app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
     try {
-        console.log('Updating transaction:', req.params.id, req.body);
+        const oldTx = await prisma.transaction.findUnique({ where: { id: req.params.id } });
+        if (!oldTx) return res.status(404).json({ error: 'Transaction not found' });
+
         const transaction = await prisma.transaction.update({
             where: { id: req.params.id },
             data: req.body
         });
-        console.log('Transaction updated successfully:', transaction);
+
+        // Update patient balance if patientId is linked
+        if (transaction.patientId) {
+            const calculateContribution = (tx: any) => {
+                if (tx.status === 'Paid') {
+                    // Balance type payments don't add "new" money to the overall balance,
+                    // they just settle existing debt which was already decremented.
+                    return tx.type === 'Balance' ? 0 : tx.amount;
+                }
+                // Pending/Overdue transactions represent a cost/debt
+                return -tx.amount;
+            };
+
+            const oldContribution = calculateContribution(oldTx);
+            const newContribution = calculateContribution(transaction);
+            const adjustment = newContribution - oldContribution;
+
+            if (adjustment !== 0) {
+                await prisma.patient.update({
+                    where: { id: transaction.patientId },
+                    data: { balance: { increment: adjustment } }
+                }).catch((err: any) => console.error('Failed to adjust patient balance:', err));
+            }
+        }
+
         res.json(transaction);
     } catch (error) {
         console.error('Transaction update error:', error);
         res.status(500).json({ error: 'Failed to update transaction' });
+    }
+});
+
+app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
+    try {
+        const transaction = await prisma.transaction.findUnique({ where: { id: req.params.id } });
+        if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+
+        // Reverse balance contribution
+        if (transaction.patientId) {
+            const contribution = (transaction.status === 'Paid' && transaction.type !== 'Balance') 
+                ? transaction.amount 
+                : (transaction.status === 'Pending' || transaction.status === 'Overdue' ? -transaction.amount : 0);
+            
+            if (contribution !== 0) {
+                await prisma.patient.update({
+                    where: { id: transaction.patientId },
+                    data: { balance: { increment: -contribution } }
+                }).catch((err: any) => console.error('Failed to reverse patient balance on delete:', err));
+            }
+        }
+
+        await prisma.transaction.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Transaction delete error:', error);
+        res.status(500).json({ error: 'Failed to delete transaction' });
     }
 });
 
@@ -1164,7 +1231,7 @@ app.get('/api/clinics/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/clinics', authenticateToken, async (req, res) => {
     try {
-        const { name, adminName, username, password, phone, planId, status, subscriptionStartDate, expiryDate, monthlyRevenue } = req.body;
+        const { name, adminName, username, password, phone, planId, status, subscriptionStartDate, expiryDate, monthlyRevenue, customPrice } = req.body;
 
         let passwordData = password ? password.trim() : '';
         if (passwordData) {
@@ -1183,6 +1250,7 @@ app.post('/api/clinics', authenticateToken, async (req, res) => {
                 subscriptionStartDate,
                 expiryDate,
                 monthlyRevenue,
+                customPrice: customPrice !== undefined ? Number(customPrice) : null,
                 subscriptionType: req.body.subscriptionType || 'Paid'
             }
         });
@@ -1198,6 +1266,9 @@ app.put('/api/clinics/:id', authenticateToken, async (req, res) => {
         if (updateData.password) {
             const salt = await bcrypt.genSalt(10);
             updateData.password = await bcrypt.hash(updateData.password, salt);
+        }
+        if (updateData.customPrice !== undefined) {
+            updateData.customPrice = updateData.customPrice !== null ? Number(updateData.customPrice) : null;
         }
         const clinic = await prisma.clinic.update({
             where: { id: req.params.id },
@@ -1436,6 +1507,44 @@ app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), 
             details: error.message || 'Unknown error',
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
+    }
+});
+
+// Avatar upload
+app.post('/api/patients/:id/avatar', authenticateToken, upload.single('photo'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const patientId = req.params.id;
+        const url = (req.file as any).path;
+
+        const patient = await prisma.patient.update({
+            where: { id: patientId },
+            data: { avatarUrl: url }
+        });
+
+        res.json({ success: true, url, patient });
+    } catch (error: any) {
+        console.error('Avatar upload error:', error);
+        res.status(500).json({ error: 'Failed to upload avatar' });
+    }
+});
+
+// Portrait upload
+app.post('/api/patients/:id/portrait', authenticateToken, upload.single('photo'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const patientId = req.params.id;
+        const url = (req.file as any).path;
+
+        const patient = await prisma.patient.update({
+            where: { id: patientId },
+            data: { portraitUrl: url }
+        });
+
+        res.json({ success: true, url, patient });
+    } catch (error: any) {
+        console.error('Portrait upload error:', error);
+        res.status(500).json({ error: 'Failed to upload portrait' });
     }
 });
 

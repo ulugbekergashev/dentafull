@@ -64,6 +64,9 @@ export interface Patient {
   secondaryPhone?: string;
   doctorId?: string;    // Assigned doctor
   doctorName?: string;  // Cached doctor name
+  avatarUrl?: string;
+  portraitUrl?: string;
+  balance?: number;
 }
 
 export interface Appointment {
@@ -88,7 +91,7 @@ export interface Transaction {
   patientName: string;
   date: string;
   amount: number;
-  type: 'Cash' | 'Card' | 'Insurance';
+  type: 'Cash' | 'Card' | 'Insurance' | 'Balance';
   service: string;
   status: 'Paid' | 'Pending' | 'Overdue';
   clinicId: string;

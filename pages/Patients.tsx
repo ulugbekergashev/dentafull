@@ -533,8 +533,12 @@ export const Patients: React.FC<PatientsProps> = ({
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-sm group-hover:bg-blue-200 dark:group-hover:bg-blue-800 transition-colors">
-                        {patient.firstName[0]}{patient.lastName[0]}
+                      <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-sm group-hover:bg-blue-200 dark:group-hover:bg-blue-800 transition-colors overflow-hidden">
+                        {patient.avatarUrl ? (
+                          <img src={patient.avatarUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          `${patient.firstName[0]}${patient.lastName[0]}`
+                        )}
                       </div>
                       <div className="ml-3">
                         <div className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">

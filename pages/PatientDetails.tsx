@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck } from 'lucide-react';
+import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
@@ -166,6 +166,23 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          }
       }
    }, []);
+
+   const handleImageUpload = async (type: 'avatar' | 'portrait', file: File) => {
+      if (!patient) return;
+      try {
+         const res = type === 'avatar' 
+            ? await api.patients.uploadAvatar(patient.id, file)
+            : await api.patients.uploadPortrait(patient.id, file);
+         
+         if (res.success) {
+            onUpdatePatient(patient.id, { [type === 'avatar' ? 'avatarUrl' : 'portraitUrl']: res.url });
+            alert(t('common.save'));
+         }
+      } catch (error) {
+         console.error(`Failed to upload ${type}:`, error);
+         alert(t('patients.details.alerts.error'));
+      }
+   };
 
    const [isLoaded, setIsLoaded] = useState(false);
 
@@ -872,8 +889,26 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             {/* Header Card */}
             <Card className="p-6">
                <div className="flex flex-col md:flex-row gap-6 items-start">
-                  <div className="w-24 h-24 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-200 flex items-center justify-center text-3xl font-bold flex-shrink-0">
-                     {patient.firstName[0]}{patient.lastName[0]}
+                  <div className="relative group flex-shrink-0">
+                     <div className="w-24 h-24 rounded-full bg-blue-100 dark:bg-blue-900 border-2 border-white dark:border-gray-700 shadow-md overflow-hidden flex items-center justify-center text-3xl font-bold">
+                        {patient.avatarUrl ? (
+                           <img src={patient.avatarUrl} alt={patient.firstName} className="w-full h-full object-cover" />
+                        ) : (
+                           <span className="text-blue-600 dark:text-blue-200">{patient.firstName[0]}{patient.lastName[0]}</span>
+                        )}
+                     </div>
+                     <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                        <Edit className="w-6 h-6" />
+                        <input 
+                           type="file" 
+                           className="hidden" 
+                           accept="image/*" 
+                           onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleImageUpload('avatar', file);
+                           }} 
+                        />
+                     </label>
                   </div>
                   <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
                      <div className="space-y-1">
@@ -881,8 +916,23 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <p className="text-gray-500 dark:text-gray-400 flex items-center gap-2">
                            <span className="capitalize">{patient.gender === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}</span> • {patient.dob ? (new Date().getFullYear() - new Date(patient.dob).getFullYear()) : 'N/A'} {t('patients.details.age')}{patient.dob && ` (${new Date(patient.dob).toLocaleDateString('uz-UZ')})`}
                         </p>
-                        <div className="pt-2">
+                        <div className="pt-2 flex items-center gap-3">
                            <Badge status={patient.status} />
+                           {patient.balance !== undefined && (
+                              <div className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                                 patient.balance > 0 
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+                                    : patient.balance < 0
+                                       ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
+                                       : 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
+                              }`}>
+                                 {patient.balance > 0 
+                                    ? `Avans: ${patient.balance.toLocaleString()} UZS` 
+                                    : patient.balance < 0 
+                                       ? `Qarz: ${Math.abs(patient.balance).toLocaleString()} UZS`
+                                       : `Hisob: 0 UZS`}
+                              </div>
+                           )}
                         </div>
                      </div>
 
@@ -1043,6 +1093,43 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               ))}
                            </div>
                         </div>
+                     </Card>
+
+                     <Card className="p-6 space-y-4">
+                        <div className="flex justify-between items-center">
+                           <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                              <User className="w-5 h-5 text-blue-500" /> 
+                              Portret rasm
+                           </h3>
+                        </div>
+                        <div className="relative aspect-[3/4] w-full max-w-[200px] mx-auto bg-gray-50 dark:bg-gray-800 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 dark:border-gray-700 group hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+                           {patient.portraitUrl ? (
+                              <img src={patient.portraitUrl} alt="Portrait" className="w-full h-full object-cover" />
+                           ) : (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 p-4 text-center">
+                                 <Plus className="w-8 h-8 mb-2 group-hover:text-blue-500 transition-colors" />
+                                 <span className="text-xs font-medium">Bemor portretini yuklash</span>
+                              </div>
+                           )}
+                           <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                              <div className="flex flex-col items-center gap-2">
+                                 <Edit className="w-6 h-6" />
+                                 <span className="font-medium text-xs">O'zgartirish</span>
+                              </div>
+                              <input 
+                                 type="file" 
+                                 className="hidden" 
+                                 accept="image/*" 
+                                 onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleImageUpload('portrait', file);
+                                 }} 
+                              />
+                           </label>
+                        </div>
+                        <p className="text-xs text-gray-500 text-center italic leading-relaxed">
+                           Ushbu rasm bemor profilida asosiy portret sifatida ko'rinadi
+                        </p>
                      </Card>
                   </div>
                )}
@@ -1208,20 +1295,44 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
                                           <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
                                           <td className="p-4"><Badge status="Pending" /></td>
-                                          <td className="p-4"><Button size="sm" onClick={() => {
-                                             const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
-                                             setPaymentData({
-                                                amount: total.toString(),
-                                                paidAmount: total.toString(),
-                                                debtAmount: '0',
-                                                service: breakdown || app.type,
-                                                type: 'Cash',
-                                                status: 'Paid',
-                                                doctorId: app.doctorId,
-                                                appointmentDate: app.date
-                                             });
-                                             setIsPaymentModalOpen(true);
-                                          }}>To'lov</Button></td>
+                                          <td className="p-4 flex gap-2">
+                                             <Button size="sm" onClick={() => {
+                                                const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                                setPaymentData({
+                                                   amount: total.toString(),
+                                                   paidAmount: total.toString(),
+                                                   debtAmount: '0',
+                                                   service: breakdown || app.type,
+                                                   type: 'Cash',
+                                                   status: 'Paid',
+                                                   doctorId: app.doctorId,
+                                                   appointmentDate: app.date,
+                                                   discountPercent: ''
+                                                });
+                                                setIsPaymentModalOpen(true);
+                                             }}>To'lov</Button>
+                                             {(patient.balance || 0) > 0 && (
+                                                <Button size="sm" variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100" onClick={async () => {
+                                                   const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                                   if (confirm(`Ushbu qabul uchun ${total.toLocaleString()} UZS miqdorini bemor avansidan yechishga ruxsatingiz bormi?`)) {
+                                                      const doctor = doctors.find(d => d.id === app.doctorId);
+                                                      await onAddTransaction({
+                                                         patientId: patient.id,
+                                                         patientName: `${patient.lastName} ${patient.firstName}`,
+                                                         date: app.date,
+                                                         amount: total,
+                                                         service: breakdown || app.type,
+                                                         type: 'Balance' as any,
+                                                         status: 'Paid',
+                                                         doctorId: app.doctorId,
+                                                         doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
+                                                         clinicId: patient.clinicId
+                                                      });
+                                                      alert("To'lov avans hisobidan muvaffaqiyatli amalga oshirildi!");
+                                                   }
+                                                }}>Hisobdan</Button>
+                                             )}
+                                          </td>
                                        </tr>
                                     );
                                  })}
@@ -1239,12 +1350,35 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  <p className="text-sm text-gray-500">{t('patients.details.payments.totalPaid')}</p>
                                  <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
                                     {(patientTransactions || [])
-                                       .filter(transaction => transaction && transaction.status === 'Paid')
+                                       .filter(transaction => transaction && transaction.status === 'Paid' && transaction.service !== 'Avans')
                                        .reduce((acc, transaction) => acc + (Number(transaction.amount) || 0), 0)
                                        .toLocaleString()} UZS
                                  </p>
                               </div>
-                              <Button size="sm" onClick={handlePaymentModalOpen}>{t('patients.details.payments.newPayment')}</Button>
+                              <div className="flex gap-2">
+                                 <Button 
+                                    size="sm" 
+                                    variant="secondary"
+                                    className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
+                                    onClick={() => {
+                                       setPaymentData({
+                                          amount: '',
+                                          paidAmount: '',
+                                          debtAmount: '0',
+                                          service: 'Avans',
+                                          type: 'Cash',
+                                          status: 'Paid',
+                                          doctorId: doctors.length > 0 ? doctors[0].id : '',
+                                          appointmentDate: new Date().toISOString().split('T')[0],
+                                          discountPercent: ''
+                                       });
+                                       setIsPaymentModalOpen(true);
+                                    }}
+                                 >
+                                    <Plus className="w-4 h-4 mr-2" /> Avans qo'shish
+                                 </Button>
+                                 <Button size="sm" onClick={handlePaymentModalOpen}>{t('patients.details.payments.newPayment')}</Button>
+                              </div>
                            </div>
                         </div>
                         <div className="overflow-x-auto">
@@ -1566,7 +1700,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         options={[
                            { value: 'Cash', label: 'Naqd' },
                            { value: 'Card', label: 'Karta' },
-                           { value: 'Insurance', label: 'Sug\'urta' }
+                           { value: 'Insurance', label: 'Sug\'urta' },
+                           { value: 'Balance', label: 'Hisobdan (Avans)', disabled: (patient?.balance || 0) <= 0 }
                         ]}
                      />
                   </div>

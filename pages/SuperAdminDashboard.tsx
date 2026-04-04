@@ -40,7 +40,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
    // Detail/Edit Modal State
    const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
-   const [editClinicData, setEditClinicData] = useState<{ status: string; expiryDate: string; planId: string; subscriptionType: 'Paid' | 'Trial' } | null>(null);
+   const [editClinicData, setEditClinicData] = useState<{ status: string; expiryDate: string; planId: string; subscriptionType: 'Paid' | 'Trial'; customPrice: number; useCustomPrice: boolean } | null>(null);
 
    // Delete Confirmation Modal
    const [deleteConfirmClinic, setDeleteConfirmClinic] = useState<Clinic | null>(null);
@@ -69,7 +69,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             status: selectedClinic.status,
             expiryDate: selectedClinic.expiryDate,
             planId: selectedClinic.planId,
-            subscriptionType: selectedClinic.subscriptionType
+            subscriptionType: selectedClinic.subscriptionType,
+            customPrice: selectedClinic.customPrice || 0,
+            useCustomPrice: selectedClinic.customPrice !== undefined && selectedClinic.customPrice !== null
          });
       } else {
          setEditClinicData(null);
@@ -80,7 +82,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       .filter(c => c.status === 'Active') // Only active clinics contribute to revenue
       .reduce((acc, c) => {
          const plan = plans.find(p => p.id === c.planId);
-         const price = c.customPrice !== undefined ? c.customPrice : (plan?.price || 0);
+         const price = (c.customPrice !== undefined && c.customPrice !== null) ? c.customPrice : (plan?.price || 0);
          return acc + price;
       }, 0);
 
@@ -230,7 +232,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             status: editClinicData.status as 'Active' | 'Blocked',
             expiryDate: editClinicData.expiryDate,
             planId: editClinicData.planId,
-            subscriptionType: editClinicData.subscriptionType
+            subscriptionType: editClinicData.subscriptionType,
+            customPrice: editClinicData.useCustomPrice ? editClinicData.customPrice : null
          });
          setSelectedClinic(null);
       }
@@ -868,6 +871,41 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            </label>
                         </div>
                      </div>
+                  </div>
+
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
+                     <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                        <CreditCard className="w-4 h-4" /> Tarif va Narx
+                     </h4>
+
+                     <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <input
+                           type="checkbox"
+                           id="editUseCustomPrice"
+                           checked={editClinicData.useCustomPrice}
+                           onChange={(e) => setEditClinicData({ ...editClinicData, useCustomPrice: e.target.checked })}
+                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                        />
+                        <label htmlFor="editUseCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">
+                           Maxsus narx belgilash
+                        </label>
+                     </div>
+
+                     {editClinicData.useCustomPrice && (
+                        <div className="animate-fade-in">
+                           <Input
+                              label="Maxsus oylik to'lov summasi"
+                              type="number"
+                              value={editClinicData.customPrice}
+                              onChange={e => setEditClinicData({ ...editClinicData, customPrice: parseInt(e.target.value) || 0 })}
+                              required
+                              placeholder="Masalan: 800000"
+                           />
+                           <p className="text-xs text-gray-500 mt-1">
+                              Ushbu klinika uchun tarif narxi o'rniga shu summa hisoblanadi.
+                           </p>
+                        </div>
+                     )}
                   </div>
 
                   {/* Access Control Section */}
