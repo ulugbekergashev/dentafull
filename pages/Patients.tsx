@@ -56,6 +56,8 @@ export const Patients: React.FC<PatientsProps> = ({
     doctorId: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedAvatar, setSelectedAvatar] = useState<File | null>(null);
+  const [selectedPortrait, setSelectedPortrait] = useState<File | null>(null);
 
   const filteredPatients = useMemo(() => {
     return patients.filter((p) => {
@@ -206,7 +208,7 @@ export const Patients: React.FC<PatientsProps> = ({
     setIsSubmitting(true);
     try {
       const doctor = doctors.find((d) => d.id === formData.doctorId);
-      await onAddPatient({
+      const newPatient = await onAddPatient({
         ...formData,
         status: 'Active',
         lastVisit: 'Never',
@@ -214,8 +216,21 @@ export const Patients: React.FC<PatientsProps> = ({
         doctorId: formData.doctorId || undefined,
         doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : undefined,
       });
+
+      // Upload photos if selected
+      if (newPatient && newPatient.id) {
+        if (selectedAvatar) {
+          await api.patients.uploadAvatar(newPatient.id, selectedAvatar);
+        }
+        if (selectedPortrait) {
+          await api.patients.uploadPortrait(newPatient.id, selectedPortrait);
+        }
+      }
+
       setIsAddModalOpen(false);
       setFormData({ firstName: '', lastName: '', phone: '', dob: '', gender: 'Male', medicalHistory: '', address: '', secondaryPhone: '', doctorId: '' });
+      setSelectedAvatar(null);
+      setSelectedPortrait(null);
     } catch {
       // handled by parent
     } finally {
@@ -667,8 +682,29 @@ export const Patients: React.FC<PatientsProps> = ({
           <Input label="Tug'ilgan sana" type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText="Sanani qo'lda kiritish uchun maydonga bosing" />
           <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder="Toshkent sh., Chilonzor t..." />
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.avatar')}</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setSelectedAvatar(e.target.files?.[0] || null)}
+                className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.portrait')}</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setSelectedPortrait(e.target.files?.[0] || null)}
+                className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Shifokor</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.doctor')}</label>
             <select
               name="doctorId"
               value={formData.doctorId}

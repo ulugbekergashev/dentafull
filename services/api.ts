@@ -63,7 +63,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
 
 async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
     const headers: HeadersInit = {
-        'Content-Type': 'application/json',
+        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...(options.headers || {}),
     };
 

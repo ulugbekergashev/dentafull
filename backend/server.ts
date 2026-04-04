@@ -1525,7 +1525,11 @@ app.post('/api/patients/:id/avatar', authenticateToken, upload.single('photo'), 
         res.json({ success: true, url, patient });
     } catch (error: any) {
         console.error('Avatar upload error:', error);
-        res.status(500).json({ error: 'Failed to upload avatar' });
+        res.status(500).json({ 
+            error: 'Failed to upload avatar',
+            details: error.message || 'Unknown error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 });
 
@@ -1544,7 +1548,11 @@ app.post('/api/patients/:id/portrait', authenticateToken, upload.single('photo')
         res.json({ success: true, url, patient });
     } catch (error: any) {
         console.error('Portrait upload error:', error);
-        res.status(500).json({ error: 'Failed to upload portrait' });
+        res.status(500).json({ 
+            error: 'Failed to upload portrait',
+            details: error.message || 'Unknown error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 });
 

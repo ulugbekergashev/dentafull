@@ -1552,12 +1552,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             </Modal>
 
             {/* Payment Modal */}
-            <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="To'lov Qabul Qilish">
+            <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title={paymentData.service === 'Avans' ? t('patients.details.modals.advanceTitle') : t('patients.details.modals.paymentTitle')}>
                <form onSubmit={handlePaymentSave} className="space-y-4">
-                  {/* Only show doctor field for non-individual plans OR individual plans with doctors */}
-                  {!(currentClinic?.planId === 'individual' && doctors.length === 0) && (
+                  {/* Only show doctor field for non-individual plans OR individual plans with doctors - AND NOT for Avans */}
+                  {paymentData.service !== 'Avans' && !(currentClinic?.planId === 'individual' && doctors.length === 0) && (
                      <Select
-                        label="Shifokor"
+                        label={t('finance.table.doctor')}
                         value={paymentData.doctorId}
                         onChange={e => setPaymentData({ ...paymentData, doctorId: e.target.value })}
                         options={[
@@ -1567,106 +1567,110 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         required
                      />
                   )}
-                  <div>
-                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📋 Bajarilgan Xizmatlar</label>
-                     <div className="border-2 border-blue-100 dark:border-blue-800 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-4 space-y-0.5">
-                        {paymentData.service && paymentData.service.includes('|') ? (
-                           paymentData.service.split('||').filter(Boolean).map((item, idx) => {
-                              const parts = item.split('|');
-                              if (parts[0] === 'TOTAL') {
-                                 return (
-                                    <div key={idx} className="pt-3 mt-3 border-t-2 border-blue-300 dark:border-blue-700">
-                                       <div className="flex justify-between items-center bg-blue-600 dark:bg-blue-700 text-white px-4 py-2.5 rounded-md font-bold text-base">
-                                          <span className="flex items-center gap-2">💰 JAMI:</span>
-                                          <span className="text-lg">{parts[1]} UZS</span>
+                  {paymentData.service !== 'Avans' && (
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📋 {t('patients.details.modals.doneServices')}</label>
+                        <div className="border-2 border-blue-100 dark:border-blue-800 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-4 space-y-0.5">
+                           {paymentData.service && paymentData.service.includes('|') ? (
+                              paymentData.service.split('||').filter(Boolean).map((item, idx) => {
+                                 const parts = item.split('|');
+                                 if (parts[0] === 'TOTAL') {
+                                    return (
+                                       <div key={idx} className="pt-3 mt-3 border-t-2 border-blue-300 dark:border-blue-700">
+                                          <div className="flex justify-between items-center bg-blue-600 dark:bg-blue-700 text-white px-4 py-2.5 rounded-md font-bold text-base">
+                                             <span className="flex items-center gap-2">💰 JAMI:</span>
+                                             <span className="text-lg">{parts[1]} UZS</span>
+                                          </div>
                                        </div>
+                                    );
+                                 }
+                                 return (
+                                    <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-800 px-3 py-2 rounded border border-blue-100 dark:border-gray-700">
+                                       <span className="text-gray-700 dark:text-gray-200 font-medium">{parts[0]}</span>
+                                       <span className="text-blue-600 dark:text-blue-400 font-semibold">{parts[1]} UZS</span>
                                     </div>
                                  );
-                              }
-                              return (
-                                 <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-800 px-3 py-2 rounded border border-blue-100 dark:border-gray-700">
-                                    <span className="text-gray-700 dark:text-gray-200 font-medium">{parts[0]}</span>
-                                    <span className="text-blue-600 dark:text-blue-400 font-semibold">{parts[1]} UZS</span>
-                                 </div>
-                              );
-                           })
-                        ) : (
-                           <div className="space-y-4">
-                              {categories && categories.length > 0 && (
+                              })
+                           ) : (
+                              <div className="space-y-4">
+                                 {categories && categories.length > 0 && (
+                                    <Select
+                                       label="Kategoriya"
+                                       value={manualPaymentCategoryId}
+                                       onChange={(e) => {
+                                          setManualPaymentCategoryId(e.target.value);
+                                          setManualPaymentServiceId(null);
+                                          setPaymentData({ ...paymentData, service: '', paidAmount: '' });
+                                       }}
+                                    >
+                                       <option value="">Barcha kategoriyalar</option>
+                                       {categories.map(cat => (
+                                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                       ))}
+                                    </Select>
+                                 )}
+
                                  <Select
-                                    label="Kategoriya"
-                                    value={manualPaymentCategoryId}
-                                    onChange={(e) => {
-                                       setManualPaymentCategoryId(e.target.value);
-                                       setManualPaymentServiceId(null);
-                                       setPaymentData({ ...paymentData, service: '', paidAmount: '' });
-                                    }}
+                                    label="Xizmat"
+                                    value={manualPaymentServiceId?.toString() || ''}
+                                    onChange={(e) => handleManualServiceChange(parseInt(e.target.value))}
                                  >
-                                    <option value="">Barcha kategoriyalar</option>
-                                    {categories.map(cat => (
-                                       <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                    ))}
+                                    <option value="">Xizmatni tanlang...</option>
+                                    {(services || [])
+                                       .filter(s => {
+                                          if (!manualPaymentCategoryId) return true;
+                                          const serviceCatId = (s as any).categoryId?.toString();
+                                          return serviceCatId === manualPaymentCategoryId.toString();
+                                       })
+                                       .map(service => (
+                                          <option key={service.id} value={service.id}>
+                                             {service.name} - {service.price.toLocaleString()} UZS
+                                          </option>
+                                       ))}
                                  </Select>
-                              )}
-
-                              <Select
-                                 label="Xizmat"
-                                 value={manualPaymentServiceId?.toString() || ''}
-                                 onChange={(e) => handleManualServiceChange(parseInt(e.target.value))}
-                              >
-                                 <option value="">Xizmatni tanlang...</option>
-                                 {(services || [])
-                                    .filter(s => {
-                                       if (!manualPaymentCategoryId) return true;
-                                       const serviceCatId = (s as any).categoryId?.toString();
-                                       return serviceCatId === manualPaymentCategoryId.toString();
-                                    })
-                                    .map(service => (
-                                       <option key={service.id} value={service.id}>
-                                          {service.name} - {service.price.toLocaleString()} UZS
-                                       </option>
-                                    ))}
-                              </Select>
-                           </div>
-                        )}
-                     </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                     <div>
-                        <Input
-                           label="Chegirma (%)"
-                           type="number"
-                           min="0"
-                           max="100"
-                           value={paymentData.discountPercent}
-                           onChange={e => {
-                              const percent = Number(e.target.value);
-                              if (percent < 0 || percent > 100) return;
-
-                              const baseTotal = Number(paymentData.amount) || 0;
-                              if (baseTotal > 0) {
-                                 const discountedTotal = Math.round(baseTotal * (1 - percent / 100));
-                                 setPaymentData({
-                                    ...paymentData,
-                                    discountPercent: e.target.value,
-                                    paidAmount: discountedTotal.toString(),
-                                    debtAmount: '0'
-                                 });
-                              } else {
-                                 setPaymentData({ ...paymentData, discountPercent: e.target.value });
-                              }
-                           }}
-                           placeholder="0"
-                        />
-                     </div>
-                     <div className="col-span-2 flex items-end">
-                        <div className="w-full p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-xs text-yellow-800 dark:text-yellow-200">
-                           Chegirma summasi: <strong>{Math.round((Number(paymentData.amount) || 0) * (Number(paymentData.discountPercent) || 0) / 100).toLocaleString()} UZS</strong>
+                              </div>
+                           )}
                         </div>
                      </div>
-                  </div>
+                  )}
+                  {paymentData.service !== 'Avans' && (
+                     <div className="grid grid-cols-3 gap-4">
+                        <div>
+                           <Input
+                              label="Chegirma (%)"
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={paymentData.discountPercent}
+                              onChange={e => {
+                                 const percent = Number(e.target.value);
+                                 if (percent < 0 || percent > 100) return;
 
-                  <div className="grid grid-cols-2 gap-4">
+                                 const baseTotal = Number(paymentData.amount) || 0;
+                                 if (baseTotal > 0) {
+                                    const discountedTotal = Math.round(baseTotal * (1 - percent / 100));
+                                    setPaymentData({
+                                       ...paymentData,
+                                       discountPercent: e.target.value,
+                                       paidAmount: discountedTotal.toString(),
+                                       debtAmount: '0'
+                                    });
+                                 } else {
+                                    setPaymentData({ ...paymentData, discountPercent: e.target.value });
+                                 }
+                              }}
+                              placeholder="0"
+                           />
+                        </div>
+                        <div className="col-span-2 flex items-end">
+                           <div className="w-full p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-xs text-yellow-800 dark:text-yellow-200">
+                              Chegirma summasi: <strong>{Math.round((Number(paymentData.amount) || 0) * (Number(paymentData.discountPercent) || 0) / 100).toLocaleString()} UZS</strong>
+                           </div>
+                        </div>
+                     </div>
+                  )}
+
+                  <div className={paymentData.service === 'Avans' ? "grid grid-cols-1" : "grid grid-cols-2 gap-4"}>
                      <Input
                         label="To'lanayotgan Summa"
                         type="number"
@@ -1675,34 +1679,44 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         placeholder="0.00"
                         required
                      />
-                     <Input
-                        label="Qolgan Qarzdorlik"
-                        type="number"
-                        value={paymentData.debtAmount}
-                        onChange={e => setPaymentData({ ...paymentData, debtAmount: e.target.value })}
-                        placeholder="0.00"
-                     />
+                     {paymentData.service !== 'Avans' && (
+                        <Input
+                           label="Qolgan Qarzdorlik"
+                           type="number"
+                           value={paymentData.debtAmount}
+                           onChange={e => setPaymentData({ ...paymentData, debtAmount: e.target.value })}
+                           placeholder="0.00"
+                        />
+                     )}
                   </div>
 
-                  {/* Total Calculator Display */}
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex justify-between items-center">
-                     <span className="text-gray-700 dark:text-gray-300 font-medium">Jami Summa:</span>
-                     <span className="text-gray-900 dark:text-white font-bold text-lg">
-                        {((Number(paymentData.paidAmount) || 0) + (Number(paymentData.debtAmount) || 0)).toLocaleString()} UZS
-                     </span>
-                  </div>
+                  {/* Total Calculator Display - Only for non-Avans */}
+                  {paymentData.service !== 'Avans' && (
+                     <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex justify-between items-center">
+                        <span className="text-gray-700 dark:text-gray-300 font-medium">Jami Summa:</span>
+                        <span className="text-gray-900 dark:text-white font-bold text-lg">
+                           {((Number(paymentData.paidAmount) || 0) + (Number(paymentData.debtAmount) || 0)).toLocaleString()} UZS
+                        </span>
+                     </div>
+                  )}
 
                   <div className="grid grid-cols-1 gap-4">
                      <Select
                         label="To'lov Usuli"
                         value={paymentData.type}
                         onChange={e => setPaymentData({ ...paymentData, type: e.target.value })}
-                        options={[
-                           { value: 'Cash', label: 'Naqd' },
-                           { value: 'Card', label: 'Karta' },
-                           { value: 'Insurance', label: 'Sug\'urta' },
-                           { value: 'Balance', label: 'Hisobdan (Avans)', disabled: (patient?.balance || 0) <= 0 }
-                        ]}
+                        options={paymentData.service === 'Avans' 
+                           ? [
+                              { value: 'Cash', label: 'Naqd' },
+                              { value: 'Card', label: 'Karta' }
+                           ]
+                           : [
+                              { value: 'Cash', label: 'Naqd' },
+                              { value: 'Card', label: 'Karta' },
+                              { value: 'Insurance', label: 'Sug\'urta' },
+                              ...(paymentData.service !== 'Avans' ? [{ value: 'Balance', label: 'Hisobdan (Avans)', disabled: (patient?.balance || 0) <= 0 }] : [])
+                           ]
+                        }
                      />
                   </div>
                   <div className="flex justify-end gap-2 pt-4">
