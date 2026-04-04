@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
@@ -58,7 +58,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Payment Form State
    const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
    const [pendingProcedures, setPendingProcedures] = useState<any[]>([]);
-   const [useBalance, setUseBalance] = useState(false);
 
    // Medical History State
    const [historyText, setHistoryText] = useState('');
@@ -686,11 +685,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       }
    };
 
-   useEffect(() => {
-      if (!isPaymentModalOpen) {
-         setUseBalance(false);
-      }
-   }, [isPaymentModalOpen]);
 
    const handleSendMessage = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -1657,33 +1651,25 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   )}
 
                   {paymentData.service !== 'Avans' && (patient?.balance || 0) > 0 && (
-                     <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                        <input 
-                           type="checkbox" 
-                           id="use-balance" 
-                           checked={useBalance} 
-                           onChange={(e) => {
-                              const checked = e.target.checked;
-                              setUseBalance(checked);
-                              if (checked) {
-                                 const amountToPay = Number(paymentData.amount) || 0;
-                                 const discount = Number(paymentData.discountPercent) || 0;
-                                 const total = Math.round(amountToPay * (1 - discount / 100));
-                                 setPaymentData({ 
-                                    ...paymentData, 
-                                    type: 'Balance',
-                                    paidAmount: total.toString(),
-                                    debtAmount: '0'
-                                 });
-                              } else {
-                                 setPaymentData({ ...paymentData, type: 'Cash' });
-                              }
+                     <div className="mb-4">
+                        <Button 
+                           type="button" 
+                           variant="secondary" 
+                           className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800 flex items-center justify-center gap-2"
+                           onClick={() => {
+                              const amountToPay = Number(paymentData.amount) || 0;
+                              const discount = Number(paymentData.discountPercent) || 0;
+                              const total = Math.round(amountToPay * (1 - discount / 100));
+                              setPaymentData({ 
+                                 ...paymentData, 
+                                 type: 'Balance',
+                                 paidAmount: total.toString(),
+                                 debtAmount: '0'
+                              });
                            }}
-                           className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor="use-balance" className="text-sm font-medium text-blue-800 dark:text-blue-200 cursor-pointer">
-                           Bemor avansidan yechish (Mavjud: {patient.balance.toLocaleString()} UZS)
-                        </label>
+                        >
+                           <CreditCard className="w-4 h-4" /> Bemor avansidan to'lash (Mavjud: {patient.balance.toLocaleString()} UZS)
+                        </Button>
                      </div>
                   )}
 
@@ -1728,10 +1714,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               { value: 'Card', label: 'Karta' }
                            ]
                            : [
-                              { value: 'Cash', label: 'Naqd', disabled: useBalance },
-                              { value: 'Card', label: 'Karta', disabled: useBalance },
-                              { value: 'Insurance', label: 'Sug\'urta', disabled: useBalance },
-                              ...(paymentData.service !== 'Avans' ? [{ value: 'Balance', label: 'Hisobdan (Avans)', disabled: (patient?.balance || 0) <= 0 || useBalance }] : [])
+                              { value: 'Cash', label: 'Naqd' },
+                              { value: 'Card', label: 'Karta' },
+                              { value: 'Insurance', label: 'Sug\'urta' },
+                              ...(paymentData.service !== 'Avans' ? [{ value: 'Balance', label: 'Hisobdan (Avans)', disabled: (patient?.balance || 0) <= 0 }] : [])
                            ]
                         }
                      />
