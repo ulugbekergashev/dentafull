@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
+import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus, RefreshCw } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
@@ -685,6 +685,30 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       }
    };
 
+   const handleRecalculateBalances = async () => {
+      if (!confirm("Barcha bemorlar balansini qayta hisoblashni xohlaysizmi? Bu bir necha soniya vaqt olishi mumkin.")) return;
+      try {
+         const authData = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+         const token = authData ? JSON.parse(authData).token : '';
+         
+         const response = await fetch('/api/admin/recalculate-balances', {
+            method: 'POST',
+            headers: {
+               'Authorization': `Bearer ${token}`,
+               'Content-Type': 'application/json'
+            }
+         });
+         const data = await response.json();
+         if (data.success) {
+            alert(`Muvaffaqiyatli! ${data.patientsFixed} ta bemor balansi qayta hisoblandi.`);
+            window.location.reload();
+         }
+      } catch (error) {
+         console.error('Failed to recalculate balances', error);
+         alert(t('common.error'));
+      }
+   };
+
    const handleSendMessage = async (e: React.FormEvent) => {
       e.preventDefault();
       try {
@@ -1323,16 +1347,25 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  <p className="text-sm text-gray-500">{t('patients.details.payments.totalPaid')}</p>
                                  <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
                                     {(patientTransactions || [])
-                                       .filter(transaction => transaction && transaction.status === 'Paid' && transaction.service !== 'Avans' && transaction.type !== 'Balance')
+                                       .filter(transaction => transaction && transaction.status === 'Paid' && transaction.type !== 'Balance')
                                        .reduce((acc, transaction) => acc + (Number(transaction.amount) || 0), 0)
                                        .toLocaleString()} UZS
                                  </p>
                               </div>
-                              <div className="text-right">
-                                 <p className="text-sm text-gray-500">{t('patients.details.balance')}</p>
-                                 <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                                    {(patient.balance || 0).toLocaleString()} UZS
-                                 </p>
+                              <div className="text-right flex items-center gap-2">
+                                 <div>
+                                    <p className="text-sm text-gray-500">{t('patients.details.balance')}</p>
+                                    <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                                       {(patient.balance || 0).toLocaleString()} UZS
+                                    </p>
+                                 </div>
+                                 <button 
+                                    onClick={handleRecalculateBalances}
+                                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors text-gray-400 hover:text-blue-500"
+                                    title="Balanslarni qayta hisoblash"
+                                 >
+                                    <RefreshCw className="w-4 h-4" />
+                                 </button>
                               </div>
                               <div className="flex gap-2">
                                  <Button 
