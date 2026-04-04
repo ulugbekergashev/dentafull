@@ -1103,42 +1103,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         </div>
                      </Card>
 
-                     <Card className="p-6 space-y-4">
-                        <div className="flex justify-between items-center">
-                           <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                              <User className="w-5 h-5 text-blue-500" /> 
-                              Portret rasm
-                           </h3>
-                        </div>
-                        <div className="relative aspect-[3/4] w-full max-w-[200px] mx-auto bg-gray-50 dark:bg-gray-800 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 dark:border-gray-700 group hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
-                           {patient.portraitUrl ? (
-                              <img src={patient.portraitUrl} alt="Portrait" className="w-full h-full object-cover" />
-                           ) : (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 p-4 text-center">
-                                 <Plus className="w-8 h-8 mb-2 group-hover:text-blue-500 transition-colors" />
-                                 <span className="text-xs font-medium">Bemor portretini yuklash</span>
-                              </div>
-                           )}
-                           <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                              <div className="flex flex-col items-center gap-2">
-                                 <Edit className="w-6 h-6" />
-                                 <span className="font-medium text-xs">O'zgartirish</span>
-                              </div>
-                              <input 
-                                 type="file" 
-                                 className="hidden" 
-                                 accept="image/*" 
-                                 onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handleImageUpload('portrait', file);
-                                 }} 
-                              />
-                           </label>
-                        </div>
-                        <p className="text-xs text-gray-500 text-center italic leading-relaxed">
-                           Ushbu rasm bemor profilida asosiy portret sifatida ko'rinadi
-                        </p>
-                     </Card>
+
                   </div>
                )}
 
