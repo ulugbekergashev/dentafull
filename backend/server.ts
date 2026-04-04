@@ -804,6 +804,40 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Recalculate all patient balances (one-time fix) ---
+app.post('/api/admin/recalculate-balances', authenticateToken, async (req, res) => {
+    try {
+        const patients = await prisma.patient.findMany({ select: { id: true } });
+        let fixed = 0;
+
+        for (const patient of patients) {
+            const transactions = await prisma.transaction.findMany({
+                where: { patientId: patient.id }
+            });
+
+            let correctBalance = 0;
+            for (const tx of transactions) {
+                if (tx.service === 'Avans' && tx.status === 'Paid') {
+                    correctBalance += tx.amount;
+                } else if (tx.type === 'Balance' && tx.status === 'Paid') {
+                    correctBalance -= tx.amount;
+                }
+            }
+
+            await prisma.patient.update({
+                where: { id: patient.id },
+                data: { balance: correctBalance }
+            });
+            fixed++;
+        }
+
+        res.json({ success: true, patientsFixed: fixed });
+    } catch (error) {
+        console.error('Recalculate balances error:', error);
+        res.status(500).json({ error: 'Failed to recalculate balances' });
+    }
+});
+
 // --- Doctors ---
 app.get('/api/doctors', authenticateToken, async (req, res) => {
     try {
