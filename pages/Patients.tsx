@@ -56,8 +56,7 @@ export const Patients: React.FC<PatientsProps> = ({
     doctorId: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedAvatar, setSelectedAvatar] = useState<File | null>(null);
-  const [selectedPortrait, setSelectedPortrait] = useState<File | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
 
   const filteredPatients = useMemo(() => {
     return patients.filter((p) => {
@@ -217,20 +216,17 @@ export const Patients: React.FC<PatientsProps> = ({
         doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : undefined,
       });
 
-      // Upload photos if selected
-      if (newPatient && newPatient.id) {
-        if (selectedAvatar) {
-          await api.patients.uploadAvatar(newPatient.id, selectedAvatar);
-        }
-        if (selectedPortrait) {
-          await api.patients.uploadPortrait(newPatient.id, selectedPortrait);
-        }
+      // Upload photo if selected
+      if (newPatient && newPatient.id && selectedPhoto) {
+        await Promise.all([
+          api.patients.uploadAvatar(newPatient.id, selectedPhoto),
+          api.patients.uploadPortrait(newPatient.id, selectedPhoto)
+        ]);
       }
 
       setIsAddModalOpen(false);
       setFormData({ firstName: '', lastName: '', phone: '', dob: '', gender: 'Male', medicalHistory: '', address: '', secondaryPhone: '', doctorId: '' });
-      setSelectedAvatar(null);
-      setSelectedPortrait(null);
+      setSelectedPhoto(null);
     } catch {
       // handled by parent
     } finally {
@@ -682,25 +678,39 @@ export const Patients: React.FC<PatientsProps> = ({
           <Input label="Tug'ilgan sana" type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText="Sanani qo'lda kiritish uchun maydonga bosing" />
           <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder="Toshkent sh., Chilonzor t..." />
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.avatar')}</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setSelectedAvatar(e.target.files?.[0] || null)}
-                className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.portrait')}</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setSelectedPortrait(e.target.files?.[0] || null)}
-                className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-            </div>
+          <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-blue-200 dark:border-blue-800 rounded-xl bg-blue-50/50 dark:bg-blue-900/20 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors group cursor-pointer relative overflow-hidden">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setSelectedPhoto(e.target.files?.[0] || null)}
+              className="absolute inset-0 opacity-0 cursor-pointer z-10"
+              id="patient-photo-upload"
+            />
+            {selectedPhoto ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-blue-500 shadow-lg">
+                  <img src={URL.createObjectURL(selectedPhoto)} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-3 py-1 rounded-full">
+                  {selectedPhoto.name}
+                </span>
+                <button 
+                  type="button" 
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedPhoto(null); }}
+                  className="text-xs text-red-500 hover:text-red-600 font-medium"
+                >
+                  {t('common.delete')}
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center text-center gap-2">
+                <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
+                  <Plus className="w-6 h-6" />
+                </div>
+                <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('patients.modal.uploadPhoto')}</span>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">JPG, PNG or WEBP</span>
+              </div>
+            )}
           </div>
 
           <div>
