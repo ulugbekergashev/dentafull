@@ -6,6 +6,7 @@ import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 
 interface PatientsProps {
+  userRole: string;
   patients: Patient[];
   doctors: Doctor[];
   appointments: Appointment[];
@@ -17,6 +18,7 @@ interface PatientsProps {
 }
 
 export const Patients: React.FC<PatientsProps> = ({
+  userRole,
   patients,
   doctors,
   appointments,
@@ -713,20 +715,22 @@ export const Patients: React.FC<PatientsProps> = ({
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.doctor')}</label>
-            <select
-              name="doctorId"
-              value={formData.doctorId}
-              onChange={handleInputChange}
-              className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">— Keyinroq biriktirish —</option>
-              {doctors.filter((d) => d.status === 'Active').map((d) => (
-                <option key={d.id} value={d.id}>{d.lastName} {d.firstName} ({d.specialty})</option>
-              ))}
-            </select>
-          </div>
+          {userRole !== 'DOCTOR' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.doctor')}</label>
+              <select
+                name="doctorId"
+                value={formData.doctorId}
+                onChange={handleInputChange}
+                className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— Keyinroq biriktirish —</option>
+                {doctors.filter((d) => d.status === 'Active').map((d) => (
+                  <option key={d.id} value={d.id}>{d.lastName} {d.firstName} ({d.specialty})</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jins</label>

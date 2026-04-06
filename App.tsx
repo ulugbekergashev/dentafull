@@ -1131,6 +1131,7 @@ const AppContent: React.FC = () => {
 
               <Route path="/patients" element={
                 <Patients
+                  userRole={userRole}
                   patients={patients}
                   doctors={doctors}
                   appointments={appointments}
@@ -1142,7 +1143,8 @@ const AppContent: React.FC = () => {
                 />
               } />
 
-              <Route path="/leads" element={
+              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
+                <Route path="/leads" element={
                 <Leads
                   leads={leads}
                   doctors={doctors}
@@ -1155,6 +1157,7 @@ const AppContent: React.FC = () => {
                   onConvertLead={convertLeadToPatient}
                 />
               } />
+              )}
 
               <Route path="/patients/:patientId" element={
                 <PatientDetails
@@ -1196,7 +1199,8 @@ const AppContent: React.FC = () => {
                 />
               } />
 
-              <Route path="/finance" element={
+              {userRole === UserRole.CLINIC_ADMIN && (
+                <Route path="/finance" element={
                 <Finance
                   userRole={userRole}
                   transactions={transactions}
@@ -1208,8 +1212,11 @@ const AppContent: React.FC = () => {
                   doctors={doctors}
                 />
               } />
+              )}
 
-              <Route path="/doctors" element={
+              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
+                <>
+                  <Route path="/doctors" element={
                 <DoctorsAnalytics
                   doctors={doctors}
                   appointments={appointments}
@@ -1263,6 +1270,8 @@ const AppContent: React.FC = () => {
                   reviews={reviews}
                 />
               } />
+                </>
+              )}
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

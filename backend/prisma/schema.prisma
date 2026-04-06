@@ -23,6 +23,7 @@ model Doctor {
   color          String?
   secondaryPhone String?
   appointments   Appointment[]
+  patients       Patient[]
   clinic         Clinic        @relation(fields: [clinicId], references: [id])
 
   @@unique([clinicId, telegramChatId])
@@ -58,9 +59,11 @@ model Patient {
   avatarUrl      String?
   portraitUrl    String?
   balance        Float              @default(0)
+  doctorId       String?
   appointments   Appointment[]
   inventoryLogs  InventoryLog[]
   clinic         Clinic             @relation(fields: [clinicId], references: [id])
+  doctor         Doctor?            @relation(fields: [doctorId], references: [id])
   diagnoses      PatientDiagnosis[]
   photos         PatientPhoto[]
   telegramLogs   TelegramLog[]

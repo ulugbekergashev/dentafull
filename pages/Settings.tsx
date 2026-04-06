@@ -400,11 +400,15 @@ export const Settings: React.FC<SettingsProps> = ({
       if (!currentClinic?.id) return;
 
       try {
-         const response = await api.clinics.updateSettings(currentClinic.id, {
+         const response = await api.clinics.update(currentClinic.id, {
+            name: generalForm.clinicName,
+            address: generalForm.address,
+            phone: generalForm.phone,
+            email: generalForm.email,
             ownerPhone: generalForm.ownerPhone
          });
 
-         if (response.success) {
+         if (response && response.id) {
             setGeneralSaved(true);
             setTimeout(() => setGeneralSaved(false), 3000);
          }

@@ -313,8 +313,14 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'clinicId is required' });
         }
 
+        const user = (req as any).user;
+        const whereClause: any = { clinicId: clinicId as string };
+        if (user?.role === 'DOCTOR' && user?.doctorId) {
+            whereClause.doctorId = user.doctorId;
+        }
+
         const patients = await prisma.patient.findMany({
-            where: { clinicId: clinicId as string },
+            where: whereClause,
             orderBy: { id: 'desc' } // Newest patients first
         });
         res.json(patients);
@@ -340,6 +346,12 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
         // Basic phone validation could go here
 
         // 3. Create Patient
+        const user = (req as any).user;
+        let assignedDoctorId = req.body.doctorId || null;
+        if (user?.role === 'DOCTOR' && user?.doctorId) {
+            assignedDoctorId = user.doctorId;
+        }
+
         const patient = await prisma.patient.create({
             data: {
                 firstName,
@@ -350,7 +362,8 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
                 gender: gender || 'Male',
                 medicalHistory: medicalHistory || '',
                 status: 'Active',
-                lastVisit: 'Never'
+                lastVisit: 'Never',
+                doctorId: assignedDoctorId
             }
         });
         res.json(patient);
