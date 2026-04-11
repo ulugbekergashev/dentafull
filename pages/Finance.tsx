@@ -637,9 +637,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                            </h4>
                            <p className="text-sm text-gray-500 italic">{plan.service}</p>
                         </div>
-                        <Badge variant={plan.status === 'Active' ? 'warning' : 'success'}>
-                           {plan.status === 'Active' ? 'Faol' : 'Yakunlangan'}
-                        </Badge>
+                        <Badge status={plan.status === 'Active' ? 'pending' : 'completed'} />
                      </div>
                      <div className="grid grid-cols-3 gap-2 py-3 border-y border-gray-100 dark:border-gray-800 text-center">
                         <div>

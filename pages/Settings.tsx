@@ -416,7 +416,10 @@ export const Settings: React.FC<SettingsProps> = ({
 
          if (response && response.id) {
             setGeneralSaved(true);
-            setTimeout(() => setGeneralSaved(false), 3000);
+            setTimeout(() => {
+               setGeneralSaved(false);
+               window.location.reload();
+            }, 1000);
          }
       } catch (error) {
          console.error('Failed to save general settings:', error);
