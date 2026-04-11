@@ -5,6 +5,7 @@ import { Button, Card, Badge, Modal, Input, Select } from '../components/Common'
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
 import { VisitWorkflow, ProceduresSection } from '../components/ProceduresSection';
+import { InstallmentsTab } from '../components/InstallmentsTab';
 import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
@@ -46,7 +47,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const patientId = patientIdProp || patientIdParam || null;
    const { t } = useLanguage();
 
-   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'materials'>('overview');
+   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'materials' | 'installments'>('overview');
    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
@@ -603,7 +604,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       const doctor = doctors.find(d => d.id === paymentData.doctorId);
       const discountPercent = Number(paymentData.discountPercent) || 0;
-      const discountAmount = Math.round((totalAmount / (1 - discountPercent / 100)) * (discountPercent / 100)) || 0; // Rough estimate of original price if we assume totalAmount is already discounted? No, let's just use the current sum. Or better, let's treat totalAmount as the final price and discountPercent as descriptive.
+      const discountAmount = Math.round(totalAmount * (discountPercent / 100)) || 0; // Fixed to calculate direct percentage of the total amount
       // Actually, let's just use the fields directly from the state we'll add.
 
       try {
@@ -620,7 +621,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,
-               discountAmount: Math.round(totalAmount * (discountPercent / (100 - discountPercent))) || 0
+               discountAmount: Math.round(totalAmount * (discountPercent / 100)) || 0
             });
          }
          // Scenario 2: No Payment (Paid == 0)
@@ -636,7 +637,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,
-               discountAmount: Math.round(totalAmount * (discountPercent / (100 - discountPercent))) || 0
+               discountAmount: Math.round(totalAmount * (discountPercent / 100)) || 0
             });
          }
          // Scenario 3: Partial Payment (Paid > 0 && Debt > 0)
@@ -653,7 +654,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,
-               discountAmount: Math.round(paidAmount * (discountPercent / (100 - discountPercent))) || 0
+               discountAmount: Math.round(paidAmount * (discountPercent / 100)) || 0
             });
 
             // 2. Pending Part (Debt)
@@ -668,7 +669,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,
-               discountAmount: Math.round(debtAmount * (discountPercent / (100 - discountPercent))) || 0
+               discountAmount: Math.round(debtAmount * (discountPercent / 100)) || 0
             });
          }
 
@@ -995,6 +996,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      { id: 'photos', label: t('patients.details.tabs.photos'), icon: FileText },
                      { id: 'appointments', label: t('patients.details.tabs.appointments'), icon: Calendar },
                      { id: 'payments', label: t('patients.details.tabs.payments'), icon: CreditCard },
+                     { id: 'installments', label: "Bo'lib to'lash", icon: Clock },
                      { id: 'materials', label: t('patients.details.tabs.materials'), icon: Package },
                   ].map(tab => (
                      <button
@@ -1413,6 +1415,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </Card>
                   </div>
                )}
+               {activeTab === 'installments' && patient && currentClinic && (
+                  <InstallmentsTab 
+                     patientId={patient.id} 
+                     clinicId={currentClinic.id} 
+                     doctors={doctors}
+                     services={services}
+                  />
+               )}
+               
                {activeTab === 'materials' && (
                   <Card className="overflow-hidden">
                      <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">

@@ -23,12 +23,15 @@ interface CalendarProps {
   onPatientClick?: (id: string) => void;
 }
 
-const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
+
 
 export const Calendar: React.FC<CalendarProps> = ({
   appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, currentClinic, plans, onPatientClick
 }) => {
   const { t } = useLanguage();
+  const startHour = currentClinic?.startHour ?? 8;
+  const endHour = currentClinic?.endHour ?? 20;
+  const HOURS = Array.from({ length: Math.max(1, endHour - startHour + 1) }, (_, i) => i + startHour);
   // Filter appointments for doctors
   const filteredAppointments = userRole === UserRole.DOCTOR && doctorId
     ? appointments.filter(a => a.doctorId === doctorId)
@@ -694,7 +697,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                   const [h, m] = app.time.split(':').map(Number);
                   if (isNaN(h)) return null;
 
-                  const topOffset = ((h - 8) * 96) + (m >= 30 ? 48 : 0) + (m % 30 / 30 * 48);
+                  const topOffset = ((h - startHour) * 96) + (m >= 30 ? 48 : 0) + (m % 30 / 30 * 48);
                   const height = (app.duration / 30) * 48;
 
                   const { col = 0, total = 1 } = layoutData[app.id] || {};

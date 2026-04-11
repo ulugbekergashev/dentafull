@@ -77,7 +77,9 @@ export const Settings: React.FC<SettingsProps> = ({
       address: '',
       phone: '',
       email: '',
-      ownerPhone: ''
+      ownerPhone: '',
+      startHour: 8,
+      endHour: 20
    });
    const [generalSaved, setGeneralSaved] = useState(false);
 
@@ -114,7 +116,9 @@ export const Settings: React.FC<SettingsProps> = ({
             address: (currentClinic as any).address || '',
             phone: currentClinic.phone || '',
             email: (currentClinic as any).email || '',
-            ownerPhone: currentClinic.ownerPhone || ''
+            ownerPhone: currentClinic.ownerPhone || '',
+            startHour: currentClinic.startHour ?? 8,
+            endHour: currentClinic.endHour ?? 20
          });
       }
    }, [currentClinic]);
@@ -405,7 +409,9 @@ export const Settings: React.FC<SettingsProps> = ({
             address: generalForm.address,
             phone: generalForm.phone,
             email: generalForm.email,
-            ownerPhone: generalForm.ownerPhone
+            ownerPhone: generalForm.ownerPhone,
+            startHour: Number(generalForm.startHour),
+            endHour: Number(generalForm.endHour)
          });
 
          if (response && response.id) {
@@ -519,6 +525,24 @@ export const Settings: React.FC<SettingsProps> = ({
                               placeholder="998901234567"
                               helperText={t('settings.general.ownerPhoneHelp')}
                            />
+                           <div className="grid grid-cols-2 gap-4 mt-4">
+                              <div>
+                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ishni boshlash vaqti</label>
+                                 <Select
+                                    value={generalForm.startHour.toString()}
+                                    onChange={e => setGeneralForm({ ...generalForm, startHour: parseInt(e.target.value) })}
+                                    options={Array.from({ length: 24 }, (_, i) => ({ value: i.toString(), label: `${i.toString().padStart(2, '0')}:00` }))}
+                                 />
+                              </div>
+                              <div>
+                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ishni tugash vaqti</label>
+                                 <Select
+                                    value={generalForm.endHour.toString()}
+                                    onChange={e => setGeneralForm({ ...generalForm, endHour: parseInt(e.target.value) })}
+                                    options={Array.from({ length: 24 }, (_, i) => ({ value: i.toString(), label: `${i.toString().padStart(2, '0')}:00` }))}
+                                 />
+                              </div>
+                           </div>
                            <div className="pt-4 flex items-center gap-4">
                               <Button type="submit">{t('common.save')}</Button>
                               {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}

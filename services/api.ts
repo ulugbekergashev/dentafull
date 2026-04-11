@@ -1,5 +1,5 @@
-import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead } from '../types';
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, saveDemoData } from './demoData';
+import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, Installment } from '../types';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -257,6 +257,97 @@ export const api = {
                 method: 'POST',
             });
         },
+    },
+    installments: {
+        getAll: (clinicId?: string, patientId?: string) => {
+            if (isDemoMode()) {
+                 let results = [...DEMO_INSTALLMENTS];
+                 if (patientId) results = results.filter(p => p.patientId === patientId);
+                 if (clinicId) results = results.filter(p => p.clinicId === clinicId);
+                 return Promise.resolve(results);
+            }
+            const query = new URLSearchParams();
+            if (clinicId) query.append('clinicId', clinicId);
+            if (patientId) query.append('patientId', patientId);
+            return fetchJson<any[]>(`/installments?${query.toString()}`);
+        },
+        create: (data: any) => {
+            if (isDemoMode()) {
+                const newPlan = { 
+                    ...data, 
+                    id: `demo-ins-${Date.now()}`,
+                    totalPaid: parseFloat(data.totalPaid || 0),
+                    items: data.items.map((it: any, i: number) => ({ ...it, id: `demo-item-${Date.now()}-${i}` }))
+                };
+                DEMO_INSTALLMENTS.push(newPlan);
+                saveDemoData();
+                return Promise.resolve(newPlan);
+            }
+            return fetchJson<any>('/installments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        },
+        pay: (itemId: string, date: string, paymentMethod: string) => {
+            if (isDemoMode()) {
+                let foundItem: any = null;
+                let foundPlan: any = null;
+                DEMO_INSTALLMENTS.forEach(p => {
+                    const item = p.items?.find(it => it.id === itemId);
+                    if (item) {
+                        foundItem = item;
+                        foundPlan = p;
+                    }
+                });
+                
+                if (foundItem && foundPlan) {
+                    foundItem.status = 'Paid';
+                    foundItem.paidDate = date;
+                    foundPlan.totalPaid += foundItem.amount;
+                    if (foundPlan.items.every((it: any) => it.status === 'Paid')) {
+                        foundPlan.status = 'Completed';
+                    }
+                    
+                    const patient = DEMO_PATIENTS.find(p => p.id === foundPlan.patientId);
+                    const doctor = DEMO_DOCTORS.find(d => d.id === foundPlan.doctorId);
+
+                    const newTx: Transaction = {
+                        id: `demo-tx-${Date.now()}`,
+                        patientId: foundPlan.patientId,
+                        patientName: patient ? `${patient.lastName} ${patient.firstName}` : 'Bemor',
+                        clinicId: foundPlan.clinicId,
+                        doctorId: foundPlan.doctorId,
+                        doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : '',
+                        amount: foundItem.amount,
+                        date: date,
+                        service: `Bo'lib to'lash (${foundPlan.service})`,
+                        type: paymentMethod,
+                        status: 'Paid'
+                    };
+                    DEMO_TRANSACTIONS.push(newTx);
+                    saveDemoData();
+                    return Promise.resolve({ success: true, item: foundItem, transaction: newTx });
+                }
+                return Promise.reject("Item not found");
+            }
+            return fetchJson<any>(`/installments/${itemId}/pay`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date, paymentMethod })
+            });
+        },
+        delete: (id: string) => {
+             if (isDemoMode()) {
+                 const idx = DEMO_INSTALLMENTS.findIndex(p => p.id === id);
+                 if (idx !== -1) {
+                     DEMO_INSTALLMENTS.splice(idx, 1);
+                     saveDemoData();
+                 }
+                 return Promise.resolve({ success: true });
+             }
+             return fetchJson<{ success: true }>(`/installments/${id}`, { method: 'DELETE' });
+        }
     },
     transactions: {
         getAll: (clinicId: string) => {

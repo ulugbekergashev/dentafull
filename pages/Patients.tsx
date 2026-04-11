@@ -101,19 +101,15 @@ export const Patients: React.FC<PatientsProps> = ({
         const lastVisitDate = p.lastVisit === 'Never' ? null : new Date(p.lastVisit);
         matchesStat = lastVisitDate ? lastVisitDate >= sevenDaysAgo : true;
       } else if (activeStatFilter === 'debtor') {
-        const patientAppts = appointments.filter(a => a.patientId === p.id || a.patientName === `${p.lastName} ${p.firstName}`);
         const patientTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
-
-        const totalService = patientAppts.reduce((sum, app) => sum + (app.totalAmount || 0), 0);
-        const totalPaid = patientTxs.filter(t => t.status === 'Paid').reduce((sum, t) => sum + t.amount, 0);
-
-        matchesStat = totalService > totalPaid;
+        const totalDebt = patientTxs.filter(t => t.status === 'Pending').reduce((sum, t) => sum + t.amount, 0);
+        matchesStat = totalDebt > 0;
       } else if (activeStatFilter === 'waiting') {
         const patientAppts = appointments.filter(a => a.patientId === p.id || a.patientName === `${p.lastName} ${p.firstName}`);
         const patientTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
         const hasUnpaid = patientAppts.some(app => {
-          const isPaid = patientTxs.some(t => t.date === app.date && t.status === 'Paid');
-          return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid;
+          const hasTransaction = patientTxs.some(t => t.date === app.date);
+          return (app.status === 'Completed' || app.status === 'Checked-In') && !hasTransaction;
         });
         matchesStat = hasUnpaid;
       }
@@ -131,21 +127,17 @@ export const Patients: React.FC<PatientsProps> = ({
     const newPatients = patients.filter(p => p.lastVisit === 'Never' || (p.lastVisit !== 'Never' && new Date(p.lastVisit) >= sevenDaysAgo)).length;
 
     const debtors = patients.filter(p => {
-      const pAppts = appointments.filter(a => a.patientId === p.id || a.patientName === `${p.lastName} ${p.firstName}`);
       const pTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
-
-      const totalSvc = pAppts.reduce((sum, app) => sum + (app.totalAmount || 0), 0);
-      const totalPd = pTxs.filter(t => t.status === 'Paid').reduce((sum, t) => sum + t.amount, 0);
-
-      return totalSvc > totalPd;
+      const totalDebt = pTxs.filter(t => t.status === 'Pending').reduce((sum, t) => sum + t.amount, 0);
+      return totalDebt > 0;
     }).length;
 
     const waiting = patients.filter(p => {
       const pAppts = appointments.filter(a => a.patientId === p.id || a.patientName === `${p.lastName} ${p.firstName}`);
       const pTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
       return pAppts.some(app => {
-        const isPaid = pTxs.some(t => t.date === app.date && t.status === 'Paid');
-        return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid;
+        const hasTransaction = pTxs.some(t => t.date === app.date);
+        return (app.status === 'Completed' || app.status === 'Checked-In') && !hasTransaction;
       });
     }).length;
 

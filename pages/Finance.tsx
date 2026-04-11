@@ -19,10 +19,11 @@ interface FinanceProps {
   doctors: Doctor[];
 }
 
-import { Doctor } from '../types';
+import { Doctor, InstallmentPlan } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
 export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors }) => {
+  const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
@@ -35,6 +36,23 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
   const [startDate, setStartDate] = useState(isReceptionist ? today : defaultStart);
   const [endDate, setEndDate] = useState(isReceptionist ? today : defaultEnd);
+
+  const loadInstallments = async () => {
+    if (isReceptionist || !patients.length) return;
+    try {
+      const clinicId = patients[0]?.clinicId;
+      if (clinicId) {
+        const data = await api.installments.getAll(clinicId);
+        setInstallments(data);
+      }
+    } catch (err) {
+      console.error('Failed to load installments:', err);
+    }
+  };
+
+  React.useEffect(() => {
+    loadInstallments();
+  }, [patients]);
 
   // Filter data for doctors - only show their appointments and transactions
   const filteredAppointmentsByDoctor = userRole === UserRole.DOCTOR && doctorId
@@ -74,7 +92,11 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
 
   // Calculate debtors from transactions (only Pending, not Overdue since it's not used)
   const debtTransactions = transactions.filter(t => t.status === 'Pending');
-  const totalDebt = debtTransactions.reduce((acc, t) => acc + t.amount, 0);
+  const transactionDebt = debtTransactions.reduce((acc, t) => acc + t.amount, 0);
+
+  // Installment debt
+  const installmentDebt = installments.reduce((acc, plan) => acc + (plan.totalAmount - plan.totalPaid), 0);
+  const totalDebt = transactionDebt + installmentDebt;
 
   // Create a map of patientName -> patientId from patients list
   const patientIdMap = new Map<string, string>();
@@ -104,16 +126,38 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
     }
   });
 
+  const installmentDebtMap = new Map<string, number>();
+  installments.forEach(plan => {
+    const patient = patients.find(p => p.id === plan.patientId);
+    if (patient) {
+      const name = `${patient.lastName} ${patient.firstName}`;
+      installmentDebtMap.set(name, (installmentDebtMap.get(name) || 0) + (plan.totalAmount - plan.totalPaid));
+    }
+  });
+
+  debtorMap.forEach((debtor, name) => {
+    debtor.amount += installmentDebtMap.get(name) || 0;
+  });
+
+  // Upcoming Installments for current month
+  const { startDate: monthStart, endDate: monthEnd } = getCurrentMonthRange();
+  const upcomingItems = installments.flatMap(p => p.items || [])
+    .filter(item => item.status === 'Pending' && item.expectedDate >= monthStart && item.expectedDate <= monthEnd);
+  const upcomingInstallmentAmount = upcomingItems.reduce((acc, item) => acc + item.amount, 0);
+
   const DEBTORS = Array.from(debtorMap.values())
     .map((d, index) => ({
-      id: index + 1,
+      id: d.patientId || `debtor-${index}`,
       name: d.name,
       amount: d.amount,
+      phone: patients.find(p => p.id === d.patientId)?.phone || '',
       days: Math.floor((new Date().getTime() - new Date(d.date).getTime()) / (1000 * 60 * 60 * 24)),
-      phone: '+998 90 XXX XX XX',
       patientId: d.patientId
     }))
+    .filter(d => d.amount > 0)
     .sort((a, b) => b.amount - a.amount);
+
+  const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
 
   const PAYMENT_METHOD_DATA = [
     { name: 'Naqd', value: filteredTransactions.filter(t => t.type === 'Cash').length, color: '#10B981' },
@@ -315,7 +359,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
       </div>
 
       {/* Main Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-none">
           <p className="text-blue-100 text-sm font-medium">{isReceptionist ? t('finance.todayIncomeCard') : t('finance.totalIncome')}</p>
           <h3 className="text-3xl font-bold mt-2">{totalRevenue.toLocaleString()} UZS</h3>
@@ -333,6 +377,19 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.debt')}</p>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{totalDebt.toLocaleString()} UZS</h3>
+              </div>
+            </div>
+          </Card>
+        )}
+        {!isReceptionist && (
+          <Card className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+                <Clock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Bo'lib to'lash (Oy)</p>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{upcomingInstallmentAmount.toLocaleString()} UZS</h3>
               </div>
             </div>
           </Card>
@@ -483,6 +540,33 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               <Button variant="ghost" className="w-full text-sm mt-2" onClick={() => setIsDebtorModalOpen(true)}>{t('finance.viewAll')}</Button>
             </div>
           </Card>
+          
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+               <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Bo'lib to'lash rejalari</h3>
+                  <p className="text-sm text-gray-500">{installments.filter(p => p.status === 'Active').length} ta faol shartnoma</p>
+               </div>
+               <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600">
+                  <CreditCard className="w-5 h-5" />
+               </div>
+            </div>
+            <div className="space-y-4">
+               {installments.filter(p => p.status === 'Active').slice(0, 3).map(plan => (
+                  <div key={plan.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700">
+                     <div>
+                        <p className="font-medium text-sm text-gray-900 dark:text-white">{plan.patient?.lastName} {plan.patient?.firstName}</p>
+                        <p className="text-xs text-gray-500">{plan.service}</p>
+                     </div>
+                     <div className="text-right">
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">{(plan.totalAmount - plan.totalPaid).toLocaleString()} UZS</p>
+                        <p className="text-[10px] text-gray-500">Qoldiq</p>
+                     </div>
+                  </div>
+               ))}
+               <Button variant="ghost" className="w-full text-sm mt-2" onClick={() => setIsInstallmentModalOpen(true)}>{t('finance.viewAll')}</Button>
+            </div>
+          </Card>
         </div>
 
         {/* Transaction Table */}
@@ -540,6 +624,50 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
             </table>
           </div>
         </Card>
+
+        {/* Installment Modal */}
+        <Modal isOpen={isInstallmentModalOpen} onClose={() => setIsInstallmentModalOpen(false)} title="Bo'lib to'lash rejalari">
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+               {installments.map(plan => (
+                  <div key={plan.id} className="p-4 border border-gray-100 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-800/30">
+                     <div className="flex justify-between items-start mb-3">
+                        <div>
+                           <h4 className="font-bold text-gray-900 dark:text-white text-lg">
+                              {plan.patient?.lastName} {plan.patient?.firstName}
+                           </h4>
+                           <p className="text-sm text-gray-500 italic">{plan.service}</p>
+                        </div>
+                        <Badge variant={plan.status === 'Active' ? 'warning' : 'success'}>
+                           {plan.status === 'Active' ? 'Faol' : 'Yakunlangan'}
+                        </Badge>
+                     </div>
+                     <div className="grid grid-cols-3 gap-2 py-3 border-y border-gray-100 dark:border-gray-800 text-center">
+                        <div>
+                           <p className="text-[10px] text-gray-500 uppercase">Jami</p>
+                           <p className="font-bold text-sm">{plan.totalAmount.toLocaleString()}</p>
+                        </div>
+                        <div>
+                           <p className="text-[10px] text-gray-500 uppercase text-green-600">To'landi</p>
+                           <p className="font-bold text-sm text-green-600">{plan.totalPaid.toLocaleString()}</p>
+                        </div>
+                        <div>
+                           <p className="text-[10px] text-gray-500 uppercase text-red-600">Qoldiq</p>
+                           <p className="font-bold text-sm text-red-600">{(plan.totalAmount - plan.totalPaid).toLocaleString()}</p>
+                        </div>
+                     </div>
+                     <div className="mt-3 flex justify-end">
+                        <Button size="sm" variant="secondary" onClick={() => {
+                           setIsInstallmentModalOpen(false);
+                           if (plan.patientId) onPatientClick(plan.patientId);
+                        }}>Profilga o'tish</Button>
+                     </div>
+                  </div>
+               ))}
+               {installments.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">Hech qanday reja topilmadi.</div>
+               )}
+            </div>
+        </Modal>
 
         {/* Debtors Modal */}
         <Modal isOpen={isDebtorModalOpen} onClose={() => setIsDebtorModalOpen(false)} title="Qarzdorlar Ro'yxati">

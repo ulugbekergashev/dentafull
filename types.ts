@@ -102,6 +102,35 @@ export interface Transaction {
   discountAmount?: number;  // Chegirma summasi
 }
 
+export interface InstallmentPlan {
+  id: string;
+  patientId: string;
+  clinicId: string;
+  doctorId?: string;
+  service: string;
+  totalAmount: number;
+  totalPaid: number;
+  startDate: string;
+  endDate: string;
+  status: 'Active' | 'Completed' | 'Cancelled';
+  createdAt?: string;
+  items?: InstallmentItem[];
+  
+  // Relations mapped out
+  patient?: Patient;
+  doctor?: Doctor;
+}
+
+export interface InstallmentItem {
+  id: string;
+  planId: string;
+  expectedDate: string;
+  amount: number;
+  status: 'Pending' | 'Paid';
+  paidDate?: string;
+  transactionId?: string;
+}
+
 export interface Service {
   id?: number; // Optional because it might be auto-generated or missing in some contexts
   name: string;
@@ -165,6 +194,8 @@ export interface Clinic {
   facebookPageId?: string;
   facebookPageAccessToken?: string;
   facebookPageName?: string;
+  startHour?: number;
+  endHour?: number;
 }
 
 export interface ICD10Code {

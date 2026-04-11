@@ -41,7 +41,8 @@ export const saveDemoData = () => {
             inventory: DEMO_INVENTORY,
             logs: DEMO_INVENTORY_LOGS,
             categories: DEMO_CATEGORIES,
-            leads: DEMO_LEADS
+            leads: DEMO_LEADS,
+            installments: DEMO_INSTALLMENTS
         };
         const stringified = JSON.stringify(data);
         localStorage.setItem(STORAGE_KEY, stringified);
@@ -68,6 +69,8 @@ export let DEMO_CLINIC: Clinic = savedData?.clinic || {
     monthlyRevenue: 0,
     subscriptionType: 'Paid',
     botToken: '',
+    startHour: 8,
+    endHour: 20
 };
 
 export let DEMO_CLINICS: Clinic[] = savedData?.clinics || [DEMO_CLINIC];
@@ -421,5 +424,29 @@ export let DEMO_LEADS: Lead[] = savedData?.leads || [
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         clinicId: 'demo-clinic-1'
+    }
+];
+
+// Demo Installments
+export let DEMO_INSTALLMENTS: InstallmentPlan[] = savedData?.installments || [
+    {
+        id: 'demo-ins-1',
+        patientId: 'demo-patient-1',
+        clinicId: 'demo-clinic-1',
+        doctorId: 'demo-doctor-1',
+        service: 'Breket tizimi',
+        totalAmount: 5000000,
+        totalPaid: 2000000,
+        startDate: '2026-01-01',
+        endDate: '2026-06-01',
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+        items: [
+            { id: 'item-1', planId: 'demo-ins-1', expectedDate: '2026-02-01', amount: 600000, status: 'Paid', paidDate: '2026-02-01' },
+            { id: 'item-2', planId: 'demo-ins-1', expectedDate: '2026-03-01', amount: 600000, status: 'Paid', paidDate: '2026-03-01' },
+            { id: 'item-3', planId: 'demo-ins-1', expectedDate: '2026-04-15', amount: 600000, status: 'Pending' },
+            { id: 'item-4', planId: 'demo-ins-1', expectedDate: '2026-05-15', amount: 600000, status: 'Pending' },
+            { id: 'item-5', planId: 'demo-ins-1', expectedDate: '2026-06-15', amount: 600000, status: 'Pending' },
+        ]
     }
 ];

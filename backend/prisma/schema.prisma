@@ -24,6 +24,7 @@ model Doctor {
   secondaryPhone String?
   appointments   Appointment[]
   patients       Patient[]
+  installmentPlans InstallmentPlan[]
   clinic         Clinic        @relation(fields: [clinicId], references: [id])
 
   @@unique([clinicId, telegramChatId])
@@ -70,6 +71,7 @@ model Patient {
   teeth          ToothData[]
   transactions   Transaction[]
   visits         Visit[]
+  installmentPlans InstallmentPlan[]
 
   @@unique([clinicId, telegramChatId])
   @@index([phone])
@@ -234,6 +236,8 @@ model Clinic {
   facebookUserAccessToken String?
   facebookPageName      String?
   customPrice           Float?
+  startHour             Int                @default(8)
+  endHour               Int                @default(20)
   appointments          Appointment[]
   plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors               Doctor[]
@@ -247,6 +251,7 @@ model Clinic {
   telegramLogs          TelegramLog[]
   transactions          Transaction[]
   visits                Visit[]
+  installmentPlans      InstallmentPlan[]
 
   @@index([botToken])
 }
@@ -353,4 +358,36 @@ model TelegramLog {
 
   @@index([clinicId])
   @@index([patientId])
+}
+
+model InstallmentPlan {
+  id           String @id @default(uuid())
+  patientId    String
+  clinicId     String
+  doctorId     String?
+  service      String
+  totalAmount  Float
+  totalPaid    Float  @default(0)
+  startDate    String
+  endDate      String
+  status       String @default("Active")
+  items        InstallmentItem[]
+  
+  patient      Patient  @relation(fields: [patientId], references: [id])
+  clinic       Clinic   @relation(fields: [clinicId], references: [id])
+  doctor       Doctor?  @relation(fields: [doctorId], references: [id])
+
+  createdAt    DateTime @default(now())
+}
+
+model InstallmentItem {
+  id            String @id @default(uuid())
+  planId        String
+  expectedDate  String
+  amount        Float
+  status        String @default("Pending")
+  paidDate      String?
+  transactionId String?
+  
+  plan          InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 }

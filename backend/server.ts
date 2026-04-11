@@ -829,6 +829,114 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Installments ---
+app.get('/api/installments', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId, patientId } = req.query;
+        if (!clinicId && !patientId) return res.status(400).json({ error: 'clinicId or patientId required' });
+        
+        const where: any = {};
+        if (clinicId) where.clinicId = clinicId as string;
+        if (patientId) where.patientId = patientId as string;
+        
+        const plans = await prisma.installmentPlan.findMany({
+            where,
+            include: { items: true, patient: true, doctor: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(plans);
+    } catch (error) {
+        console.error('Fetch installments error:', error);
+        res.status(500).json({ error: 'Failed to fetch installments' });
+    }
+});
+
+app.post('/api/installments', authenticateToken, async (req, res) => {
+    try {
+        const { patientId, clinicId, doctorId, service, totalAmount, totalPaid, startDate, endDate, status, items } = req.body;
+        
+        const plan = await prisma.installmentPlan.create({
+            data: {
+                patientId, clinicId, doctorId, service, totalAmount, totalPaid, startDate, endDate, status,
+                items: {
+                    create: items.map((item: any) => ({
+                        expectedDate: item.expectedDate,
+                        amount: item.amount,
+                        status: item.status || 'Pending'
+                    }))
+                }
+            },
+            include: { items: true, patient: true, doctor: true }
+        });
+        
+        res.json(plan);
+    } catch (error) {
+        console.error('Create installment error:', error);
+        res.status(500).json({ error: 'Failed to create installment' });
+    }
+});
+
+app.post('/api/installments/:id/pay', authenticateToken, async (req, res) => {
+    try {
+        const itemId = req.params.id;
+        const { date, paymentMethod } = req.body;
+        
+        const item = await prisma.installmentItem.findUnique({ where: { id: itemId }, include: { plan: { include: { patient: true, doctor: true } } } });
+        if (!item) return res.status(404).json({ error: 'Installment item not found' });
+        if (item.status === 'Paid') return res.status(400).json({ error: 'Already paid' });
+        
+        const updatedItem = await prisma.installmentItem.update({
+            where: { id: itemId },
+            data: { status: 'Paid', paidDate: date }
+        });
+        
+        const updatedPlan = await prisma.installmentPlan.update({
+            where: { id: item.planId },
+            data: { totalPaid: { increment: item.amount } }
+        });
+        
+        const remainingItems = await prisma.installmentItem.count({ where: { planId: item.planId, status: 'Pending' } });
+        if (remainingItems === 0) {
+            await prisma.installmentPlan.update({ where: { id: item.planId }, data: { status: 'Completed' } });
+        }
+        
+        const transaction = await prisma.transaction.create({
+            data: {
+                patientId: item.plan.patientId,
+                patientName: `${item.plan.patient.lastName} ${item.plan.patient.firstName}`,
+                clinicId: item.plan.clinicId,
+                doctorId: item.plan.doctorId,
+                doctorName: item.plan.doctor ? `${item.plan.doctor.lastName} ${item.plan.doctor.firstName}` : '',
+                amount: item.amount,
+                date: date,
+                service: `Bo'lib to'lash (${item.plan.service})`,
+                type: paymentMethod || 'Cash',
+                status: 'Paid',
+            }
+        });
+        
+        await prisma.installmentItem.update({
+            where: { id: itemId },
+            data: { transactionId: transaction.id }
+        });
+        
+        res.json({ success: true, item: updatedItem, transaction });
+    } catch (error) {
+        console.error('Pay installment error:', error);
+        res.status(500).json({ error: 'Failed to pay installment' });
+    }
+});
+
+app.delete('/api/installments/:id', authenticateToken, async (req, res) => {
+    try {
+        await prisma.installmentPlan.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete installment error:', error);
+        res.status(500).json({ error: 'Failed to delete installment plan' });
+    }
+});
+
 // --- Recalculate all patient balances (one-time fix) ---
 app.post('/api/admin/recalculate-balances', authenticateToken, async (req, res) => {
     try {
