@@ -58,7 +58,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
    // Payment Form State
    const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
+   const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent'); // Chegirma turi: foiz yoki summa
    const [pendingProcedures, setPendingProcedures] = useState<any[]>([]);
+
+   // Installment quick-open state (from appointment row)
+   const [installmentQuickOpen, setInstallmentQuickOpen] = useState<{ service: string; amount: number; doctorId: string } | null>(null);
 
    // Medical History State
    const [historyText, setHistoryText] = useState('');
@@ -603,9 +607,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       }
 
       const doctor = doctors.find(d => d.id === paymentData.doctorId);
-      const discountPercent = Number(paymentData.discountPercent) || 0;
-      const discountAmount = Math.round(totalAmount * (discountPercent / 100)) || 0; // Fixed to calculate direct percentage of the total amount
-      // Actually, let's just use the fields directly from the state we'll add.
+      // Calculate discount percent and amount based on discount type
+      const rawDiscountVal = Number(paymentData.discountPercent) || 0;
+      const discountPercent = discountType === 'percent'
+         ? rawDiscountVal
+         : (totalAmount > 0 ? Math.round((rawDiscountVal / totalAmount) * 100) : 0);
+      const discountAmount = discountType === 'percent'
+         ? Math.round(totalAmount * (rawDiscountVal / 100))
+         : rawDiscountVal;
 
       try {
          // Scenario 1: Full Payment (Debt == 0)
@@ -1271,9 +1280,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
                                           <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
                                           <td className="p-4"><Badge status="Pending" /></td>
-                                          <td className="p-4 flex gap-2">
+                                          <td className="p-4 flex gap-2 flex-wrap">
                                              <Button size="sm" onClick={() => {
                                                 const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                                setDiscountType('percent');
                                                 setPaymentData({
                                                    amount: total.toString(),
                                                    paidAmount: total.toString(),
@@ -1287,6 +1297,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                 });
                                                 setIsPaymentModalOpen(true);
                                              }}>To'lov</Button>
+                                             <Button size="sm" variant="secondary" className="bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800" onClick={() => {
+                                                const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                                setInstallmentQuickOpen({ service: breakdown || app.type, amount: total, doctorId: app.doctorId });
+                                                setActiveTab('installments');
+                                             }}>Bo'lib to'lash</Button>
                                              {(patient.balance || 0) > 0 && (
                                                 <Button size="sm" variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100" onClick={async () => {
                                                    const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
@@ -1421,6 +1436,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      clinicId={currentClinic.id} 
                      doctors={doctors}
                      services={services}
+                     initialCreateData={installmentQuickOpen || undefined}
+                     onInitialDataConsumed={() => setInstallmentQuickOpen(null)}
                   />
                )}
                
@@ -1625,39 +1642,84 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </div>
                   )}
                   {paymentData.service !== 'Avans' && (
-                     <div className="grid grid-cols-3 gap-4">
-                        <div>
-                           <Input
-                              label="Chegirma (%)"
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={paymentData.discountPercent}
-                              onChange={e => {
-                                 const percent = Number(e.target.value);
-                                 if (percent < 0 || percent > 100) return;
-
-                                 const baseTotal = Number(paymentData.amount) || 0;
-                                 if (baseTotal > 0) {
-                                    const discountedTotal = Math.round(baseTotal * (1 - percent / 100));
-                                    setPaymentData({
-                                       ...paymentData,
-                                       discountPercent: e.target.value,
-                                       paidAmount: discountedTotal.toString(),
-                                       debtAmount: '0'
-                                    });
-                                 } else {
-                                    setPaymentData({ ...paymentData, discountPercent: e.target.value });
-                                 }
-                              }}
-                              placeholder="0"
-                           />
-                        </div>
-                        <div className="col-span-2 flex items-end">
-                           <div className="w-full p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-xs text-yellow-800 dark:text-yellow-200">
-                              Chegirma summasi: <strong>{Math.round((Number(paymentData.amount) || 0) * (Number(paymentData.discountPercent) || 0) / 100).toLocaleString()} UZS</strong>
+                     <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Chegirma</label>
+                        <div className="flex gap-2">
+                           {/* Discount type selector */}
+                           <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shrink-0">
+                              <button
+                                 type="button"
+                                 className={`px-3 py-2 text-sm font-medium transition-colors ${
+                                    discountType === 'percent'
+                                       ? 'bg-blue-600 text-white'
+                                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                 }`}
+                                 onClick={() => {
+                                    setDiscountType('percent');
+                                    setPaymentData({ ...paymentData, discountPercent: '' });
+                                 }}
+                              >Foiz (%)</button>
+                              <button
+                                 type="button"
+                                 className={`px-3 py-2 text-sm font-medium transition-colors ${
+                                    discountType === 'amount'
+                                       ? 'bg-blue-600 text-white'
+                                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                 }`}
+                                 onClick={() => {
+                                    setDiscountType('amount');
+                                    setPaymentData({ ...paymentData, discountPercent: '' });
+                                 }}
+                              >Summa</button>
+                           </div>
+                           {/* Discount input */}
+                           <div className="flex-1">
+                              <Input
+                                 label=""
+                                 type="number"
+                                 min="0"
+                                 max={discountType === 'percent' ? 100 : undefined}
+                                 value={paymentData.discountPercent}
+                                 onChange={e => {
+                                    const val = Number(e.target.value);
+                                    const baseTotal = Number(paymentData.amount) || 0;
+                                    if (discountType === 'percent') {
+                                       if (val < 0 || val > 100) return;
+                                       const discountedTotal = baseTotal > 0 ? Math.round(baseTotal * (1 - val / 100)) : 0;
+                                       setPaymentData({
+                                          ...paymentData,
+                                          discountPercent: e.target.value,
+                                          paidAmount: baseTotal > 0 ? discountedTotal.toString() : paymentData.paidAmount,
+                                          debtAmount: '0'
+                                       });
+                                    } else {
+                                       // Fixed amount discount
+                                       if (val < 0) return;
+                                       const discountedTotal = baseTotal > 0 ? Math.max(0, baseTotal - val) : 0;
+                                       // Store equivalent percent for data consistency
+                                       const equivalentPercent = baseTotal > 0 ? Math.round((val / baseTotal) * 100) : 0;
+                                       setPaymentData({
+                                          ...paymentData,
+                                          discountPercent: e.target.value, // store raw discount amount as string
+                                          paidAmount: baseTotal > 0 ? discountedTotal.toString() : paymentData.paidAmount,
+                                          debtAmount: '0'
+                                       });
+                                    }
+                                 }}
+                                 placeholder={discountType === 'percent' ? '0' : 'Summa kiriting'}
+                              />
                            </div>
                         </div>
+                        {/* Discount info box */}
+                        {paymentData.discountPercent && Number(paymentData.discountPercent) > 0 && (
+                           <div className="p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-xs text-yellow-800 dark:text-yellow-200">
+                              {discountType === 'percent' ? (
+                                 <>Chegirma summasi: <strong>{Math.round((Number(paymentData.amount) || 0) * (Number(paymentData.discountPercent) || 0) / 100).toLocaleString()} UZS</strong> ({paymentData.discountPercent}%)</>
+                              ) : (
+                                 <>Chegirma: <strong>{Number(paymentData.discountPercent).toLocaleString()} UZS</strong> &nbsp;(Umumiy {(Number(paymentData.amount)||0) > 0 ? Math.round((Number(paymentData.discountPercent)/(Number(paymentData.amount)||1))*100) : 0}%)</>
+                              )}
+                           </div>
+                        )}
                      </div>
                   )}
 

@@ -10,9 +10,11 @@ interface InstallmentsTabProps {
    clinicId: string;
    doctors: Doctor[];
    services: Service[];
+   initialCreateData?: { service: string; amount: number; doctorId: string };
+   onInitialDataConsumed?: () => void;
 }
 
-export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, clinicId, doctors, services }) => {
+export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, clinicId, doctors, services, initialCreateData, onInitialDataConsumed }) => {
    const { t } = useLanguage();
    const [plans, setPlans] = useState<InstallmentPlan[]>([]);
    const [loading, setLoading] = useState(true);
@@ -48,6 +50,21 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
    useEffect(() => {
       loadPlans();
    }, [patientId, clinicId]);
+
+   // Auto-open create modal when initialCreateData is provided
+   useEffect(() => {
+      if (initialCreateData) {
+         setCreateForm(prev => ({
+            ...prev,
+            service: initialCreateData.service,
+            totalAmount: initialCreateData.amount.toString(),
+            doctorId: initialCreateData.doctorId || '',
+            initialPayment: ''
+         }));
+         setIsCreateModalOpen(true);
+         onInitialDataConsumed?.();
+      }
+   }, [initialCreateData]);
 
    const handleCreate = async () => {
       try {

@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, Installment } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan } from '../types';
 import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
@@ -322,7 +322,7 @@ export const api = {
                         amount: foundItem.amount,
                         date: date,
                         service: `Bo'lib to'lash (${foundPlan.service})`,
-                        type: paymentMethod,
+                        type: paymentMethod as any,
                         status: 'Paid'
                     };
                     DEMO_TRANSACTIONS.push(newTx);
