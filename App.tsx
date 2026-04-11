@@ -1266,6 +1266,7 @@ const AppContent: React.FC = () => {
                   onAddReceptionist={addReceptionist}
                   onUpdateReceptionist={updateReceptionist}
                   onDeleteReceptionist={deleteReceptionist}
+                  currentClinic={currentClinic}
                   plans={plans}
                   reviews={reviews}
                 />
