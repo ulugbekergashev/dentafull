@@ -282,6 +282,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                >
                   {t('superAdmin.tabs.plans')}
                </button>
+               <button
+                  onClick={() => setActiveTab('blocked')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
+               >
+                  {t('superAdmin.tabs.blocked')} ({blockedCount})
+               </button>
             </div>
          </div>
 
@@ -308,6 +314,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <h3 className="text-3xl font-bold mt-2 text-gray-900 dark:text-white">{totalClinics}</h3>
                         <div className="flex gap-3 mt-3 text-xs">
                            <span className="text-green-600 font-medium flex items-center"><CheckCircle className="w-3 h-3 mr-1" /> {activeClinics} Faol</span>
+                           <span className="text-red-500 font-medium flex items-center"><Ban className="w-3 h-3 mr-1" /> {blockedCount} Bloklangan</span>
                         </div>
                      </div>
                      <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
@@ -390,6 +397,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <option value="All">Barchasi ({allCount})</option>
                         <option value="NotExpired">Hali tugamagan ({notExpiredCount})</option>
                         <option value="Active">Faol ({activeCount})</option>
+                        <option value="Blocked">Bloklangan ({blockedCount})</option>
                         <option value="Expiring">Tugayotganlar ({expiringCount})</option>
                         <option value="Expired">Muddati tugagan ({expiredCount})</option>
                      </select>
