@@ -219,6 +219,8 @@ model Clinic {
   username              String             @unique
   password              String?
   phone                 String
+  email                 String?
+  address               String?
   status                String
   planId                String
   subscriptionStartDate String
