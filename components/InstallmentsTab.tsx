@@ -148,9 +148,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
                         <div>
                            <div className="flex items-center gap-3 mb-1">
                               <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{plan.service}</h4>
-                              <Badge variant={plan.status === 'Active' ? 'warning' : 'success'}>
-                                 {plan.status === 'Active' ? 'Faol' : 'Yakunlangan'}
-                              </Badge>
+                              <Badge status={plan.status === 'Active' ? 'pending' : 'completed'} />
                            </div>
                            <p className="text-sm text-gray-500 dark:text-gray-400">
                               Shifokor: {plan.doctor ? `${plan.doctor.lastName} ${plan.doctor.firstName}` : 'Klinika'}

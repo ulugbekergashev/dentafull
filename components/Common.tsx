@@ -67,9 +67,9 @@ const STATUS_TRANSLATIONS: Record<string, string> = {
   'crown': 'Qoplama'
 };
 
-export const Badge: React.FC<{ status: string }> = ({ status }) => {
+export const Badge: React.FC<{ status?: string }> = ({ status = 'pending' }) => {
   let colorClass = 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-  const lowerStatus = status.toLowerCase();
+  const lowerStatus = (status || 'pending').toLowerCase();
 
   switch (lowerStatus) {
     case 'active':
