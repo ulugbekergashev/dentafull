@@ -20,6 +20,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const { t } = useLanguage();
    const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked'>('overview');
 
+   const handleTabChange = (tab: 'overview' | 'clinics' | 'plans' | 'blocked') => {
+      setActiveTab(tab);
+      setCurrentPage(1);
+      setFilterStatus('All');
+      setSearchQuery('');
+   };
+
    // Create Clinic State
    const [isAddClinicModalOpen, setIsAddClinicModalOpen] = useState(false);
    const [newClinicForm, setNewClinicForm] = useState({
@@ -265,25 +272,25 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             </div>
             <div className="flex bg-white dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
                <button
-                  onClick={() => setActiveTab('overview')}
+                  onClick={() => handleTabChange('overview')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
                   {t('superAdmin.tabs.overview')}
                </button>
                <button
-                  onClick={() => setActiveTab('clinics')}
+                  onClick={() => handleTabChange('clinics')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'clinics' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
                   {t('superAdmin.tabs.clinics')}
                </button>
                <button
-                  onClick={() => setActiveTab('plans')}
+                  onClick={() => handleTabChange('plans')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
                   {t('superAdmin.tabs.plans')}
                </button>
                <button
-                  onClick={() => setActiveTab('blocked')}
+                  onClick={() => handleTabChange('blocked')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
                   {t('superAdmin.tabs.blocked')} ({blockedCount})
@@ -589,6 +596,33 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </tbody>
                   </table>
                </div>
+
+               {/* Pagination Controls for Blocked Tab */}
+               {totalPages > 1 && (
+                  <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                     <div className="text-sm text-gray-500">
+                        Jami: {filteredClinics.length} ta (Sahifa {currentPage} / {totalPages})
+                     </div>
+                     <div className="flex gap-2">
+                        <Button
+                           variant="secondary"
+                           size="sm"
+                           onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                           disabled={currentPage === 1}
+                        >
+                           Ortga
+                        </Button>
+                        <Button
+                           variant="secondary"
+                           size="sm"
+                           onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                           disabled={currentPage === totalPages}
+                        >
+                           Oldinga
+                        </Button>
+                     </div>
+                  </div>
+               )}
             </Card>
          )}
 

@@ -556,6 +556,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
       }
 
+      setDiscountType('percent');
       setManualPaymentCategoryId('');
       setManualPaymentServiceId(null);
 
@@ -569,7 +570,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setPaymentData({
             ...paymentData,
             service: service.name,
-            paidAmount: service.price.toString()
+            amount: service.price.toString(),
+            paidAmount: service.price.toString(),
+            debtAmount: '0',
+            discountPercent: ''
          });
       }
    };
@@ -630,7 +634,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,
-               discountAmount: Math.round(totalAmount * (discountPercent / 100)) || 0
+               discountAmount: discountAmount
             });
          }
          // Scenario 2: No Payment (Paid == 0)
@@ -646,7 +650,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,
-               discountAmount: Math.round(totalAmount * (discountPercent / 100)) || 0
+               discountAmount: discountAmount
             });
          }
          // Scenario 3: Partial Payment (Paid > 0 && Debt > 0)
@@ -1730,13 +1734,20 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            variant="secondary" 
                            className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800 flex items-center justify-center gap-2"
                            onClick={() => {
-                              const amountToPay = Number(paymentData.amount) || 0;
-                              const discount = Number(paymentData.discountPercent) || 0;
-                              const total = Math.round(amountToPay * (1 - discount / 100));
+                              const baseAmount = Number(paymentData.amount) || 0;
+                              const discountVal = Number(paymentData.discountPercent) || 0;
+                              let finalTotal = baseAmount;
+                              
+                              if (discountType === 'percent') {
+                                 finalTotal = Math.round(baseAmount * (1 - discountVal / 100));
+                              } else {
+                                 finalTotal = Math.max(0, baseAmount - discountVal);
+                              }
+
                               setPaymentData({ 
                                  ...paymentData, 
                                  type: 'Balance',
-                                 paidAmount: total.toString(),
+                                 paidAmount: finalTotal.toString(),
                                  debtAmount: '0'
                               });
                            }}
