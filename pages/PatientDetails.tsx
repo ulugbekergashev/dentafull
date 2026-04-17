@@ -2187,6 +2187,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <div className="flex justify-end pt-4 mt-2 border-t border-gray-100 dark:border-gray-700">
                <Button variant="secondary" onClick={() => setIsAssignDoctorModalOpen(false)}>{t('common.close')}</Button>
             </div>
+         </Modal>
+         
          <ReceiptModal
             isOpen={isReceiptModalOpen}
             onClose={() => setIsReceiptModalOpen(false)}
