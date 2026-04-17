@@ -443,6 +443,7 @@ const AppContent: React.FC = () => {
       }
 
       addToast('success', 'To\'lov qabul qilindi.');
+      return newTx;
     } catch (e: any) {
       console.error('Add transaction error:', e);
       addToast('error', e.message || 'To\'lovni saqlashda xatolik yuz berdi');
@@ -642,10 +643,24 @@ const AppContent: React.FC = () => {
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
-  const updateInventoryStock = async (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string }) => {
+  const updateInventoryStock = async (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string; cost?: number }) => {
     try {
       const updated = await api.inventory.updateStock(id, data);
       setInventoryItems(prev => prev.map(item => item.id === id ? updated : item));
+
+      if (data.type === 'IN' && data.cost && data.cost > 0) {
+        const newTx = await api.transactions.create({
+          patientName: `Ombor: ${updated.name}`,
+          date: new Date().toISOString().split('T')[0],
+          amount: data.cost,
+          type: 'Expense' as any,
+          service: 'Ombor Xarajati',
+          status: 'Paid',
+          clinicId
+        });
+        setTransactions(prev => [newTx, ...prev]);
+      }
+
       addToast('success', 'Miqdor yangilandi.');
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };

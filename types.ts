@@ -91,7 +91,7 @@ export interface Transaction {
   patientName: string;
   date: string;
   amount: number;
-  type: 'Cash' | 'Card' | 'Insurance' | 'Balance';
+  type: 'Cash' | 'Card' | 'Insurance' | 'Balance' | 'Expense';
   service: string;
   status: 'Paid' | 'Pending' | 'Overdue';
   clinicId: string;
@@ -196,6 +196,7 @@ export interface Clinic {
   facebookPageName?: string;
   startHour?: number;
   endHour?: number;
+  enableReceipts?: boolean;
 }
 
 export interface ICD10Code {

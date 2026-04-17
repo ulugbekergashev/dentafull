@@ -8,7 +8,7 @@ interface InventoryProps {
     items: InventoryItem[];
     userName: string;
     onAddItem: (item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => void;
-    onUpdateStock: (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string }) => void;
+    onUpdateStock: (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string; cost?: number }) => void;
     onDeleteItem: (id: string) => void;
 }
 
@@ -23,7 +23,7 @@ export const Inventory: React.FC<InventoryProps> = ({
     // Update Stock Modal State
     const [isStockModalOpen, setIsStockModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-    const [stockForm, setStockForm] = useState({ type: 'IN' as 'IN' | 'OUT', change: '', note: '' });
+    const [stockForm, setStockForm] = useState({ type: 'IN' as 'IN' | 'OUT', change: '', note: '', cost: '' });
 
     // Delete Confirmation
     const [deleteConfirm, setDeleteConfirm] = useState<InventoryItem | null>(null);
@@ -43,7 +43,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
     const handleOpenStockModal = (item: InventoryItem, type: 'IN' | 'OUT') => {
         setSelectedItem(item);
-        setStockForm({ type, change: '', note: '' });
+        setStockForm({ type, change: '', note: '', cost: '' });
         setIsStockModalOpen(true);
     };
 
@@ -55,10 +55,11 @@ export const Inventory: React.FC<InventoryProps> = ({
             change: Number(stockForm.change),
             type: stockForm.type,
             note: stockForm.note || undefined,
-            userName
+            userName,
+            cost: stockForm.type === 'IN' && stockForm.cost ? Number(stockForm.cost) : undefined
         });
         setIsStockModalOpen(false);
-        setStockForm({ type: 'IN', change: '', note: '' });
+        setStockForm({ type: 'IN', change: '', note: '', cost: '' });
         setSelectedItem(null);
     };
 
@@ -220,6 +221,17 @@ export const Inventory: React.FC<InventoryProps> = ({
                         step="0.01"
                         required
                     />
+                    {stockForm.type === 'IN' && (
+                        <Input
+                            label="Xarajat (agar mavjud bo'lsa)"
+                            type="number"
+                            value={stockForm.cost}
+                            onChange={e => setStockForm({ ...stockForm, cost: e.target.value })}
+                            min="0"
+                            placeholder="Masalan: 500000"
+                            helperText="Omborga kiritish uchun ketgan mablag' (moliyaviy hisobotda ko'rinadi)"
+                        />
+                    )}
                     <Input
                         label={t('inventory.note')}
                         value={stockForm.note}

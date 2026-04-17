@@ -10,6 +10,7 @@ export interface DoctorFinancials {
 export interface TotalFinancials {
     technicianCosts: number;
     doctorSalaries: number;
+    inventoryCosts: number;
     netProfit: number;
 }
 
@@ -72,12 +73,21 @@ export function calculateTotalFinancials(
 ): TotalFinancials {
     let technicianCosts = 0;
     let doctorSalaries = 0;
+    let inventoryCosts = 0;
+    let totalRevenue = 0;
 
     // Detect single doctor mode
     const hasSingleDoctor = doctors.length === 1;
     const singleDoctor = hasSingleDoctor ? doctors[0] : null;
 
     transactions.forEach(tx => {
+        if (tx.type === 'Expense') {
+            inventoryCosts += tx.amount;
+            return;
+        }
+
+        totalRevenue += tx.amount;
+
         // Calculate technician cost
         const txService = tx.service.trim().toLowerCase();
         const service = services.find(s => s.name.trim().toLowerCase() === txService);
@@ -109,12 +119,12 @@ export function calculateTotalFinancials(
         }
     });
 
-    const totalRevenue = transactions.reduce((sum, tx) => sum + tx.amount, 0);
-    const netProfit = totalRevenue - technicianCosts - doctorSalaries;
+    const netProfit = totalRevenue - technicianCosts - doctorSalaries - inventoryCosts;
 
     return {
         technicianCosts,
         doctorSalaries,
+        inventoryCosts,
         netProfit
     };
 }

@@ -79,7 +79,8 @@ export const Settings: React.FC<SettingsProps> = ({
       email: '',
       ownerPhone: '',
       startHour: 8,
-      endHour: 20
+      endHour: 20,
+      enableReceipts: true
    });
    const [generalSaved, setGeneralSaved] = useState(false);
 
@@ -118,7 +119,8 @@ export const Settings: React.FC<SettingsProps> = ({
             email: (currentClinic as any).email || '',
             ownerPhone: currentClinic.ownerPhone || '',
             startHour: currentClinic.startHour ?? 8,
-            endHour: currentClinic.endHour ?? 20
+            endHour: currentClinic.endHour ?? 20,
+            enableReceipts: currentClinic.enableReceipts ?? true
          });
       }
    }, [currentClinic]);
@@ -411,7 +413,8 @@ export const Settings: React.FC<SettingsProps> = ({
             email: generalForm.email,
             ownerPhone: generalForm.ownerPhone,
             startHour: Number(generalForm.startHour),
-            endHour: Number(generalForm.endHour)
+            endHour: Number(generalForm.endHour),
+            enableReceipts: generalForm.enableReceipts
          });
 
          if (response && response.id) {
@@ -423,6 +426,23 @@ export const Settings: React.FC<SettingsProps> = ({
          }
       } catch (error) {
          console.error('Failed to save general settings:', error);
+         alert(t('common.error'));
+      }
+   };
+
+   const handleBotSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!currentClinic?.id) return;
+
+      try {
+         await api.clinics.updateSettings(currentClinic.id, { botToken });
+         setBotSaved(true);
+         setTimeout(() => {
+            setBotSaved(false);
+            window.location.reload();
+         }, 1000);
+      } catch (error) {
+         console.error('Failed to save bot settings:', error);
          alert(t('common.error'));
       }
    };
@@ -546,6 +566,23 @@ export const Settings: React.FC<SettingsProps> = ({
                                  />
                               </div>
                            </div>
+                           
+                           {/* Receipt Printing Toggle */}
+                           <div className="pt-2">
+                              <label className="flex items-center space-x-3 cursor-pointer">
+                                 <input
+                                    type="checkbox"
+                                    checked={generalForm.enableReceipts}
+                                    onChange={(e) => setGeneralForm({ ...generalForm, enableReceipts: e.target.checked })}
+                                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                                 />
+                                 <div>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white">Chek chiqarish funksiyasi</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Yoqilsa, to'lov qabul qilinganda avtomatik ravishda chek oynasi ochiladi.</p>
+                                 </div>
+                              </label>
+                           </div>
+
                            <div className="pt-4 flex items-center gap-4">
                               <Button type="submit">{t('common.save')}</Button>
                               {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
@@ -763,13 +800,23 @@ export const Settings: React.FC<SettingsProps> = ({
 
                      <div className="space-y-6">
                         <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
-                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">{t('settings.bot.connectTitle')}</h4>
-                           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                              Telegram-da @DentaFullBot ni toping va unga `/start` buyrug'ini yuboring. Keyin quyidagi ID ni botga yuboring:
+                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">Shaxsiy Telegram Botni Ulash</h4>
+                           <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                              Telegram-da @BotFather orqali o'zingizning shaxsiy botingizni yarating va bot tokenini quyidagi maydonga kiritib, uni tizimga ulang.
                            </p>
-                           <div className="flex items-center gap-2 p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 font-mono text-lg font-bold text-blue-600">
-                              {currentClinic?.id}
-                           </div>
+
+                           <form onSubmit={handleBotSave} className="space-y-4">
+                              <Input 
+                                 label="Telegram Bot Token" 
+                                 value={botToken} 
+                                 onChange={e => setBotToken(e.target.value)} 
+                                 placeholder="7451241151:AAEi-y2F4_abcdefghijklmnopqrst..." 
+                              />
+                              <div className="flex items-center gap-4">
+                                 <Button type="submit">{t('common.save')}</Button>
+                                 {botSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
+                              </div>
+                           </form>
                         </div>
 
                         {currentClinic?.telegramChatId ? (

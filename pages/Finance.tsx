@@ -8,6 +8,8 @@ import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { calculateTotalFinancials } from '../utils/financialCalculations';
 
+import { ReceiptModal } from '../components/ReceiptModal';
+
 interface FinanceProps {
   userRole: UserRole;
   transactions: Transaction[];
@@ -158,6 +160,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
     .sort((a, b) => b.amount - a.amount);
 
   const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [receiptTransaction, setReceiptTransaction] = useState<Transaction | null>(null);
 
   const PAYMENT_METHOD_DATA = [
     { name: 'Naqd', value: filteredTransactions.filter(t => t.type === 'Cash').length, color: '#10B981' },
@@ -165,11 +169,11 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
     { name: 'Sug\'urta', value: filteredTransactions.filter(t => t.type === 'Insurance').length, color: '#8B5CF6' },
   ];
 
-  const totalRevenue = filteredTransactions.reduce((acc, t) => acc + t.amount, 0);
+  const totalRevenue = filteredTransactions.reduce((acc, t) => acc + (t.type !== 'Expense' ? t.amount : 0), 0);
 
   // --- Financial Breakdown Logic ---
   // Use shared utility function for consistent calculations
-  const { technicianCosts, doctorSalaries, netProfit } = calculateTotalFinancials(
+  const { technicianCosts, doctorSalaries, inventoryCosts, netProfit } = calculateTotalFinancials(
     filteredTransactions,
     doctors,
     services
@@ -414,7 +418,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
       {/* Financial Breakdown, Loss Analysis, Charts, Transactions, Debtors - hidden for receptionist */}
       {!isReceptionist && (<>
         {/* Financial Breakdown Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
           <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-red-500">
             <div className="flex items-center justify-between">
               <div>
@@ -423,6 +427,18 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               </div>
               <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
                 <DollarSign className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-orange-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Ombor Xarajatlari</p>
+                <h3 className="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1">{inventoryCosts.toLocaleString()} UZS</h3>
+              </div>
+              <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-full">
+                <Wallet className="w-6 h-6 text-orange-600 dark:text-orange-400" />
               </div>
             </div>
           </Card>
@@ -603,6 +619,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                   <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.method')}</th>
                   <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.amount')}</th>
                   <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.status')}</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase text-right">Amal</th>
                 </tr>
               </thead>
               <tbody className="text-sm text-gray-700 dark:text-gray-300">
@@ -615,10 +632,15 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                     <td className="px-6 py-4">{t.type}</td>
                     <td className="px-6 py-4 font-medium">{t.amount.toLocaleString()} UZS</td>
                     <td className="px-6 py-4"><Badge status={t.status} /></td>
+                    <td className="px-6 py-4 text-right">
+                       <Button size="sm" variant="secondary" onClick={() => { setReceiptTransaction(t); setIsReceiptModalOpen(true); }} title="Chek chiqarish">
+                          <Printer className="w-4 h-4" />
+                       </Button>
+                    </td>
                   </tr>
                 ))}
                 {filteredTransactions.length === 0 && (
-                  <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">Tranzaksiyalar topilmadi.</td></tr>
+                  <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-500">Tranzaksiyalar topilmadi.</td></tr>
                 )}
               </tbody>
             </table>
@@ -737,6 +759,13 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           </div>
         </Modal>
       </>)}
+
+      <ReceiptModal
+         isOpen={isReceiptModalOpen}
+         onClose={() => setIsReceiptModalOpen(false)}
+         transaction={receiptTransaction}
+         clinic={currentClinic}
+      />
     </div>
   );
 };

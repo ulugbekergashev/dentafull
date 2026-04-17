@@ -11,6 +11,8 @@ import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
 
+import { ReceiptModal } from '../components/ReceiptModal';
+
 interface PatientDetailsProps {
    patientId: string | null;
    patients: Patient[];
@@ -24,7 +26,7 @@ interface PatientDetailsProps {
    userRole?: UserRole;
    onBack: () => void;
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
-   onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<void>;
+   onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<Transaction | void>;
    onUpdateTransaction: (id: string, data: Partial<Transaction>) => void;
    onAddAppointment: (appt: Omit<Appointment, 'id'>) => Promise<void>;
    onUpdateAppointment: (id: string, data: Partial<Appointment>) => Promise<void>;
@@ -126,6 +128,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Manual Payment Selection State
    const [manualPaymentCategoryId, setManualPaymentCategoryId] = useState<string>('');
    const [manualPaymentServiceId, setManualPaymentServiceId] = useState<number | null>(null);
+
+   // Receipt Modal State
+   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+   const [receiptTransaction, setReceiptTransaction] = useState<Transaction | null>(null);
 
    // Parse procedures from appointment notes
    const pastProcedures = React.useMemo(() => {
@@ -621,9 +627,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          : rawDiscountVal;
 
       try {
+         let finalTransaction: Transaction | null | void = null;
+
          // Scenario 1: Full Payment (Debt == 0)
          if (debtAmount <= 0) {
-            await onAddTransaction({
+            finalTransaction = await onAddTransaction({
                patientId: patient.id,
                patientName: `${patient.lastName} ${patient.firstName}`,
                date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
@@ -639,7 +647,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          }
          // Scenario 2: No Payment (Paid == 0)
          else if (paidAmount <= 0) {
-            await onAddTransaction({
+            finalTransaction = await onAddTransaction({
                patientId: patient.id,
                patientName: `${patient.lastName} ${patient.firstName}`,
                date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
@@ -656,7 +664,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          // Scenario 3: Partial Payment (Paid > 0 && Debt > 0)
          else {
             // 1. Paid Part
-            await onAddTransaction({
+            finalTransaction = await onAddTransaction({
                patientId: patient.id,
                patientName: `${patient.lastName} ${patient.firstName}`,
                date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
@@ -684,6 +692,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                discountPercent,
                discountAmount: Math.round(debtAmount * (discountPercent / 100)) || 0
             });
+         }
+
+         // Verify if clinic has receipt enabled
+         if (finalTransaction && currentClinic?.enableReceipts) {
+            setReceiptTransaction(finalTransaction as Transaction);
+            setIsReceiptModalOpen(true);
          }
 
          // Cleanup only on SUCCESS
@@ -2173,7 +2187,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <div className="flex justify-end pt-4 mt-2 border-t border-gray-100 dark:border-gray-700">
                <Button variant="secondary" onClick={() => setIsAssignDoctorModalOpen(false)}>{t('common.close')}</Button>
             </div>
-         </Modal>
+         <ReceiptModal
+            isOpen={isReceiptModalOpen}
+            onClose={() => setIsReceiptModalOpen(false)}
+            transaction={receiptTransaction}
+            clinic={currentClinic}
+         />
       </>
    );
 };
