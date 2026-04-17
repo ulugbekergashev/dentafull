@@ -2549,6 +2549,14 @@ cron.schedule('0 22 * * *', () => {
     timezone: "Asia/Tashkent"
 });
 
+// Doctor Morning Schedules - Every day at 8:00 AM
+cron.schedule('0 8 * * *', () => {
+    console.log('⏰ Cron: Doctor morning schedule job triggered');
+    botManager.sendDoctorMorningSchedules();
+}, {
+    timezone: "Asia/Tashkent"
+});
+
 /**
  * Helper function: Send daily summary reports to clinic owners
  */
@@ -2810,6 +2818,15 @@ app.post('/api/test/send-daily-reports', authenticateToken, async (req, res) => 
     try {
         await sendDailyClinicReports();
         res.json({ success: true, message: 'Daily reports triggered' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/test/send-doctor-schedules', authenticateToken, async (req, res) => {
+    try {
+        await botManager.sendDoctorMorningSchedules();
+        res.json({ success: true, message: 'Doctor morning schedules sent' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

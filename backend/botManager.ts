@@ -115,17 +115,32 @@ class BotManager {
                         });
                     }
 
+                    // Check if already linked as a doctor
+                    const doctorLinked = await prisma.doctor.findFirst({
+                        where: { telegramChatId: chatId, clinic: { botToken: token } },
+                        include: { clinic: true }
+                    });
+
+                    if (doctorLinked) {
+                        return ctx.reply(`👋 Assalomu alaykum, Dr. ${doctorLinked.firstName} ${doctorLinked.lastName}!\n\nSiz ${doctorLinked.clinic.name} klinikasiga ulangansiz. Bugungi qabullaringizni ko'rish uchun quyidagi tugmani bosing.`, {
+                            reply_markup: {
+                                keyboard: [[{ text: "📅 Bugungi qabullarim" }]],
+                                resize_keyboard: true
+                            }
+                        });
+                    }
+
                     ctx.reply("👋 Assalomu alaykum!\n\nKlinika botiga xush kelibsiz.\n\nIltimos, telefon raqamingizni yuboring:", {
                         reply_markup: {
                             keyboard: [[{ text: "📱 Telefon raqamni yuborish", request_contact: true }]],
                             resize_keyboard: true,
-                            one_time_keyboard: false // Keep it persistent until linked
+                            one_time_keyboard: false
                         }
                     });
                 }
             });
 
-            // 2. Report Command
+            // 2. Report Command (for clinic owner)
             bot.command('report', async (ctx) => {
                 const chatId = String(ctx.chat.id);
                 const clinic = await prisma.clinic.findFirst({
@@ -140,7 +155,7 @@ class BotManager {
                 ctx.reply(report, { parse_mode: 'Markdown' });
             });
 
-            // Listen for report button text
+            // 3. Listen for "📊 Kunlik hisobot" button (clinic owner)
             bot.hears('📊 Kunlik hisobot', async (ctx) => {
                 const chatId = String(ctx.chat.id);
                 const clinic = await prisma.clinic.findFirst({
@@ -153,7 +168,32 @@ class BotManager {
                 }
             });
 
-            // 3. Contact Listener
+            // 4. Listen for "📅 Bugungi qabullarim" button (doctor)
+            bot.hears('📅 Bugungi qabullarim', async (ctx) => {
+                const chatId = String(ctx.chat.id);
+
+                const doctor = await prisma.doctor.findFirst({
+                    where: {
+                        telegramChatId: chatId,
+                        clinic: { botToken: token }
+                    },
+                    include: { clinic: true }
+                });
+
+                if (doctor) {
+                    const schedule = await this.generateDoctorSchedule(doctor.id, doctor.clinic.id);
+                    ctx.reply(schedule, { parse_mode: 'Markdown' });
+                } else {
+                    ctx.reply("❌ Siz shifokor sifatida ulanmagansiz. Iltimos, telefon raqamingizni yuboring.", {
+                        reply_markup: {
+                            keyboard: [[{ text: "📱 Telefon raqamni yuborish", request_contact: true }]],
+                            resize_keyboard: true
+                        }
+                    });
+                }
+            });
+
+            // 5. Contact Listener
             bot.on('contact', async (ctx) => {
                 const contact = ctx.message.contact;
                 const chatId = String(ctx.chat.id);
@@ -169,6 +209,7 @@ class BotManager {
 
                     let foundAny = false;
 
+                    // --- CHECK: Clinic Owner ---
                     for (const clinic of clinics) {
                         if ((clinic as any).ownerPhone) {
                             const ownerPhone = (clinic as any).ownerPhone.replace(/\s/g, '').replace('+', '');
@@ -188,10 +229,61 @@ class BotManager {
                         }
                     }
 
-                    // Also check for patients across these clinics
+                    if (foundAny) return;
+
+                    // --- CHECK: Doctor ---
+                    const cleanPhone = phone.slice(-9); // last 9 digits for matching
+                    const doctors = await prisma.doctor.findMany({
+                        where: {
+                            clinic: { botToken: token }
+                        },
+                        include: { clinic: true }
+                    });
+
+                    for (const doctor of doctors) {
+                        const doctorPhone = doctor.phone.replace(/\s/g, '').replace('+', '');
+                        if (doctorPhone.slice(-9) === cleanPhone) {
+                            // Check unique constraint before updating
+                            // Clear any existing doctor with this chatId in same clinic
+                            await prisma.doctor.updateMany({
+                                where: {
+                                    telegramChatId: chatId,
+                                    clinicId: doctor.clinicId,
+                                    NOT: { id: doctor.id }
+                                },
+                                data: { telegramChatId: null }
+                            });
+
+                            await prisma.doctor.update({
+                                where: { id: doctor.id },
+                                data: { telegramChatId: chatId }
+                            });
+
+                            const schedule = await this.generateDoctorSchedule(doctor.id, doctor.clinicId);
+
+                            ctx.reply(`✅ Xush kelibsiz, Dr. ${doctor.firstName} ${doctor.lastName}!\n\nSiz ${doctor.clinic.name} klinikasiga muvaffaqiyatli ulandi. Endi har kuni ertalab soat 8:00 da bugungi qabullaringiz haqida xabar olasiz. 🏥`, {
+                                reply_markup: {
+                                    keyboard: [[{ text: "📅 Bugungi qabullarim" }]],
+                                    resize_keyboard: true
+                                }
+                            });
+
+                            // Send today's schedule immediately
+                            if (schedule !== null) {
+                                ctx.reply(schedule, { parse_mode: 'Markdown' });
+                            }
+
+                            foundAny = true;
+                            break;
+                        }
+                    }
+
+                    if (foundAny) return;
+
+                    // --- CHECK: Patient ---
                     const patients = await prisma.patient.findMany({
                         where: {
-                            phone: { contains: phone.slice(-9) },
+                            phone: { contains: cleanPhone },
                             clinic: { botToken: token }
                         },
                         include: { clinic: true }
@@ -215,14 +307,13 @@ class BotManager {
                 }
             });
 
-            // 3. Rating Action Handler
+            // 6. Rating Action Handler
             bot.action(/^rate_(\d+)_([\w-]+)$/, async (ctx) => {
                 const rating = parseInt(ctx.match[1]);
                 const appointmentId = ctx.match[2];
                 if (!ctx.chat) return;
 
                 try {
-                    // Update review if exists, or create new
                     await prisma.review.upsert({
                         where: { appointmentId: appointmentId },
                         update: { rating: rating },
@@ -251,7 +342,6 @@ class BotManager {
     }
 
     public async removeBot(clinicId: string) {
-        // Since we use tokens, we need the token associated with this clinicId
         const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
         if (!clinic || !clinic.botToken) return;
 
@@ -331,6 +421,112 @@ class BotManager {
         const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
         if (!clinic || !clinic.botToken) return null;
         return this.botUsernames.get(clinic.botToken) || null;
+    }
+
+    /**
+     * Send morning schedule to ALL doctors across ALL clinics that have a bot and telegram-linked doctors
+     */
+    public async sendDoctorMorningSchedules() {
+        try {
+            console.log('🏥 Running doctor morning schedule job...');
+
+            const formatter = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Tashkent',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+            const todayDateString = formatter.format(new Date());
+
+            // Find all doctors with telegramChatId and clinic with botToken
+            const doctors = await prisma.doctor.findMany({
+                where: {
+                    telegramChatId: { not: null },
+                    status: 'Active',
+                    clinic: { botToken: { not: null }, status: 'Active' }
+                },
+                include: { clinic: true }
+            });
+
+            console.log(`Found ${doctors.length} telegram-linked doctors to notify.`);
+            let sentCount = 0;
+
+            for (const doctor of doctors) {
+                if (!doctor.telegramChatId || !doctor.clinic.botToken) continue;
+
+                const bot = this.bots.get(doctor.clinic.botToken);
+                if (!bot) continue;
+
+                try {
+                    const schedule = await this.generateDoctorSchedule(doctor.id, doctor.clinicId);
+                    await bot.telegram.sendMessage(doctor.telegramChatId, schedule, { parse_mode: 'Markdown' });
+                    sentCount++;
+                    console.log(`✅ Morning schedule sent to Dr. ${doctor.firstName} ${doctor.lastName}`);
+                } catch (e: any) {
+                    console.error(`Failed to send morning schedule to Dr. ${doctor.firstName}:`, e.message);
+                }
+            }
+
+            console.log(`🏥 Doctor morning schedule job done. Sent to ${sentCount} doctors.`);
+        } catch (error) {
+            console.error('❌ Doctor morning schedule job error:', error);
+        }
+    }
+
+    /**
+     * Generate today's appointment schedule for a specific doctor
+     */
+    public async generateDoctorSchedule(doctorId: string, clinicId: string): Promise<string> {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Tashkent',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const todayDateString = formatter.format(new Date());
+
+        const doctor = await prisma.doctor.findUnique({
+            where: { id: doctorId },
+            include: { clinic: true }
+        });
+
+        const appointments = await prisma.appointment.findMany({
+            where: {
+                doctorId: doctorId,
+                clinicId: clinicId,
+                date: todayDateString,
+                status: { notIn: ['Cancelled'] }
+            },
+            orderBy: { time: 'asc' }
+        });
+
+        const doctorName = doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : 'Shifokor';
+        const clinicName = doctor?.clinic?.name || 'Klinika';
+
+        if (appointments.length === 0) {
+            return `📅 *BUGUNGI JADVALINGIZ* (${todayDateString})\n\n` +
+                `👨‍⚕️ ${doctorName} — ${clinicName}\n\n` +
+                `✅ Bugun qabulingiz yo'q. Dam oling! 😊`;
+        }
+
+        let message = `📅 *BUGUNGI JADVALINGIZ* (${todayDateString})\n\n` +
+            `👨‍⚕️ ${doctorName} — ${clinicName}\n` +
+            `📊 Jami: *${appointments.length} ta qabul*\n\n`;
+
+        appointments.forEach((appt, index) => {
+            const statusEmoji =
+                appt.status === 'Completed' ? '✅' :
+                appt.status === 'No-Show' ? '❌' :
+                appt.status === 'Confirmed' ? '🟢' : '🕐';
+
+            message += `${index + 1}. ${statusEmoji} *${appt.time}* — ${appt.patientName}\n`;
+            message += `   📋 ${appt.type}\n`;
+            if (appt.notes) message += `   📝 ${appt.notes.substring(0, 50)}${appt.notes.length > 50 ? '...' : ''}\n`;
+            message += `\n`;
+        });
+
+        message += `\nXayrli kun deb tilaymiz! 🌟`;
+        return message;
     }
 
     public async generateDailyReport(clinicId: string): Promise<string> {
