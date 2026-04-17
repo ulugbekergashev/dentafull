@@ -80,7 +80,7 @@ export const Settings: React.FC<SettingsProps> = ({
       ownerPhone: '',
       startHour: 8,
       endHour: 20,
-      enableReceipts: true
+      enableReceipts: false
    });
    const [generalSaved, setGeneralSaved] = useState(false);
 
@@ -120,7 +120,7 @@ export const Settings: React.FC<SettingsProps> = ({
             ownerPhone: currentClinic.ownerPhone || '',
             startHour: currentClinic.startHour ?? 8,
             endHour: currentClinic.endHour ?? 20,
-            enableReceipts: currentClinic.enableReceipts ?? true
+            enableReceipts: currentClinic.enableReceipts ?? false
          });
       }
    }, [currentClinic]);

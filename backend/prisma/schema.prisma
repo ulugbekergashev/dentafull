@@ -240,7 +240,7 @@ model Clinic {
   customPrice           Float?
   startHour             Int                @default(8)
   endHour               Int                @default(20)
-  enableReceipts        Boolean            @default(true)
+  enableReceipts        Boolean            @default(false)
   appointments          Appointment[]
   plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors               Doctor[]
