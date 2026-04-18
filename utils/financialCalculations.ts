@@ -34,8 +34,8 @@ export function calculateDoctorSalary(
         grossRevenue += tx.amount;
 
         // Find service to get cost
-        const txService = tx.service.trim().toLowerCase();
-        const service = services.find(s => s.name.trim().toLowerCase() === txService);
+        const txService = (tx.service || '').trim().toLowerCase();
+        const service = services.find(s => (s.name || '').trim().toLowerCase() === txService);
 
         const servicePrice = service?.price || tx.amount;
         const serviceCost = service?.cost || 0;
@@ -89,8 +89,8 @@ export function calculateTotalFinancials(
         totalRevenue += tx.amount;
 
         // Calculate technician cost
-        const txService = tx.service.trim().toLowerCase();
-        const service = services.find(s => s.name.trim().toLowerCase() === txService);
+        const txService = (tx.service || '').trim().toLowerCase();
+        const service = services.find(s => (s.name || '').trim().toLowerCase() === txService);
 
         const servicePrice = service?.price || tx.amount;
         const serviceCost = service?.cost || 0;

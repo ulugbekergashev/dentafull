@@ -8,24 +8,24 @@ datasource db {
 }
 
 model Doctor {
-  id             String        @id @default(uuid())
-  firstName      String
-  lastName       String
-  specialty      String
-  phone          String
-  email          String?
-  status         String
-  username       String?       @unique
-  password       String?
-  clinicId       String
-  telegramChatId String?
-  percentage     Float         @default(0)
-  color          String?
-  secondaryPhone String?
-  appointments   Appointment[]
-  patients       Patient[]
+  id               String            @id @default(uuid())
+  firstName        String
+  lastName         String
+  specialty        String
+  phone            String
+  email            String?
+  status           String
+  username         String?           @unique
+  password         String?
+  clinicId         String
+  telegramChatId   String?
+  percentage       Float             @default(0)
+  color            String?
+  secondaryPhone   String?
+  appointments     Appointment[]
+  clinic           Clinic            @relation(fields: [clinicId], references: [id])
   installmentPlans InstallmentPlan[]
-  clinic         Clinic        @relation(fields: [clinicId], references: [id])
+  patients         Patient[]
 
   @@unique([clinicId, telegramChatId])
 }
@@ -43,35 +43,35 @@ model Receptionist {
 }
 
 model Patient {
-  id             String             @id @default(uuid())
-  firstName      String
-  lastName       String
-  phone          String
-  dob            String
-  lastVisit      String
-  status         String
-  gender         String
-  medicalHistory String
-  clinicId       String
-  telegramChatId String?
-  address        String?
-  createdAt      DateTime           @default(now())
-  secondaryPhone String?
-  avatarUrl      String?
-  portraitUrl    String?
-  balance        Float              @default(0)
-  doctorId       String?
-  appointments   Appointment[]
-  inventoryLogs  InventoryLog[]
-  clinic         Clinic             @relation(fields: [clinicId], references: [id])
-  doctor         Doctor?            @relation(fields: [doctorId], references: [id])
-  diagnoses      PatientDiagnosis[]
-  photos         PatientPhoto[]
-  telegramLogs   TelegramLog[]
-  teeth          ToothData[]
-  transactions   Transaction[]
-  visits         Visit[]
+  id               String             @id @default(uuid())
+  firstName        String
+  lastName         String
+  phone            String
+  dob              String
+  lastVisit        String
+  status           String
+  gender           String
+  medicalHistory   String
+  clinicId         String
+  telegramChatId   String?
+  address          String?
+  createdAt        DateTime           @default(now())
+  secondaryPhone   String?
+  avatarUrl        String?
+  portraitUrl      String?
+  balance          Float              @default(0)
+  doctorId         String?
+  appointments     Appointment[]
   installmentPlans InstallmentPlan[]
+  inventoryLogs    InventoryLog[]
+  clinic           Clinic             @relation(fields: [clinicId], references: [id])
+  doctor           Doctor?            @relation(fields: [doctorId], references: [id])
+  diagnoses        PatientDiagnosis[]
+  photos           PatientPhoto[]
+  telegramLogs     TelegramLog[]
+  teeth            ToothData[]
+  transactions     Transaction[]
+  visits           Visit[]
 
   @@unique([clinicId, telegramChatId])
   @@index([phone])
@@ -213,48 +213,48 @@ model SubscriptionPlan {
 }
 
 model Clinic {
-  id                    String             @id @default(uuid())
-  name                  String
-  adminName             String
-  username              String             @unique
-  password              String?
-  phone                 String
-  email                 String?
-  address               String?
-  status                String
-  planId                String
-  subscriptionStartDate String
-  expiryDate            String
-  monthlyRevenue        Float
-  telegramChatId        String?
-  botToken              String?
-  subscriptionType      String             @default("Paid")
-  smsBalance            Float              @default(0)
-  smsLimit              Int                @default(0)
-  smsUsedThisMonth      Int                @default(0)
-  ownerPhone            String?
-  facebookPageId        String?
+  id                      String             @id @default(uuid())
+  name                    String
+  adminName               String
+  username                String             @unique
+  password                String?
+  phone                   String
+  status                  String
+  planId                  String
+  subscriptionStartDate   String
+  expiryDate              String
+  monthlyRevenue          Float
+  telegramChatId          String?
+  botToken                String?
+  subscriptionType        String             @default("Paid")
+  smsBalance              Float              @default(0)
+  smsLimit                Int                @default(0)
+  smsUsedThisMonth        Int                @default(0)
+  ownerPhone              String?
   facebookPageAccessToken String?
+  facebookPageId          String?
+  facebookPageName        String?
   facebookUserAccessToken String?
-  facebookPageName      String?
-  customPrice           Float?
-  startHour             Int                @default(8)
-  endHour               Int                @default(20)
-  enableReceipts        Boolean            @default(false)
-  appointments          Appointment[]
-  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
-  doctors               Doctor[]
-  inventoryItems        InventoryItem[]
-  leads                 Lead[]
-  patients              Patient[]
-  diagnoses             PatientDiagnosis[]
-  receptionists         Receptionist[]
-  services              Service[]
-  serviceCategories     ServiceCategory[]
-  telegramLogs          TelegramLog[]
-  transactions          Transaction[]
-  visits                Visit[]
-  installmentPlans      InstallmentPlan[]
+  customPrice             Float?
+  endHour                 Int                @default(20)
+  startHour               Int                @default(8)
+  address                 String?
+  email                   String?
+  enableReceipts          Boolean            @default(false)
+  appointments            Appointment[]
+  plan                    SubscriptionPlan   @relation(fields: [planId], references: [id])
+  doctors                 Doctor[]
+  installmentPlans        InstallmentPlan[]
+  inventoryItems          InventoryItem[]
+  leads                   Lead[]
+  patients                Patient[]
+  diagnoses               PatientDiagnosis[]
+  receptionists           Receptionist[]
+  services                Service[]
+  serviceCategories       ServiceCategory[]
+  telegramLogs            TelegramLog[]
+  transactions            Transaction[]
+  visits                  Visit[]
 
   @@index([botToken])
 }
@@ -364,33 +364,30 @@ model TelegramLog {
 }
 
 model InstallmentPlan {
-  id           String @id @default(uuid())
-  patientId    String
-  clinicId     String
-  doctorId     String?
-  service      String
-  totalAmount  Float
-  totalPaid    Float  @default(0)
-  startDate    String
-  endDate      String
-  status       String @default("Active")
-  items        InstallmentItem[]
-  
-  patient      Patient  @relation(fields: [patientId], references: [id])
-  clinic       Clinic   @relation(fields: [clinicId], references: [id])
-  doctor       Doctor?  @relation(fields: [doctorId], references: [id])
-
-  createdAt    DateTime @default(now())
+  id          String            @id @default(uuid())
+  patientId   String
+  clinicId    String
+  doctorId    String?
+  service     String
+  totalAmount Float
+  totalPaid   Float             @default(0)
+  startDate   String
+  endDate     String
+  status      String            @default("Active")
+  createdAt   DateTime          @default(now())
+  items       InstallmentItem[]
+  clinic      Clinic            @relation(fields: [clinicId], references: [id])
+  doctor      Doctor?           @relation(fields: [doctorId], references: [id])
+  patient     Patient           @relation(fields: [patientId], references: [id])
 }
 
 model InstallmentItem {
-  id            String @id @default(uuid())
+  id            String          @id @default(uuid())
   planId        String
   expectedDate  String
   amount        Float
-  status        String @default("Pending")
+  status        String          @default("Pending")
   paidDate      String?
   transactionId String?
-  
   plan          InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 }

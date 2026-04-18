@@ -97,7 +97,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const transactionDebt = debtTransactions.reduce((acc, t) => acc + t.amount, 0);
 
   // Installment debt
-  const installmentDebt = installments.reduce((acc, plan) => acc + (plan.totalAmount - plan.totalPaid), 0);
+  const installmentDebt = (installments || []).reduce((acc, plan) => acc + ((plan?.totalAmount || 0) - (plan?.totalPaid || 0)), 0);
   const totalDebt = transactionDebt + installmentDebt;
 
   // Create a map of patientName -> patientId from patients list
@@ -148,14 +148,22 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const upcomingInstallmentAmount = upcomingItems.reduce((acc, item) => acc + item.amount, 0);
 
   const DEBTORS = Array.from(debtorMap.values())
-    .map((d, index) => ({
-      id: d.patientId || `debtor-${index}`,
-      name: d.name,
-      amount: d.amount,
-      phone: patients.find(p => p.id === d.patientId)?.phone || '',
-      days: Math.floor((new Date().getTime() - new Date(d.date).getTime()) / (1000 * 60 * 60 * 24)),
-      patientId: d.patientId
-    }))
+    .map((d, index) => {
+      const debtDate = new Date(d.date);
+      const isValidDate = !isNaN(debtDate.getTime());
+      const daysDiff = isValidDate 
+        ? Math.floor((new Date().getTime() - debtDate.getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+        
+      return {
+        id: d.patientId || `debtor-${index}`,
+        name: d.name,
+        amount: d.amount,
+        phone: patients.find(p => p.id === d.patientId)?.phone || '',
+        days: Math.max(0, daysDiff),
+        patientId: d.patientId
+      };
+    })
     .filter(d => d.amount > 0)
     .sort((a, b) => b.amount - a.amount);
 
