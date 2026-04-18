@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
-import { UserRole, Transaction, Appointment, Patient } from '../types';
+import { UserRole, Transaction, Appointment, Patient, Clinic } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock } from 'lucide-react';
 import { api } from '../services/api';
@@ -19,12 +19,13 @@ interface FinanceProps {
   onPatientClick: (id: string) => void;
   doctorId: string;
   doctors: Doctor[];
+  currentClinic?: Clinic;
 }
 
 import { Doctor, InstallmentPlan } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors, currentClinic }) => {
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;

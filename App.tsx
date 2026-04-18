@@ -1225,6 +1225,7 @@ const AppContent: React.FC = () => {
                   onPatientClick={handlePatientClick}
                   doctorId={doctorId}
                   doctors={doctors}
+                  currentClinic={currentClinic}
                 />
               } />
               )}
