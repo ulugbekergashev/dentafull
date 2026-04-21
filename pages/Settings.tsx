@@ -1051,7 +1051,6 @@ export const Settings: React.FC<SettingsProps> = ({
                                        <Button type="submit" className="w-full sm:w-auto">Saqlash va Ulanishni Tekshirish</Button>
                                     </div>
                                  </div>
-                              </div>
                            )}
 
                            {smsForm.notificationMode === 'telegram_only' && (
