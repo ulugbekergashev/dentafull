@@ -2545,6 +2545,8 @@ async function sendAppointmentReminders() {
         let sentCount = 0;
         let withTelegramCount = 0;
 
+        for (const appointment of appointments) {
+            const clinic = appointment.patient.clinic as any;
             const doctorName = `${appointment.doctor.firstName} ${appointment.doctor.lastName}`;
             const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName}, sizning ertaga ${appointment.date} kuni soat ${appointment.time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
 
@@ -2562,6 +2564,7 @@ async function sendAppointmentReminders() {
             } catch (e) {
                 console.error(`Failed to notify ${appointment.patient.firstName}:`, e);
             }
+        }
 
         console.log(`🔔 Appointment reminder job completed. Sent ${sentCount} reminders.`);
         return {
@@ -2603,11 +2606,13 @@ async function sendNoShowFollowups() {
         });
 
         let sentCount = 0;
+        for (const appointment of appointments) {
             const clinic = appointment.patient.clinic as any;
             const message = `❗️ Siz bugun ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinic.phone}`;
 
             await sendNotification(clinic, appointment.patient, message);
             sentCount++;
+        }
 
         console.log(`❗️ No-show follow-up job completed. Sent ${sentCount} messages.`);
     } catch (error) {
