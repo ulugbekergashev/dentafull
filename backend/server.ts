@@ -249,7 +249,8 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
         const { phone } = req.body;
         if (!phone) return res.status(400).json({ error: 'Telefon raqam kiritilsin' });
 
-        const message = `DentaCRM: Tizim muvaffaqiyatli ulanganligini tasdiqlovchi test xabari. Sizning klinikangiz endi SMS xabarnomalar yuborishga tayyor.`;
+        // Eskiz strictly enforces these exact strings for test/unverified accounts
+        const message = `Bu Eskiz dan test`;
 
         const result = await smsService.sendSms(req.params.id, phone, message);
         if (result.success) {
