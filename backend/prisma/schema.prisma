@@ -246,6 +246,7 @@ model Clinic {
   eskizPassword           String?
   eskizToken              String?
   eskizTokenExpiry        DateTime?
+  eskizNick               String?
   appointments            Appointment[]
   plan                    SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors                 Doctor[]

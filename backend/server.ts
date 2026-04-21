@@ -248,8 +248,10 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
     try {
         const { phone } = req.body;
         if (!phone) return res.status(400).json({ error: 'Telefon raqam kiritilsin' });
-        const testMessage = `✅ DentaCRM test xabari. SMS integratsiyangiz muvaffaqiyatli ulandi!`;
-        const result = await smsService.sendSms(req.params.id, phone, testMessage);
+
+        const message = `DentaCRM: Tizim muvaffaqiyatli ulanganligini tasdiqlovchi test xabari. Sizning klinikangiz endi SMS xabarnomalar yuborishga tayyor.`;
+
+        const result = await smsService.sendSms(req.params.id, phone, message);
         if (result.success) {
             res.json({ success: true, message: 'Test SMS muvaffaqiyatli yuborildi' });
         } else {

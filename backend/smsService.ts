@@ -58,12 +58,30 @@ class SmsService {
             const expiry = new Date();
             expiry.setDate(expiry.getDate() + 29);
 
+            const updateData: any = {
+                eskizToken: token,
+                eskizTokenExpiry: expiry
+            };
+
+            // Try to auto-resolve nickname if not set
+            try {
+                const nicksResponse = await axios.get(`${ESKIZ_BASE_URL}/user/get-nicknames`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    timeout: 5000
+                });
+                const nicks = nicksResponse.data?.data;
+                if (Array.isArray(nicks) && nicks.length > 0) {
+                    const activeNick = nicks.find((n: any) => n.status === 'active')?.name || nicks[0].name;
+                    updateData.eskizNick = activeNick;
+                    console.log(`[SMS] Auto-resolved Nickname: ${activeNick}`);
+                }
+            } catch (e) {
+                console.error('[SMS] Failed to auto-resolve nickname during token refresh');
+            }
+
             await (prisma.clinic as any).update({
                 where: { id: clinicId },
-                data: {
-                    eskizToken: token,
-                    eskizTokenExpiry: expiry
-                }
+                data: updateData
             });
 
             console.log(`[SMS] Fresh Eskiz token saved for clinic ${clinicId}`);
@@ -88,10 +106,14 @@ class SmsService {
             // Normalize phone: remove spaces, +, leading zeros
             const cleanPhone = phone.replace(/\s/g, '').replace(/^\+/, '').replace(/^0+/, '');
 
+            // Use stored nickname or fallback to environment/default
+            const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } }) as any;
+            const senderNick = clinic?.eskizNick || ESKIZ_NICK;
+
             const formData = new URLSearchParams();
             formData.append('mobile_phone', cleanPhone);
             formData.append('message', message);
-            formData.append('from', ESKIZ_NICK);
+            formData.append('from', senderNick);
             formData.append('callback_url', '');
 
             const response = await axios.post(`${ESKIZ_BASE_URL}/message/sms/send`, formData, {
