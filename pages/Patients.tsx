@@ -4,6 +4,8 @@ import { Search, Plus, MoreHorizontal, Eye, Trash2, Loader2, Download, Filter, U
 import { Patient, Doctor, Appointment, Transaction } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { BulkSmsModal } from '../components/BulkSmsModal';
+import { User, Wallet, Building } from 'lucide-react';
 
 interface PatientsProps {
   userRole: string;
@@ -44,6 +46,8 @@ export const Patients: React.FC<PatientsProps> = ({
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null);
+  const [isBulkSmsModalOpen, setIsBulkSmsModalOpen] = useState(false);
+  const [isBulkSending, setIsBulkSending] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -267,17 +271,7 @@ export const Patients: React.FC<PatientsProps> = ({
           <Button
             variant="secondary"
             className="flex-1 lg:flex-none justify-center gap-2 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all active:scale-95 py-2.5"
-            onClick={async () => {
-              if (confirm('Barcha qarzdor bemorlarga eslatma yuborilsinmi?')) {
-                try {
-                  const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
-                  const response = await api.batch.remindDebts(user.clinicId, []);
-                  alert(response.message || 'Eslatmalar yuborildi');
-                } catch {
-                  alert('Xatolik yuz berdi');
-                }
-              }
-            }}
+            onClick={() => setIsBulkSmsModalOpen(true)}
           >
             <MoreHorizontal className="w-4 h-4" /> 
             <span className="whitespace-nowrap">{t('patients.buttons.remind')}</span>
@@ -754,6 +748,33 @@ export const Patients: React.FC<PatientsProps> = ({
           </div>
         </form>
       </Modal>
+
+      <BulkSmsModal 
+        isOpen={isBulkSmsModalOpen}
+        onClose={() => setIsBulkSmsModalOpen(false)}
+        title="Qarzdorlarga Eslatma Yuborish"
+        recipientCount={stats.debtors}
+        loading={isBulkSending}
+        defaultMessage={`💰 Qarzdorlikni eslatish!\n\nHurmatli {BEMOR}, sizning {KLINIKA} klinikasida {MIQDOR} UZS miqdorida to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshirishingizni so'raymiz!`}
+        placeholders={[
+          { key: '{BEMOR}', label: 'Bemor ismi', icon: User },
+          { key: '{MIQDOR}', label: 'Qarz miqdori', icon: Wallet },
+          { key: '{KLINIKA}', label: 'Klinika nomi', icon: Building },
+        ]}
+        onSend={async (msg) => {
+          setIsBulkSending(true);
+          try {
+            const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
+            const response = await api.batch.remindDebts(user.clinicId, [], msg);
+            alert(response.message || 'Eslatmalar yuborildi');
+            setIsBulkSmsModalOpen(false);
+          } catch (e: any) {
+            alert('Xatolik yuz berdi: ' + (e.message || 'Server error'));
+          } finally {
+            setIsBulkSending(false);
+          }
+        }}
+      />
     </div>
   );
 };

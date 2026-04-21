@@ -2517,9 +2517,29 @@ async function sendBirthdayReminders() {
 /**
  * Helper function: Send appointment reminders 24 hours in advance
  */
-async function sendAppointmentReminders() {
+/**
+ * Helper to process SMS templates with dynamic variables
+ */
+function processTemplate(template: string, data: { [key: string]: any }) {
+    let result = template;
+    const placeholders: { [key: string]: string } = {
+        '{BEMOR}': data.patientName || '',
+        '{VAQT}': data.time || '',
+        '{SANA}': data.date || '',
+        '{MIQDOR}': data.amount !== undefined ? data.amount.toLocaleString() : '',
+        '{KLINIKA}': data.clinicName || '',
+        '{DOKTOR}': data.doctorName || ''
+    };
+
+    Object.keys(placeholders).forEach(key => {
+        result = result.replace(new RegExp(key, 'g'), placeholders[key]);
+    });
+    return result;
+}
+
+async function sendAppointmentReminders(clinicId?: string, customMessage?: string) {
     try {
-        console.log('🔔 Running appointment reminder job...');
+        console.log(`🔔 Running appointment reminder job${clinicId ? ` for clinic ${clinicId}` : ''}...`);
 
         // Get tomorrow's date in YYYY-MM-DD format (database standard)
         const tomorrow = new Date();
@@ -2529,11 +2549,17 @@ async function sendAppointmentReminders() {
         console.log(`Checking appointments for date: ${tomorrowFormatted}`);
 
         // Find all appointments for tomorrow with confirmed/pending status
+        const whereClause: any = {
+            date: tomorrowFormatted,
+            status: { in: ['Confirmed', 'Pending'] }
+        };
+
+        if (clinicId) {
+            whereClause.patient = { clinicId: clinicId };
+        }
+
         const appointments = await prisma.appointment.findMany({
-            where: {
-                date: tomorrowFormatted,
-                status: { in: ['Confirmed', 'Pending'] }
-            },
+            where: whereClause,
             include: {
                 patient: {
                     include: {
@@ -2552,7 +2578,19 @@ async function sendAppointmentReminders() {
         for (const appointment of appointments) {
             const clinic = appointment.patient.clinic as any;
             const doctorName = `${appointment.doctor.firstName} ${appointment.doctor.lastName}`;
-            const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName}, sizning ertaga ${appointment.date} kuni soat ${appointment.time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
+            
+            let message = '';
+            if (customMessage) {
+                message = processTemplate(customMessage, {
+                    patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+                    time: appointment.time,
+                    date: appointment.date,
+                    clinicName: clinic.name,
+                    doctorName: doctorName
+                });
+            } else {
+                message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName}, sizning ertaga ${appointment.date} kuni soat ${appointment.time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
+            }
 
             try {
                 await sendNotification(clinic, appointment.patient, message);
@@ -2707,15 +2745,15 @@ async function sendDailyClinicReports() {
 // Batch: Send reminders for tomorrow's appointments
 app.post('/api/batch/remind-appointments', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.body;
-        console.log('🔔 Manual trigger: Sending appointment reminders...');
+        const { clinicId, message } = req.body;
+        console.log(`🔔 Manual trigger: Sending appointment reminders for clinic ${clinicId || 'ALL'}...`);
 
-        const result = await sendAppointmentReminders();
+        const result = await sendAppointmentReminders(clinicId, message);
 
         res.json({
             success: true,
             count: result.sent,
-            message: `${result.date} sanasi uchun ${result.found} ta qabul topildi. ${result.withTelegram} tasida Telegram bor. ${result.sent} ta xabar yuborildi.`
+            message: `${result.date} sanasi uchun ${result.found} ta qabul topildi. ${result.sent} ta xabar yuborildi.`
         });
     } catch (error: any) {
         console.error('Batch appointment reminder error:', error);
@@ -2813,10 +2851,22 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
                 if(!fullClinic) continue;
                 
                 foundPatientsCount++;
-                const message = `💰 Hurmatli ${patient.firstName}, sizning klinikada ${amount.toLocaleString()} UZS miqdorida to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.`;
+
+                let messageText = '';
+                const template = req.body.message;
+
+                if (template) {
+                    messageText = processTemplate(template, {
+                        patientName: `${patient.lastName} ${patient.firstName}`,
+                        amount: amount,
+                        clinicName: fullClinic?.name || 'Denta CRM'
+                    });
+                } else {
+                    messageText = `💰 Hurmatli ${patient.firstName}, sizning klinikada ${amount.toLocaleString()} UZS miqdorida to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.`;
+                }
 
                 try {
-                    await sendNotification(fullClinic, patient, message);
+                    await sendNotification(fullClinic, patient, messageText);
                     sentCount++;
                     details.push(`Sent: ${patient.firstName} ${patient.lastName}`);
                 } catch (e) {

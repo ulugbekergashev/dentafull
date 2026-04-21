@@ -739,15 +739,15 @@ export const api = {
         },
     },
     batch: {
-        remindAppointments: (clinicId: string) => fetchJson<{ success: true; message: string }>('/batch/remind-appointments', {
+        remindAppointments: (clinicId: string, message?: string) => fetchJson<{ success: true; message: string }>('/batch/remind-appointments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clinicId }),
+            body: JSON.stringify({ clinicId, message }),
         }),
-        remindDebts: (clinicId: string, debtors: any[]) => fetchJson<{ success: true; count: number; message?: string }>('/batch/remind-debts?clinicId=' + clinicId, {
+        remindDebts: (clinicId: string, debtors: any[], message?: string) => fetchJson<{ success: true; count: number; message?: string }>('/batch/remind-debts?clinicId=' + clinicId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clinicId, debtors }),
+            body: JSON.stringify({ clinicId, debtors, message }),
         }),
     },
     inventory: {
