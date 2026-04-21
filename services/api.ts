@@ -647,6 +647,38 @@ export const api = {
             });
         },
     },
+    sms: {
+        getSettings: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve({
+                notificationMode: 'telegram_only',
+                eskizEmail: '',
+                hasPassword: false,
+                isConnected: false,
+                eskizTokenExpiry: null
+            });
+            return fetchJson<any>(`/clinics/${clinicId}/sms-settings`);
+        },
+        saveSettings: (clinicId: string, data: any) => {
+            if (isDemoMode()) return Promise.resolve({ success: true });
+            return fetchJson<{success: true}>(`/clinics/${clinicId}/sms-settings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        getBalance: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve({ balance: 0 });
+            return fetchJson<any>(`/clinics/${clinicId}/sms-balance`);
+        },
+        testSend: (clinicId: string, phone: string) => {
+            if (isDemoMode()) return Promise.resolve({ success: true, message: 'Test SMS (Demo)' });
+            return fetchJson<{success: true, message: string}>(`/clinics/${clinicId}/sms-test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone }),
+            });
+        }
+    },
     plans: {
         getAll: () => {
             if (isDemoMode()) return Promise.resolve([DEMO_PLAN]);

@@ -19,6 +19,7 @@ app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.
 // Load everything else
 const cron = require('node-cron');
 const { botManager } = require('./botManager');
+const { smsService } = require('./smsService');
 const cors = require('cors');
 const axios = require('axios');
 const { PrismaClient } = require('@prisma/client');
@@ -123,6 +124,44 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
     });
 };
 
+// ─── Markaziy xabar yuborish funksiyasi ───────────────────────────────────────
+// notificationMode ga qarab Telegram va/yoki SMS orqali xabar yuboradi.
+async function sendNotification(
+    clinic: any,
+    patient: { firstName: string; lastName?: string; telegramChatId?: string | null; phone?: string | null; id?: string | null },
+    message: string
+): Promise<void> {
+    const mode = clinic.notificationMode || 'telegram_only';
+    const patientName = `${patient.firstName} ${patient.lastName || ''}`.trim();
+    
+    console.log(`[Notification] Target: ${patientName}, Mode: ${mode}`);
+
+    // Telegram
+    if ((mode === 'telegram_only' || mode === 'both') && clinic.botToken && patient.telegramChatId) {
+        try {
+            await botManager.notifyClinicUser(clinic.id, patient.telegramChatId, message, patient.id || undefined);
+            console.log(`[Notification] Telegram sent to ${patientName}`);
+        } catch (e: any) {
+            console.error(`[Notification] Telegram failed for ${patientName}:`, e.message);
+        }
+    }
+
+    // SMS
+    if ((mode === 'sms_only' || mode === 'both') && clinic.eskizEmail && patient.phone) {
+        try {
+            const result = await smsService.sendSms(clinic.id, patient.phone, message);
+            if (result.success) {
+                console.log(`[Notification] SMS sent to ${patientName} via Eskiz`);
+            } else {
+                console.error(`[Notification] SMS failed for ${patientName}:`, result.error);
+            }
+        } catch (e: any) {
+            console.error(`[Notification] SMS exception for ${patientName}:`, e.message);
+        }
+    }
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 // Bot Logs
 app.get('/api/clinics/:id/bot-logs', authenticateToken, async (req, res) => {
     try {
@@ -137,6 +176,91 @@ app.get('/api/clinics/:id/bot-logs', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch bot logs' });
     }
 });
+
+// ─── SMS Settings Endpoints ───────────────────────────────────────────────────
+
+// GET SMS settings (credentials masked)
+app.get('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => {
+    try {
+        const clinic = await prisma.clinic.findUnique({ where: { id: req.params.id } }) as any;
+        if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+        res.json({
+            notificationMode: clinic.notificationMode || 'telegram_only',
+            eskizEmail: clinic.eskizEmail || '',
+            hasPassword: !!clinic.eskizPassword,
+            isConnected: !!clinic.eskizToken,
+            eskizTokenExpiry: clinic.eskizTokenExpiry || null
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'SMS sozlamalarini olishda xatolik' });
+    }
+});
+
+// PUT SMS settings (save credentials + mode)
+app.put('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => {
+    try {
+        const { notificationMode, eskizEmail, eskizPassword } = req.body;
+        const clinicId = req.params.id;
+
+        const updateData: any = {};
+        if (notificationMode) updateData.notificationMode = notificationMode;
+
+        if (eskizEmail !== undefined) updateData.eskizEmail = eskizEmail;
+        if (eskizPassword) {
+            updateData.eskizPassword = eskizPassword;
+            // Invalidate old token so it gets refreshed on next use
+            updateData.eskizToken = null;
+            updateData.eskizTokenExpiry = null;
+        }
+
+        // If credentials provided, validate them immediately
+        if (eskizEmail && eskizPassword) {
+            const validation = await smsService.validateCredentials(eskizEmail, eskizPassword);
+            if (!validation.valid) {
+                return res.status(400).json({ error: validation.error || 'Eskiz login yoki parol noto\'g\'ri' });
+            }
+            // Pre-fetch token and save
+            await (prisma.clinic as any).update({ where: { id: clinicId }, data: updateData });
+            await smsService.refreshToken(clinicId, eskizEmail, eskizPassword);
+        } else {
+            await (prisma.clinic as any).update({ where: { id: clinicId }, data: updateData });
+        }
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('SMS settings save error:', error);
+        res.status(500).json({ error: 'SMS sozlamalarini saqlashda xatolik' });
+    }
+});
+
+// POST SMS balance check
+app.get('/api/clinics/:id/sms-balance', authenticateToken, async (req, res) => {
+    try {
+        const result = await smsService.getBalance(req.params.id);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: 'Balansni olishda xatolik' });
+    }
+});
+
+// POST Test SMS
+app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
+    try {
+        const { phone } = req.body;
+        if (!phone) return res.status(400).json({ error: 'Telefon raqam kiritilsin' });
+        const testMessage = `✅ DentaCRM test xabari. SMS integratsiyangiz muvaffaqiyatli ulandi!`;
+        const result = await smsService.sendSms(req.params.id, phone, testMessage);
+        if (result.success) {
+            res.json({ success: true, message: 'Test SMS muvaffaqiyatli yuborildi' });
+        } else {
+            res.status(400).json({ error: result.error });
+        }
+    } catch (error: any) {
+        res.status(500).json({ error: 'Test SMS yuborishda xatolik: ' + error.message });
+    }
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 // Patient Reviews
 app.get('/api/clinics/:id/reviews', authenticateToken, async (req, res) => {
@@ -552,17 +676,12 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
         });
 
         // Check if status changed to 'No-Show' and send notification
-        if (status === 'No-Show' && appointment.patient.telegramChatId && appointment.patient.clinic.botToken) {
-            const clinicPhone = appointment.patient.clinic.phone;
-            const message = `❗️ Siz ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinicPhone}`;
-
-            try {
-                await botManager.notifyClinicUser(appointment.patient.clinicId, appointment.patient.telegramChatId, message);
-                console.log(`✅ Immediate no-show notification sent to ${appointment.patient.firstName}`);
-            } catch (notifyError) {
-                console.error('Failed to send no-show notification:', notifyError);
-                // Don't fail the request if notification fails, just log it
-            }
+        if (status === 'No-Show') {
+            const clinic = appointment.patient.clinic as any;
+            const message = `❗️ Siz ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinic.phone}`;
+            
+            // Unified notification sender
+            await sendNotification(clinic, appointment.patient, message);
         }
 
         // Check if status changed to 'Completed' and send rating request after 1 hour
@@ -615,22 +734,15 @@ app.post('/api/appointments/:id/remind', authenticateToken, async (req, res) => 
             return res.status(404).json({ error: 'Appointment or patient not found' });
         }
 
-        // Check if bot is configured for this clinic
-        if (!appointment.patient.clinic.botToken) {
-            return res.status(400).json({ error: 'Bot not configured' });
-        }
+        const clinic = appointment.patient.clinic as any;
 
-        if (!appointment.patient.telegramChatId) {
-            return res.status(400).json({ error: 'Patient telegram not linked' });
-        }
-
+        // Message details
         const date = new Date(appointment.date).toLocaleDateString('uz-UZ');
         const time = appointment.time;
         const doctorName = appointment.doctor ? `${appointment.doctor.firstName} ${appointment.doctor.lastName}` : 'Shifokor';
-
         const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName},\nSizning ${date} kuni soat ${time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
 
-        await botManager.notifyClinicUser(appointment.clinicId, appointment.patient.telegramChatId, message);
+        await sendNotification(clinic, appointment.patient, message);
 
         res.json({ success: true });
     } catch (error) {
@@ -652,14 +764,7 @@ app.post('/api/patients/:id/remind-debt', authenticateToken, async (req, res) =>
             return res.status(404).json({ error: 'Patient not found' });
         }
 
-        // Check if bot is configured for this clinic
-        if (!patient.clinic.botToken) {
-            return res.status(400).json({ error: 'Bot not configured' });
-        }
-
-        if (!patient.telegramChatId) {
-            return res.status(400).json({ error: 'Patient telegram not linked' });
-        }
+        const clinic = patient.clinic as any;
 
         const debtMessage = amount
             ? `sizning ${amount.toLocaleString()} so'm qarzdorligingiz mavjud.`
@@ -667,7 +772,7 @@ app.post('/api/patients/:id/remind-debt', authenticateToken, async (req, res) =>
 
         const message = `💰 To'lov eslatmasi!\n\nHurmatli ${patient.firstName}, ${debtMessage}\n\nIltimos, to'lovni amalga oshiring.`;
 
-        await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
+        await sendNotification(clinic, patient, message);
 
         res.json({ success: true });
     } catch (error) {
@@ -689,20 +794,20 @@ app.post('/api/patients/:id/send-message', authenticateToken, async (req, res) =
             return res.status(404).json({ error: 'Patient not found' });
         }
 
-        // Check if bot is configured for this clinic
-        if (!patient.clinic.botToken) {
-            return res.status(400).json({ error: 'Bot not configured' });
-        }
-
-        if (!patient.telegramChatId) {
-            return res.status(400).json({ error: 'Patient telegram not linked' });
-        }
-
         if (!message) {
             return res.status(400).json({ error: 'Message content is required' });
         }
 
-        await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
+        const clinic = patient.clinic as any;
+        const mode = clinic.notificationMode || 'telegram_only';
+        const hasTelegram = !!clinic.botToken && !!patient.telegramChatId;
+        const hasSms = (mode === 'sms_only' || mode === 'both') && !!clinic.eskizEmail && !!patient.phone;
+
+        if (!hasTelegram && !hasSms) {
+            return res.status(400).json({ error: 'Bemor bilan bog\'lanish imkoni yo\'q (Telegram ham, SMS ham ulangan emas)' });
+        }
+
+        await sendNotification(clinic, patient, message);
 
         res.json({ success: true });
     } catch (error) {
@@ -2393,9 +2498,9 @@ async function sendBirthdayReminders() {
             if (patientMonthDay === todayMonthDay) {
                 const message = `🎉 Tug'ilgan kuningiz bilan!\n\nHurmatli ${patient.firstName}, sizni tug'ilgan kuningiz bilan chin dildan tabriklaymiz! Sog'lig'ingiz mustahkam bo'lsin! 🎂`;
 
-                await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId!, message);
+                await sendNotification(patient.clinic, patient, message);
                 sentCount++;
-                console.log(`✅ Birthday greeting sent to ${patient.firstName} ${patient.lastName}`);
+                console.log(`✅ Birthday greeting processed for ${patient.firstName} ${patient.lastName}`);
             }
         }
 
@@ -2440,31 +2545,23 @@ async function sendAppointmentReminders() {
         let sentCount = 0;
         let withTelegramCount = 0;
 
-        for (const appointment of appointments) {
-            // Only send if patient has Telegram connected
-            if (appointment.patient.telegramChatId) {
-                withTelegramCount++;
-                const doctorName = `${appointment.doctor.firstName} ${appointment.doctor.lastName}`;
-                const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName}, sizning ertaga ${appointment.date} kuni soat ${appointment.time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
+            const doctorName = `${appointment.doctor.firstName} ${appointment.doctor.lastName}`;
+            const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName}, sizning ertaga ${appointment.date} kuni soat ${appointment.time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
 
-                try {
-                    await botManager.notifyClinicUser(appointment.patient.clinicId, appointment.patient.telegramChatId, message);
+            try {
+                await sendNotification(clinic, appointment.patient, message);
 
-                    // Mark as reminded
-                    await prisma.appointment.update({
-                        where: { id: appointment.id },
-                        data: { reminderSent: true }
-                    });
+                // Mark as reminded
+                await prisma.appointment.update({
+                    where: { id: appointment.id },
+                    data: { reminderSent: true }
+                });
 
-                    sentCount++;
-                    console.log(`✅ Appointment reminder sent to ${appointment.patient.firstName} ${appointment.patient.lastName}`);
-                } catch (e) {
-                    console.error(`Failed to send to ${appointment.patient.firstName}:`, e);
-                }
-            } else {
-                console.log(`Skipping ${appointment.patient.firstName} - No Telegram ID`);
+                sentCount++;
+                if (clinic.botToken && appointment.patient.telegramChatId) withTelegramCount++;
+            } catch (e) {
+                console.error(`Failed to notify ${appointment.patient.firstName}:`, e);
             }
-        }
 
         console.log(`🔔 Appointment reminder job completed. Sent ${sentCount} reminders.`);
         return {
@@ -2506,16 +2603,11 @@ async function sendNoShowFollowups() {
         });
 
         let sentCount = 0;
-        for (const appointment of appointments) {
-            if (appointment.patient.telegramChatId) {
-                const clinicPhone = appointment.patient.clinic.phone;
-                const message = `❗️ Siz bugun ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinicPhone}`;
+            const clinic = appointment.patient.clinic as any;
+            const message = `❗️ Siz bugun ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinic.phone}`;
 
-                await botManager.notifyClinicUser(appointment.patient.clinicId, appointment.patient.telegramChatId!, message);
-                sentCount++;
-                console.log(`✅ No-show follow-up sent to ${appointment.patient.firstName} ${appointment.patient.lastName}`);
-            }
-        }
+            await sendNotification(clinic, appointment.patient, message);
+            sentCount++;
 
         console.log(`❗️ No-show follow-up job completed. Sent ${sentCount} messages.`);
     } catch (error) {
@@ -2679,12 +2771,11 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
         // Fetch all patients with Telegram for this clinic (for in-memory matching)
         const patients = await prisma.patient.findMany({
             where: {
-                clinicId: clinicId as string,
-                telegramChatId: { not: null }
+                clinicId: clinicId as string
             }
         });
 
-        console.log(`Loaded ${patients.length} patients with Telegram for matching.`);
+        console.log(`Loaded ${patients.length} patients for matching.`);
 
         let sentCount = 0;
         let foundPatientsCount = 0;
@@ -2707,14 +2798,17 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
                     (cleanName.includes(pFirst) && cleanName.includes(pLast));
             });
 
-            if (patient && patient.telegramChatId) {
+            if (patient) {
+                // Determine if we can send a notification to this patient
+                const fullClinic = await prisma.clinic.findUnique({where: {id: clinicId}}) as any;
+                if(!fullClinic) continue;
+                
                 foundPatientsCount++;
                 const message = `💰 Hurmatli ${patient.firstName}, sizning klinikada ${amount.toLocaleString()} UZS miqdorida to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.`;
 
                 try {
-                    await botManager.notifyClinicUser(patient.clinicId, patient.telegramChatId, message);
+                    await sendNotification(fullClinic, patient, message);
                     sentCount++;
-                    console.log(`✅ Debt reminder sent to ${patient.firstName} ${patient.lastName} (matched "${name}")`);
                     details.push(`Sent: ${patient.firstName} ${patient.lastName}`);
                 } catch (e) {
                     console.error(`Failed to send to ${patient.firstName}:`, e);

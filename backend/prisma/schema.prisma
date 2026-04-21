@@ -241,6 +241,11 @@ model Clinic {
   address                 String?
   email                   String?
   enableReceipts          Boolean            @default(false)
+  notificationMode        String             @default("telegram_only")
+  eskizEmail              String?
+  eskizPassword           String?
+  eskizToken              String?
+  eskizTokenExpiry        DateTime?
   appointments            Appointment[]
   plan                    SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors                 Doctor[]

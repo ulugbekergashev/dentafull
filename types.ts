@@ -197,6 +197,11 @@ export interface Clinic {
   startHour?: number;
   endHour?: number;
   enableReceipts?: boolean;
+  notificationMode?: 'telegram_only' | 'sms_only' | 'both';
+  eskizEmail?: string;
+  hasPassword?: boolean;
+  isConnected?: boolean;
+  eskizTokenExpiry?: string;
 }
 
 export interface ICD10Code {
