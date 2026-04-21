@@ -200,12 +200,12 @@ app.get('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => 
 // PUT SMS settings (save credentials + mode)
 app.put('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => {
     try {
-        const { notificationMode, eskizEmail, eskizPassword } = req.body;
+        const { notificationMode, eskizEmail, eskizPassword, eskizNick } = req.body;
         const clinicId = req.params.id;
 
         const updateData: any = {};
         if (notificationMode) updateData.notificationMode = notificationMode;
-
+        if (eskizNick) updateData.eskizNick = eskizNick;
         if (eskizEmail !== undefined) updateData.eskizEmail = eskizEmail;
         if (eskizPassword) {
             updateData.eskizPassword = eskizPassword;

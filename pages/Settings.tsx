@@ -1032,16 +1032,20 @@ export const Settings: React.FC<SettingsProps> = ({
 
                                 {smsSettings.eskizNick && (
                                     <div className="sms-settings-info-box" style={{ marginTop: '1rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                        <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>
-                                            <i className="fas fa-id-badge" style={{ marginRight: '0.5rem' }}></i>
-                                            Aniqlangan yuboruvchi nomi (Nickname): <strong>{smsSettings.eskizNick}</strong>
+                                        <p className="sms-settings-label text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Nickname (Yuboruvchi nomi)
                                         </p>
-                                        {smsSettings.eskizNick === '4546' && (
-                                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: '#f59e0b' }}>
-                                                <i className="fas fa-exclamation-triangle" style={{ marginRight: '0.5rem' }}></i>
-                                                Siz hozircha standart sondan foydalanyapsiz. Maxsus nom uchun Eskizda "Nickname" tasdiqlatishingiz kerak.
-                                            </p>
-                                        )}
+                                        <input
+                                            type="text"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                            placeholder="Masalan: 4546 yoki DentaCRM"
+                                            value={smsForm.eskizNick || '4546'}
+                                            onChange={(e) => setSmsForm({...smsForm, eskizNick: e.target.value})}
+                                        />
+                                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                                            <i className="fas fa-info-circle" style={{ marginRight: '0.5rem' }}></i>
+                                            Eskizda tasdiqlangan maxsus nomingiz bo'lsa kiriting. Aks holda <strong>4546</strong> qoladi.
+                                        </p>
                                     </div>
                                 )}
                      
