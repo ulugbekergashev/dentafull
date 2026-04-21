@@ -101,7 +101,8 @@ export const Settings: React.FC<SettingsProps> = ({
    const [smsForm, setSmsForm] = useState({
       notificationMode: 'telegram_only',
       eskizEmail: '',
-      eskizPassword: ''
+      eskizPassword: '',
+      eskizNick: '4546'
    });
    const [smsConnected, setSmsConnected] = useState(false);
    const [smsHasPassword, setSmsHasPassword] = useState(false);
@@ -152,7 +153,8 @@ export const Settings: React.FC<SettingsProps> = ({
                setSmsForm(prev => ({
                   ...prev,
                   notificationMode: data.notificationMode || 'telegram_only',
-                  eskizEmail: data.eskizEmail || ''
+                  eskizEmail: data.eskizEmail || '',
+                  eskizNick: data.eskizNick || '4546'
                }));
                setSmsHasPassword(data.hasPassword);
                setSmsConnected(data.isConnected);
@@ -448,7 +450,8 @@ export const Settings: React.FC<SettingsProps> = ({
          await api.sms.saveSettings(currentClinic.id, {
             notificationMode: smsForm.notificationMode,
             eskizEmail: smsForm.eskizEmail,
-            eskizPassword: smsForm.eskizPassword || undefined
+            eskizPassword: smsForm.eskizPassword || undefined,
+            eskizNick: smsForm.eskizNick || '4546'
          });
          
          setSmsSaved(true);
@@ -1023,31 +1026,26 @@ export const Settings: React.FC<SettingsProps> = ({
                                         <input
                                             type="password"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                            placeholder={smsSettings.hasPassword ? "(Parol kiritilgan. O'zgartirish uchun yangisini kiriting)" : "Yashirin kalitni kiriting"}
-                                            value={newEskizPassword}
-                                            onChange={(e) => setNewEskizPassword(e.target.value)}
+                                            placeholder={smsHasPassword ? "(Parol kiritilgan. O'zgartirish uchun yangisini kiriting)" : "Yashirin kalitni kiriting"}
+                                            value={smsForm.eskizPassword}
+                                            onChange={(e) => setSmsForm({...smsForm, eskizPassword: e.target.value})}
                                         />
                                     </div>
-                                </div>
 
-                                {smsSettings.eskizNick && (
-                                    <div className="sms-settings-info-box" style={{ marginTop: '1rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                        <p className="sms-settings-label text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            Nickname (Yuboruvchi nomi)
-                                        </p>
+                                    <div className="space-y-1">
+                                        <p className="sms-settings-label text-sm font-medium text-gray-700 dark:text-gray-300">Nickname (Yuboruvchi nomi)</p>
                                         <input
                                             type="text"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                             placeholder="Masalan: 4546 yoki DentaCRM"
-                                            value={smsForm.eskizNick || '4546'}
+                                            value={smsForm.eskizNick}
                                             onChange={(e) => setSmsForm({...smsForm, eskizNick: e.target.value})}
                                         />
-                                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-                                            <i className="fas fa-info-circle" style={{ marginRight: '0.5rem' }}></i>
-                                            Eskizda tasdiqlangan maxsus nomingiz bo'lsa kiriting. Aks holda <strong>4546</strong> qoladi.
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Eskizda tasdiqlangan maxsus nomingiz bo'lsa kiriting. Aks holda 4546 qoladi.
                                         </p>
                                     </div>
-                                )}
+                                </div>
                      
                                     <div className="pt-2">
                                        <Button type="submit" className="w-full sm:w-auto">Saqlash va Ulanishni Tekshirish</Button>
