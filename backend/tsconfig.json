@@ -11,6 +11,7 @@
     "include": [
         "server.ts",
         "botManager.ts",
+        "smsService.ts",
         "bot.ts",
         "seed.ts"
     ],
