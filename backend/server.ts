@@ -187,6 +187,7 @@ app.get('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => 
         res.json({
             notificationMode: clinic.notificationMode || 'telegram_only',
             eskizEmail: clinic.eskizEmail || '',
+            eskizNick: clinic.eskizNick || '4546',
             hasPassword: !!clinic.eskizPassword,
             isConnected: !!clinic.eskizToken,
             eskizTokenExpiry: clinic.eskizTokenExpiry || null
