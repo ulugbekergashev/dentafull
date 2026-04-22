@@ -61,6 +61,7 @@ model Patient {
   portraitUrl      String?
   balance          Float              @default(0)
   doctorId         String?
+  pinfl            String?
   appointments     Appointment[]
   installmentPlans InstallmentPlan[]
   inventoryLogs    InventoryLog[]
@@ -247,6 +248,12 @@ model Clinic {
   eskizToken              String?
   eskizTokenExpiry        DateTime?
   eskizNick               String?
+  dmedEnabled             Boolean            @default(false)
+  dmedApiKey              String?
+  dmedApiSecret           String?
+  dmedClinicId            String?
+  dmedToken               String?
+  dmedTokenExpiry         DateTime?
   appointments            Appointment[]
   plan                    SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors                 Doctor[]

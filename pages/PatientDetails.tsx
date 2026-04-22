@@ -54,7 +54,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
 
-   const patient = patients.find(p => p.id === patientId);
+   const patient = patients.find(p => String(p.id).trim() === String(patientId).trim());
 
    // Edit Form State
    const [editFormData, setEditFormData] = useState<Partial<Patient>>({});

@@ -67,6 +67,7 @@ export interface Patient {
   avatarUrl?: string;
   portraitUrl?: string;
   balance?: number;
+  pinfl?: string;
 }
 
 export interface Appointment {
@@ -202,6 +203,12 @@ export interface Clinic {
   hasPassword?: boolean;
   isConnected?: boolean;
   eskizTokenExpiry?: string;
+  dmedEnabled?: boolean;
+  dmedApiKey?: string;
+  dmedApiSecret?: string;
+  dmedClinicId?: string;
+  dmedToken?: string;
+  dmedTokenExpiry?: string;
 }
 
 export interface ICD10Code {

@@ -42,7 +42,7 @@ export const Settings: React.FC<SettingsProps> = ({
    userRole, services, categories, doctors, receptionists = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans, reviews
 }) => {
    const { t } = useLanguage();
-   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot' | 'facebook' | 'sms'>('services');
+   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot' | 'facebook' | 'sms' | 'dmed'>('services');
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
    const [categoryForm, setCategoryForm] = useState({ name: '' });
@@ -110,6 +110,14 @@ export const Settings: React.FC<SettingsProps> = ({
    const [isCheckingSms, setIsCheckingSms] = useState(false);
    const [smsTestPhone, setSmsTestPhone] = useState('');
    const [smsSaved, setSmsSaved] = useState(false);
+   
+   // DMED Settings State
+   const [dmedEnabled, setDmedEnabled] = useState(false);
+   const [dmedApiKey, setDmedApiKey] = useState('');
+   const [dmedApiSecret, setDmedApiSecret] = useState('');
+   const [dmedClinicId, setDmedClinicId] = useState('');
+   const [dmedSaved, setDmedSaved] = useState(false);
+   const [isCheckingDmed, setIsCheckingDmed] = useState(false);
 
    // Clinic overall rating calculation
    const clinicAvgRating = useMemo(() => {
@@ -139,10 +147,15 @@ export const Settings: React.FC<SettingsProps> = ({
       }
    }, [currentClinic]);
 
-   // Sync botToken with currentClinic
+   // Sync DMED settings
    React.useEffect(() => {
-      setBotToken(currentClinic?.botToken || '');
-   }, [currentClinic?.botToken]);
+      if (currentClinic) {
+         setDmedEnabled(currentClinic.dmedEnabled || false);
+         setDmedApiKey(currentClinic.dmedApiKey || '');
+         setDmedApiSecret(currentClinic.dmedApiSecret || '');
+         setDmedClinicId(currentClinic.dmedClinicId || '');
+      }
+   }, [currentClinic]);
 
    // Load SMS settings
    React.useEffect(() => {
@@ -489,6 +502,45 @@ export const Settings: React.FC<SettingsProps> = ({
       }
    };
 
+   const handleDmedSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!currentClinic?.id) return;
+      try {
+         await api.clinics.updateDmedSettings(currentClinic.id, {
+            dmedEnabled,
+            dmedApiKey,
+            dmedApiSecret,
+            dmedClinicId
+         });
+         setDmedSaved(true);
+         setTimeout(() => setDmedSaved(false), 3000);
+         window.location.reload(); 
+      } catch (error) {
+         console.error('Failed to save DMED settings:', error);
+         alert('DMED sozlamalarini saqlashda xatolik yuz berdi');
+      }
+   };
+
+   const handleDmedTest = async () => {
+      if (!currentClinic?.id) return;
+      setIsCheckingDmed(true);
+      try {
+         const res = await api.clinics.testDmed(currentClinic.id, {
+            dmedApiKey,
+            dmedApiSecret
+         });
+         if (res.valid) {
+            alert('DMED ulanishi muvaffaqiyatli!');
+         } else {
+            alert('Ulanishda xatolik: ' + (res.error || 'Noma\'lum xatolik'));
+         }
+      } catch (error: any) {
+         alert('DMED test xatosi: ' + error.message);
+      } finally {
+         setIsCheckingDmed(false);
+      }
+   };
+
    const handleGeneralSave = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!currentClinic?.id) return;
@@ -578,6 +630,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   { id: 'receptionists', name: t('settings.tabs.receptionists'), icon: Phone },
                   { id: 'bot', name: t('settings.tabs.bot'), icon: Bot },
                   { id: 'sms', name: "SMS Sozlamalari", icon: MessageSquare },
+                  { id: 'dmed', name: "DMED (IT-MED)", icon: Activity },
                ].map((item) => (
                   <button
                      key={item.id}
@@ -675,6 +728,89 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="pt-4 flex items-center gap-4">
                               <Button type="submit">{t('common.save')}</Button>
                               {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
+                           </div>
+                        </form>
+                     </Card>
+                  </div>
+               )}
+
+               {/* DMED Tab */}
+               {activeTab === 'dmed' && (
+                  <div className="space-y-6">
+                     <Card className="p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                           <div className="p-3 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl text-indigo-600 dark:text-indigo-400">
+                              <Activity className="w-8 h-8" />
+                           </div>
+                           <div>
+                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">DMED (IT-MED) Integratsiyasi</h3>
+                              <p className="text-sm text-gray-500">O'zbekiston milliy tibbiy axborot tizimi bilan bog'lanish va ma'lumotlarni sinxronizatsiya qilish.</p>
+                           </div>
+                        </div>
+
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800/40 mb-6">
+                           <p className="text-sm text-blue-800 dark:text-blue-200">
+                              <strong>Eslatma:</strong> DMED tizimiga ulanish uchun klinika rasmiy ravishda SSV (Uzinfocom) orqali Client ID va Client Secret kalitlarini olgan bo'lishi shart.
+                           </p>
+                        </div>
+
+                        <form onSubmit={handleDmedSave} className="space-y-6">
+                           <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                              <div>
+                                 <h4 className="font-medium text-gray-900 dark:text-white">DMED Integratsiyasini yoqish</h4>
+                                 <p className="text-sm text-gray-500">Agar yoqilsa, bemorlar profilida DMED ma'lumotlari paydo bo'ladi.</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                 <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={dmedEnabled}
+                                    onChange={(e) => setDmedEnabled(e.target.checked)}
+                                 />
+                                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                              </label>
+                           </div>
+
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <Input 
+                                 label="DMED Client ID (API Key)" 
+                                 value={dmedApiKey} 
+                                 onChange={e => setDmedApiKey(e.target.value)} 
+                                 placeholder="Masalan: denta_clinic_123"
+                                 disabled={!dmedEnabled}
+                              />
+                              <Input 
+                                 label="DMED Client Secret" 
+                                 value={dmedApiSecret} 
+                                 onChange={e => setDmedApiSecret(e.target.value)} 
+                                 type="password"
+                                 placeholder="••••••••••••••••"
+                                 disabled={!dmedEnabled}
+                              />
+                           </div>
+                           
+                           <Input 
+                              label="Klinika ID (DMED tizimidagi)" 
+                              value={dmedClinicId} 
+                              onChange={e => setDmedClinicId(e.target.value)} 
+                              placeholder="Masalan: 69213aa6-b1f2-11ee-9cc3..."
+                              disabled={!dmedEnabled}
+                           />
+
+                           <div className="flex items-center gap-4 pt-4">
+                              <Button type="submit" disabled={!dmedEnabled}>
+                                 {t('common.save')}
+                              </Button>
+                              <Button 
+                                 type="button" 
+                                 variant="secondary" 
+                                 onClick={handleDmedTest}
+                                 disabled={!dmedEnabled || isCheckingDmed || !dmedApiKey || !dmedApiSecret}
+                              >
+                                 {isCheckingDmed ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+                                 Ulanishni tekshirish
+                              </Button>
+                              {dmedSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
                            </div>
                         </form>
                      </Card>

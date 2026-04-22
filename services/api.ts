@@ -131,7 +131,7 @@ export const api = {
         },
         create: (data: Omit<Patient, 'id'>) => {
             if (isDemoMode()) {
-                const newPatient = { ...data, id: `demo - patient - ${Date.now()} -${Math.floor(Math.random() * 1000)} ` } as Patient;
+                const newPatient = { ...data, id: `demo-patient-${Date.now()}-${Math.floor(Math.random() * 1000)}` } as Patient;
                 DEMO_PATIENTS.push(newPatient);
                 saveDemoData();
                 return Promise.resolve(newPatient);
@@ -202,6 +202,20 @@ export const api = {
                 method: 'POST',
                 body: formData,
             });
+        },
+        lookupPinfl: (pinfl: string) => {
+            if (isDemoMode()) {
+                // Mock DMED response for demo testing
+                return Promise.resolve({
+                    firstName: 'Eldor',
+                    lastName: 'Abduqodirov',
+                    dob: '1990-05-15',
+                    gender: 'Male',
+                    pinfl: pinfl,
+                    address: 'Toshkent sh., Yunusobod tumani'
+                });
+            }
+            return fetchJson<any>(`/patients/lookup/${pinfl}`);
         },
     },
     appointments: {
@@ -642,6 +656,26 @@ export const api = {
             }
             return fetchJson<{ success: true; clinic: Clinic }>(`/clinics/${id}/settings`, {
                 method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        testDmed: (id: string, data: { dmedApiKey: string, dmedApiSecret: string }) => {
+            if (isDemoMode()) return Promise.resolve({ valid: true });
+            return fetchJson<{ valid: boolean; error?: string }>(`/clinics/${id}/dmed-test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        updateDmedSettings: (id: string, data: any) => {
+            if (isDemoMode()) {
+                Object.assign(DEMO_CLINIC, data);
+                saveDemoData();
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/clinics/${id}/dmed-settings`, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });

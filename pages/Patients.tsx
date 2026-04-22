@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
-import { Search, Plus, MoreHorizontal, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon } from 'lucide-react';
-import { Patient, Doctor, Appointment, Transaction } from '../types';
+import { Search, Plus, MoreHorizontal, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity, User, Building } from 'lucide-react';
+import { Patient, Doctor, Appointment, Transaction, Clinic } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { BulkSmsModal } from '../components/BulkSmsModal';
-import { User, Wallet, Building } from 'lucide-react';
 
 interface PatientsProps {
   userRole: string;
@@ -14,9 +13,10 @@ interface PatientsProps {
   appointments: Appointment[];
   transactions: Transaction[];
   onPatientClick: (id: string) => void;
-  onAddPatient: (patient: Omit<Patient, 'id'>) => void;
+  onAddPatient: (patient: Omit<Patient, 'id'>) => Promise<any>;
   onDeletePatient: (id: string) => void;
   onUpdatePatient: (id: string, data: Partial<Patient>) => Promise<void>;
+  currentClinic?: Clinic;
 }
 
 export const Patients: React.FC<PatientsProps> = ({
@@ -29,6 +29,7 @@ export const Patients: React.FC<PatientsProps> = ({
   onAddPatient,
   onDeletePatient,
   onUpdatePatient,
+  currentClinic,
 }) => {
   const { t } = useLanguage();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -60,7 +61,9 @@ export const Patients: React.FC<PatientsProps> = ({
     address: '',
     secondaryPhone: '',
     doctorId: '',
+    pinfl: '',
   });
+  const [isLookingUp, setIsLookingUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
 
@@ -199,6 +202,31 @@ export const Patients: React.FC<PatientsProps> = ({
     }
   };
 
+  const handleLookupPinfl = async () => {
+    if (!formData.pinfl || formData.pinfl.length !== 14) {
+      alert('JSHSHIR 14 ta raqamdan iborat bo\'lishi kerak');
+      return;
+    }
+    setIsLookingUp(true);
+    try {
+      const data = await api.patients.lookupPinfl(formData.pinfl);
+      if (data) {
+        setFormData(prev => ({
+          ...prev,
+          firstName: data.firstName || prev.firstName,
+          lastName: data.lastName || prev.lastName,
+          dob: data.birthDate || prev.dob,
+          gender: data.gender === 'male' ? 'Male' : data.gender === 'female' ? 'Female' : prev.gender,
+          address: data.address || prev.address,
+        }));
+      }
+    } catch (error: any) {
+      alert('DMED orqali topilmadi: ' + (error.message || 'Xatolik'));
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.firstName || !formData.lastName) return;
@@ -223,7 +251,7 @@ export const Patients: React.FC<PatientsProps> = ({
       }
 
       setIsAddModalOpen(false);
-      setFormData({ firstName: '', lastName: '', phone: '', dob: '', gender: 'Male', medicalHistory: '', address: '', secondaryPhone: '', doctorId: '' });
+      setFormData({ firstName: '', lastName: '', phone: '', dob: '', gender: 'Male', medicalHistory: '', address: '', secondaryPhone: '', doctorId: '', pinfl: '' });
       setSelectedPhoto(null);
     } catch {
       // handled by parent
@@ -519,6 +547,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.age_gender')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.doctor')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.lastVisit')}</th>
+                <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">DMED</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.status')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">{t('patients.table.actions')}</th>
               </tr>
@@ -566,6 +595,15 @@ export const Patients: React.FC<PatientsProps> = ({
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{patient.lastVisit}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {patient.pinfl ? (
+                      <span className="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 w-fit">
+                        <Activity className="w-3 h-3" /> {patient.pinfl}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 text-[10px]">—</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Badge status={patient.status} />
                   </td>
@@ -659,6 +697,34 @@ export const Patients: React.FC<PatientsProps> = ({
             <Input label="Familiya" name="lastName" value={formData.lastName} onChange={handleInputChange} required />
             <Input label="Ism" name="firstName" value={formData.firstName} onChange={handleInputChange} required />
           </div>
+          
+          <div className="space-y-1">
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Input 
+                  label="JSHSHIR (PINFL)" 
+                  name="pinfl" 
+                  value={formData.pinfl} 
+                  onChange={handleInputChange} 
+                  placeholder="14 ta raqam" 
+                  maxLength={14}
+                />
+              </div>
+              {currentClinic?.dmedEnabled && (
+                <Button 
+                  type="button" 
+                  variant="secondary" 
+                  className="mb-1"
+                  onClick={handleLookupPinfl}
+                  disabled={isLookingUp || formData.pinfl.length !== 14}
+                >
+                  {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+                </Button>
+              )}
+            </div>
+            <p className="text-[10px] text-gray-500">Bemorning pasportidagi 14 raqamli shaxsiy identifikatsiya raqami.</p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <Input label="Asosiy Telefon" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
             <Input label="Qo'shimcha Telefon" name="secondaryPhone" value={formData.secondaryPhone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" />

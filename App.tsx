@@ -1155,6 +1155,7 @@ const AppContent: React.FC = () => {
                   onAddPatient={addPatient}
                   onDeletePatient={deletePatient}
                   onUpdatePatient={updatePatient}
+                  currentClinic={currentClinic}
                 />
               } />
 
@@ -1176,7 +1177,6 @@ const AppContent: React.FC = () => {
 
               <Route path="/patients/:patientId" element={
                 <PatientDetails
-                  patientId={null}
                   patients={patients}
                   appointments={appointments}
                   transactions={transactions}

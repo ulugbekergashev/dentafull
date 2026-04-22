@@ -20,6 +20,7 @@ app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.
 const cron = require('node-cron');
 const { botManager } = require('./botManager');
 const { smsService } = require('./smsService');
+const { dmedService } = require('./dmedService');
 const cors = require('cors');
 const axios = require('axios');
 const { PrismaClient } = require('@prisma/client');
@@ -1630,6 +1631,52 @@ app.put('/api/plans/:id', authenticateToken, async (req, res) => {
         res.json({ ...plan, features: JSON.parse(plan.features) });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update plan' });
+    }
+});
+
+// --- DMED Integration ---
+app.post('/api/clinics/:id/dmed-settings', authenticateToken, async (req, res) => {
+    try {
+        const { dmedEnabled, dmedApiKey, dmedApiSecret, dmedClinicId } = req.body;
+        const clinic = await prisma.clinic.update({
+            where: { id: req.params.id },
+            data: { dmedEnabled, dmedApiKey, dmedApiSecret, dmedClinicId }
+        });
+        res.json(clinic);
+    } catch (error) {
+        res.status(500).json({ error: 'DMED sozlamalarini saqlashda xatolik' });
+    }
+});
+
+app.post('/api/clinics/:id/dmed-test', authenticateToken, async (req, res) => {
+    try {
+        const { dmedApiKey, dmedApiSecret } = req.body;
+        const result = await dmedService.validateCredentials(dmedApiKey, dmedApiSecret);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: 'Ulanishni tekshirishda xatolik' });
+    }
+});
+
+app.get('/api/patients/lookup/:pinfl', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
+        const result = await dmedService.findPatientByPinfl(clinicId as string, req.params.pinfl);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: 'Bemor ma\'lumotlarini olishda xatolik' });
+    }
+});
+
+// Manual sync Visit to DMED
+app.post('/api/visits/:id/dmed-sync', authenticateToken, async (req, res) => {
+    try {
+        const { clinicId } = req.body;
+        await dmedService.syncEncounter(clinicId, req.params.id);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'DMEDga yuborishda xatolik' });
     }
 });
 
