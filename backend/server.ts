@@ -12,9 +12,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // IMMEDIATE HEALTH CHECK
-app.get('/health', (req, res) => res.status(200).send('OK - v1.0.1'));
+app.get('/health', (req, res) => res.status(200).send('OK - v1.0.2'));
 app.get('/test-fb', (req, res) => res.status(200).send('FB-TEST-OK'));
-app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.0.1'));
+app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.0.2'));
 
 // Load everything else
 const cron = require('node-cron');
@@ -56,39 +56,39 @@ const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
 
 
-// Manual CORS Middleware
-app.use((req, res, next) => {
-    const allowedOrigins = [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'http://localhost:3005',
-        'https://dentafull-production.up.railway.app',
-        'https://dentafull.vercel.app',
-        'https://dentacrm.uz',
-        'http://dentacrm.uz',
-        'https://www.dentacrm.uz'
-    ];
-    const origin = req.headers.origin;
+// Standard CORS Middleware
+const corsOptions = {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        const allowedOrigins = [
+            'http://localhost:5173',
+            'http://localhost:3000',
+            'http://localhost:3005',
+            'https://dentafull-production.up.railway.app',
+            'https://dentafull.vercel.app',
+            'https://dentacrm.uz',
+            'http://dentacrm.uz',
+            'https://www.dentacrm.uz',
+            'http://www.dentacrm.uz'
+        ];
+        
+        // Allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.includes(origin) || origin.endsWith('.dentacrm.uz')) {
+            callback(null, true);
+        } else {
+            console.warn('⚠️ CORS Blocked Origin:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    credentials: true,
+    optionsSuccessStatus: 200
+};
 
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return next();
-
-    if (allowedOrigins.includes(origin)) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-    }
-
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
-
-// app.use(cors(corsOptions)); // Disabled in favor of manual middleware
-// app.options(/.*/, cors(corsOptions)); // Disabled
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
 
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
