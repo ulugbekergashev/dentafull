@@ -88,7 +88,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
+// Pre-flight handling is integrated into app.use(cors())
 
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));

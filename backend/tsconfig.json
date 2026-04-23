@@ -13,7 +13,8 @@
         "botManager.ts",
         "smsService.ts",
         "bot.ts",
-        "seed.ts"
+        "seed.ts",
+        "dmedService.ts"
     ],
     "exclude": [
         "node_modules",
