@@ -83,9 +83,13 @@ class BotManager {
                                 where: { telegramChatId: chatId, botToken: token }
                             });
 
+                            const patientMenu = [
+                                [{ text: "📅 Qabulga yozilish" }, { text: "⏰ Keyingi qabulim" }],
+                                [{ text: "📋 Davolanish tarixim" }, { text: "💳 Mening hisobim" }]
+                            ];
                             const keyboard = ownerClinic
-                                ? [[{ text: "📊 Kunlik hisobot" }]]
-                                : [[{ text: "📱 Telefon raqamni yuborish", request_contact: true }]];
+                                ? [[{ text: "📊 Kunlik hisobot" }], ...patientMenu]
+                                : patientMenu;
 
                             ctx.reply(`✅ Assalomu alaykum, ${patient.firstName}!\n\nSizning profilingiz muvaffaqiyatli ulandi.\n\nEndi siz ${patient.clinic.name}dan eslatmalar va xabarlar olasiz.`, {
                                 reply_markup: {
@@ -294,7 +298,15 @@ class BotManager {
                             where: { id: patient.id },
                             data: { telegramChatId: chatId }
                         });
-                        ctx.reply(`✅ Assalomu alaykum, ${patient.firstName}!\n\nSiz ${patient.clinic.name} bemori sifatida muvaffaqiyatli ulandingiz.`);
+                        ctx.reply(`✅ Assalomu alaykum, ${patient.firstName}!\n\nSiz ${patient.clinic.name} bemori sifatida muvaffaqiyatli ulandingiz.`, {
+                            reply_markup: {
+                                keyboard: [
+                                    [{ text: "📅 Qabulga yozilish" }, { text: "⏰ Keyingi qabulim" }],
+                                    [{ text: "📋 Davolanish tarixim" }, { text: "💳 Mening hisobim" }]
+                                ],
+                                resize_keyboard: true
+                            }
+                        });
                         foundAny = true;
                     }
 
@@ -306,6 +318,289 @@ class BotManager {
                     ctx.reply("❌ Xatolik yuz berdi.");
                 }
             });
+
+            // --- PATIENT MENU HANDLERS ---
+            bot.hears('⏰ Keyingi qabulim', async (ctx) => {
+                const chatId = String(ctx.chat.id);
+                const patient = await prisma.patient.findFirst({ where: { telegramChatId: chatId, clinic: { botToken: token } } });
+                if (!patient) return;
+
+                const today = new Date();
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+                const nextAppt = await prisma.appointment.findFirst({
+                    where: {
+                        patientId: patient.id,
+                        date: { gte: todayStr },
+                        status: { in: ['Confirmed', 'Pending'] }
+                    },
+                    orderBy: [
+                        { date: 'asc' },
+                        { time: 'asc' }
+                    ]
+                });
+
+                if (nextAppt) {
+                    ctx.reply(`📅 *Sizning navbatdagi qabulingiz:*\n\n👨‍⚕️ Shifokor: ${nextAppt.doctorName}\n📆 Sana: ${nextAppt.date}\n⏰ Vaqt: ${nextAppt.time}`, { parse_mode: 'Markdown' });
+                } else {
+                    ctx.reply("Sizda rejalashtirilgan qabullar yo'q. Yangi qabulga yozilish uchun '📅 Qabulga yozilish' tugmasidan foydalaning.");
+                }
+            });
+
+            bot.hears('📋 Davolanish tarixim', async (ctx) => {
+                const chatId = String(ctx.chat.id);
+                const patient = await prisma.patient.findFirst({ where: { telegramChatId: chatId, clinic: { botToken: token } } });
+                if (!patient) return;
+
+                const history = await prisma.appointment.findMany({
+                    where: {
+                        patientId: patient.id,
+                        status: 'Completed'
+                    },
+                    orderBy: { date: 'desc' },
+                    take: 5
+                });
+
+                if (history.length > 0) {
+                    let msg = `📋 *So'nggi tashriflaringiz:*\n\n`;
+                    history.forEach((appt, idx) => {
+                        msg += `${idx + 1}. ${appt.date} — ${appt.type} (${appt.doctorName})\n`;
+                    });
+                    ctx.reply(msg, { parse_mode: 'Markdown' });
+                } else {
+                    ctx.reply("Sizning davolanish tarixingiz bo'sh. Hali klinikamizda to'liq qabulda bo'lmagansiz.");
+                }
+            });
+
+            bot.hears('💳 Mening hisobim', async (ctx) => {
+                const chatId = String(ctx.chat.id);
+                const patient = await prisma.patient.findFirst({ where: { telegramChatId: chatId, clinic: { botToken: token } } });
+                if (!patient) return;
+
+                const debts = await prisma.transaction.findMany({
+                    where: {
+                        patientId: patient.id,
+                        status: 'Pending'
+                    }
+                });
+
+                const totalDebt = debts.reduce((sum, t) => sum + t.amount, 0);
+
+                if (totalDebt > 0) {
+                    let msg = `💳 *Sizning to'lanmagan qarzingiz: ${totalDebt.toLocaleString()} UZS*\n\n`;
+                    debts.forEach((t, idx) => {
+                        msg += `• ${t.date}: ${t.service} - ${t.amount.toLocaleString()} UZS\n`;
+                    });
+                    ctx.reply(msg, { parse_mode: 'Markdown' });
+                } else {
+                    ctx.reply("💳 Sizda to'lanmagan qarzdorlik yo'q. Barcha xizmatlar uchun to'lov qilingan! Rahmat 😊");
+                }
+            });
+
+            // --- BOOKING WIZARD START ---
+            
+            const startBookingFlow = async (ctx: any) => {
+                const chatId = String(ctx.chat ? ctx.chat.id : (ctx.callbackQuery ? ctx.callbackQuery.message.chat.id : ''));
+                if (!chatId) return;
+
+                const patient = await prisma.patient.findFirst({
+                    where: { telegramChatId: chatId, clinic: { botToken: token } },
+                    include: { clinic: true }
+                });
+                
+                if (!patient) {
+                    const msg = "❌ Siz bemor sifatida ulanmagansiz. Iltimos, /start buyrug'ini bering yoki raqamingizni yuboring.";
+                    return ctx.callbackQuery ? ctx.answerCbQuery(msg, {show_alert: true}) : ctx.reply(msg);
+                }
+
+                const doctors = await prisma.doctor.findMany({
+                    where: { clinicId: patient.clinicId, status: 'Active' }
+                });
+
+                if (doctors.length === 0) {
+                    const msg = "Hozircha shifokorlar topilmadi.";
+                    return ctx.callbackQuery ? ctx.answerCbQuery(msg, {show_alert: true}) : ctx.reply(msg);
+                }
+
+                const buttons = doctors.map(d => ([{ text: `👨‍⚕️ Dr. ${d.firstName} ${d.lastName}`, callback_data: `bdc_${d.id}` }]));
+                
+                const text = "🩺 Qaysi shifokor qabuliga yozilmoqchisiz?";
+                const opts = { reply_markup: { inline_keyboard: buttons } };
+                
+                if (ctx.callbackQuery) {
+                    await ctx.editMessageText(text, opts).catch(() => ctx.reply(text, opts));
+                } else {
+                    await ctx.reply(text, opts);
+                }
+            };
+
+            bot.hears('📅 Qabulga yozilish', startBookingFlow);
+            bot.action('start_booking', startBookingFlow);
+
+            bot.action(/^bdc_([^_]+)$/, async (ctx) => {
+                const doctorId = ctx.match[1];
+                const dateButtons = [];
+                const today = new Date();
+                
+                for(let i=0; i<7; i++) {
+                    const d = new Date(today);
+                    d.setDate(today.getDate() + i);
+                    
+                    const yyyy = d.getFullYear();
+                    const mm = String(d.getMonth() + 1).padStart(2, '0');
+                    const dd = String(d.getDate()).padStart(2, '0');
+                    const dateStr = `${yyyy}-${mm}-${dd}`;
+                    
+                    const display = i === 0 ? "Bugun" : i === 1 ? "Ertaga" : `${dd}.${mm}.${yyyy}`;
+                    
+                    dateButtons.push([{ text: `📅 ${display}`, callback_data: `bdt_${doctorId}_${dateStr}` }]);
+                }
+
+                ctx.editMessageText("🗓 Qaysi kunga yozilmoqchisiz?", {
+                    reply_markup: { inline_keyboard: dateButtons }
+                });
+            });
+
+            bot.action(/^bdt_([^_]+)_(.+)$/, async (ctx) => {
+                const doctorId = ctx.match[1];
+                const dateStr = ctx.match[2];
+                
+                const doctor = await prisma.doctor.findUnique({ where: { id: doctorId }, include: { clinic: true } });
+                if (!doctor) return ctx.answerCbQuery("Shifokor topilmadi");
+
+                const appointments = await prisma.appointment.findMany({
+                    where: { doctorId, date: dateStr, status: { notIn: ['Cancelled'] } }
+                });
+
+                const startHour = doctor.clinic.startHour || 8;
+                const endHour = doctor.clinic.endHour || 20;
+                
+                const availableSlots: string[] = [];
+                for(let h = startHour; h < endHour; h++) {
+                    for(let m of [0, 30]) {
+                        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                        const slotStartMins = h * 60 + m;
+                        
+                        let isOverlap = false;
+                        for(const appt of appointments) {
+                            const [ah, am] = appt.time.split(':').map(Number);
+                            const apptStartMins = ah * 60 + am;
+                            const apptEndMins = apptStartMins + (appt.duration || 30);
+                            
+                            if (slotStartMins >= apptStartMins && slotStartMins < apptEndMins) {
+                                isOverlap = true;
+                                break;
+                            }
+                        }
+                        
+                        const today = new Date();
+                        const yyyy = today.getFullYear();
+                        const mm = String(today.getMonth() + 1).padStart(2, '0');
+                        const dd = String(today.getDate()).padStart(2, '0');
+                        if (dateStr === `${yyyy}-${mm}-${dd}`) {
+                            const currentMins = today.getHours() * 60 + today.getMinutes();
+                            if (slotStartMins <= currentMins) {
+                                isOverlap = true;
+                            }
+                        }
+
+                        if (!isOverlap) {
+                            availableSlots.push(timeStr);
+                        }
+                    }
+                }
+
+                if (availableSlots.length === 0) {
+                    return ctx.editMessageText("❌ Bu kunda bo'sh vaqtlar qolmagan. Boshqa kunni tanlang.");
+                }
+
+                const buttons = [];
+                for(let i=0; i < availableSlots.length; i+=3) {
+                    const row = [];
+                    for(let j=0; j<3 && i+j < availableSlots.length; j++) {
+                        const t = availableSlots[i+j];
+                        row.push({ text: t, callback_data: `btm_${doctorId}_${dateStr}_${t}` });
+                    }
+                    buttons.push(row);
+                }
+
+                ctx.editMessageText(`🗓 ${dateStr} sanasi uchun bo'sh vaqtlarni tanlang:`, {
+                    reply_markup: { inline_keyboard: buttons }
+                });
+            });
+
+            bot.action(/^btm_([^_]+)_([^_]+)_(.+)$/, async (ctx) => {
+                if (!ctx.chat) return;
+                const doctorId = ctx.match[1];
+                const dateStr = ctx.match[2];
+                const timeStr = ctx.match[3];
+                const chatId = String(ctx.chat.id);
+
+                const patient = await prisma.patient.findFirst({
+                    where: { telegramChatId: chatId, clinic: { botToken: token } },
+                    include: { clinic: true }
+                });
+                
+                if (!patient) return ctx.answerCbQuery("Siz tizimda topilmadingiz.");
+
+                const doctor = await prisma.doctor.findUnique({ where: { id: doctorId } });
+                if (!doctor) return ctx.answerCbQuery("Shifokor topilmadi.");
+
+                const overlapping = await prisma.appointment.findMany({
+                    where: { doctorId, date: dateStr, status: { notIn: ['Cancelled'] } }
+                });
+                
+                const [h, m] = timeStr.split(':').map(Number);
+                const slotStartMins = h * 60 + m;
+                let isOverlap = false;
+                for(const appt of overlapping) {
+                    const [ah, am] = appt.time.split(':').map(Number);
+                    const apptStartMins = ah * 60 + am;
+                    const apptEndMins = apptStartMins + (appt.duration || 30);
+                    if (slotStartMins >= apptStartMins && slotStartMins < apptEndMins) {
+                        isOverlap = true;
+                        break;
+                    }
+                }
+                
+                if (isOverlap) {
+                    return ctx.editMessageText("❌ Kechirasiz, bu vaqt allaqachon band qilindi. Boshqa vaqt tanlang.");
+                }
+
+                try {
+                    await prisma.appointment.create({
+                        data: {
+                            patientId: patient.id,
+                            patientName: `${patient.firstName} ${patient.lastName}`,
+                            doctorId: doctor.id,
+                            doctorName: `Dr. ${doctor.firstName} ${doctor.lastName}`,
+                            clinicId: patient.clinicId,
+                            date: dateStr,
+                            time: timeStr,
+                            duration: 30,
+                            status: 'Confirmed',
+                            type: 'Konsultatsiya',
+                            notes: 'Telegram bot orqali yozildi'
+                        }
+                    });
+
+                    await ctx.editMessageText(`✅ Muvaffaqiyatli yozildingiz!\n\n👨‍⚕️ Shifokor: Dr. ${doctor.firstName} ${doctor.lastName}\n📅 Sana: ${dateStr}\n⏰ Vaqt: ${timeStr}\n\nKlinikada kutib qolamiz.`);
+                    
+                    if (doctor.telegramChatId) {
+                        const msg = `🔔 *YANGI QABUL (Telegram bot orqali)*\n\n👤 Bemor: ${patient.firstName} ${patient.lastName}\n📱 Telefon: ${patient.phone}\n📅 Sana: ${dateStr}\n⏰ Vaqt: ${timeStr}`;
+                        await bot.telegram.sendMessage(doctor.telegramChatId, msg, { parse_mode: 'Markdown' }).catch(() => {});
+                    }
+                    
+                } catch(e: any) {
+                    if (e.code === 'P2002') {
+                        return ctx.editMessageText("❌ Sizda bu kunga allaqachon qabul mavjud. Boshqa kunni tanlang.");
+                    }
+                    console.error("Booking error:", e);
+                    ctx.editMessageText("❌ Xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
+                }
+            });
+
+            // --- BOOKING WIZARD END ---
 
             // 6. Rating Action Handler
             bot.action(/^rate_(\d+)_([\w-]+)$/, async (ctx) => {
@@ -365,14 +660,14 @@ class BotManager {
         }
     }
 
-    public async notifyClinicUser(clinicId: string, chatId: string, message: string, patientId?: string, type: string = 'Manual') {
+    public async notifyClinicUser(clinicId: string, chatId: string, message: string, patientId?: string, type: string = 'Manual', replyMarkup?: any) {
         const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
         if (!clinic || !clinic.botToken) return;
 
         const bot = this.bots.get(clinic.botToken);
         if (bot) {
             try {
-                await bot.telegram.sendMessage(chatId, message);
+                await bot.telegram.sendMessage(chatId, message, replyMarkup ? { reply_markup: replyMarkup } : undefined);
                 await prisma.telegramLog.create({
                     data: { clinicId, patientId, type, status: 'Sent', message }
                 });

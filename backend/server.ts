@@ -130,7 +130,8 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
 async function sendNotification(
     clinic: any,
     patient: { firstName: string; lastName?: string; telegramChatId?: string | null; phone?: string | null; id?: string | null },
-    message: string
+    message: string,
+    replyMarkup?: any
 ): Promise<void> {
     const mode = clinic.notificationMode || 'telegram_only';
     const patientName = `${patient.firstName} ${patient.lastName || ''}`.trim();
@@ -140,7 +141,7 @@ async function sendNotification(
     // Telegram
     if ((mode === 'telegram_only' || mode === 'both') && clinic.botToken && patient.telegramChatId) {
         try {
-            await botManager.notifyClinicUser(clinic.id, patient.telegramChatId, message, patient.id || undefined);
+            await botManager.notifyClinicUser(clinic.id, patient.telegramChatId, message, patient.id || undefined, 'Manual', replyMarkup);
             console.log(`[Notification] Telegram sent to ${patientName}`);
         } catch (e: any) {
             console.error(`[Notification] Telegram failed for ${patientName}:`, e.message);
@@ -2697,9 +2698,13 @@ async function sendNoShowFollowups() {
         let sentCount = 0;
         for (const appointment of appointments) {
             const clinic = appointment.patient.clinic as any;
-            const message = `❗️ Siz bugun ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinic.phone}`;
+            const message = `❗️ Siz bugun ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang yoki quyidagi tugma orqali qayta yoziling!\n\n📞 Telefon: ${clinic.phone}`;
 
-            await sendNotification(clinic, appointment.patient, message);
+            const replyMarkup = {
+                inline_keyboard: [[{ text: "📅 Qabulga yozilish", callback_data: "start_booking" }]]
+            };
+
+            await sendNotification(clinic, appointment.patient, message, replyMarkup);
             sentCount++;
         }
 
@@ -2739,6 +2744,14 @@ cron.schedule('0 22 * * *', () => {
 cron.schedule('0 8 * * *', () => {
     console.log('⏰ Cron: Doctor morning schedule job triggered');
     botManager.sendDoctorMorningSchedules();
+}, {
+    timezone: "Asia/Tashkent"
+});
+
+// Appointment Reminders for tomorrow - Every day at 18:00 (6:00 PM)
+cron.schedule('0 18 * * *', () => {
+    console.log('⏰ Cron: Appointment reminder job triggered');
+    sendAppointmentReminders();
 }, {
     timezone: "Asia/Tashkent"
 });
