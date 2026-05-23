@@ -1119,17 +1119,14 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Oldindan to'lovni yoqish</p>
                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Yoqilsa, bemor qabulga yozilgandan keyin to'lov cheki yuborishi shart bo'ladi</p>
                               </div>
-                              <div className="relative">
+                              <div className="relative w-12 h-6 flex-shrink-0">
                                  <input
                                     type="checkbox"
                                     className="sr-only"
                                     checked={prepaymentForm.prepaymentEnabled}
                                     onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentEnabled: e.target.checked })}
                                  />
-                                 <div
-                                    onClick={() => setPrepaymentForm({ ...prepaymentForm, prepaymentEnabled: !prepaymentForm.prepaymentEnabled })}
-                                    className={`w-12 h-6 rounded-full cursor-pointer transition-colors ${prepaymentForm.prepaymentEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-                                 >
+                                 <div className={`w-12 h-6 rounded-full transition-colors ${prepaymentForm.prepaymentEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                                     <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prepaymentForm.prepaymentEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
                                  </div>
                               </div>
