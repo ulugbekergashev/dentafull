@@ -1712,6 +1712,38 @@ app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Prepayment Settings ---
+app.get('/api/clinics/:id/prepayment-settings', authenticateToken, async (req, res) => {
+    try {
+        const clinic = await prisma.clinic.findUnique({ where: { id: req.params.id } });
+        if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+        res.json({
+            prepaymentEnabled: (clinic as any).prepaymentEnabled ?? false,
+            prepaymentCardNumber: (clinic as any).prepaymentCardNumber || '',
+            prepaymentAmount: (clinic as any).prepaymentAmount ?? 0,
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Oldindan to\'lov sozlamalarini olishda xatolik' });
+    }
+});
+
+app.put('/api/clinics/:id/prepayment-settings', authenticateToken, async (req, res) => {
+    try {
+        const { prepaymentEnabled, prepaymentCardNumber, prepaymentAmount } = req.body;
+        const clinic = await prisma.clinic.update({
+            where: { id: req.params.id },
+            data: {
+                prepaymentEnabled: prepaymentEnabled ?? false,
+                prepaymentCardNumber: prepaymentCardNumber || null,
+                prepaymentAmount: prepaymentAmount ? Number(prepaymentAmount) : null,
+            } as any
+        });
+        res.json({ success: true, clinic });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message || 'Oldindan to\'lov sozlamalarini saqlashda xatolik' });
+    }
+});
+
 // Get bot username for clinic (public endpoint - no auth needed)
 app.get('/api/clinics/:id/bot-username', async (req, res) => {
     try {

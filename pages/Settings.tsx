@@ -119,6 +119,14 @@ export const Settings: React.FC<SettingsProps> = ({
    const [dmedSaved, setDmedSaved] = useState(false);
    const [isCheckingDmed, setIsCheckingDmed] = useState(false);
 
+   // Prepayment Settings State
+   const [prepaymentForm, setPrepaymentForm] = useState({
+      prepaymentEnabled: false,
+      prepaymentCardNumber: '',
+      prepaymentAmount: 0,
+   });
+   const [prepaymentSaved, setPrepaymentSaved] = useState(false);
+
    // Clinic overall rating calculation
    const clinicAvgRating = useMemo(() => {
       if (!reviews || reviews.length === 0) return 0;
@@ -154,6 +162,17 @@ export const Settings: React.FC<SettingsProps> = ({
          setDmedApiKey(currentClinic.dmedApiKey || '');
          setDmedApiSecret(currentClinic.dmedApiSecret || '');
          setDmedClinicId(currentClinic.dmedClinicId || '');
+      }
+   }, [currentClinic]);
+
+   // Sync prepayment settings
+   React.useEffect(() => {
+      if (currentClinic) {
+         setPrepaymentForm({
+            prepaymentEnabled: currentClinic.prepaymentEnabled ?? false,
+            prepaymentCardNumber: currentClinic.prepaymentCardNumber || '',
+            prepaymentAmount: currentClinic.prepaymentAmount ?? 0,
+         });
       }
    }, [currentClinic]);
 
@@ -532,7 +551,7 @@ export const Settings: React.FC<SettingsProps> = ({
          if (res.valid) {
             alert('DMED ulanishi muvaffaqiyatli!');
          } else {
-            alert('Ulanishda xatolik: ' + (res.error || 'Noma\'lum xatolik'));
+            alert('Ulanishda xatolik: ' + ((res as any).error || 'Noma\'lum xatolik'));
          }
       } catch (error: any) {
          alert('DMED test xatosi: ' + error.message);
@@ -583,6 +602,23 @@ export const Settings: React.FC<SettingsProps> = ({
          }, 1000);
       } catch (error) {
          console.error('Failed to save bot settings:', error);
+         alert(t('common.error'));
+      }
+   };
+
+   const handlePrepaymentSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!currentClinic?.id) return;
+      try {
+         await api.clinics.savePrepaymentSettings(currentClinic.id, {
+            prepaymentEnabled: prepaymentForm.prepaymentEnabled,
+            prepaymentCardNumber: prepaymentForm.prepaymentCardNumber,
+            prepaymentAmount: Number(prepaymentForm.prepaymentAmount),
+         });
+         setPrepaymentSaved(true);
+         setTimeout(() => setPrepaymentSaved(false), 2000);
+      } catch (error) {
+         console.error('Failed to save prepayment settings:', error);
          alert(t('common.error'));
       }
    };
@@ -1012,6 +1048,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
                {/* Bot Tab */}
                {activeTab === 'bot' && (
+                  <div className="space-y-6">
                   <Card className="p-6">
                      <div className="flex items-center gap-4 mb-6">
                         <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-xl text-blue-600 dark:text-blue-400">
@@ -1062,6 +1099,75 @@ export const Settings: React.FC<SettingsProps> = ({
                         )}
                      </div>
                   </Card>
+
+                  {/* Prepayment Settings Card */}
+                  <Card className="p-6 mt-6">
+                     <div className="flex items-center gap-4 mb-6">
+                        <div className="p-3 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl text-emerald-600 dark:text-emerald-400">
+                           <DollarSign className="w-8 h-8" />
+                        </div>
+                        <div>
+                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">Oldindan To'lov (Bron uchun)</h3>
+                           <p className="text-sm text-gray-500">Bemor bot orqali qabulga yozilganda oldindan to'lov talab qilish.</p>
+                        </div>
+                     </div>
+
+                     <form onSubmit={handlePrepaymentSave} className="space-y-5">
+                        <div className="bg-gray-50 dark:bg-gray-800/50 p-5 rounded-2xl border border-gray-100 dark:border-gray-700">
+                           <label className="flex items-center justify-between cursor-pointer">
+                              <div>
+                                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Oldindan to'lovni yoqish</p>
+                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Yoqilsa, bemor qabulga yozilgandan keyin to'lov cheki yuborishi shart bo'ladi</p>
+                              </div>
+                              <div className="relative">
+                                 <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={prepaymentForm.prepaymentEnabled}
+                                    onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentEnabled: e.target.checked })}
+                                 />
+                                 <div
+                                    onClick={() => setPrepaymentForm({ ...prepaymentForm, prepaymentEnabled: !prepaymentForm.prepaymentEnabled })}
+                                    className={`w-12 h-6 rounded-full cursor-pointer transition-colors ${prepaymentForm.prepaymentEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                 >
+                                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prepaymentForm.prepaymentEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                                 </div>
+                              </div>
+                           </label>
+                        </div>
+
+                        {prepaymentForm.prepaymentEnabled && (
+                           <div className="space-y-4">
+                              <Input
+                                 label="Karta raqami"
+                                 value={prepaymentForm.prepaymentCardNumber}
+                                 onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentCardNumber: e.target.value })}
+                                 placeholder="8600 1234 5678 9012"
+                              />
+                              <Input
+                                 label="Bron summasi (so'm)"
+                                 type="number"
+                                 value={prepaymentForm.prepaymentAmount === 0 ? '' : String(prepaymentForm.prepaymentAmount)}
+                                 onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentAmount: Number(e.target.value) })}
+                                 placeholder="50000"
+                              />
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                 Bemor to'lov chekini (rasm yoki fayl) telegram bot orqali yuborganda, bu chek admin telegram chatiga avtomatik yuboriladi.
+                              </p>
+                           </div>
+                        )}
+
+                        <div className="flex items-center gap-4">
+                           <Button type="submit" variant="primary">Saqlash</Button>
+                           {prepaymentSaved && (
+                              <span className="text-green-600 text-sm flex items-center gap-1">
+                                 <CheckCircle className="w-4 h-4" /> Saqlandi
+                              </span>
+                           )}
+                        </div>
+                     </form>
+                  </Card>
+                  </div>
                )}
 
                {/* SMS Tab */}

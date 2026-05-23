@@ -1,4 +1,5 @@
 import { Telegraf } from 'telegraf';
+import { message } from 'telegraf/filters';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -7,6 +8,7 @@ class BotManager {
     private bots: Map<string, Telegraf> = new Map(); // token -> Telegraf
     private usageCount: Map<string, number> = new Map(); // token -> count of clinics
     private botUsernames: Map<string, string> = new Map(); // token -> username
+    private pendingPayments: Map<string, { appointmentId: string; clinicId: string }> = new Map(); // chatId -> payment info
 
     constructor() {
         // Start loading bots without blocking the main thread or crashing
@@ -567,8 +569,13 @@ class BotManager {
                     return ctx.editMessageText("❌ Kechirasiz, bu vaqt allaqachon band qilindi. Boshqa vaqt tanlang.");
                 }
 
+                const clinic = patient.clinic as any;
+                const prepaymentEnabled = clinic?.prepaymentEnabled ?? false;
+                const prepaymentCard = clinic?.prepaymentCardNumber || '';
+                const prepaymentAmount = clinic?.prepaymentAmount ?? 0;
+
                 try {
-                    await prisma.appointment.create({
+                    const newAppointment = await prisma.appointment.create({
                         data: {
                             patientId: patient.id,
                             patientName: `${patient.firstName} ${patient.lastName}`,
@@ -578,19 +585,33 @@ class BotManager {
                             date: dateStr,
                             time: timeStr,
                             duration: 30,
-                            status: 'Confirmed',
+                            status: prepaymentEnabled ? 'Pending' : 'Confirmed',
                             type: 'Konsultatsiya',
-                            notes: 'Telegram bot orqali yozildi'
+                            notes: prepaymentEnabled ? 'Telegram bot orqali yozildi (to\'lov kutilmoqda)' : 'Telegram bot orqali yozildi'
                         }
                     });
 
-                    await ctx.editMessageText(`✅ Muvaffaqiyatli yozildingiz!\n\n👨‍⚕️ Shifokor: Dr. ${doctor.firstName} ${doctor.lastName}\n📅 Sana: ${dateStr}\n⏰ Vaqt: ${timeStr}\n\nKlinikada kutib qolamiz.`);
-                    
-                    if (doctor.telegramChatId) {
-                        const msg = `🔔 *YANGI QABUL (Telegram bot orqali)*\n\n👤 Bemor: ${patient.firstName} ${patient.lastName}\n📱 Telefon: ${patient.phone}\n📅 Sana: ${dateStr}\n⏰ Vaqt: ${timeStr}`;
-                        await bot.telegram.sendMessage(doctor.telegramChatId, msg, { parse_mode: 'Markdown' }).catch(() => {});
+                    if (prepaymentEnabled && prepaymentCard && prepaymentAmount > 0) {
+                        this.pendingPayments.set(chatId, { appointmentId: newAppointment.id, clinicId: patient.clinicId });
+                        await ctx.editMessageText(
+                            `📋 Qabulingiz vaqtincha band qilindi.\n\n` +
+                            `👨‍⚕️ Shifokor: Dr. ${doctor.firstName} ${doctor.lastName}\n` +
+                            `📅 Sana: ${dateStr}\n⏰ Vaqt: ${timeStr}\n\n` +
+                            `💳 *Oldindan to'lov talab etiladi!*\n\n` +
+                            `To'lov miqdori: *${prepaymentAmount.toLocaleString()} so'm*\n` +
+                            `Karta raqami: \`${prepaymentCard}\`\n\n` +
+                            `Iltimos, yuqoridagi kartaga to'lov qiling va chekni (rasm yoki fayl sifatida) shu yerga yuboring. ` +
+                            `Admin tekshirgach, qabulingiz tasdiqlanadi.`,
+                            { parse_mode: 'Markdown' }
+                        );
+                    } else {
+                        await ctx.editMessageText(`✅ Muvaffaqiyatli yozildingiz!\n\n👨‍⚕️ Shifokor: Dr. ${doctor.firstName} ${doctor.lastName}\n📅 Sana: ${dateStr}\n⏰ Vaqt: ${timeStr}\n\nKlinikada kutib qolamiz.`);
+                        if (doctor.telegramChatId) {
+                            const msg = `🔔 *YANGI QABUL (Telegram bot orqali)*\n\n👤 Bemor: ${patient.firstName} ${patient.lastName}\n📱 Telefon: ${patient.phone}\n📅 Sana: ${dateStr}\n⏰ Vaqt: ${timeStr}`;
+                            await bot.telegram.sendMessage(doctor.telegramChatId, msg, { parse_mode: 'Markdown' }).catch(() => {});
+                        }
                     }
-                    
+
                 } catch(e: any) {
                     if (e.code === 'P2002') {
                         return ctx.editMessageText("❌ Sizda bu kunga allaqachon qabul mavjud. Boshqa kunni tanlang.");
@@ -601,6 +622,137 @@ class BotManager {
             });
 
             // --- BOOKING WIZARD END ---
+
+            // 7. Payment Receipt Handler (photo or document)
+            const handlePaymentReceipt = async (ctx: any, fileId: string, isPhoto: boolean) => {
+                if (!ctx.chat) return;
+                const chatId = String(ctx.chat.id);
+                const pending = this.pendingPayments.get(chatId);
+                if (!pending) return;
+
+                const { appointmentId, clinicId } = pending;
+
+                const appointment = await prisma.appointment.findUnique({
+                    where: { id: appointmentId },
+                    include: { patient: true, doctor: true }
+                });
+                if (!appointment) return;
+
+                const adminClinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
+                if (!adminClinic?.telegramChatId) {
+                    await ctx.reply("✅ Chekingiz qabul qilindi. Admin tez orada tasdiqlaydî.");
+                    return;
+                }
+
+                const caption =
+                    `💳 *TO'LOV CHEKI*\n\n` +
+                    `👤 Bemor: ${appointment.patient.firstName} ${appointment.patient.lastName}\n` +
+                    `📱 Telefon: ${appointment.patient.phone}\n` +
+                    `👨‍⚕️ Shifokor: ${appointment.doctorName}\n` +
+                    `📅 Sana: ${appointment.date}\n` +
+                    `⏰ Vaqt: ${appointment.time}\n\n` +
+                    `Qabulni tasdiqlaysizmi?`;
+
+                const replyMarkup = {
+                    inline_keyboard: [[
+                        { text: "✅ Tasdiqlash", callback_data: `confirm_pay_${appointmentId}` },
+                        { text: "❌ Rad etish", callback_data: `reject_pay_${appointmentId}` }
+                    ]]
+                };
+
+                try {
+                    if (isPhoto) {
+                        await bot.telegram.sendPhoto(adminClinic.telegramChatId, fileId, {
+                            caption,
+                            parse_mode: 'Markdown',
+                            reply_markup: replyMarkup
+                        });
+                    } else {
+                        await bot.telegram.sendDocument(adminClinic.telegramChatId, fileId, {
+                            caption,
+                            parse_mode: 'Markdown',
+                            reply_markup: replyMarkup
+                        });
+                    }
+                    this.pendingPayments.delete(chatId);
+                    await ctx.reply("✅ Chekingiz adminga yuborildi. Tez orada qabulingiz tasdiqlanadi.");
+                } catch (e) {
+                    console.error("Failed to forward payment receipt:", e);
+                    await ctx.reply("❌ Xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
+                }
+            };
+
+            bot.on(message('photo'), async (ctx) => {
+                const photos = ctx.message.photo;
+                const fileId = photos[photos.length - 1].file_id;
+                await handlePaymentReceipt(ctx, fileId, true);
+            });
+
+            bot.on(message('document'), async (ctx) => {
+                const fileId = ctx.message.document.file_id;
+                await handlePaymentReceipt(ctx, fileId, false);
+            });
+
+            // 8. Admin: Confirm or Reject Payment
+            bot.action(/^confirm_pay_([\w-]+)$/, async (ctx) => {
+                const appointmentId = ctx.match[1];
+                try {
+                    const appointment = await prisma.appointment.update({
+                        where: { id: appointmentId },
+                        data: { status: 'Confirmed', notes: 'Telegram bot orqali yozildi (to\'lov tasdiqlandi)' },
+                        include: { patient: true, doctor: true }
+                    });
+                    await ctx.editMessageCaption(
+                        `✅ *TASDIQLANDI*\n\n` +
+                        `👤 Bemor: ${appointment.patient.firstName} ${appointment.patient.lastName}\n` +
+                        `👨‍⚕️ Shifokor: ${appointment.doctorName}\n` +
+                        `📅 ${appointment.date} soat ${appointment.time}`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    await ctx.answerCbQuery("✅ Qabul tasdiqlandi");
+
+                    if (appointment.patient.telegramChatId) {
+                        await bot.telegram.sendMessage(
+                            appointment.patient.telegramChatId,
+                            `✅ *Qabulingiz tasdiqlandi!*\n\n👨‍⚕️ Shifokor: ${appointment.doctorName}\n📅 Sana: ${appointment.date}\n⏰ Vaqt: ${appointment.time}\n\nKlinikada kutib qolamiz!`,
+                            { parse_mode: 'Markdown' }
+                        ).catch(() => {});
+                    }
+                } catch (e) {
+                    console.error("Confirm payment error:", e);
+                    await ctx.answerCbQuery("Xatolik yuz berdi");
+                }
+            });
+
+            bot.action(/^reject_pay_([\w-]+)$/, async (ctx) => {
+                const appointmentId = ctx.match[1];
+                try {
+                    const appointment = await prisma.appointment.update({
+                        where: { id: appointmentId },
+                        data: { status: 'Cancelled', notes: 'To\'lov rad etildi' },
+                        include: { patient: true, doctor: true }
+                    });
+                    await ctx.editMessageCaption(
+                        `❌ *RAD ETILDI*\n\n` +
+                        `👤 Bemor: ${appointment.patient.firstName} ${appointment.patient.lastName}\n` +
+                        `👨‍⚕️ Shifokor: ${appointment.doctorName}\n` +
+                        `📅 ${appointment.date} soat ${appointment.time}`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    await ctx.answerCbQuery("❌ Qabul rad etildi");
+
+                    if (appointment.patient.telegramChatId) {
+                        await bot.telegram.sendMessage(
+                            appointment.patient.telegramChatId,
+                            `❌ *Qabulingiz tasdiqlanmadi.*\n\nTo'lovingiz rad etildi. Iltimos, klinika bilan bog'laning yoki qaytadan urinib ko'ring.`,
+                            { parse_mode: 'Markdown' }
+                        ).catch(() => {});
+                    }
+                } catch (e) {
+                    console.error("Reject payment error:", e);
+                    await ctx.answerCbQuery("Xatolik yuz berdi");
+                }
+            });
 
             // 6. Rating Action Handler
             bot.action(/^rate_(\d+)_([\w-]+)$/, async (ctx) => {

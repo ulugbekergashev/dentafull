@@ -680,6 +680,18 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+        getPrepaymentSettings: (id: string) => {
+            if (isDemoMode()) return Promise.resolve({ prepaymentEnabled: false, prepaymentCardNumber: '', prepaymentAmount: 0 });
+            return fetchJson<{ prepaymentEnabled: boolean; prepaymentCardNumber: string; prepaymentAmount: number }>(`/clinics/${id}/prepayment-settings`);
+        },
+        savePrepaymentSettings: (id: string, data: { prepaymentEnabled: boolean; prepaymentCardNumber: string; prepaymentAmount: number }) => {
+            if (isDemoMode()) return Promise.resolve({ success: true });
+            return fetchJson<{ success: true }>(`/clinics/${id}/prepayment-settings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
     },
     sms: {
         getSettings: (clinicId: string) => {

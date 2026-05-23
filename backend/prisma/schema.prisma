@@ -254,6 +254,9 @@ model Clinic {
   dmedClinicId            String?
   dmedToken               String?
   dmedTokenExpiry         DateTime?
+  prepaymentEnabled       Boolean            @default(false)
+  prepaymentCardNumber    String?
+  prepaymentAmount        Float?
   appointments            Appointment[]
   plan                    SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors                 Doctor[]

@@ -209,6 +209,9 @@ export interface Clinic {
   dmedClinicId?: string;
   dmedToken?: string;
   dmedTokenExpiry?: string;
+  prepaymentEnabled?: boolean;
+  prepaymentCardNumber?: string;
+  prepaymentAmount?: number;
 }
 
 export interface ICD10Code {
