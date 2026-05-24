@@ -474,8 +474,8 @@ class BotManager {
                     where: { doctorId, date: dateStr, status: { notIn: ['Cancelled'] } }
                 });
 
-                const startHour = doctor.clinic.startHour || 8;
-                const endHour = doctor.clinic.endHour || 20;
+                const startHour = (doctor as any).startHour ?? doctor.clinic.startHour ?? 8;
+                const endHour = (doctor as any).endHour ?? doctor.clinic.endHour ?? 20;
                 
                 const availableSlots: string[] = [];
                 for(let h = startHour; h < endHour; h++) {

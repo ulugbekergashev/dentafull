@@ -22,6 +22,8 @@ model Doctor {
   percentage       Float             @default(0)
   color            String?
   secondaryPhone   String?
+  startHour        Int?
+  endHour          Int?
   appointments     Appointment[]
   clinic           Clinic            @relation(fields: [clinicId], references: [id])
   installmentPlans InstallmentPlan[]

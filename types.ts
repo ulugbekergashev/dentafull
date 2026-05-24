@@ -35,6 +35,8 @@ export interface Doctor {
   percentage?: number; // Revenue share percentage
   secondaryPhone?: string;
   color?: string;
+  startHour?: number | null;
+  endHour?: number | null;
 }
 
 export interface Receptionist {

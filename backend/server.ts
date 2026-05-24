@@ -1171,7 +1171,7 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
             }
         }
         // Sanitize body to only include valid Doctor fields
-        const { firstName, lastName, specialty, phone, email, status, password, percentage, secondaryPhone, color, clinicId } = req.body;
+        const { firstName, lastName, specialty, phone, email, status, password, percentage, secondaryPhone, color, clinicId, startHour, endHour } = req.body;
         const updateData: any = {};
         if (firstName !== undefined) updateData.firstName = firstName;
         if (lastName !== undefined) updateData.lastName = lastName;
@@ -1184,6 +1184,8 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
         if (secondaryPhone !== undefined) updateData.secondaryPhone = secondaryPhone;
         if (color !== undefined) updateData.color = color;
         if (clinicId !== undefined) updateData.clinicId = clinicId;
+        if (startHour !== undefined) updateData.startHour = startHour === null ? null : Number(startHour);
+        if (endHour !== undefined) updateData.endHour = endHour === null ? null : Number(endHour);
 
         if (password) {
             const salt = await bcrypt.genSalt(10);

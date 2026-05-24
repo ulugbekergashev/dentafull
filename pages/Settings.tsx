@@ -55,7 +55,7 @@ export const Settings: React.FC<SettingsProps> = ({
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
    const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
-   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', color: DOCTOR_COLORS[0].value });
+   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '' });
 
    // Receptionist Modal State
    const [isReceptionistModalOpen, setIsReceptionistModalOpen] = useState(false);
@@ -407,11 +407,13 @@ export const Settings: React.FC<SettingsProps> = ({
             username: doctor.username || '',
             password: '',
             percentage: (doctor.percentage || 0).toString(),
-            color: doctor.color || DOCTOR_COLORS[0].value
+            color: doctor.color || DOCTOR_COLORS[0].value,
+            startHour: doctor.startHour != null ? String(doctor.startHour) : '',
+            endHour: doctor.endHour != null ? String(doctor.endHour) : '',
          });
       } else {
          setEditingDoctorId(null);
-         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', color: DOCTOR_COLORS[0].value });
+         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '' });
       }
       setIsDoctorModalOpen(true);
    };
@@ -420,15 +422,17 @@ export const Settings: React.FC<SettingsProps> = ({
       e.preventDefault();
       if (editingDoctorId) {
          const updateData: any = { ...doctorForm };
-         if (!updateData.password) {
-            delete updateData.password;
-         }
+         if (!updateData.password) delete updateData.password;
          updateData.percentage = Number(updateData.percentage) || 0;
+         updateData.startHour = doctorForm.startHour !== '' ? Number(doctorForm.startHour) : null;
+         updateData.endHour = doctorForm.endHour !== '' ? Number(doctorForm.endHour) : null;
          onUpdateDoctor(editingDoctorId, updateData);
       } else {
          onAddDoctor({
             ...doctorForm,
             percentage: Number(doctorForm.percentage) || 0,
+            startHour: doctorForm.startHour !== '' ? Number(doctorForm.startHour) : null,
+            endHour: doctorForm.endHour !== '' ? Number(doctorForm.endHour) : null,
             status: 'Active'
          });
       }
@@ -1436,6 +1440,40 @@ export const Settings: React.FC<SettingsProps> = ({
                      <p className="text-xs text-gray-500 mt-2">Bu rang kalendarda shifokor qabullarini belgilash uchun ishlatiladi.</p>
                   </div>
                </div>
+
+               <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Ishlash vaqti (Ixtiyoriy)</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Bo'sh qoldirsa, klinika umumiy vaqti ishlatiladi</p>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Boshlanish vaqti</label>
+                        <select
+                           value={doctorForm.startHour}
+                           onChange={e => setDoctorForm({ ...doctorForm, startHour: e.target.value })}
+                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                           <option value="">— Klinika vaqti —</option>
+                           {Array.from({ length: 18 }, (_, i) => i + 6).map(h => (
+                              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                           ))}
+                        </select>
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tugash vaqti</label>
+                        <select
+                           value={doctorForm.endHour}
+                           onChange={e => setDoctorForm({ ...doctorForm, endHour: e.target.value })}
+                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                           <option value="">— Klinika vaqti —</option>
+                           {Array.from({ length: 18 }, (_, i) => i + 6).map(h => (
+                              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                           ))}
+                        </select>
+                     </div>
+                  </div>
+               </div>
+
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsDoctorModalOpen(false)}>{t('common.cancel')}</Button>
                   <Button type="submit">{t('common.save')}</Button>
