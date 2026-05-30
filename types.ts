@@ -338,3 +338,14 @@ export interface Lead {
   updatedAt: string;
   clinicId: string;
 }
+
+export interface SalesAgent {
+  id: string;
+  name: string;
+  username: string;
+  password?: string;
+  phone: string;
+  status: 'Active' | 'Blocked';
+  clinicCount?: number;
+  createdAt: string;
+}

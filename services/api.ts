@@ -736,6 +736,20 @@ export const api = {
             body: JSON.stringify(data),
         }),
     },
+    sales: {
+        getAll: () => {
+            if (isDemoMode()) return Promise.resolve([]);
+            return fetchJson<any[]>('/superadmin/sales');
+        },
+        create: (data: any) => {
+            if (isDemoMode()) return Promise.resolve({ success: true, agent: { id: 'demo-agent-1', ...data } });
+            return fetchJson<{ success: boolean; agent: any }>('/superadmin/sales', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+    },
     diagnoses: {
         searchCodes: (query: string) => fetchJson<ICD10Code[]>(`/icd10?query=${query}`),
         add: (data: Omit<PatientDiagnosis, 'id' | 'icd10'>) => fetchJson<PatientDiagnosis>('/diagnoses', {

@@ -4,6 +4,7 @@ import { Card, Button, Input, Modal, Select, Badge } from '../components/Common'
 import { Clinic, SubscriptionPlan } from '../types';
 import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import { api } from '../services/api';
 
 interface SuperAdminDashboardProps {
    clinics: Clinic[];
@@ -18,14 +19,35 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    clinics, plans, onAddClinic, onUpdateClinic, onUpdatePlan, onDeleteClinic
 }) => {
    const { t } = useLanguage();
-   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked'>('overview');
+   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked' | 'sales'>('overview');
 
-   const handleTabChange = (tab: 'overview' | 'clinics' | 'plans' | 'blocked') => {
+   const handleTabChange = (tab: 'overview' | 'clinics' | 'plans' | 'blocked' | 'sales') => {
       setActiveTab(tab);
       setCurrentPage(1);
       setFilterStatus('All');
       setSearchQuery('');
    };
+
+   // Sales Agents State
+   const [salesAgents, setSalesAgents] = useState<any[]>([]);
+   const [isAddSalesModalOpen, setIsAddSalesModalOpen] = useState(false);
+   const [newSalesForm, setNewSalesForm] = useState({
+      name: '',
+      username: '',
+      password: '',
+      phone: ''
+   });
+   const [createdSalesCreds, setCreatedSalesCreds] = useState<{ username: string, password: string, name: string } | null>(null);
+   const [salesError, setSalesError] = useState<string | null>(null);
+
+   // Load Sales Agents when activeTab becomes 'sales'
+   useEffect(() => {
+      if (activeTab === 'sales') {
+         api.sales.getAll()
+            .then(setSalesAgents)
+            .catch(err => console.error('Sotuvchilarni yuklashda xatolik:', err));
+      }
+   }, [activeTab]);
 
    // Create Clinic State
    const [isAddClinicModalOpen, setIsAddClinicModalOpen] = useState(false);
@@ -197,6 +219,37 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       setNewClinicForm(prev => ({ ...prev, password: pass }));
    };
 
+   const handleAddSalesSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setSalesError(null);
+      try {
+         const res = await api.sales.create(newSalesForm);
+         if (res.success) {
+            setCreatedSalesCreds({
+               username: newSalesForm.username,
+               password: newSalesForm.password,
+               name: newSalesForm.name
+            });
+            setIsAddSalesModalOpen(false);
+            setNewSalesForm({ name: '', username: '', password: '', phone: '' });
+            // Reload sales agents
+            const updatedAgents = await api.sales.getAll();
+            setSalesAgents(updatedAgents);
+         }
+      } catch (err: any) {
+         setSalesError(err.message || 'Sotuvchini qo\'shishda xatolik yuz berdi');
+      }
+   };
+
+   const generateSalesPassword = () => {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let pass = '';
+      for (let i = 0; i < 10; i++) {
+         pass += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      setNewSalesForm(prev => ({ ...prev, password: pass }));
+   };
+
    // Management Logic
    const handleExtendSubscription = (months: number) => {
       if (!editClinicData) return;
@@ -288,6 +341,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
                   {t('superAdmin.tabs.plans')}
+               </button>
+               <button
+                  onClick={() => handleTabChange('sales')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'sales' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+               >
+                  Sotuvchilar
                </button>
                <button
                   onClick={() => handleTabChange('blocked')}
@@ -689,6 +748,71 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   );
                })}
             </div>
+         )}
+
+         {/* SALES AGENT TAB */}
+         {activeTab === 'sales' && (
+            <Card className="p-6">
+               <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                  <div>
+                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">Sotuvchilar (Resellers)</h3>
+                     <p className="text-sm text-gray-500">Tizimni klinikalar uchun targ'ib qiluvchi sotuvchilarni boshqarish bo'limi</p>
+                  </div>
+                  <Button onClick={() => {
+                     setSalesError(null);
+                     setIsAddSalesModalOpen(true);
+                  }}>
+                     <Plus className="w-4 h-4 mr-2" /> Yangi Sotuvchi Qo'shish
+                  </Button>
+               </div>
+
+               <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                     <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                           <th className="p-4 font-medium text-gray-500">Sotuvchi</th>
+                           <th className="p-4 font-medium text-gray-500">Login (Username)</th>
+                           <th className="p-4 font-medium text-gray-500">Telefon</th>
+                           <th className="p-4 font-medium text-gray-500 text-center">Biriktirilgan Klinikalar</th>
+                           <th className="p-4 font-medium text-gray-500">Yaratilgan Sana</th>
+                           <th className="p-4 font-medium text-gray-500">Holat</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {salesAgents.length === 0 ? (
+                           <tr>
+                              <td colSpan={6} className="p-8 text-center text-gray-500">
+                                 Sotuvchilar mavjud emas
+                              </td>
+                           </tr>
+                        ) : (
+                           salesAgents.map(agent => (
+                              <tr key={agent.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                 <td className="p-4 font-medium text-gray-900 dark:text-white">
+                                    {agent.name}
+                                 </td>
+                                 <td className="p-4 font-mono text-blue-600 dark:text-blue-400">
+                                    {agent.username}
+                                 </td>
+                                 <td className="p-4">
+                                    {agent.phone}
+                                 </td>
+                                 <td className="p-4 text-center font-bold text-indigo-600 dark:text-indigo-400">
+                                    {agent.clinicCount || 0} ta
+                                 </td>
+                                 <td className="p-4 text-xs text-gray-500">
+                                    {new Date(agent.createdAt).toLocaleDateString('uz-UZ')}
+                                 </td>
+                                 <td className="p-4">
+                                    <Badge status={agent.status === 'Active' ? 'active' : 'blocked'} />
+                                 </td>
+                              </tr>
+                           ))
+                        )}
+                     </tbody>
+                  </table>
+               </div>
+            </Card>
          )}
 
          {/* Add Clinic Modal */}
@@ -1102,6 +1226,86 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   >
                      Parolni Saqlash
                   </Button>
+               </div>
+            </div>
+         </Modal>
+
+         {/* Add Sales Agent Modal */}
+         <Modal isOpen={isAddSalesModalOpen} onClose={() => setIsAddSalesModalOpen(false)} title="Yangi Sotuvchi (Reseller) Qo'shish">
+            <form onSubmit={handleAddSalesSubmit} className="space-y-4">
+               {salesError && (
+                  <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-sm rounded-lg">
+                     {salesError}
+                  </div>
+               )}
+               <Input
+                  label="F.I.SH."
+                  value={newSalesForm.name}
+                  onChange={e => setNewSalesForm({ ...newSalesForm, name: e.target.value })}
+                  required
+               />
+               <div className="grid grid-cols-2 gap-4">
+                  <Input
+                     label="Telefon raqami"
+                     value={newSalesForm.phone}
+                     onChange={e => setNewSalesForm({ ...newSalesForm, phone: e.target.value })}
+                     required
+                  />
+                  <Input
+                     label="Login (Username)"
+                     value={newSalesForm.username}
+                     onChange={e => setNewSalesForm({ ...newSalesForm, username: e.target.value })}
+                     required
+                  />
+               </div>
+               
+               <div className="flex items-end gap-2">
+                  <Input
+                     label="Parol"
+                     type="text"
+                     value={newSalesForm.password}
+                     onChange={e => setNewSalesForm({ ...newSalesForm, password: e.target.value })}
+                     required
+                     className="flex-1"
+                  />
+                  <Button type="button" variant="secondary" onClick={generateSalesPassword} className="mb-[1px]">
+                     Generatsiya qilish
+                  </Button>
+               </div>
+
+               <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                  <Button type="button" variant="secondary" onClick={() => setIsAddSalesModalOpen(false)}>
+                     Bekor qilish
+                  </Button>
+                  <Button type="submit">
+                     Saqlash
+                  </Button>
+               </div>
+            </form>
+         </Modal>
+
+         {/* Sales Agent Created Credentials Modal */}
+         <Modal isOpen={!!createdSalesCreds} onClose={() => setCreatedSalesCreds(null)} title="Sotuvchi Muvaffaqiyatli Yaratildi">
+            <div className="space-y-4 text-center">
+               <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                  <ShieldCheck className="w-6 h-6 text-green-600" />
+               </div>
+               <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center justify-center gap-1">Kirish Ma'lumotlari</h3>
+                  <p className="text-sm text-gray-500">Sotuvchi {createdSalesCreds?.name} uchun tizimga kirish ma'lumotlari:</p>
+               </div>
+               <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg text-left space-y-2 border border-gray-200 dark:border-gray-700">
+                  <div>
+                     <span className="text-xs text-gray-400">Login:</span>
+                     <span className="block font-mono font-bold text-gray-800 dark:text-gray-200">{createdSalesCreds?.username}</span>
+                  </div>
+                  <div>
+                     <span className="text-xs text-gray-400">Parol:</span>
+                     <span className="block font-mono font-bold text-red-600">{createdSalesCreds?.password}</span>
+                  </div>
+               </div>
+               <div className="pt-2">
+                  <Button onClick={() => setCreatedSalesCreds(null)} className="w-full">Yopish</Button>
                </div>
             </div>
          </Modal>
