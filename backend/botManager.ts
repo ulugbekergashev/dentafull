@@ -1,8 +1,6 @@
 import { Telegraf } from 'telegraf';
 import { message } from 'telegraf/filters';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from './db';
 
 class BotManager {
     private bots: Map<string, Telegraf> = new Map(); // token -> Telegraf

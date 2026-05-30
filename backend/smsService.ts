@@ -1,7 +1,5 @@
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from './db';
 
 const ESKIZ_BASE_URL = 'https://notify.eskiz.uz/api';
 // Sender name registered in Eskiz cabinet (default for most accounts)

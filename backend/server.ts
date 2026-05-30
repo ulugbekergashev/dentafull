@@ -23,7 +23,7 @@ const { smsService } = require('./smsService');
 const { dmedService } = require('./dmedService');
 const cors = require('cors');
 const axios = require('axios');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('./db');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -40,11 +40,14 @@ cloudinary.config({
 });
 
 // Configure Multer
+// Configure Multer with structured folder hierarchy for multi-tenant safety
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: async (req: any, file: any) => {
+        const clinicId = req.query?.clinicId || req.body?.clinicId || 'general';
+        const patientId = req.query?.patientId || req.body?.patientId || 'unknown';
         return {
-            folder: 'patient-photos',
+            folder: `denta7/clinics/${clinicId}/patients/${patientId}`,
             allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
             public_id: `${Date.now()}-${Math.round(Math.random() * 1E9)}`
         };
@@ -52,7 +55,6 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage: storage });
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
 
 
@@ -303,11 +305,11 @@ app.post('/api/auth/login', async (req, res) => {
         let userPayload = null;
         let responseData = null;
 
-        // Check for super admin (uses env variables with fallback)
-        const superAdminUsername = process.env.SUPERADMIN_USERNAME || 'superadminulugbek';
-        const superAdminPassword = process.env.SUPERADMIN_PASSWORD || 'superadminpassword';
+        // Check for super admin (safely checking env variables without exposing default fallback keys)
+        const superAdminUsername = process.env.SUPERADMIN_USERNAME;
+        const superAdminPassword = process.env.SUPERADMIN_PASSWORD;
 
-        if (cleanUsername === superAdminUsername && cleanPassword === superAdminPassword) {
+        if (superAdminUsername && superAdminPassword && cleanUsername === superAdminUsername && cleanPassword === superAdminPassword) {
             userPayload = { role: 'SUPER_ADMIN', name: 'Ulugbek (Super Admin)' };
             responseData = {
                 success: true,
@@ -315,6 +317,9 @@ app.post('/api/auth/login', async (req, res) => {
                 name: 'Ulugbek (Super Admin)'
             };
         } else {
+            if (!superAdminUsername || !superAdminPassword) {
+                console.warn('⚠️ WARNING: Superadmin credentials are not configured in .env file!');
+            }
             // Helper function to verify and seamlessly upgrade passwords
             const verifyAndUpgradePassword = async (user: any, modelName: string, idField: string = 'id') => {
                 let isValid = false;
@@ -461,7 +466,7 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
 
 app.post('/api/patients', authenticateToken, async (req, res) => {
     try {
-        const { firstName, lastName, phone, clinicId, dob, gender, medicalHistory } = req.body;
+        const { firstName, lastName, phone, clinicId, dob, gender, medicalHistory, pinfl } = req.body;
 
         // 1. Validate required fields
         if (!firstName || !lastName || !phone) {
@@ -493,7 +498,8 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
                 medicalHistory: medicalHistory || '',
                 status: 'Active',
                 lastVisit: 'Never',
-                doctorId: assignedDoctorId
+                doctorId: assignedDoctorId,
+                pinfl: pinfl || ''
             }
         });
         res.json(patient);
@@ -527,8 +533,7 @@ app.get('/api/patients/:id', authenticateToken, async (req, res) => {
 
 app.put('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
-        // Sanitize body to only include valid Patient fields
-        const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId, avatarUrl, portraitUrl } = req.body;
+        const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId, avatarUrl, portraitUrl, doctorId, pinfl } = req.body;
         const updateData: any = {};
         if (firstName !== undefined) updateData.firstName = firstName;
         if (lastName !== undefined) updateData.lastName = lastName;
@@ -544,6 +549,8 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
         if (clinicId !== undefined) updateData.clinicId = clinicId;
         if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
         if (portraitUrl !== undefined) updateData.portraitUrl = portraitUrl;
+        if (doctorId !== undefined) updateData.doctorId = doctorId === "" ? null : doctorId;
+        if (pinfl !== undefined) updateData.pinfl = pinfl;
 
         const patient = await prisma.patient.update({
             where: { id: req.params.id },

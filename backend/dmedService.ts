@@ -1,7 +1,5 @@
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from './db';
 
 const IS_DMED_PROD = process.env.DMED_MODE === 'production';
 const DMED_BASE_URL = IS_DMED_PROD ? 'https://api.ssv.uz/v2' : 'https://test-api.ssv.uz/v2';
@@ -50,8 +48,8 @@ class DmedService {
      */
     public async refreshToken(clinicId: string, apiKey: string, apiSecret: string): Promise<string | null> {
         try {
-            // Sandbox Mode for testing without real keys
-            if (apiKey === 'test_key' || apiKey === 'sandbox_key') {
+            // Sandbox Mode for testing without real keys (only allowed in non-production environments)
+            if (process.env.NODE_ENV !== 'production' && (apiKey === 'test_key' || apiKey === 'sandbox_key')) {
                 console.log(`[DMED] 🧪 Sandbox Mode: Simulating token refresh for ${clinicId}`);
                 const token = 'sandbox_token_' + Math.random().toString(36).substring(7);
                 const expiry = new Date();
@@ -103,8 +101,8 @@ class DmedService {
             
             if (!token) return { success: false, error: 'DMED tokeni olinmadi' };
 
-            // Sandbox Mode Mock Response
-            if (config?.apiKey === 'test_key' || config?.apiKey === 'sandbox_key') {
+            // Sandbox Mode Mock Response (only allowed in non-production environments)
+            if (process.env.NODE_ENV !== 'production' && (config?.apiKey === 'test_key' || config?.apiKey === 'sandbox_key')) {
                 console.log(`[DMED] 🧪 Sandbox Mode: Searching for PINFL ${pinfl}`);
                 await new Promise(r => setTimeout(r, 1000)); // Simulate network lag
                 
