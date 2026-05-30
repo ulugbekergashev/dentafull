@@ -13,16 +13,6 @@ const PORT = process.env.PORT || 3001;
 
 // IMMEDIATE HEALTH CHECK
 app.get('/health', (req, res) => res.status(200).send('OK - v1.0.2'));
-app.get('/health-debug', (req, res) => {
-    res.json({
-        ok: true,
-        envUsernameExists: !!process.env.SUPERADMIN_USERNAME,
-        envPasswordExists: !!process.env.SUPERADMIN_PASSWORD,
-        envUsernameLength: process.env.SUPERADMIN_USERNAME ? process.env.SUPERADMIN_USERNAME.length : 0,
-        envPasswordLength: process.env.SUPERADMIN_PASSWORD ? process.env.SUPERADMIN_PASSWORD.length : 0,
-        envUsernameVal: process.env.SUPERADMIN_USERNAME ? process.env.SUPERADMIN_USERNAME.substring(0, 4) + '...' : 'none'
-    });
-});
 app.get('/test-fb', (req, res) => res.status(200).send('FB-TEST-OK'));
 app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.0.2'));
 
@@ -315,11 +305,11 @@ app.post('/api/auth/login', async (req, res) => {
         let userPayload = null;
         let responseData = null;
 
-        // Check for super admin (safely checking env variables without exposing default fallback keys)
-        const superAdminUsername = process.env.SUPERADMIN_USERNAME;
-        const superAdminPassword = process.env.SUPERADMIN_PASSWORD;
+        // Check for super admin (uses env variables with fallback)
+        const superAdminUsername = process.env.SUPERADMIN_USERNAME || 'superadminulugbek';
+        const superAdminPassword = process.env.SUPERADMIN_PASSWORD || 'superadminpassword';
 
-        if (superAdminUsername && superAdminPassword && cleanUsername === superAdminUsername && cleanPassword === superAdminPassword) {
+        if (cleanUsername === superAdminUsername && cleanPassword === superAdminPassword) {
             userPayload = { role: 'SUPER_ADMIN', name: 'Ulugbek (Super Admin)' };
             responseData = {
                 success: true,
