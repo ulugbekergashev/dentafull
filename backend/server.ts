@@ -416,6 +416,26 @@ app.post('/api/auth/login', async (req, res) => {
                             receptionistId: receptionist.id
                         };
                     }
+
+                    if (!userPayload) {
+                        // Check for sales agent
+                        const salesAgent = await prisma.salesAgent.findUnique({
+                            where: { username: cleanUsername }
+                        });
+
+                        if (salesAgent && await verifyAndUpgradePassword(salesAgent, 'salesAgent')) {
+                            if (salesAgent.status !== 'Active') {
+                                return res.status(403).json({ success: false, error: 'Sotuvchi akkaunti faol emas' });
+                            }
+                            userPayload = { role: 'SALES_AGENT', name: salesAgent.name, salesAgentId: salesAgent.id };
+                            responseData = {
+                                success: true,
+                                role: 'SALES_AGENT',
+                                name: salesAgent.name,
+                                salesAgentId: salesAgent.id
+                            };
+                        }
+                    }
                 }
             }
         }
@@ -1534,6 +1554,13 @@ app.post('/api/clinics', authenticateToken, async (req, res) => {
             const salt = await bcrypt.genSalt(10);
             passwordData = await bcrypt.hash(passwordData, salt);
         }
+
+        const user = (req as any).user;
+        let salesAgentId = null;
+        if (user && user.role === 'SALES_AGENT') {
+            salesAgentId = user.salesAgentId;
+        }
+
         const clinic = await prisma.clinic.create({
             data: {
                 name,
@@ -1547,7 +1574,8 @@ app.post('/api/clinics', authenticateToken, async (req, res) => {
                 expiryDate,
                 monthlyRevenue,
                 customPrice: customPrice !== undefined ? Number(customPrice) : null,
-                subscriptionType: req.body.subscriptionType || 'Paid'
+                subscriptionType: req.body.subscriptionType || 'Paid',
+                salesAgentId: salesAgentId
             }
         });
         res.json(clinic);
@@ -3085,10 +3113,106 @@ app.post('/api/test/send-doctor-schedules', authenticateToken, async (req, res) 
         res.status(500).json({ error: error.message });
     }
 });
+// ============================================
+// SALES AGENT & SUPER ADMIN ENDPOINTS
+// ============================================
 
+// Get own clinics (for sales agent)
+app.get('/api/sales/clinics', authenticateToken, async (req, res) => {
+    try {
+        const user = (req as any).user;
+        if (!user || user.role !== 'SALES_AGENT') {
+            return res.status(403).json({ error: 'Ruxsat berilmadi' });
+        }
 
+        const clinics = await prisma.clinic.findMany({
+            where: {
+                salesAgentId: user.salesAgentId,
+                status: { not: 'Deleted' }
+            },
+            include: { plan: true }
+        });
+        res.json(clinics);
+    } catch (error: any) {
+        res.status(500).json({ error: 'Klinikalarni yuklashda xatolik: ' + error.message });
+    }
+});
 
+// Create new sales agent (Super Admin only)
+app.post('/api/superadmin/sales', authenticateToken, async (req, res) => {
+    try {
+        const user = (req as any).user;
+        if (!user || user.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ error: 'Ruxsat berilmadi (Faqat Super Admin)' });
+        }
 
+        const { name, username, password, phone } = req.body;
+        if (!name || !username || !password || !phone) {
+            return res.status(400).json({ error: 'Barcha maydonlar to\'ldirilishi shart' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password.trim(), salt);
+
+        const agent = await prisma.salesAgent.create({
+            data: {
+                name,
+                username: username.trim().toLowerCase(),
+                password: hashedPassword,
+                phone,
+                status: 'Active'
+            }
+        });
+
+        res.json({
+            success: true,
+            agent: {
+                id: agent.id,
+                name: agent.name,
+                username: agent.username,
+                phone: agent.phone
+            }
+        });
+    } catch (error: any) {
+        if (error.code === 'P2002') {
+            return res.status(400).json({ error: 'Ushbu login band qilingan. Boshqasini tanlang.' });
+        }
+        res.status(500).json({ error: 'Sotuvchini yaratishda xatolik: ' + error.message });
+    }
+});
+
+// List all sales agents and their stats (Super Admin only)
+app.get('/api/superadmin/sales', authenticateToken, async (req, res) => {
+    try {
+        const user = (req as any).user;
+        if (!user || user.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ error: 'Ruxsat berilmadi' });
+        }
+
+        const agents = await prisma.salesAgent.findMany({
+            include: {
+                clinics: {
+                    where: { status: { not: 'Deleted' } }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const formatted = agents.map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            username: a.username,
+            phone: a.phone,
+            status: a.status,
+            clinicCount: a.clinics.length,
+            createdAt: a.createdAt
+        }));
+
+        res.json(formatted);
+    } catch (error: any) {
+        res.status(500).json({ error: 'Sotuvchilarni yuklashda xatolik: ' + error.message });
+    }
+});
 
 // ============================================
 // START SERVER

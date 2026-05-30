@@ -273,6 +273,8 @@ model Clinic {
   telegramLogs            TelegramLog[]
   transactions            Transaction[]
   visits                  Visit[]
+  salesAgentId            String?
+  salesAgent              SalesAgent?        @relation(fields: [salesAgentId], references: [id])
 
   @@index([botToken])
 }
@@ -408,4 +410,15 @@ model InstallmentItem {
   paidDate      String?
   transactionId String?
   plan          InstallmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+model SalesAgent {
+  id        String   @id @default(uuid())
+  name      String
+  username  String   @unique
+  password  String
+  phone     String
+  status    String   @default("Active") // Active, Blocked
+  clinics   Clinic[]
+  createdAt DateTime @default(now())
 }
