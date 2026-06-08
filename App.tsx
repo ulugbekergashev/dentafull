@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
@@ -18,7 +18,9 @@ import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
 import { DoctorDetails } from './pages/DoctorDetails';
 import { Inventory } from './pages/Inventory';
-import { UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead } from './types';
+import { OnlineQueue } from './pages/OnlineQueue';
+import { LabOrders } from './pages/LabOrders';
+import { UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
@@ -36,6 +38,8 @@ const CLINIC_NAVIGATION = [
   { id: 'finance', labelKey: 'nav.finance', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
   { id: 'doctors', labelKey: 'nav.doctors', icon: Activity, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'inventory', labelKey: 'inventory.title', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
+  { id: 'queue', labelKey: 'nav.queue', icon: ListOrdered, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST, UserRole.DOCTOR] },
+  { id: 'lab', labelKey: 'nav.lab', icon: FlaskConical, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.LAB_TECHNICIAN] },
   { id: 'settings', labelKey: 'nav.settings', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
 ];
 
@@ -53,6 +57,8 @@ const getPageLabelKey = (pathname: string): any => {
   if (pathname === '/finance') return 'nav.finance';
   if (pathname === '/doctors') return 'nav.doctors';
   if (pathname === '/inventory') return 'inventory.title';
+  if (pathname === '/queue') return 'nav.queue';
+  if (pathname === '/lab') return 'nav.lab';
   if (pathname === '/settings') return 'nav.settings';
   if (pathname === '/admin') return 'nav.saas';
   return 'nav.dashboard';
@@ -70,6 +76,7 @@ const AppContent: React.FC = () => {
   const [clinicId, setClinicId] = useState<string>('');
   const [doctorId, setDoctorId] = useState<string>('');
   const [receptionistId, setReceptionistId] = useState<string>('');
+  const [technicianId, setTechnicianId] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -87,6 +94,8 @@ const AppContent: React.FC = () => {
   const [receptionists, setReceptionists] = useState<Receptionist[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [labTechnicians, setLabTechnicians] = useState<LabTechnician[]>([]);
+  const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [searchBarTerm, setSearchBarTerm] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -134,13 +143,14 @@ const AppContent: React.FC = () => {
     const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
     if (storedAuth) {
       try {
-        const { role, name, clinicId: storedClinicId, doctorId: storedDoctorId, receptionistId: storedReceptionistId } = JSON.parse(storedAuth);
+        const { role, name, clinicId: storedClinicId, doctorId: storedDoctorId, receptionistId: storedReceptionistId, technicianId: storedTechnicianId } = JSON.parse(storedAuth);
         if (role && name) {
           setUserRole(role);
           setUserName(name);
           if (storedClinicId) setClinicId(storedClinicId);
           if (storedDoctorId) setDoctorId(storedDoctorId);
           if (storedReceptionistId) setReceptionistId(storedReceptionistId);
+          if (storedTechnicianId) setTechnicianId(storedTechnicianId);
           setIsAuthenticated(true);
           // Fetch current clinic info if not in demo mode
           if (storedClinicId && role !== UserRole.SUPER_ADMIN) {
@@ -176,7 +186,7 @@ const AppContent: React.FC = () => {
         const isDemo = storedAuth ? JSON.parse(storedAuth).isDemo : false;
 
         if (isDemo && clinicId === 'demo-clinic-1') {
-          const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN, DEMO_CATEGORIES } = await import('./services/demoData');
+          const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN, DEMO_CATEGORIES, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_RECEPTIONISTS, DEMO_LEADS, DEMO_INVENTORY } = await import('./services/demoData');
           setCurrentClinic(DEMO_CLINIC);
           setPatients(DEMO_PATIENTS);
           setAppointments(DEMO_APPOINTMENTS);
@@ -185,7 +195,11 @@ const AppContent: React.FC = () => {
           setCategories(DEMO_CATEGORIES);
           setDoctors(DEMO_DOCTORS);
           setPlans([DEMO_PLAN]);
-          setInventoryItems([]);
+          setInventoryItems(DEMO_INVENTORY || []);
+          setLabTechnicians(DEMO_LAB_TECHNICIANS || []);
+          setLabOrders(DEMO_LAB_ORDERS || []);
+          setReceptionists(DEMO_RECEPTIONISTS || []);
+          setLeads(DEMO_LEADS || []);
         } else if (userRole === UserRole.SUPER_ADMIN) {
           const [plns, clns] = await Promise.all([
             api.plans.getAll(),
@@ -194,7 +208,7 @@ const AppContent: React.FC = () => {
           setPlans(plns);
           setClinics(clns);
         } else if (clinicId) {
-          const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData] = await Promise.all([
+          const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
@@ -206,7 +220,9 @@ const AppContent: React.FC = () => {
             api.categories.getAll(clinicId),
             api.reviews.getAll(clinicId),
             api.leads.getAll(clinicId),
-            api.clinics.getById(clinicId)
+            api.clinics.getById(clinicId),
+            api.labTechnicians.getAll(clinicId),
+            api.labOrders.getAll(clinicId)
           ]);
           setCurrentClinic(clinicData);
           setPatients(pts);
@@ -221,6 +237,8 @@ const AppContent: React.FC = () => {
           setCategories(cats);
           setReviews(revs || []);
           setLeads(leadsData || []);
+          setLabTechnicians(labTechs || []);
+          setLabOrders(labOrds || []);
         }
       } catch (error: any) {
         console.error('Failed to load data:', error);
@@ -261,6 +279,8 @@ const AppContent: React.FC = () => {
       navigate('/admin');
     } else if (role === UserRole.RECEPTIONIST) {
       navigate('/patients');
+    } else if (role === UserRole.LAB_TECHNICIAN) {
+      navigate('/lab');
     } else {
       navigate('/');
     }
@@ -629,6 +649,33 @@ const AppContent: React.FC = () => {
       await api.receptionists.delete(id);
       setReceptionists(prev => prev.filter(r => r.id !== id));
       addToast('info', 'Resepshn o\'chirildi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const addLabTechnician = async (tech: Omit<LabTechnician, 'id' | 'status'>) => {
+    try {
+      const newTech = await api.labTechnicians.create({ ...tech, clinicId });
+      setLabTechnicians(prev => [...prev, newTech]);
+      addToast('success', 'Yangi lab texnik qo\'shildi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
+  const updateLabTechnician = async (id: string, data: Partial<LabTechnician>) => {
+    try {
+      const updated = await api.labTechnicians.update(id, data);
+      setLabTechnicians(prev => prev.map(t => t.id === id ? updated : t));
+      addToast('success', 'Texnik ma\'lumotlari yangilandi.');
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
+  };
+
+  const deleteLabTechnician = async (id: string) => {
+    try {
+      await api.labTechnicians.delete(id);
+      setLabTechnicians(prev => prev.filter(t => t.id !== id));
+      addToast('info', 'Texnik o\'chirildi.');
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
@@ -1226,9 +1273,31 @@ const AppContent: React.FC = () => {
                   doctorId={doctorId}
                   doctors={doctors}
                   currentClinic={currentClinic}
+                  labOrders={labOrders}
                 />
               } />
               )}
+
+              <Route path="/queue" element={
+                <OnlineQueue
+                  doctors={doctors}
+                  patients={patients}
+                  appointments={appointments}
+                  clinicId={clinicId}
+                  userRole={userRole}
+                  currentClinic={currentClinic}
+                />
+              } />
+
+              <Route path="/lab" element={
+                <LabOrders
+                  clinicId={clinicId}
+                  labTechnicians={labTechnicians}
+                  labOrders={labOrders}
+                  setLabOrders={setLabOrders}
+                  doctors={doctors}
+                />
+              } />
 
               {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
                 <>
@@ -1272,6 +1341,7 @@ const AppContent: React.FC = () => {
                   categories={categories}
                   doctors={doctors}
                   receptionists={receptionists}
+                  labTechnicians={labTechnicians}
                   onAddService={addService}
                   onUpdateService={updateService}
                   onAddCategory={addCategory}
@@ -1282,6 +1352,9 @@ const AppContent: React.FC = () => {
                   onAddReceptionist={addReceptionist}
                   onUpdateReceptionist={updateReceptionist}
                   onDeleteReceptionist={deleteReceptionist}
+                  onAddLabTechnician={addLabTechnician}
+                  onUpdateLabTechnician={updateLabTechnician}
+                  onDeleteLabTechnician={deleteLabTechnician}
                   currentClinic={currentClinic}
                   plans={plans}
                   reviews={reviews}

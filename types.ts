@@ -3,7 +3,8 @@ export enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
   CLINIC_ADMIN = 'CLINIC_ADMIN',
   DOCTOR = 'DOCTOR',
-  RECEPTIONIST = 'RECEPTIONIST'
+  RECEPTIONIST = 'RECEPTIONIST',
+  LAB_TECHNICIAN = 'LAB_TECHNICIAN'
 }
 
 export enum ToothStatus {
@@ -348,4 +349,37 @@ export interface SalesAgent {
   status: 'Active' | 'Blocked';
   clinicCount?: number;
   createdAt: string;
+}
+
+export interface LabTechnician {
+  id: string;
+  firstName: string;
+  lastName: string;
+  specialty: string;
+  phone: string;
+  status: 'Active' | 'Inactive' | 'Deleted';
+  clinicId: string;
+  username?: string;
+  password?: string;
+}
+
+export interface LabOrder {
+  id: string;
+  patientName: string;
+  doctorName: string;
+  technicianId: string;
+  technicianName: string;
+  clinicId: string;
+  orderType: string;
+  material?: string;
+  toothNumbers?: string;
+  notes?: string;
+  status: 'Pending' | 'In-Progress' | 'Ready' | 'Delivered' | 'Cancelled';
+  priority: 'Normal' | 'Urgent';
+  orderedAt: string;
+  deadline: string;
+  deliveredAt?: string;
+  price: number;
+  clinicianNotes?: string;
+  technicianNotes?: string;
 }

@@ -69,7 +69,7 @@ export const Settings: React.FC<SettingsProps> = ({
    // LabTechnician Modal State
    const [isLabTechModalOpen, setIsLabTechModalOpen] = useState(false);
    const [editingLabTechId, setEditingLabTechId] = useState<string | null>(null);
-   const [labTechForm, setLabTechForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '' });
+   const [labTechForm, setLabTechForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '' });
 
    // Upgrade Plan Modal State
    const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
@@ -495,25 +495,31 @@ export const Settings: React.FC<SettingsProps> = ({
             firstName: tech.firstName,
             lastName: tech.lastName,
             specialty: tech.specialty,
-            phone: tech.phone
+            phone: tech.phone,
+            username: tech.username || '',
+            password: ''
          });
       } else {
          setEditingLabTechId(null);
-         setLabTechForm({ firstName: '', lastName: '', specialty: '', phone: '' });
+         setLabTechForm({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '' });
       }
       setIsLabTechModalOpen(true);
    };
 
    const handleLabTechSubmit = (e: React.FormEvent) => {
       e.preventDefault();
+      const data: any = {
+         firstName: labTechForm.firstName,
+         lastName: labTechForm.lastName,
+         specialty: labTechForm.specialty,
+         phone: labTechForm.phone,
+         username: labTechForm.username || undefined,
+      };
+      if (labTechForm.password) data.password = labTechForm.password;
       if (editingLabTechId) {
-         if (onUpdateLabTechnician) {
-            onUpdateLabTechnician(editingLabTechId, labTechForm);
-         }
+         if (onUpdateLabTechnician) onUpdateLabTechnician(editingLabTechId, data);
       } else {
-         if (onAddLabTechnician) {
-            onAddLabTechnician(labTechForm);
-         }
+         if (onAddLabTechnician) onAddLabTechnician(data);
       }
       setIsLabTechModalOpen(false);
    };
@@ -1675,6 +1681,24 @@ export const Settings: React.FC<SettingsProps> = ({
                </div>
                <Input label="Mutaxassislik" value={labTechForm.specialty} onChange={e => setLabTechForm({ ...labTechForm, specialty: e.target.value })} placeholder="Koronka, Protez, Veneer..." required />
                <Input label="Telefon" value={labTechForm.phone} onChange={e => setLabTechForm({ ...labTechForm, phone: e.target.value })} required />
+               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Tizimga kirish (ixtiyoriy)</p>
+                  <div className="grid grid-cols-2 gap-4">
+                     <Input
+                        label="Login (Username)"
+                        value={labTechForm.username}
+                        onChange={e => setLabTechForm({ ...labTechForm, username: e.target.value })}
+                        placeholder="texnik_login"
+                     />
+                     <Input
+                        label="Parol"
+                        type="password"
+                        value={labTechForm.password}
+                        onChange={e => setLabTechForm({ ...labTechForm, password: e.target.value })}
+                        placeholder={editingLabTechId ? "O'zgartirish uchun kiriting" : "********"}
+                     />
+                  </div>
+               </div>
                <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="secondary" onClick={() => setIsLabTechModalOpen(false)}>{t('common.cancel')}</Button>
                   <Button type="submit">{t('common.save')}</Button>

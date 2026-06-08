@@ -38,6 +38,8 @@ export const translations = {
     'inventory.noteOutPlaceholder': 'Masalan: Davolashda ishlatildi',
     'inventory.deleteTitle': 'Materialni O\'chirish',
     'inventory.deleteConfirm': '<strong>{name}</strong> ni o\'chirmoqchimisiz? Bu amalni qaytarib bo\'lmaydi va barcha tarix ham o\'chiriladi.',
+    'nav.queue': 'Online Navbat',
+    'nav.lab': 'Laboratoriya',
     'nav.settings': 'Sozlamalar',
     'nav.saas': 'SaaS Dashboard',
 
@@ -80,6 +82,7 @@ export const translations = {
     'settings.tabs.services': 'Xizmatlar',
     'settings.tabs.doctors': 'Shifokorlar',
     'settings.tabs.receptionists': 'Resepshnlar',
+    'settings.tabs.labTechnicians': 'Texniklar',
     'settings.tabs.bot': 'Telegram Bot',
     'settings.tabs.facebook': 'Facebook',
 
@@ -769,6 +772,8 @@ export const translations = {
     'inventory.noteOutPlaceholder': 'Например: Использовано при лечении',
     'inventory.deleteTitle': 'Удалить материал',
     'inventory.deleteConfirm': 'Вы уверены, что хотите удалить <strong>{name}</strong>? Это действие нельзя отменить, и вся история также будет удалена.',
+    'nav.queue': 'Онлайн очередь',
+    'nav.lab': 'Лаборатория',
     'nav.settings': 'Настройки',
     'nav.saas': 'SaaS Панель',
 
@@ -815,6 +820,7 @@ export const translations = {
     'settings.tabs.services': 'Услуги',
     'settings.tabs.doctors': 'Врачи',
     'settings.tabs.receptionists': 'Ресепшн',
+    'settings.tabs.labTechnicians': 'Техники',
     'settings.tabs.bot': 'Telegram Bot',
     'settings.tabs.facebook': 'Facebook',
 

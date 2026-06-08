@@ -1,5 +1,5 @@
 import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan } from '../types';
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, saveDemoData } from './demoData';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -1022,5 +1022,104 @@ export const api = {
                 body: JSON.stringify({ clinicId })
             });
         }
-    }
+    },
+    labTechnicians: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([...DEMO_LAB_TECHNICIANS]);
+            return fetchJson<any[]>(`/lab-technicians?clinicId=${clinicId}`);
+        },
+        create: (data: any) => {
+            if (isDemoMode()) {
+                const newTech = { ...data, id: `demo-tech-${Date.now()}`, status: 'Active' };
+                DEMO_LAB_TECHNICIANS.push(newTech);
+                saveDemoData();
+                return Promise.resolve(newTech);
+            }
+            return fetchJson<any>('/lab-technicians', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: any) => {
+            if (isDemoMode()) {
+                const idx = DEMO_LAB_TECHNICIANS.findIndex(t => t.id === id);
+                if (idx !== -1) {
+                    DEMO_LAB_TECHNICIANS[idx] = { ...DEMO_LAB_TECHNICIANS[idx], ...data };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_LAB_TECHNICIANS[idx]);
+                }
+                return Promise.reject('Technician not found');
+            }
+            return fetchJson<any>(`/lab-technicians/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const idx = DEMO_LAB_TECHNICIANS.findIndex(t => t.id === id);
+                if (idx !== -1) {
+                    DEMO_LAB_TECHNICIANS[idx].status = 'Deleted';
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/lab-technicians/${id}`, {
+                method: 'DELETE',
+            });
+        },
+    },
+    labOrders: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([...DEMO_LAB_ORDERS]);
+            return fetchJson<any[]>(`/lab-orders?clinicId=${clinicId}`);
+        },
+        create: (data: any) => {
+            if (isDemoMode()) {
+                const newOrder = { 
+                    ...data, 
+                    id: `demo-order-${Date.now()}`, 
+                    orderedAt: new Date().toISOString(), 
+                    status: 'Pending' 
+                };
+                DEMO_LAB_ORDERS.push(newOrder);
+                saveDemoData();
+                return Promise.resolve(newOrder);
+            }
+            return fetchJson<any>('/lab-orders', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: any) => {
+            if (isDemoMode()) {
+                const idx = DEMO_LAB_ORDERS.findIndex(o => o.id === id);
+                if (idx !== -1) {
+                    DEMO_LAB_ORDERS[idx] = { ...DEMO_LAB_ORDERS[idx], ...data };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_LAB_ORDERS[idx]);
+                }
+                return Promise.reject('Order not found');
+            }
+            return fetchJson<any>(`/lab-orders/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const idx = DEMO_LAB_ORDERS.findIndex(o => o.id === id);
+                if (idx !== -1) {
+                    DEMO_LAB_ORDERS.splice(idx, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/lab-orders/${id}`, {
+                method: 'DELETE',
+            });
+        },
+    },
+    // Expose base URL for building direct URLs (e.g., TTS proxy)
+    API_BASE_URL: API_URL.replace(/\/api$/, ''),
 };

@@ -16,6 +16,40 @@ app.get('/health', (req, res) => res.status(200).send('OK - v1.0.2'));
 app.get('/test-fb', (req, res) => res.status(200).send('FB-TEST-OK'));
 app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.0.2'));
 
+// Google Edge TTS Proxy Endpoint
+app.get('/api/tts', async (req: any, res: any) => {
+    try {
+        const { text, lang } = req.query;
+        if (!text) {
+            return res.status(400).send('Text is required');
+        }
+        
+        let voice = 'uz-UZ-MadinaNeural'; // Default
+        const cleanLang = String(lang || 'uz').toLowerCase();
+        if (cleanLang === 'ru') {
+            voice = 'ru-RU-SvetlanaNeural';
+        } else if (cleanLang === 'en') {
+            voice = 'en-US-AriaNeural';
+        }
+        
+        console.log(`[TTS] Synthesizing "${text.substring(0, 30)}..." using voice=${voice}`);
+        
+        const { EdgeTTS } = require('@andresaya/edge-tts');
+        const tts = new EdgeTTS();
+        await tts.synthesize(text, voice);
+        const buffer = tts.toBuffer();
+        
+        res.set({
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': buffer.length
+        });
+        res.send(buffer);
+    } catch (err: any) {
+        console.error('[TTS] proxy error:', err.message);
+        res.status(500).send('TTS failed');
+    }
+});
+
 // Load everything else
 const cron = require('node-cron');
 const { botManager } = require('./botManager');
@@ -415,6 +449,28 @@ app.post('/api/auth/login', async (req, res) => {
                             clinicId: receptionist.clinicId,
                             receptionistId: receptionist.id
                         };
+                    }
+
+                    if (!userPayload) {
+                        // Check for lab technician
+                        const labTech = await (prisma as any).labTechnician.findUnique({
+                            where: { username: cleanUsername },
+                            include: { clinic: true }
+                        });
+
+                        if (labTech && labTech.password && await verifyAndUpgradePassword(labTech, 'labTechnician')) {
+                            if (labTech.status !== 'Active') {
+                                return res.status(403).json({ success: false, error: 'Lab texnik akkaunti faol emas' });
+                            }
+                            userPayload = { role: 'LAB_TECHNICIAN', name: `${labTech.firstName} ${labTech.lastName}`, clinicId: labTech.clinicId, technicianId: labTech.id };
+                            responseData = {
+                                success: true,
+                                role: 'LAB_TECHNICIAN',
+                                name: `${labTech.firstName} ${labTech.lastName}`,
+                                clinicId: labTech.clinicId,
+                                technicianId: labTech.id
+                            };
+                        }
                     }
 
                     if (!userPayload) {
@@ -1340,6 +1396,167 @@ app.delete('/api/receptionists/:id', authenticateToken, async (req, res) => {
     } catch (error: any) {
         console.error('Receptionist delete error:', error);
         res.status(500).json({ error: error.message || 'Failed to delete receptionist' });
+    }
+});
+
+// ============================================================
+// --- Lab Technicians ---
+// ============================================================
+
+app.get('/api/lab-technicians', authenticateToken, async (req: any, res: any) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const technicians = await (prisma as any).labTechnician.findMany({
+            where: { clinicId: clinicId as string, status: { not: 'Deleted' } },
+            orderBy: { lastName: 'asc' }
+        });
+        res.json(technicians);
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to fetch lab technicians' });
+    }
+});
+
+app.post('/api/lab-technicians', authenticateToken, async (req: any, res: any) => {
+    try {
+        const { firstName, lastName, specialty, phone, clinicId, username, password } = req.body;
+        if (!firstName || !lastName || !phone || !clinicId) {
+            return res.status(400).json({ error: 'Barcha maydonlar to\'ldirilishi shart' });
+        }
+        if (username) {
+            const existing = await (prisma as any).labTechnician.findUnique({ where: { username } });
+            if (existing) return res.status(400).json({ error: 'Bu login allaqachon band.' });
+        }
+        const data: any = { firstName, lastName, specialty: specialty || 'Umumiy', phone, clinicId, status: 'Active' };
+        if (username) data.username = username;
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            data.password = await bcrypt.hash(password, salt);
+        }
+        const technician = await (prisma as any).labTechnician.create({ data });
+        res.json(technician);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message || 'Failed to create lab technician' });
+    }
+});
+
+app.put('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+        const { firstName, lastName, specialty, phone, status, username, password } = req.body;
+        if (username) {
+            const existing = await (prisma as any).labTechnician.findUnique({ where: { username } });
+            if (existing && existing.id !== req.params.id) {
+                return res.status(400).json({ error: 'Bu login allaqachon band.' });
+            }
+        }
+        const data: any = {};
+        if (firstName !== undefined) data.firstName = firstName;
+        if (lastName !== undefined) data.lastName = lastName;
+        if (specialty !== undefined) data.specialty = specialty;
+        if (phone !== undefined) data.phone = phone;
+        if (status !== undefined) data.status = status;
+        if (username !== undefined) data.username = username || null;
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            data.password = await bcrypt.hash(password, salt);
+        }
+        const technician = await (prisma as any).labTechnician.update({ where: { id: req.params.id }, data });
+        res.json(technician);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message || 'Failed to update lab technician' });
+    }
+});
+
+app.delete('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+        await (prisma as any).labTechnician.update({
+            where: { id: req.params.id },
+            data: { status: 'Deleted' }
+        });
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message || 'Failed to delete lab technician' });
+    }
+});
+
+// ============================================================
+// --- Lab Orders ---
+// ============================================================
+
+app.get('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
+    try {
+        const { clinicId } = req.query;
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const user = (req as any).user;
+        const where: any = { clinicId: clinicId as string };
+        if (user?.role === 'LAB_TECHNICIAN' && user?.technicianId) {
+            where.technicianId = user.technicianId;
+        }
+        const orders = await (prisma as any).labOrder.findMany({
+            where,
+            orderBy: { orderedAt: 'desc' }
+        });
+        res.json(orders);
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to fetch lab orders' });
+    }
+});
+
+app.post('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
+    try {
+        const { patientName, doctorName, technicianId, technicianName, clinicId, orderType, material, toothNumbers, notes, deadline, price, priority, clinicianNotes } = req.body;
+        if (!patientName || !technicianId || !clinicId || !orderType || !deadline) {
+            return res.status(400).json({ error: 'Majburiy maydonlar to\'ldirilmagan' });
+        }
+        const order = await (prisma as any).labOrder.create({
+            data: {
+                patientName,
+                doctorName: doctorName || '',
+                technicianId,
+                technicianName: technicianName || '',
+                clinicId,
+                orderType,
+                material: material || null,
+                toothNumbers: toothNumbers || null,
+                notes: notes || null,
+                deadline,
+                price: parseFloat(price) || 0,
+                priority: priority || 'Normal',
+                clinicianNotes: clinicianNotes || null,
+                status: 'Pending'
+            }
+        });
+
+        res.json(order);
+    } catch (error: any) {
+        console.error('Lab order create error:', error);
+        res.status(500).json({ error: error.message || 'Failed to create lab order' });
+    }
+});
+
+app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+        const updateData: any = { ...req.body };
+        // If status is being set to 'Delivered', set deliveredAt
+        if (updateData.status === 'Delivered' && !updateData.deliveredAt) {
+            updateData.deliveredAt = new Date();
+        }
+        const order = await (prisma as any).labOrder.update({
+            where: { id: req.params.id },
+            data: updateData
+        });
+        res.json(order);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message || 'Failed to update lab order' });
+    }
+});
+
+app.delete('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+        await (prisma as any).labOrder.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message || 'Failed to delete lab order' });
     }
 });
 

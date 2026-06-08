@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
-import { UserRole, Transaction, Appointment, Patient, Clinic } from '../types';
+import { UserRole, Transaction, Appointment, Patient, Clinic, LabOrder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer } from 'lucide-react';
 import { api } from '../services/api';
@@ -20,12 +20,13 @@ interface FinanceProps {
   doctorId: string;
   doctors: Doctor[];
   currentClinic?: Clinic;
+  labOrders?: LabOrder[];
 }
 
 import { Doctor, InstallmentPlan } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors, currentClinic }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors, currentClinic, labOrders }) => {
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
@@ -182,11 +183,16 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
 
   // --- Financial Breakdown Logic ---
   // Use shared utility function for consistent calculations
-  const { technicianCosts, doctorSalaries, inventoryCosts, netProfit } = calculateTotalFinancials(
+  const { doctorSalaries, inventoryCosts } = calculateTotalFinancials(
     filteredTransactions,
     doctors,
     services
   );
+
+  // Calculate actual technician costs from lab orders
+  const filteredLabOrders = (labOrders || []).filter(o => o.status !== 'Cancelled' && isDateInRange(o.orderedAt));
+  const technicianCosts = filteredLabOrders.reduce((sum, o) => sum + (o.price || 0), 0);
+  const netProfit = totalRevenue - technicianCosts - doctorSalaries - inventoryCosts;
 
   // --- Lost Revenue Logic ---
   const noShowAppointments = filteredAppointments.filter(a => a.status === 'No-Show');

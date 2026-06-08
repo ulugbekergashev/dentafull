@@ -275,6 +275,8 @@ model Clinic {
   visits                  Visit[]
   salesAgentId            String?
   salesAgent              SalesAgent?        @relation(fields: [salesAgentId], references: [id])
+  labTechnicians          LabTechnician[]
+  labOrders               LabOrder[]
 
   @@index([botToken])
 }
@@ -421,4 +423,49 @@ model SalesAgent {
   status    String   @default("Active") // Active, Blocked
   clinics   Clinic[]
   createdAt DateTime @default(now())
+}
+
+model LabTechnician {
+  id        String     @id @default(uuid())
+  firstName String
+  lastName  String
+  specialty String
+  phone     String
+  status    String     @default("Active")
+  clinicId  String
+  username  String?    @unique
+  password  String?
+  clinic    Clinic     @relation(fields: [clinicId], references: [id])
+  labOrders LabOrder[]
+
+  @@index([clinicId])
+}
+
+model LabOrder {
+  id              String        @id @default(uuid())
+  patientId       String?
+  patientName     String
+  doctorId        String?
+  doctorName      String
+  technicianId    String
+  technicianName  String
+  clinicId        String
+  orderType       String
+  material        String?
+  toothNumbers    String?
+  notes           String?
+  status          String        @default("Pending")
+  priority        String        @default("Normal")
+  orderedAt       DateTime      @default(now())
+  deadline        String
+  deliveredAt     DateTime?
+  price           Float         @default(0)
+  clinicianNotes  String?
+  technicianNotes String?
+  clinic          Clinic        @relation(fields: [clinicId], references: [id])
+  technician      LabTechnician @relation(fields: [technicianId], references: [id])
+
+  @@index([clinicId])
+  @@index([technicianId])
+  @@index([status])
 }

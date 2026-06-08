@@ -60,6 +60,8 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
           name: response.name,
           clinicId: response.clinicId,
           doctorId: response.doctorId,
+          receptionistId: response.receptionistId,
+          technicianId: response.technicianId,
           username: username,
           token: response.token
         };

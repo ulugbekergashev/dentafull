@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan } from '../types';
+import { Patient, Appointment, Transaction, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder } from '../types';
 
 // --- PERSISTENCE HELPERS ---
 const STORAGE_KEY = 'dentalflow_demo_data';
@@ -42,7 +42,9 @@ export const saveDemoData = () => {
             logs: DEMO_INVENTORY_LOGS,
             categories: DEMO_CATEGORIES,
             leads: DEMO_LEADS,
-            installments: DEMO_INSTALLMENTS
+            installments: DEMO_INSTALLMENTS,
+            labTechnicians: DEMO_LAB_TECHNICIANS,
+            labOrders: DEMO_LAB_ORDERS
         };
         const stringified = JSON.stringify(data);
         localStorage.setItem(STORAGE_KEY, stringified);
@@ -448,5 +450,67 @@ export let DEMO_INSTALLMENTS: InstallmentPlan[] = savedData?.installments || [
             { id: 'item-4', planId: 'demo-ins-1', expectedDate: '2026-05-15', amount: 600000, status: 'Pending' },
             { id: 'item-5', planId: 'demo-ins-1', expectedDate: '2026-06-15', amount: 600000, status: 'Pending' },
         ]
+    }
+];
+
+// Demo Lab Technicians
+export let DEMO_LAB_TECHNICIANS: LabTechnician[] = savedData?.labTechnicians || [
+    {
+        id: 'demo-tech-1',
+        firstName: 'Farhod',
+        lastName: 'Karimov',
+        specialty: 'Metallkeramika',
+        phone: '+998 90 999 88 77',
+        status: 'Active',
+        clinicId: 'demo-clinic-1'
+    },
+    {
+        id: 'demo-tech-2',
+        firstName: 'Zuhra',
+        lastName: 'Nazarova',
+        specialty: 'Veneer / E-max',
+        phone: '+998 93 777 66 55',
+        status: 'Active',
+        clinicId: 'demo-clinic-1'
+    }
+];
+
+// Demo Lab Orders
+export let DEMO_LAB_ORDERS: LabOrder[] = savedData?.labOrders || [
+    {
+        id: 'demo-order-1',
+        patientName: 'Aziza Rahimova',
+        doctorName: 'Dr. Kamola Ahmedova',
+        technicianId: 'demo-tech-1',
+        technicianName: 'Karimov Farhod',
+        clinicId: 'demo-clinic-1',
+        orderType: 'Koronka',
+        material: 'Metallkeramika',
+        toothNumbers: '14, 15',
+        notes: 'Rang A2 bo\'lsin',
+        deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        price: 500000,
+        priority: 'Normal',
+        clinicianNotes: 'Tishlarni biroz yupqaroq qilish kerak',
+        status: 'In-Progress',
+        orderedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+        id: 'demo-order-2',
+        patientName: 'Bobur Aliyev',
+        doctorName: 'Dr. Jamshid Karimov',
+        technicianId: 'demo-tech-2',
+        technicianName: 'Nazarova Zuhra',
+        clinicId: 'demo-clinic-1',
+        orderType: 'Veneer',
+        material: 'E-max (Litiy disilkat)',
+        toothNumbers: '11, 12, 21, 22',
+        notes: 'Bleach 2 rang, ultra tabiiy shakl',
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        price: 2400000,
+        priority: 'Urgent',
+        clinicianNotes: 'Bemor juda talabchan, iltimos sifatiga e\'tibor bering',
+        status: 'Pending',
+        orderedAt: new Date().toISOString(),
     }
 ];
