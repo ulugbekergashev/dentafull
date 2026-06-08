@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
-import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw } from 'lucide-react';
+import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review, LabTechnician } from '../types';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw, FlaskConical } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -22,6 +22,7 @@ interface SettingsProps {
    services: Service[];
    doctors: Doctor[];
    receptionists?: Receptionist[];
+   labTechnicians?: LabTechnician[];
    categories: ServiceCategory[];
    onAddService: (service: Omit<Service, 'id' | 'clinicId'>) => void;
    onUpdateService: (index: number, service: Partial<Service>) => void;
@@ -33,16 +34,19 @@ interface SettingsProps {
    onAddReceptionist?: (receptionist: Omit<Receptionist, 'id'>) => void;
    onUpdateReceptionist?: (id: string, receptionist: Partial<Receptionist>) => void;
    onDeleteReceptionist?: (id: string) => void;
+   onAddLabTechnician?: (tech: Omit<LabTechnician, 'id' | 'status'>) => void;
+   onUpdateLabTechnician?: (id: string, tech: Partial<LabTechnician>) => void;
+   onDeleteLabTechnician?: (id: string) => void;
    currentClinic?: Clinic;
    plans?: SubscriptionPlan[];
    reviews: Review[];
 }
 
 export const Settings: React.FC<SettingsProps> = ({
-   userRole, services, categories, doctors, receptionists = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, currentClinic, plans, reviews
+   userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, currentClinic, plans, reviews
 }) => {
    const { t } = useLanguage();
-   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'bot' | 'facebook' | 'sms' | 'dmed'>('services');
+   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'bot' | 'facebook' | 'sms' | 'dmed'>('services');
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
    const [categoryForm, setCategoryForm] = useState({ name: '' });
@@ -62,11 +66,17 @@ export const Settings: React.FC<SettingsProps> = ({
    const [editingReceptionistId, setEditingReceptionistId] = useState<string | null>(null);
    const [receptionistForm, setReceptionistForm] = useState({ firstName: '', lastName: '', phone: '', username: '', password: '' });
 
+   // LabTechnician Modal State
+   const [isLabTechModalOpen, setIsLabTechModalOpen] = useState(false);
+   const [editingLabTechId, setEditingLabTechId] = useState<string | null>(null);
+   const [labTechForm, setLabTechForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '' });
+
    // Upgrade Plan Modal State
    const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
    // Delete Confirmation Modals
    const [deleteConfirmDoctor, setDeleteConfirmDoctor] = useState<Doctor | null>(null);
+   const [deleteConfirmLabTech, setDeleteConfirmLabTech] = useState<LabTechnician | null>(null);
    const [deleteConfirmReceptionist, setDeleteConfirmReceptionist] = useState<Receptionist | null>(null);
 
 
@@ -478,6 +488,36 @@ export const Settings: React.FC<SettingsProps> = ({
       setIsReceptionistModalOpen(false);
    };
 
+   const handleOpenLabTechModal = (tech?: LabTechnician) => {
+      if (tech) {
+         setEditingLabTechId(tech.id);
+         setLabTechForm({
+            firstName: tech.firstName,
+            lastName: tech.lastName,
+            specialty: tech.specialty,
+            phone: tech.phone
+         });
+      } else {
+         setEditingLabTechId(null);
+         setLabTechForm({ firstName: '', lastName: '', specialty: '', phone: '' });
+      }
+      setIsLabTechModalOpen(true);
+   };
+
+   const handleLabTechSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (editingLabTechId) {
+         if (onUpdateLabTechnician) {
+            onUpdateLabTechnician(editingLabTechId, labTechForm);
+         }
+      } else {
+         if (onAddLabTechnician) {
+            onAddLabTechnician(labTechForm);
+         }
+      }
+      setIsLabTechModalOpen(false);
+   };
+
    const handleSmsSave = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!currentClinic?.id) return;
@@ -668,6 +708,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   { id: 'services', name: t('settings.tabs.services'), icon: DollarSign },
                   { id: 'doctors', name: t('settings.tabs.doctors'), icon: Users },
                   { id: 'receptionists', name: t('settings.tabs.receptionists'), icon: Phone },
+                  { id: 'labTechnicians', name: t('settings.tabs.labTechnicians'), icon: FlaskConical },
                   { id: 'bot', name: t('settings.tabs.bot'), icon: Bot },
                   { id: 'sms', name: "SMS Sozlamalari", icon: MessageSquare },
                   { id: 'dmed', name: "DMED (IT-MED)", icon: Activity },
@@ -1044,6 +1085,56 @@ export const Settings: React.FC<SettingsProps> = ({
                         {receptionists.length === 0 && (
                            <div className="text-center py-8 text-gray-500 text-sm">
                               Hozircha resepshnlar qo'shilmagan
+                           </div>
+                        )}
+                     </div>
+                  </Card>
+               )}
+
+               {/* Lab Technicians Tab */}
+               {activeTab === 'labTechnicians' && (
+                  <Card className="p-6">
+                     <div className="flex justify-between items-center mb-6">
+                        <div>
+                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">Lab Texniklar Boshqaruvi</h3>
+                           <p className="text-sm text-gray-500">Stomatologik laboratoriya texniklarini boshqarish.</p>
+                        </div>
+                        <Button size="sm" onClick={() => handleOpenLabTechModal()}>Texnik Qo'shish</Button>
+                     </div>
+                     <div className="grid grid-cols-1 gap-4">
+                        {labTechnicians.map(tech => (
+                           <div key={tech.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
+                              <div className="flex items-center gap-4">
+                                 <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold">
+                                    {tech.firstName[0]}{tech.lastName[0]}
+                                 </div>
+                                 <div>
+                                    <p className="font-medium text-gray-900 dark:text-white">{tech.firstName} {tech.lastName}</p>
+                                    <p className="text-xs text-gray-500">{tech.specialty} · {tech.phone}</p>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${tech.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
+                                    {tech.status === 'Active' ? 'Faol' : 'Faol emas'}
+                                 </span>
+                                 <button
+                                    onClick={() => handleOpenLabTechModal(tech)}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md"
+                                 >
+                                    <Edit className="w-4 h-4" />
+                                 </button>
+                                 <button
+                                    className="p-2 text-gray-400 hover:text-red-600"
+                                    onClick={() => setDeleteConfirmLabTech(tech)}
+                                 >
+                                    <Trash2 className="w-4 h-4" />
+                                 </button>
+                              </div>
+                           </div>
+                        ))}
+                        {labTechnicians.length === 0 && (
+                           <div className="text-center py-8 text-gray-500 text-sm">
+                              Hozircha lab texniklar qo'shilmagan
                            </div>
                         )}
                      </div>
@@ -1573,6 +1664,49 @@ export const Settings: React.FC<SettingsProps> = ({
                   <Button type="submit">{t('common.save')}</Button>
                </div>
             </form>
+         </Modal>
+
+         {/* Add/Edit Lab Technician Modal */}
+         <Modal isOpen={isLabTechModalOpen} onClose={() => setIsLabTechModalOpen(false)} title={editingLabTechId ? 'Texnikni Tahrirlash' : 'Texnik Qo\'shish'}>
+            <form onSubmit={handleLabTechSubmit} className="space-y-4">
+               <div className="grid grid-cols-2 gap-4">
+                  <Input label="Ism" value={labTechForm.firstName} onChange={e => setLabTechForm({ ...labTechForm, firstName: e.target.value })} required />
+                  <Input label="Familiya" value={labTechForm.lastName} onChange={e => setLabTechForm({ ...labTechForm, lastName: e.target.value })} required />
+               </div>
+               <Input label="Mutaxassislik" value={labTechForm.specialty} onChange={e => setLabTechForm({ ...labTechForm, specialty: e.target.value })} placeholder="Koronka, Protez, Veneer..." required />
+               <Input label="Telefon" value={labTechForm.phone} onChange={e => setLabTechForm({ ...labTechForm, phone: e.target.value })} required />
+               <div className="flex justify-end gap-2 pt-2">
+                  <Button type="button" variant="secondary" onClick={() => setIsLabTechModalOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit">{t('common.save')}</Button>
+               </div>
+            </form>
+         </Modal>
+
+         {/* Delete Lab Technician Confirmation Modal */}
+         <Modal isOpen={!!deleteConfirmLabTech} onClose={() => setDeleteConfirmLabTech(null)} title="Texnikni O'chirish">
+            <div className="text-center space-y-4">
+               <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+               </div>
+               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
+               <p className="text-gray-600 dark:text-gray-300">
+                  <strong>{deleteConfirmLabTech?.firstName} {deleteConfirmLabTech?.lastName}</strong> texnikni o'chirasizmi? {t('common.confirmDeleteDesc')}
+               </p>
+               <div className="flex justify-center gap-3 pt-4">
+                  <Button variant="secondary" onClick={() => setDeleteConfirmLabTech(null)}>{t('common.cancel')}</Button>
+                  <Button
+                     className="bg-red-600 hover:bg-red-700 text-white border-none"
+                     onClick={() => {
+                        if (deleteConfirmLabTech && onDeleteLabTechnician) {
+                           onDeleteLabTechnician(deleteConfirmLabTech.id);
+                           setDeleteConfirmLabTech(null);
+                        }
+                     }}
+                  >
+                     Ha, O'chirish
+                  </Button>
+               </div>
+            </div>
          </Modal>
 
          {/* Delete Receptionist Confirmation Modal */}
