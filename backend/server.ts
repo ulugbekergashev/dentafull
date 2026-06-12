@@ -3435,7 +3435,33 @@ app.get('/api/superadmin/sales', authenticateToken, async (req, res) => {
 // START SERVER
 // ============================================
 
+async function runStartupMigrations() {
+    try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentEnabled" BOOLEAN NOT NULL DEFAULT false`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentCardNumber" TEXT`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentAmount" DOUBLE PRECISION`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE "Doctor" ADD COLUMN IF NOT EXISTS "startHour" INTEGER`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE "Doctor" ADD COLUMN IF NOT EXISTS "endHour" INTEGER`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE "LabTechnician" ADD COLUMN IF NOT EXISTS "username" TEXT`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE "LabTechnician" ADD COLUMN IF NOT EXISTS "password" TEXT`);
+        await prisma.$executeRawUnsafe(`
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'LabTechnician_username_key'
+                ) THEN
+                    ALTER TABLE "LabTechnician" ADD CONSTRAINT "LabTechnician_username_key" UNIQUE ("username");
+                END IF;
+            END $$
+        `);
+        console.log('✅ Startup migrations applied successfully');
+    } catch (err: any) {
+        console.error('⚠️ Startup migration warning:', err.message);
+    }
+}
+
 console.log('🚀 Server is initializing...');
-app.listen(PORT, () => {
-    console.log(`✅ Server successfully started on port ${PORT}`);
+runStartupMigrations().then(() => {
+    app.listen(PORT, () => {
+        console.log(`✅ Server successfully started on port ${PORT}`);
+    });
 });
