@@ -13,7 +13,6 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
   const { t } = useLanguage();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -39,11 +38,8 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
           isDemo: true,
         };
 
-        if (rememberMe) {
-          localStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData));
-        } else {
-          sessionStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData));
-        }
+        // Har doim eslab qolinadi
+        localStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData));
 
         onLogin(UserRole.CLINIC_ADMIN, 'Demo Admin', 'demo-clinic-1');
         setIsLoading(false);
@@ -54,7 +50,6 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
       const response = await api.auth.login(username, password);
 
       if (response.success && response.role && response.name) {
-        // Save to localStorage if remember me is checked
         const authData = {
           role: response.role,
           name: response.name,
@@ -66,11 +61,8 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
           token: response.token
         };
 
-        if (rememberMe) {
-          localStorage.setItem('dentalflow_auth', JSON.stringify(authData));
-        } else {
-          sessionStorage.setItem('dentalflow_auth', JSON.stringify(authData));
-        }
+        // Har doim eslab qolinadi (localStorage)
+        localStorage.setItem('dentalflow_auth', JSON.stringify(authData));
 
         onLogin(response.role as UserRole, response.name, response.clinicId, response.doctorId);
       } else {
@@ -148,19 +140,6 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
                   )}
                 </button>
               </div>
-            </div>
-
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
-              />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                {t('auth.rememberMe')}
-              </label>
             </div>
 
             <Button
