@@ -70,13 +70,7 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
     const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
     if (storedAuth) {
         try {
-            const { token, isDemo } = JSON.parse(storedAuth);
-            console.log('📡 Fetch Request:', { 
-                url: `${API_URL}${url}`, 
-                hasToken: !!token, 
-                tokenPreview: token ? `${token.substring(0, 10)}...` : 'NONE',
-                isDemo: !!isDemo
-            });
+            const { token } = JSON.parse(storedAuth);
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }

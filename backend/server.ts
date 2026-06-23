@@ -78,7 +78,12 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: async (req: any, file: any) => {
-        const clinicId = req.query?.clinicId || req.body?.clinicId || 'general';
+        // Multi-tenant xavfsizlik: oddiy rol uchun clinicId tokendan olinadi.
+        // (authenticateToken multer'dan oldin ishlaydi, shu sababli req.user mavjud.)
+        const user = req.user;
+        const clinicId = (user && user.role !== 'SUPER_ADMIN' && user.clinicId)
+            ? user.clinicId
+            : (req.query?.clinicId || req.body?.clinicId || 'general');
         const patientId = req.query?.patientId || req.body?.patientId || 'unknown';
         return {
             folder: `denta7/clinics/${clinicId}/patients/${patientId}`,
@@ -138,27 +143,98 @@ app.get('/', (req, res) => {
 const authenticateToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-
-    console.log('🔐 Auth check:', {
-        hasAuthHeader: !!authHeader,
-        tokenPreview: token?.substring(0, 20) + '...',
-        path: req.path
-    });
+    const isDev = process.env.NODE_ENV === 'development';
 
     if (!token) {
-        console.log('❌ No token provided');
         return res.status(401).json({ error: 'Token topilmadi (Unauthorized)' });
     }
 
     jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
         if (err) {
-            console.log('❌ Token verification failed:', err.message);
+            if (isDev) console.log('❌ Token verification failed:', err.message);
             return res.status(403).json({ error: 'Token yaroqsiz (Forbidden)' });
         }
-        console.log('✅ Token verified for user:', user);
         (req as any).user = user;
+        // Multi-tenant himoya: oddiy rol uchun body'dagi clinicId majburan o'z klinikasiga tenglashtiriladi.
+        // Bu boshqa klinika nomidan yozuv yaratish/o'zgartirishni bloklaydi. SUPER_ADMIN bundan mustasno.
+        if (user?.role !== 'SUPER_ADMIN' && user?.clinicId && req.body && typeof req.body === 'object' && 'clinicId' in req.body) {
+            (req.body as any).clinicId = user.clinicId;
+        }
         next();
     });
+};
+
+// ─── Xavfsizlik yordamchilari (multi-tenant izolyatsiya) ──────────────────────
+// Klinikaga bog'liq endpointlar uchun "samarali clinicId"ni aniqlaydi.
+// Oddiy rollar: clinicId tokendan olinadi (mijoz yuborgan qiymat e'tiborga olinmaydi).
+// SUPER_ADMIN: mijoz yuborgan clinicId'ga ishonadi (u barcha klinikalarni boshqaradi).
+const getScopedClinicId = (req: any): string | null => {
+    const u = (req as any).user;
+    if (u?.role === 'SUPER_ADMIN') {
+        return (req.query?.clinicId || req.body?.clinicId || null) as string | null;
+    }
+    return (u?.clinicId || null) as string | null;
+};
+
+// Faqat ko'rsatilgan rollar uchun ruxsat beruvchi middleware.
+const requireRole = (...roles: string[]) => {
+    return (req: any, res: any, next: any) => {
+        if (!roles.includes((req as any).user?.role)) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q' });
+        }
+        next();
+    };
+};
+
+// :id bo'yicha mutatsiyadan oldin yozuv egaligini tekshiradi.
+// SUPER_ADMIN o'tib ketadi; aks holda record.clinicId === user.clinicId bo'lishi shart.
+// Bazaviy modellar uchun (Patient, Appointment, ... — clinicId to'g'ridan-to'g'ri saqlanadi).
+const assertOwnership = async (req: any, res: any, model: string, id: string): Promise<boolean> => {
+    const u = (req as any).user;
+    if (u?.role === 'SUPER_ADMIN') return true;
+    try {
+        const rec = await (prisma as any)[model].findUnique({ where: { id } });
+        if (!rec) {
+            res.status(404).json({ error: 'Topilmadi' });
+            return false;
+        }
+        if (rec.clinicId !== u?.clinicId) {
+            res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+            return false;
+        }
+        return true;
+    } catch (e: any) {
+        res.status(500).json({ error: 'Egalik tekshiruvida xatolik' });
+        return false;
+    }
+};
+
+// Bemorga bog'liq resurslar uchun (photo, teeth, diagnosis) — bemor orqali clinicId tekshiriladi.
+const assertPatientOwnership = async (req: any, res: any, patientId: string): Promise<boolean> => {
+    const u = (req as any).user;
+    if (u?.role === 'SUPER_ADMIN') return true;
+    try {
+        const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+        if (!patient) {
+            res.status(404).json({ error: 'Bemor topilmadi' });
+            return false;
+        }
+        if (patient.clinicId !== u?.clinicId) {
+            res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+            return false;
+        }
+        return true;
+    } catch (e: any) {
+        res.status(500).json({ error: 'Egalik tekshiruvida xatolik' });
+        return false;
+    }
+};
+
+// Klinika sozlamasi endpointlari uchun: SUPER_ADMIN yoki o'z klinikasi bo'lishi shart.
+const canAccessClinic = (req: any, clinicId: string): boolean => {
+    const u = (req as any).user;
+    if (u?.role === 'SUPER_ADMIN') return true;
+    return u?.clinicId === clinicId;
 };
 
 // ─── Markaziy xabar yuborish funksiyasi ───────────────────────────────────────
@@ -203,6 +279,7 @@ async function sendNotification(
 // Bot Logs
 app.get('/api/clinics/:id/bot-logs', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const logs = await prisma.telegramLog.findMany({
             where: { clinicId: req.params.id },
             include: { patient: true },
@@ -220,6 +297,7 @@ app.get('/api/clinics/:id/bot-logs', authenticateToken, async (req, res) => {
 // GET SMS settings (credentials masked)
 app.get('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const clinic = await prisma.clinic.findUnique({ where: { id: req.params.id } }) as any;
         if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
         res.json({
@@ -238,6 +316,7 @@ app.get('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => 
 // PUT SMS settings (save credentials + mode)
 app.put('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { notificationMode, eskizEmail, eskizPassword, eskizNick } = req.body;
         const clinicId = req.params.id;
 
@@ -275,6 +354,7 @@ app.put('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => 
 // POST SMS balance check
 app.get('/api/clinics/:id/sms-balance', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const result = await smsService.getBalance(req.params.id);
         res.json(result);
     } catch (error) {
@@ -285,6 +365,7 @@ app.get('/api/clinics/:id/sms-balance', authenticateToken, async (req, res) => {
 // POST Test SMS
 app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { phone } = req.body;
         if (!phone) return res.status(400).json({ error: 'Telefon raqam kiritilsin' });
 
@@ -307,6 +388,7 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
 // Patient Reviews
 app.get('/api/clinics/:id/reviews', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const reviews = await prisma.review.findMany({
             where: {
                 appointment: { clinicId: req.params.id }
@@ -519,7 +601,7 @@ app.post('/api/auth/login', async (req, res) => {
 // --- Patients ---
 app.get('/api/patients', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -601,6 +683,10 @@ app.get('/api/patients/:id', authenticateToken, async (req, res) => {
             where: { id: req.params.id }
         });
         if (!patient) return res.status(404).json({ error: 'Patient not found' });
+        // Egalik: boshqa klinika bemorini ko'rishni bloklash
+        if ((req as any).user?.role !== 'SUPER_ADMIN' && patient.clinicId !== (req as any).user?.clinicId) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        }
         res.json(patient);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch patient' });
@@ -609,6 +695,7 @@ app.get('/api/patients/:id', authenticateToken, async (req, res) => {
 
 app.put('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'patient', req.params.id))) return;
         const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId, avatarUrl, portraitUrl, doctorId, pinfl } = req.body;
         const updateData: any = {};
         if (firstName !== undefined) updateData.firstName = firstName;
@@ -640,6 +727,7 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'patient', req.params.id))) return;
         await prisma.patient.update({
             where: { id: req.params.id },
             data: { status: 'Archived' }
@@ -653,7 +741,7 @@ app.delete('/api/patients/:id', authenticateToken, async (req, res) => {
 // --- Appointments ---
 app.get('/api/appointments', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -737,6 +825,7 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
 
 app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'appointment', req.params.id))) return;
         // Sanitize body to only include valid Appointment fields
         const { patientId, patientName, doctorId, doctorName, type, date, time, duration, status, reminderSent, notes, clinicId } = req.body;
         const updateData: any = {};
@@ -802,6 +891,7 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'appointment', req.params.id))) return;
         await prisma.appointment.delete({
             where: { id: req.params.id }
         });
@@ -814,6 +904,7 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
 // Manual Appointment Reminder
 app.post('/api/appointments/:id/remind', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'appointment', req.params.id))) return;
         const appointment = await prisma.appointment.findUnique({
             where: { id: req.params.id },
             include: { patient: { include: { clinic: true } }, doctor: true }
@@ -843,6 +934,7 @@ app.post('/api/appointments/:id/remind', authenticateToken, async (req, res) => 
 // Manual Debt Reminder
 app.post('/api/patients/:id/remind-debt', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const { amount } = req.body;
         const patient = await prisma.patient.findUnique({
             where: { id: req.params.id },
@@ -873,6 +965,7 @@ app.post('/api/patients/:id/remind-debt', authenticateToken, async (req, res) =>
 // Manual Custom Message
 app.post('/api/patients/:id/send-message', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const { message } = req.body;
         const patient = await prisma.patient.findUnique({
             where: { id: req.params.id },
@@ -908,7 +1001,7 @@ app.post('/api/patients/:id/send-message', authenticateToken, async (req, res) =
 // --- Transactions ---
 app.get('/api/transactions', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -959,6 +1052,7 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 
 app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'transaction', req.params.id))) return;
         const oldTx = await prisma.transaction.findUnique({ where: { id: req.params.id } });
         if (!oldTx) return res.status(404).json({ error: 'Transaction not found' });
 
@@ -997,6 +1091,7 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'transaction', req.params.id))) return;
         const transaction = await prisma.transaction.findUnique({ where: { id: req.params.id } });
         if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
 
@@ -1026,9 +1121,10 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
 // --- Installments ---
 app.get('/api/installments', authenticateToken, async (req, res) => {
     try {
-        const { clinicId, patientId } = req.query;
+        const clinicId = getScopedClinicId(req);
+        const { patientId } = req.query;
         if (!clinicId && !patientId) return res.status(400).json({ error: 'clinicId or patientId required' });
-        
+
         const where: any = {};
         if (clinicId) where.clinicId = clinicId as string;
         if (patientId) where.patientId = patientId as string;
@@ -1077,6 +1173,10 @@ app.post('/api/installments/:id/pay', authenticateToken, async (req, res) => {
         
         const item = await prisma.installmentItem.findUnique({ where: { id: itemId }, include: { plan: { include: { patient: true, doctor: true } } } });
         if (!item) return res.status(404).json({ error: 'Installment item not found' });
+        // Egalik: bo'lib to'lash rejasi klinikasi tekshiriladi
+        if ((req as any).user?.role !== 'SUPER_ADMIN' && item.plan?.clinicId !== (req as any).user?.clinicId) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        }
         if (item.status === 'Paid') return res.status(400).json({ error: 'Already paid' });
         
         const updatedItem = await prisma.installmentItem.update({
@@ -1123,6 +1223,7 @@ app.post('/api/installments/:id/pay', authenticateToken, async (req, res) => {
 
 app.delete('/api/installments/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'installmentPlan', req.params.id))) return;
         await prisma.installmentPlan.delete({ where: { id: req.params.id } });
         res.json({ success: true });
     } catch (error) {
@@ -1134,7 +1235,10 @@ app.delete('/api/installments/:id', authenticateToken, async (req, res) => {
 // --- Recalculate all patient balances (one-time fix) ---
 app.post('/api/admin/recalculate-balances', authenticateToken, async (req, res) => {
     try {
-        const patients = await prisma.patient.findMany({ select: { id: true } });
+        // Oddiy rol faqat o'z klinikasi bemorlarini qayta hisoblaydi; SUPER_ADMIN — barchasini
+        const u = (req as any).user;
+        const patientWhere = u?.role === 'SUPER_ADMIN' ? {} : { clinicId: u?.clinicId };
+        const patients = await prisma.patient.findMany({ where: patientWhere, select: { id: true } });
         let fixed = 0;
 
         for (const patient of patients) {
@@ -1168,7 +1272,7 @@ app.post('/api/admin/recalculate-balances', authenticateToken, async (req, res) 
 // --- Doctors ---
 app.get('/api/doctors', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -1246,6 +1350,7 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
 
 app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'doctor', req.params.id))) return;
         const { username } = req.body;
         if (username) {
             const existing = await prisma.doctor.findUnique({ where: { username } });
@@ -1291,6 +1396,7 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/doctors/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'doctor', req.params.id))) return;
         await prisma.doctor.update({
             where: { id: req.params.id },
             data: { status: 'Deleted' }
@@ -1305,7 +1411,7 @@ app.delete('/api/doctors/:id', authenticateToken, async (req, res) => {
 // --- Receptionists ---
 app.get('/api/receptionists', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -1360,6 +1466,7 @@ app.post('/api/receptionists', authenticateToken, async (req, res) => {
 
 app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'receptionist', req.params.id))) return;
         const { username } = req.body;
         if (username) {
             const existing = await prisma.receptionist.findUnique({ where: { username } });
@@ -1388,6 +1495,7 @@ app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/receptionists/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'receptionist', req.params.id))) return;
         await prisma.receptionist.update({
             where: { id: req.params.id },
             data: { status: 'Deleted' }
@@ -1405,7 +1513,7 @@ app.delete('/api/receptionists/:id', authenticateToken, async (req, res) => {
 
 app.get('/api/lab-technicians', authenticateToken, async (req: any, res: any) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const technicians = await (prisma as any).labTechnician.findMany({
             where: { clinicId: clinicId as string, status: { not: 'Deleted' } },
@@ -1442,6 +1550,7 @@ app.post('/api/lab-technicians', authenticateToken, async (req: any, res: any) =
 
 app.put('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await assertOwnership(req, res, 'labTechnician', req.params.id))) return;
         const { firstName, lastName, specialty, phone, status, username, password } = req.body;
         if (username) {
             const existing = await (prisma as any).labTechnician.findUnique({ where: { username } });
@@ -1469,6 +1578,7 @@ app.put('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any
 
 app.delete('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await assertOwnership(req, res, 'labTechnician', req.params.id))) return;
         await (prisma as any).labTechnician.update({
             where: { id: req.params.id },
             data: { status: 'Deleted' }
@@ -1485,7 +1595,7 @@ app.delete('/api/lab-technicians/:id', authenticateToken, async (req: any, res: 
 
 app.get('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const user = (req as any).user;
         const where: any = { clinicId: clinicId as string };
@@ -1536,6 +1646,7 @@ app.post('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
 
 app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return;
         const updateData: any = { ...req.body };
         // If status is being set to 'Delivered', set deliveredAt
         if (updateData.status === 'Delivered' && !updateData.deliveredAt) {
@@ -1553,6 +1664,7 @@ app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => 
 
 app.delete('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return;
         await (prisma as any).labOrder.delete({ where: { id: req.params.id } });
         res.json({ success: true });
     } catch (error: any) {
@@ -1569,6 +1681,8 @@ app.delete('/api/inventory/logs/:id', authenticateToken, async (req, res) => {
         if (!log) {
             return res.status(404).json({ error: 'Log not found' });
         }
+        // Egalik: log tegishli ombor mahsuloti orqali klinikaga tekshiriladi
+        if (!(await assertOwnership(req, res, 'inventoryItem', log.itemId))) return;
         // Reverse the stock change: if log.change was negative (OUT), adding it back restores stock
         await (prisma as any).inventoryItem.update({
             where: { id: log.itemId },
@@ -1587,7 +1701,7 @@ app.delete('/api/inventory/logs/:id', authenticateToken, async (req, res) => {
 // --- Service Categories ---
 app.get('/api/categories', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -1614,6 +1728,7 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
 
 app.put('/api/categories/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'serviceCategory', req.params.id))) return;
         const category = await prisma.serviceCategory.update({
             where: { id: req.params.id },
             data: req.body
@@ -1626,6 +1741,7 @@ app.put('/api/categories/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'serviceCategory', req.params.id))) return;
         await prisma.serviceCategory.delete({
             where: { id: req.params.id }
         });
@@ -1638,7 +1754,7 @@ app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
 // --- Services ---
 app.get('/api/services', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -1666,6 +1782,13 @@ app.post('/api/services', authenticateToken, async (req, res) => {
 
 app.put('/api/services/:id', authenticateToken, async (req, res) => {
     try {
+        // Egalik tekshiruvi (Service id butun son)
+        const u = (req as any).user;
+        if (u?.role !== 'SUPER_ADMIN') {
+            const existing = await prisma.service.findUnique({ where: { id: parseInt(req.params.id) } });
+            if (!existing) return res.status(404).json({ error: 'Topilmadi' });
+            if (existing.clinicId !== u?.clinicId) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        }
         const service = await prisma.service.update({
             where: { id: parseInt(req.params.id) },
             data: req.body
@@ -1681,7 +1804,7 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
 // --- Leads ---
 app.get('/api/leads', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -1709,6 +1832,7 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
 
 app.put('/api/leads/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'lead', req.params.id))) return;
         const lead = await prisma.lead.update({
             where: { id: req.params.id },
             data: req.body
@@ -1721,6 +1845,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'lead', req.params.id))) return;
         await prisma.lead.delete({
             where: { id: req.params.id }
         });
@@ -1730,7 +1855,7 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/clinics', authenticateToken, async (req, res) => {
+app.get('/api/clinics', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
     try {
         const clinics = await prisma.clinic.findMany({
             where: {
@@ -1738,7 +1863,9 @@ app.get('/api/clinics', authenticateToken, async (req, res) => {
             },
             include: { plan: true }
         });
-        res.json(clinics);
+        // Parol hashlarini javobdan olib tashlaymiz
+        const clinicsSafe = clinics.map((c: any) => { const { password, ...rest } = c; return rest; });
+        res.json(clinicsSafe);
     } catch (error: any) {
         console.error('Failed to fetch clinics:', error);
         res.status(500).json({ error: 'Failed to fetch clinics', details: error.message });
@@ -1748,6 +1875,10 @@ app.get('/api/clinics', authenticateToken, async (req, res) => {
 app.get('/api/clinics/:id', authenticateToken, async (req, res) => {
     try {
         const clinicId = req.params.id;
+        // Faqat SUPER_ADMIN yoki o'z klinikasini so'ragan foydalanuvchi ko'ra oladi
+        if (!canAccessClinic(req, clinicId)) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        }
         const clinic = await prisma.clinic.findUnique({
             where: { id: clinicId },
             include: { plan: true }
@@ -1755,14 +1886,16 @@ app.get('/api/clinics/:id', authenticateToken, async (req, res) => {
         if (!clinic) {
             return res.status(404).json({ error: 'Klinika topilmadi' });
         }
-        res.json(clinic);
+        // Parol hashini javobdan olib tashlaymiz (UI'ga kerak emas)
+        const { password, ...clinicSafe } = clinic as any;
+        res.json(clinicSafe);
     } catch (error: any) {
         console.error('Failed to fetch clinic by ID:', error);
         res.status(500).json({ error: 'Failed to fetch clinic details', details: error.message });
     }
 });
 
-app.post('/api/clinics', authenticateToken, async (req, res) => {
+app.post('/api/clinics', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
     try {
         const { name, adminName, username, password, phone, planId, status, subscriptionStartDate, expiryDate, monthlyRevenue, customPrice } = req.body;
 
@@ -1801,7 +1934,7 @@ app.post('/api/clinics', authenticateToken, async (req, res) => {
     }
 });
 
-app.put('/api/clinics/:id', authenticateToken, async (req, res) => {
+app.put('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
     try {
         const updateData = { ...req.body };
         if (updateData.password) {
@@ -1821,7 +1954,7 @@ app.put('/api/clinics/:id', authenticateToken, async (req, res) => {
     }
 });
 
-app.delete('/api/clinics/:id', authenticateToken, async (req, res) => {
+app.delete('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
     try {
         const clinicId = req.params.id;
 
@@ -1873,7 +2006,7 @@ app.get('/api/plans', authenticateToken, async (req, res) => {
     }
 });
 
-app.put('/api/plans/:id', authenticateToken, async (req, res) => {
+app.put('/api/plans/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
     try {
         const data = { ...req.body };
         if (data.features) {
@@ -1892,6 +2025,7 @@ app.put('/api/plans/:id', authenticateToken, async (req, res) => {
 // --- DMED Integration ---
 app.post('/api/clinics/:id/dmed-settings', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { dmedEnabled, dmedApiKey, dmedApiSecret, dmedClinicId } = req.body;
         const clinic = await prisma.clinic.update({
             where: { id: req.params.id },
@@ -1905,6 +2039,7 @@ app.post('/api/clinics/:id/dmed-settings', authenticateToken, async (req, res) =
 
 app.post('/api/clinics/:id/dmed-test', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { dmedApiKey, dmedApiSecret } = req.body;
         const result = await dmedService.validateCredentials(dmedApiKey, dmedApiSecret);
         res.json(result);
@@ -1915,7 +2050,7 @@ app.post('/api/clinics/:id/dmed-test', authenticateToken, async (req, res) => {
 
 app.get('/api/patients/lookup/:pinfl', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
         const result = await dmedService.findPatientByPinfl(clinicId as string, req.params.pinfl);
         res.json(result);
@@ -1927,7 +2062,7 @@ app.get('/api/patients/lookup/:pinfl', authenticateToken, async (req, res) => {
 // Manual sync Visit to DMED
 app.post('/api/visits/:id/dmed-sync', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.body;
+        const clinicId = getScopedClinicId(req);
         await dmedService.syncEncounter(clinicId, req.params.id);
         res.json({ success: true });
     } catch (error) {
@@ -1938,6 +2073,7 @@ app.post('/api/visits/:id/dmed-sync', authenticateToken, async (req, res) => {
 // --- Bot Settings ---
 app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { botToken, ownerPhone } = req.body;
         const clinicId = req.params.id;
 
@@ -1969,6 +2105,7 @@ app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
 // --- Prepayment Settings ---
 app.get('/api/clinics/:id/prepayment-settings', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const clinic = await prisma.clinic.findUnique({ where: { id: req.params.id } });
         if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
         res.json({
@@ -1983,6 +2120,7 @@ app.get('/api/clinics/:id/prepayment-settings', authenticateToken, async (req, r
 
 app.put('/api/clinics/:id/prepayment-settings', authenticateToken, async (req, res) => {
     try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { prepaymentEnabled, prepaymentCardNumber, prepaymentAmount } = req.body;
         const clinic = await prisma.clinic.update({
             where: { id: req.params.id },
@@ -2040,6 +2178,7 @@ app.get('/api/icd10', authenticateToken, async (req, res) => {
 app.post('/api/diagnoses', authenticateToken, async (req, res) => {
     try {
         const { patientId, code, date, notes, status, clinicId } = req.body;
+        if (!(await assertPatientOwnership(req, res, patientId))) return;
 
         const diagnosis = await prisma.patientDiagnosis.create({
             data: {
@@ -2074,6 +2213,7 @@ app.get('/api/diagnoses', authenticateToken, async (req, res) => {
         if (!patientId) {
             return res.status(400).json({ error: 'patientId is required' });
         }
+        if (!(await assertPatientOwnership(req, res, patientId as string))) return;
 
         const diagnoses = await prisma.patientDiagnosis.findMany({
             where: { patientId: patientId as string },
@@ -2089,6 +2229,7 @@ app.get('/api/diagnoses', authenticateToken, async (req, res) => {
 
 app.delete('/api/diagnoses/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'patientDiagnosis', req.params.id))) return;
         await prisma.patientDiagnosis.delete({
             where: { id: req.params.id }
         });
@@ -2106,6 +2247,7 @@ app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), 
             return res.status(400).json({ error: 'No file uploaded' });
         }
 
+        if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const { description, category } = req.body;
         const patientId = req.params.id;
 
@@ -2133,6 +2275,7 @@ app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), 
 app.post('/api/patients/:id/avatar', authenticateToken, upload.single('photo'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const patientId = req.params.id;
         const url = (req.file as any).path;
 
@@ -2156,6 +2299,7 @@ app.post('/api/patients/:id/avatar', authenticateToken, upload.single('photo'), 
 app.post('/api/patients/:id/portrait', authenticateToken, upload.single('photo'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const patientId = req.params.id;
         const url = (req.file as any).path;
 
@@ -2177,6 +2321,7 @@ app.post('/api/patients/:id/portrait', authenticateToken, upload.single('photo')
 
 app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const photos = await prisma.patientPhoto.findMany({
             where: { patientId: req.params.id },
             orderBy: { date: 'desc' }
@@ -2201,6 +2346,9 @@ app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
         if (!photo) {
             return res.status(404).json({ error: 'Photo not found' });
         }
+
+        // Egalik: surat tegishli bemor orqali klinikaga tekshiriladi
+        if (!(await assertPatientOwnership(req, res, photo.patientId))) return;
 
         // Delete from Cloudinary
         if (photo.url.includes('cloudinary')) {
@@ -2228,6 +2376,7 @@ app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
 // --- Tooth Data ---
 app.get('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const teeth = await prisma.toothData.findMany({
             where: { patientId: req.params.id }
         });
@@ -2247,6 +2396,7 @@ app.get('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
 
 app.post('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const patientId = req.params.id;
         const { number, conditions, notes } = req.body;
 
@@ -2331,7 +2481,7 @@ app.post('/api/facebook/save-config', authenticateToken, async (req, res) => {
 });
 
 app.get('/api/facebook/auth-url', authenticateToken, (req, res) => {
-    const { clinicId } = req.query;
+    const clinicId = getScopedClinicId(req);
     if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
     const appId = process.env.FACEBOOK_APP_ID;
@@ -2399,7 +2549,7 @@ app.get('/api/facebook/callback', async (req, res) => {
 });
 
 app.get('/api/facebook/pages', authenticateToken, async (req, res) => {
-    const { clinicId } = req.query;
+    const clinicId = getScopedClinicId(req);
     if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
     try {
@@ -2428,7 +2578,8 @@ app.get('/api/facebook/pages', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/facebook/select-page', authenticateToken, async (req, res) => {
-    const { clinicId, pageId, pageAccessToken, pageName } = req.body;
+    const { pageId, pageAccessToken, pageName } = req.body;
+    const clinicId = getScopedClinicId(req);
 
     if (!clinicId || !pageId || !pageAccessToken) {
         return res.status(400).json({ error: 'Missing required fields' });
@@ -2470,7 +2621,7 @@ app.post('/api/facebook/select-page', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/facebook/disconnect', authenticateToken, async (req, res) => {
-    const { clinicId } = req.body;
+    const clinicId = getScopedClinicId(req);
     if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
     try {
@@ -2546,9 +2697,21 @@ app.post('/api/facebook/webhook', async (req, res) => {
                         }
 
                         const fieldData: any = {};
+                        const additionalQAs: string[] = [];
                         leadData.field_data.forEach((f: any) => {
-                            fieldData[f.name] = f.values[0];
+                            const name = f.name;
+                            const value = f.values && f.values.length > 0 ? f.values[0] : '';
+                            fieldData[name] = value;
+                            if (name !== 'full_name' && name !== 'phone_number') {
+                                const readableName = name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+                                additionalQAs.push(`${readableName}: ${value}`);
+                            }
                         });
+
+                        let notesText = `FB Lead ID: ${leadgen_id}`;
+                        if (additionalQAs.length > 0) {
+                            notesText += `\n\nSavollar va Javoblar:\n` + additionalQAs.join('\n');
+                        }
 
                         // Create Lead in CRM
                         await prisma.lead.create({
@@ -2557,7 +2720,7 @@ app.post('/api/facebook/webhook', async (req, res) => {
                                 phone: fieldData.phone_number || 'N/A',
                                 source: 'Facebook',
                                 service: clinic.facebookPageName || 'Facebook Lead',
-                                notes: `FB Lead ID: ${leadgen_id}`,
+                                notes: notesText,
                                 clinicId: clinic.id,
                                 status: 'New'
                             }
@@ -2580,7 +2743,7 @@ app.post('/api/facebook/webhook', async (req, res) => {
 // --- Inventory Management ---
 app.get('/api/inventory', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -2599,7 +2762,8 @@ app.get('/api/inventory', authenticateToken, async (req, res) => {
 // Inventory Analytics - Get material usage within date range
 app.get('/api/inventory/analytics', authenticateToken, async (req, res) => {
     try {
-        const { clinicId, startDate, endDate } = req.query;
+        const clinicId = getScopedClinicId(req);
+        const { startDate, endDate } = req.query;
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
         }
@@ -2685,6 +2849,11 @@ app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Item not found' });
         }
 
+        // Egalik tekshiruvi
+        if ((req as any).user?.role !== 'SUPER_ADMIN' && currentItem.clinicId !== (req as any).user?.clinicId) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        }
+
         // Calculate new quantity
         const changeAmount = parseFloat(change);
         const actualChange = type === 'OUT' ? -Math.abs(changeAmount) : Math.abs(changeAmount);
@@ -2721,7 +2890,8 @@ app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
 
 app.get('/api/inventory/logs', authenticateToken, async (req, res) => {
     try {
-        const { clinicId, patientId } = req.query;
+        const clinicId = getScopedClinicId(req);
+        const { patientId } = req.query;
 
         if (!clinicId) {
             return res.status(400).json({ error: 'Clinic ID is required' });
@@ -2762,6 +2932,7 @@ app.get('/api/inventory/logs', authenticateToken, async (req, res) => {
 
 app.delete('/api/inventory/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await assertOwnership(req, res, 'inventoryItem', req.params.id))) return;
         // Delete logs first, then item (cascade should handle this but being explicit)
         await prisma.inventoryLog.deleteMany({
             where: { itemId: req.params.id }
@@ -3244,7 +3415,7 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
 
 app.get('/api/debug/transactions', authenticateToken, async (req, res) => {
     try {
-        const { clinicId } = req.query;
+        const clinicId = getScopedClinicId(req);
 
         const allTransactions = await prisma.transaction.findMany({
             where: clinicId ? { clinicId: clinicId as string } : {},
