@@ -68,9 +68,9 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 // Configure Cloudinary
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dj2qs9kgk',
-    api_key: process.env.CLOUDINARY_API_KEY || '628899167499441',
-    api_secret: process.env.CLOUDINARY_API_SECRET || 'RiLepq8hhEn2QlX0DqkeAmbNl0c'
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 // Configure Multer
@@ -94,7 +94,11 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage: storage });
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_denta_crm_2024';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('🔥 KRITIK: JWT_SECRET muhit o\'zgaruvchisi o\'rnatilmagan! Server xavfsiz ishlay olmaydi.');
+    process.exit(1);
+}
 
 
 // Standard CORS Middleware
@@ -422,10 +426,10 @@ app.post('/api/auth/login', async (req, res) => {
         let responseData = null;
 
         // Check for super admin (uses env variables with fallback)
-        const superAdminUsername = process.env.SUPERADMIN_USERNAME || 'superadminulugbek';
-        const superAdminPassword = process.env.SUPERADMIN_PASSWORD || 'superadminpassword';
+        const superAdminUsername = process.env.SUPERADMIN_USERNAME;
+        const superAdminPassword = process.env.SUPERADMIN_PASSWORD;
 
-        if (cleanUsername === superAdminUsername && cleanPassword === superAdminPassword) {
+        if (superAdminUsername && superAdminPassword && cleanUsername === superAdminUsername && cleanPassword === superAdminPassword) {
             userPayload = { role: 'SUPER_ADMIN', name: 'Ulugbek (Super Admin)' };
             responseData = {
                 success: true,
