@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { 
-    Search, Plus, MoreHorizontal, MessageSquare, Phone, Calendar as CalendarIcon, 
-    Facebook, RefreshCw, CheckCircle, X, ExternalLink, Trash2, Filter, 
-    ChevronDown, UserPlus, ArrowRight, Settings, Activity, Shield, Eye
+import {
+    Search, Plus, MoreHorizontal, MessageSquare, Phone, Calendar as CalendarIcon,
+    Facebook, RefreshCw, CheckCircle, X, ExternalLink, Trash2, Filter,
+    ChevronDown, UserPlus, ArrowRight, Settings, Activity, Shield, Eye,
+    Building2, MapPin
 } from 'lucide-react';
 import { Lead, Doctor, Appointment, ServiceCategory, Service, Clinic } from '../types';
 import { api, isDemoMode } from '../services/api';
@@ -27,6 +28,12 @@ const STAGES = [
     { id: 'Booked', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
     { id: 'Cancelled', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' }
 ];
+
+const parseNotesField = (notes: string | null | undefined, key: string): string | null => {
+    if (!notes) return null;
+    const line = notes.split('\n').find(l => l.startsWith(key + ':'));
+    return line ? line.slice(key.length + 1).trim() : null;
+};
 
 const renderNotes = (notes: string | null | undefined, t: any) => {
     if (!notes) return <span className="text-gray-400 dark:text-gray-500">Izohlar yo'q</span>;
@@ -471,9 +478,30 @@ export const Leads: React.FC<LeadsProps> = ({
 
                                             <div className="flex flex-col gap-1.5 mb-3">
                                                 <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                                                    <Phone className="w-3.5 h-3.5 mr-1.5 text-gray-400 text-blue-500" />
+                                                    <Phone className="w-3.5 h-3.5 mr-1.5 text-blue-500" />
                                                     {lead.phone}
                                                 </div>
+                                                {(() => {
+                                                    const clinicName = parseNotesField(lead.notes, 'Klinika nomi');
+                                                    const city = parseNotesField(lead.notes, 'Shahar');
+                                                    const doctors = parseNotesField(lead.notes, 'Shifokorlar soni');
+                                                    return (
+                                                        <>
+                                                            {clinicName && (
+                                                                <div className="flex items-center text-xs text-gray-600 dark:text-gray-300">
+                                                                    <Building2 className="w-3.5 h-3.5 mr-1.5 text-indigo-400 flex-shrink-0" />
+                                                                    <span className="font-medium truncate">{clinicName}</span>
+                                                                </div>
+                                                            )}
+                                                            {city && (
+                                                                <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
+                                                                    <MapPin className="w-3.5 h-3.5 mr-1.5 text-rose-400 flex-shrink-0" />
+                                                                    {city}{doctors ? ` · ${doctors} ta shifokor` : ''}
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
                                                 {lead.service && (
                                                     <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded w-fit">
                                                         {t('leads.service')}: {lead.service}
@@ -830,6 +858,24 @@ export const Leads: React.FC<LeadsProps> = ({
                                     <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('leads.addLeadModal.phone')}</p>
                                     <p className="text-sm font-bold text-gray-900 dark:text-white">{selectedLeadForDetail.phone}</p>
                                 </div>
+                                {parseNotesField(selectedLeadForDetail.notes, 'Klinika nomi') && (
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Klinika nomi</p>
+                                        <p className="text-sm font-bold text-gray-900 dark:text-white">{parseNotesField(selectedLeadForDetail.notes, 'Klinika nomi')}</p>
+                                    </div>
+                                )}
+                                {parseNotesField(selectedLeadForDetail.notes, 'Shahar') && (
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Shahar</p>
+                                        <p className="text-sm font-bold text-gray-900 dark:text-white">{parseNotesField(selectedLeadForDetail.notes, 'Shahar')}</p>
+                                    </div>
+                                )}
+                                {parseNotesField(selectedLeadForDetail.notes, 'Shifokorlar soni') && (
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Shifokorlar soni</p>
+                                        <p className="text-sm font-bold text-gray-900 dark:text-white">{parseNotesField(selectedLeadForDetail.notes, 'Shifokorlar soni')}</p>
+                                    </div>
+                                )}
                                 <div className="space-y-1">
                                     <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('leads.service')}</p>
                                     <p className="text-sm font-bold text-gray-900 dark:text-white">
@@ -858,10 +904,12 @@ export const Leads: React.FC<LeadsProps> = ({
                                 </div>
                             </div>
 
-                            <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
-                                <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">{t('leads.addLeadModal.notes')}</p>
-                                {renderNotes(selectedLeadForDetail.notes, t)}
-                            </div>
+                            {selectedLeadForDetail.notes && !selectedLeadForDetail.notes.startsWith('Klinika nomi:') && (
+                                <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
+                                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">{t('leads.addLeadModal.notes')}</p>
+                                    {renderNotes(selectedLeadForDetail.notes, t)}
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-gray-700 mt-4 flex-shrink-0">

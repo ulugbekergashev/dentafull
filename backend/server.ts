@@ -1805,6 +1805,37 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
 
 // --- Super Admin: Clinics & Plans ---
 
+// --- Public demo request (landing page, no auth) ---
+app.post('/api/public/demo-request', async (req, res) => {
+    try {
+        const { name, clinicName, phone, city, doctorsCount, source } = req.body;
+        const clinicId = process.env.LANDING_LEADS_CLINIC_ID;
+        if (!clinicId) {
+            console.log('[DEMO REQUEST]', { name, clinicName, phone, city, doctorsCount });
+            return res.json({ success: true, saved: false });
+        }
+        const notesParts = [];
+        if (clinicName) notesParts.push(`Klinika nomi: ${clinicName}`);
+        if (city) notesParts.push(`Shahar: ${city}`);
+        if (doctorsCount) notesParts.push(`Shifokorlar soni: ${doctorsCount}`);
+        const notes = notesParts.length ? notesParts.join('\n') : undefined;
+        const lead = await prisma.lead.create({
+            data: {
+                name: name || 'Noma\'lum',
+                phone: phone || '',
+                source: source || 'landing',
+                notes,
+                status: 'New',
+                clinicId,
+            }
+        });
+        res.json({ success: true, saved: true, id: lead.id });
+    } catch (error) {
+        console.error('Demo request error:', error);
+        res.status(500).json({ error: 'Failed to save demo request' });
+    }
+});
+
 // --- Leads ---
 app.get('/api/leads', authenticateToken, async (req, res) => {
     try {
