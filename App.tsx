@@ -941,7 +941,7 @@ const AppContent: React.FC = () => {
                 </div>
                 <div className="ml-3 truncate">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate" title={userName}>{userName}</p>
-                  <p className="text-xs text-gray-500 capitalize">{userRole === UserRole.SUPER_ADMIN ? 'SaaS Owner' : userRole === UserRole.CLINIC_ADMIN ? 'Administrator' : userRole === UserRole.RECEPTIONIST ? 'Resepshn' : 'Shifokor'}</p>
+                  <p className="text-xs text-gray-500 capitalize">{userRole === UserRole.SUPER_ADMIN ? 'SaaS Owner' : userRole === UserRole.CLINIC_ADMIN ? 'Administrator' : userRole === UserRole.RECEPTIONIST ? 'Resepshn' : userRole === UserRole.SALES_AGENT ? 'Sotuvchi' : 'Shifokor'}</p>
                 </div>
               </div>
               <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 flex-shrink-0" title="Chiqish">

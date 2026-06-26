@@ -13,13 +13,14 @@ interface SuperAdminDashboardProps {
    onUpdateClinic: (id: string, data: Partial<Clinic>) => void;
    onUpdatePlan: (id: string, data: Partial<SubscriptionPlan>) => void;
    onDeleteClinic: (id: string) => void;
+   salesAgentMode?: boolean;
 }
 
 export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
-   clinics, plans, onAddClinic, onUpdateClinic, onUpdatePlan, onDeleteClinic
+   clinics, plans, onAddClinic, onUpdateClinic, onUpdatePlan, onDeleteClinic, salesAgentMode = false
 }) => {
    const { t } = useLanguage();
-   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked' | 'sales'>('overview');
+   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked' | 'sales'>(salesAgentMode ? 'clinics' : 'overview');
 
    const handleTabChange = (tab: 'overview' | 'clinics' | 'plans' | 'blocked' | 'sales') => {
       setActiveTab(tab);
@@ -324,36 +325,42 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <p className="text-sm text-gray-500 dark:text-gray-400">{t('superAdmin.subtitle')}</p>
             </div>
             <div className="flex bg-white dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
-               <button
-                  onClick={() => handleTabChange('overview')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
-               >
-                  {t('superAdmin.tabs.overview')}
-               </button>
+               {!salesAgentMode && (
+                  <button
+                     onClick={() => handleTabChange('overview')}
+                     className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+                  >
+                     {t('superAdmin.tabs.overview')}
+                  </button>
+               )}
                <button
                   onClick={() => handleTabChange('clinics')}
                   className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'clinics' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
                   {t('superAdmin.tabs.clinics')}
                </button>
-               <button
-                  onClick={() => handleTabChange('plans')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
-               >
-                  {t('superAdmin.tabs.plans')}
-               </button>
-               <button
-                  onClick={() => handleTabChange('sales')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'sales' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
-               >
-                  Sotuvchilar
-               </button>
-               <button
-                  onClick={() => handleTabChange('blocked')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
-               >
-                  {t('superAdmin.tabs.blocked')} ({blockedCount})
-               </button>
+               {!salesAgentMode && (
+                  <>
+                     <button
+                        onClick={() => handleTabChange('plans')}
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+                     >
+                        {t('superAdmin.tabs.plans')}
+                     </button>
+                     <button
+                        onClick={() => handleTabChange('sales')}
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'sales' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+                     >
+                        Sotuvchilar
+                     </button>
+                     <button
+                        onClick={() => handleTabChange('blocked')}
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
+                     >
+                        {t('superAdmin.tabs.blocked')} ({blockedCount})
+                     </button>
+                  </>
+               )}
             </div>
          </div>
 
