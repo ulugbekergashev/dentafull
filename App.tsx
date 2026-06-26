@@ -49,6 +49,10 @@ const SUPER_ADMIN_NAVIGATION = [
   { id: 'admin', labelKey: 'nav.saas', icon: Building2, roles: [UserRole.SUPER_ADMIN] },
 ];
 
+const SALES_NAVIGATION = [
+  { id: 'sales', labelKey: 'nav.saas', icon: Building2, roles: [UserRole.SALES_AGENT] },
+];
+
 // Helper: get page label key from path
 const getPageLabelKey = (pathname: string): any => {
   if (pathname === '/' || pathname === '/dashboard') return 'nav.dashboard';
@@ -182,7 +186,6 @@ const AppContent: React.FC = () => {
   // Load Data
   useEffect(() => {
     if (!isAuthenticated) return;
-    if (userRole === UserRole.SALES_AGENT) return;
 
     const loadData = async () => {
       setIsLoading(true);
@@ -206,6 +209,13 @@ const AppContent: React.FC = () => {
           setLabOrders(DEMO_LAB_ORDERS || []);
           setReceptionists(DEMO_RECEPTIONISTS || []);
           setLeads(DEMO_LEADS || []);
+        } else if (userRole === UserRole.SALES_AGENT) {
+          const [plns, clns] = await Promise.all([
+            api.plans.getAll(),
+            api.sales.myClinics(),
+          ]);
+          setPlans(plns);
+          setClinics(clns);
         } else if (userRole === UserRole.SUPER_ADMIN) {
           const [plns, clns] = await Promise.all([
             api.plans.getAll(),
@@ -795,7 +805,9 @@ const AppContent: React.FC = () => {
   };
 
   // Select navigation
-  const CURRENT_NAVIGATION = userRole === UserRole.SUPER_ADMIN ? SUPER_ADMIN_NAVIGATION : CLINIC_NAVIGATION;
+  const CURRENT_NAVIGATION = userRole === UserRole.SUPER_ADMIN ? SUPER_ADMIN_NAVIGATION
+    : userRole === UserRole.SALES_AGENT ? SALES_NAVIGATION
+    : CLINIC_NAVIGATION;
 
   // --- Main Render ---
   if (!isAuthenticated) {
@@ -812,15 +824,6 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // Sales Agent — dedicated workspace, no clinic sidebar
-  if (userRole === UserRole.SALES_AGENT) {
-    return (
-      <>
-        <ToastContainer toasts={toasts} removeToast={removeToast} />
-        <SalesDashboard agentName={userName} onLogout={handleLogout} />
-      </>
-    );
-  }
 
   // Loading Screen
   if (isLoading && !error) {
@@ -1195,6 +1198,20 @@ const AppContent: React.FC = () => {
                 <>
                   <Route path="/" element={<Navigate to="/admin" replace />} />
                   <Route path="/admin" element={
+                    <SuperAdminDashboard
+                      clinics={clinics}
+                      plans={plans}
+                      onAddClinic={addClinic}
+                      onUpdateClinic={updateClinic}
+                      onUpdatePlan={updatePlan}
+                      onDeleteClinic={deleteClinic}
+                    />
+                  } />
+                </>
+              ) : userRole === UserRole.SALES_AGENT ? (
+                <>
+                  <Route path="/" element={<Navigate to="/sales" replace />} />
+                  <Route path="/sales" element={
                     <SuperAdminDashboard
                       clinics={clinics}
                       plans={plans}
