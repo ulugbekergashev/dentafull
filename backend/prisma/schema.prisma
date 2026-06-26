@@ -298,6 +298,23 @@ model Lead {
   @@index([status])
 }
 
+model DemoRequest {
+  id           String   @id @default(uuid())
+  name         String
+  clinicName   String?
+  phone        String
+  city         String?
+  doctorsCount Int?
+  source       String?
+  status       String   @default("New")
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
 model ICD10Code {
   code        String             @id
   name        String

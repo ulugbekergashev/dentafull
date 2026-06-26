@@ -748,6 +748,20 @@ export const api = {
             return fetchJson<any[]>('/sales/clinics');
         },
     },
+    demoRequests: {
+        getAll: () => {
+            if (isDemoMode()) return Promise.resolve([]);
+            return fetchJson<any[]>('/admin/demo-requests');
+        },
+        update: (id: string, data: { status?: string; notes?: string }) =>
+            fetchJson<any>(`/admin/demo-requests/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            }),
+        remove: (id: string) =>
+            fetchJson<any>(`/admin/demo-requests/${id}`, { method: 'DELETE' }),
+    },
     diagnoses: {
         searchCodes: (query: string) => fetchJson<ICD10Code[]>(`/icd10?query=${query}`),
         add: (data: Omit<PatientDiagnosis, 'id' | 'icd10'>) => fetchJson<PatientDiagnosis>('/diagnoses', {

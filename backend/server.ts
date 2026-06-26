@@ -1809,30 +1809,48 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
 app.post('/api/public/demo-request', async (req, res) => {
     try {
         const { name, clinicName, phone, city, doctorsCount, source } = req.body;
-        const clinicId = process.env.LANDING_LEADS_CLINIC_ID;
-        if (!clinicId) {
-            console.log('[DEMO REQUEST]', { name, clinicName, phone, city, doctorsCount });
-            return res.json({ success: true, saved: false });
-        }
-        const notesParts = [];
-        if (clinicName) notesParts.push(`Klinika nomi: ${clinicName}`);
-        if (city) notesParts.push(`Shahar: ${city}`);
-        if (doctorsCount) notesParts.push(`Shifokorlar soni: ${doctorsCount}`);
-        const notes = notesParts.length ? notesParts.join('\n') : undefined;
-        const lead = await prisma.lead.create({
-            data: {
-                name: name || 'Noma\'lum',
-                phone: phone || '',
-                source: source || 'landing',
-                notes,
-                status: 'New',
-                clinicId,
-            }
-        });
-        res.json({ success: true, saved: true, id: lead.id });
+        const id = require('crypto').randomUUID();
+        await prisma.$executeRawUnsafe(
+            `INSERT INTO "DemoRequest" ("id","name","clinicName","phone","city","doctorsCount","source","status","createdAt","updatedAt")
+             VALUES ($1,$2,$3,$4,$5,$6,$7,'New',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+            id, name || 'Noma\'lum', clinicName || null, phone || '', city || null,
+            doctorsCount ? parseInt(doctorsCount) : null, source || 'landing'
+        );
+        res.json({ success: true, id });
     } catch (error) {
         console.error('Demo request error:', error);
         res.status(500).json({ error: 'Failed to save demo request' });
+    }
+});
+
+app.get('/api/admin/demo-requests', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const rows = await prisma.$queryRawUnsafe(`SELECT * FROM "DemoRequest" ORDER BY "createdAt" DESC`);
+        res.json(rows);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch demo requests' });
+    }
+});
+
+app.put('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const { status, notes } = req.body;
+        await prisma.$executeRawUnsafe(
+            `UPDATE "DemoRequest" SET "status"=$1,"notes"=$2,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=$3`,
+            status, notes ?? null, req.params.id
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update demo request' });
+    }
+});
+
+app.delete('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        await prisma.$executeRawUnsafe(`DELETE FROM "DemoRequest" WHERE "id"=$1`, req.params.id);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete demo request' });
     }
 });
 
@@ -3658,6 +3676,21 @@ async function runStartupMigrations() {
                     ALTER TABLE "LabTechnician" ADD CONSTRAINT "LabTechnician_username_key" UNIQUE ("username");
                 END IF;
             END $$
+        `);
+        await prisma.$executeRawUnsafe(`
+            CREATE TABLE IF NOT EXISTS "DemoRequest" (
+                "id"           TEXT NOT NULL PRIMARY KEY,
+                "name"         TEXT NOT NULL,
+                "clinicName"   TEXT,
+                "phone"        TEXT NOT NULL,
+                "city"         TEXT,
+                "doctorsCount" INTEGER,
+                "source"       TEXT,
+                "status"       TEXT NOT NULL DEFAULT 'New',
+                "notes"        TEXT,
+                "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
         `);
         console.log('✅ Startup migrations applied successfully');
     } catch (err: any) {

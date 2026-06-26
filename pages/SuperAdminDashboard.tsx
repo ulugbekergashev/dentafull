@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan } from '../types';
-import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock } from 'lucide-react';
+import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 
@@ -20,13 +20,37 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    clinics, plans, onAddClinic, onUpdateClinic, onUpdatePlan, onDeleteClinic, salesAgentMode = false
 }) => {
    const { t } = useLanguage();
-   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked' | 'sales'>(salesAgentMode ? 'clinics' : 'overview');
+   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked' | 'sales' | 'leads'>(salesAgentMode ? 'clinics' : 'overview');
 
-   const handleTabChange = (tab: 'overview' | 'clinics' | 'plans' | 'blocked' | 'sales') => {
+   const handleTabChange = (tab: 'overview' | 'clinics' | 'plans' | 'blocked' | 'sales' | 'leads') => {
       setActiveTab(tab);
       setCurrentPage(1);
       setFilterStatus('All');
       setSearchQuery('');
+   };
+
+   // Demo Requests State
+   const [demoRequests, setDemoRequests] = useState<any[]>([]);
+   const [demoLoading, setDemoLoading] = useState(false);
+
+   useEffect(() => {
+      if (activeTab === 'leads') {
+         setDemoLoading(true);
+         api.demoRequests.getAll()
+            .then(setDemoRequests)
+            .catch(err => console.error('Demo so\'rovlarni yuklashda xatolik:', err))
+            .finally(() => setDemoLoading(false));
+      }
+   }, [activeTab]);
+
+   const DEMO_STAGES = ['New', 'Contacted', 'Thinking', 'Booked', 'Cancelled'];
+   const DEMO_STAGE_LABELS: Record<string, string> = {
+      New: 'Yangi', Contacted: 'Bog\'lashildi', Thinking: 'O\'ylamoqda', Booked: 'Oldi', Cancelled: 'Bekor'
+   };
+   const DEMO_STAGE_COLORS: Record<string, string> = {
+      New: 'bg-blue-100 text-blue-700', Contacted: 'bg-amber-100 text-amber-700',
+      Thinking: 'bg-purple-100 text-purple-700', Booked: 'bg-emerald-100 text-emerald-700',
+      Cancelled: 'bg-red-100 text-red-700'
    };
 
    // Sales Agents State
@@ -358,6 +382,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
                      >
                         {t('superAdmin.tabs.blocked')} ({blockedCount})
+                     </button>
+                     <button
+                        onClick={() => handleTabChange('leads')}
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${activeTab === 'leads' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'}`}
+                     >
+                        <Inbox className="w-3.5 h-3.5" />
+                        Lidlar
                      </button>
                   </>
                )}
@@ -820,6 +851,98 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </table>
                </div>
             </Card>
+         )}
+
+         {/* LEADS (DEMO REQUESTS) TAB */}
+         {activeTab === 'leads' && (
+            <div className="space-y-4">
+               <div className="flex items-center justify-between">
+                  <div>
+                     <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <Inbox className="w-5 h-5 text-emerald-500" /> Demo So'rovlari (Lidlar)
+                     </h3>
+                     <p className="text-sm text-gray-500">Landing page orqali kelgan demo so'rovlar</p>
+                  </div>
+                  <button
+                     onClick={() => { setDemoLoading(true); api.demoRequests.getAll().then(setDemoRequests).finally(() => setDemoLoading(false)); }}
+                     className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                     Yangilash
+                  </button>
+               </div>
+               {demoLoading ? (
+                  <Card className="p-10 text-center text-gray-400">Yuklanmoqda...</Card>
+               ) : demoRequests.length === 0 ? (
+                  <Card className="p-10 text-center">
+                     <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                     <p className="text-gray-500">Hali so'rovlar yo'q</p>
+                     <p className="text-xs text-gray-400 mt-1">Landing sahifadan demo so'rov yuborilganda bu yerda ko'rinadi</p>
+                  </Card>
+               ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                     {demoRequests.map((req: any) => (
+                        <Card key={req.id} className="p-5 hover:shadow-md transition-shadow">
+                           <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold text-sm">
+                                    {req.name ? req.name[0].toUpperCase() : '?'}
+                                 </div>
+                                 <div>
+                                    <p className="font-bold text-gray-900 dark:text-white text-sm">{req.name}</p>
+                                    <p className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleDateString('uz-UZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
+                                 </div>
+                              </div>
+                              <button
+                                 onClick={() => { if (window.confirm('O\'chirishni tasdiqlaysizmi?')) { api.demoRequests.remove(req.id).then(() => setDemoRequests(prev => prev.filter(r => r.id !== req.id))); } }}
+                                 className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                              >
+                                 <Trash2 className="w-4 h-4" />
+                              </button>
+                           </div>
+                           <div className="space-y-1.5 mb-3">
+                              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                 <Phone className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                                 <a href={`tel:${req.phone}`} className="hover:text-blue-600 font-medium">{req.phone}</a>
+                              </div>
+                              {req.clinicName && (
+                                 <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                    <Building2 className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                                    <span>{req.clinicName}</span>
+                                 </div>
+                              )}
+                              {req.city && (
+                                 <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                                    <MapPin className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+                                    <span>{req.city}{req.doctorsCount ? ` · ${req.doctorsCount} ta shifokor` : ''}</span>
+                                 </div>
+                              )}
+                           </div>
+                           <div className="flex items-center justify-between">
+                              <select
+                                 value={req.status}
+                                 onChange={e => {
+                                    const newStatus = e.target.value;
+                                    api.demoRequests.update(req.id, { status: newStatus });
+                                    setDemoRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: newStatus } : r));
+                                 }}
+                                 className={`text-xs font-bold px-2.5 py-1 rounded-full border-0 cursor-pointer ${DEMO_STAGE_COLORS[req.status] || 'bg-gray-100 text-gray-700'}`}
+                              >
+                                 {DEMO_STAGES.map(s => (
+                                    <option key={s} value={s}>{DEMO_STAGE_LABELS[s]}</option>
+                                 ))}
+                              </select>
+                              <a
+                                 href={`tel:${req.phone}`}
+                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors"
+                              >
+                                 <Phone className="w-3 h-3" /> Qo'ng'iroq
+                              </a>
+                           </div>
+                        </Card>
+                     ))}
+                  </div>
+               )}
+            </div>
          )}
 
          {/* Add Clinic Modal */}
