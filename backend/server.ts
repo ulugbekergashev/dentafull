@@ -562,7 +562,7 @@ app.post('/api/auth/login', async (req, res) => {
                     if (!userPayload) {
                         // Check for sales agent
                         const salesAgent = await prisma.salesAgent.findUnique({
-                            where: { username: cleanUsername }
+                            where: { username: cleanUsername.toLowerCase() }
                         });
 
                         if (salesAgent && await verifyAndUpgradePassword(salesAgent, 'salesAgent')) {
