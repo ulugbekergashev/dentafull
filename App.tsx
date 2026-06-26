@@ -1219,6 +1219,7 @@ const AppContent: React.FC = () => {
                       onUpdateClinic={updateClinic}
                       onUpdatePlan={updatePlan}
                       onDeleteClinic={deleteClinic}
+                      salesAgentMode={true}
                     />
                   } />
                 </>
