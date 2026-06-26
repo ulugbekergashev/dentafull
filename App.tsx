@@ -1137,7 +1137,7 @@ const AppContent: React.FC = () => {
                 <div className="flex flex-col">
                   <span className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{userName}</span>
                   <span className="text-xs text-gray-500 capitalize leading-tight">
-                    {userRole === UserRole.SUPER_ADMIN ? t('roles.superAdmin') : userRole === UserRole.CLINIC_ADMIN ? t('roles.admin') : userRole === UserRole.RECEPTIONIST ? t('roles.receptionist') : t('roles.doctor')}
+                    {userRole === UserRole.SUPER_ADMIN ? t('roles.superAdmin') : userRole === UserRole.CLINIC_ADMIN ? t('roles.admin') : userRole === UserRole.RECEPTIONIST ? t('roles.receptionist') : userRole === UserRole.SALES_AGENT ? 'Sotuvchi' : t('roles.doctor')}
                   </span>
                 </div>
                 <button onClick={handleLogout} className="ml-2 p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title={t('common.logout')}>
