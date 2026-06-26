@@ -43,9 +43,11 @@ export default function Navbar({ onOpenDemoModal, scrollToSection }: NavbarProps
             className="flex items-center gap-2 cursor-pointer group shrink-0"
             onClick={() => scrollToSection("hero")}
           >
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-base shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
-              D
-            </div>
+            <img
+              src="/logo-icon.png"
+              alt="DentaCRM"
+              className="w-9 h-9 object-contain group-hover:scale-105 transition-transform"
+            />
             <div>
               <span className={`text-lg font-bold tracking-tight transition-colors ${isScrolled ? "text-blue-900" : "text-slate-900"}`}>
                 Denta<span className="text-blue-600">CRM</span>
