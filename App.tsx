@@ -14,6 +14,7 @@ import { Finance } from './pages/Finance';
 import { Leads } from './pages/Leads';
 import { Settings } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
+import { LandingPage } from './pages/LandingPage';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
 import { DoctorDetails } from './pages/DoctorDetails';
@@ -71,6 +72,7 @@ const AppContent: React.FC = () => {
 
   // --- Global State ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>(UserRole.CLINIC_ADMIN);
   const [userName, setUserName] = useState('');
   const [clinicId, setClinicId] = useState<string>('');
@@ -169,6 +171,7 @@ const AppContent: React.FC = () => {
       }
     }
 
+    setAuthChecked(true);
     const handleAuthError = () => handleLogout();
     window.addEventListener('auth:unauthorized', handleAuthError);
     return () => window.removeEventListener('auth:unauthorized', handleAuthError);
@@ -359,6 +362,17 @@ const AppContent: React.FC = () => {
   // Patient Actions
   const addPatient = async (patient: Omit<Patient, 'id'>) => {
     try {
+      const normalizedFirst = patient.firstName.trim().toLowerCase();
+      const normalizedLast = patient.lastName.trim().toLowerCase();
+      const isDuplicate = patients.some(
+        p => p.firstName.trim().toLowerCase() === normalizedFirst && 
+             p.lastName.trim().toLowerCase() === normalizedLast
+      );
+
+      if (isDuplicate) {
+        throw new Error(t('patients.alerts.duplicateName') || "Bunday ism va familiyali bemor allaqachon mavjud!");
+      }
+
       let activeClinicId = clinicId;
       if (!activeClinicId) {
         const stored = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
@@ -780,9 +794,11 @@ const AppContent: React.FC = () => {
 
   // --- Main Render ---
   if (!isAuthenticated) {
+    if (!authChecked) return null;
     return (
       <>
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<SignIn onLogin={handleLogin} />} />
           <Route path="*" element={<SignIn onLogin={handleLogin} />} />
         </Routes>

@@ -35,6 +35,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const [isDebtorModalOpen, setIsDebtorModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Barchasi');
   const [remindedDebtors, setRemindedDebtors] = useState<Set<string>>(new Set());
+  const [selectedDebtorDoctorId, setSelectedDebtorDoctorId] = useState<string>('All');
 
   // Date Range State
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -156,18 +157,26 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
       const daysDiff = isValidDate 
         ? Math.floor((new Date().getTime() - debtDate.getTime()) / (1000 * 60 * 60 * 24))
         : 0;
+      
+      const patient = patients.find(p => p.id === d.patientId);
         
       return {
         id: d.patientId || `debtor-${index}`,
         name: d.name,
         amount: d.amount,
-        phone: patients.find(p => p.id === d.patientId)?.phone || '',
+        phone: patient?.phone || '',
         days: Math.max(0, daysDiff),
-        patientId: d.patientId
+        patientId: d.patientId,
+        doctorId: patient?.doctorId || null
       };
     })
     .filter(d => d.amount > 0)
     .sort((a, b) => b.amount - a.amount);
+
+  const filteredDebtors = DEBTORS.filter(d => {
+    if (selectedDebtorDoctorId === 'All') return true;
+    return d.doctorId === selectedDebtorDoctorId;
+  });
 
   const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -706,6 +715,35 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
 
         {/* Debtors Modal */}
         <Modal isOpen={isDebtorModalOpen} onClose={() => setIsDebtorModalOpen(false)} title="Qarzdorlar Ro'yxati">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-6 bg-gray-50 dark:bg-gray-800/40 p-4 rounded-xl border border-gray-100 dark:border-gray-700/50">
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">
+                {t('finance.debtorsModal.filterByDoctor')}
+              </label>
+              <select
+                value={selectedDebtorDoctorId}
+                onChange={(e) => setSelectedDebtorDoctorId(e.target.value)}
+                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              >
+                <option value="All">{t('finance.debtorsModal.allDoctors')}</option>
+                {doctors.map(doc => (
+                  <option key={doc.id} value={doc.id}>
+                    {doc.lastName} {doc.firstName} ({doc.specialty})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col justify-end text-right sm:mt-4">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('finance.debtorsModal.filteredDebt')}</span>
+              <span className="text-lg font-black text-red-600">
+                {filteredDebtors.reduce((sum, d) => sum + d.amount, 0).toLocaleString()} UZS
+              </span>
+              <span className="text-xs text-gray-500 font-medium">
+                {filteredDebtors.length} {t('finance.debtorsModal.debtorsCount')}
+              </span>
+            </div>
+          </div>
+
           <div className="flex justify-end mb-4">
             <Button onClick={async () => {
               if (!confirm('Barcha qarzdorlarga eslatma yuborilsinmi?')) return;
@@ -717,13 +755,13 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                   if (session) return JSON.parse(session);
                   return null;
                 };
-
+ 
                 const auth = getAuthData();
                 if (!auth || !auth.clinicId) {
                   alert('Klinika ma\'lumotlari topilmadi. Iltimos, qayta kiring.');
                   return;
                 }
-                const response = await api.batch.remindDebts(auth.clinicId, DEBTORS.map(d => ({ name: d.name, amount: d.amount })));
+                const response = await api.batch.remindDebts(auth.clinicId, filteredDebtors.map(d => ({ name: d.name, amount: d.amount })));
                 alert(response.message || 'Eslatmalar yuborildi');
               } catch (e) {
                 alert('Xatolik yuz berdi');
@@ -733,17 +771,25 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               Barchasiga Eslatish
             </Button>
           </div>
-          <div className="space-y-4">
-            {DEBTORS.map(d => (
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+            {filteredDebtors.map(d => (
               <div key={d.id} className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg">
                 <div>
                   <button
-                    onClick={() => d.patientId && onPatientClick(d.patientId)}
+                    onClick={() => {
+                      setIsDebtorModalOpen(false);
+                      if (d.patientId) onPatientClick(d.patientId);
+                    }}
                     className="font-bold text-gray-900 dark:text-white hover:text-blue-600 hover:underline text-left"
                   >
                     {d.name}
                   </button>
                   <p className="text-sm text-gray-500">{d.phone}</p>
+                  {d.doctorId && (
+                    <p className="text-xs text-gray-400 mt-1 font-semibold">
+                      Shifokor: {doctors.find(doc => doc.id === d.doctorId) ? `${doctors.find(doc => doc.id === d.doctorId)?.lastName} ${doctors.find(doc => doc.id === d.doctorId)?.firstName[0]}.` : '-'}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold text-red-600">{d.amount.toLocaleString()} UZS</p>
@@ -771,6 +817,11 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 </div>
               </div>
             ))}
+            {filteredDebtors.length === 0 && (
+              <div className="text-center py-8 text-gray-500 font-medium bg-gray-50 dark:bg-gray-800/25 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+                Ushbu shifokorga biriktirilgan qarzdorlar yo'q.
+              </div>
+            )}
           </div>
         </Modal>
       </>)}

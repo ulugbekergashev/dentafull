@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
     Search, Plus, MoreHorizontal, MessageSquare, Phone, Calendar as CalendarIcon, 
     Facebook, RefreshCw, CheckCircle, X, ExternalLink, Trash2, Filter, 
-    ChevronDown, UserPlus, ArrowRight, Settings, Activity, Shield 
+    ChevronDown, UserPlus, ArrowRight, Settings, Activity, Shield, Eye
 } from 'lucide-react';
 import { Lead, Doctor, Appointment, ServiceCategory, Service, Clinic } from '../types';
 import { api, isDemoMode } from '../services/api';
@@ -28,6 +28,52 @@ const STAGES = [
     { id: 'Cancelled', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' }
 ];
 
+const renderNotes = (notes: string | null | undefined, t: any) => {
+    if (!notes) return <span className="text-gray-400 dark:text-gray-500">Izohlar yo'q</span>;
+
+    // Check if it's formatted Q&A
+    if (notes.includes('Savollar va Javoblar:') || notes.includes('Savol-Javoblar:')) {
+        const lines = notes.split('\n');
+        const renderedQuestions: React.ReactNode[] = [];
+        let isQASection = false;
+
+        lines.forEach((line, idx) => {
+            if (line.trim().startsWith('Savollar va Javoblar:') || line.trim().startsWith('Savol-Javoblar:')) {
+                isQASection = true;
+                return;
+            }
+            if (isQASection && line.includes(':')) {
+                const parts = line.split(':');
+                const question = parts[0].trim();
+                const answer = parts.slice(1).join(':').trim();
+                if (question && answer) {
+                    renderedQuestions.push(
+                        <div key={idx} className="p-3 bg-gray-50 dark:bg-gray-750 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{question}</p>
+                            <p className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">{answer}</p>
+                        </div>
+                    );
+                }
+            } else if (line.trim()) {
+                renderedQuestions.push(
+                    <p key={idx} className="text-xs text-gray-500 dark:text-gray-400 mt-1">{line}</p>
+                );
+            }
+        });
+
+        if (renderedQuestions.length > 0) {
+            return <div className="space-y-2.5">{renderedQuestions}</div>;
+        }
+    }
+
+    // Default plain text formatting
+    return (
+        <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-800 text-sm text-gray-900 dark:text-white whitespace-pre-wrap">
+            {notes}
+        </div>
+    );
+};
+
 export const Leads: React.FC<LeadsProps> = ({
     leads,
     doctors,
@@ -48,6 +94,7 @@ export const Leads: React.FC<LeadsProps> = ({
     const [isFBLoading, setIsFBLoading] = useState(false);
     const [facebookPages, setFacebookPages] = useState<any[]>([]);
     const [isFBPageModalOpen, setIsFBPageModalOpen] = useState(false);
+    const [selectedLeadForDetail, setSelectedLeadForDetail] = useState<Lead | null>(null);
 
     // Form State
     const [formData, setFormData] = useState<Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'clinicId'>>({
@@ -394,14 +441,32 @@ export const Leads: React.FC<LeadsProps> = ({
                                             onDragEnd={handleDragEnd}
                                             className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group relative cursor-grab active:cursor-grabbing"
                                         >
-                                            <div className="flex justify-between items-start mb-2 pointer-events-none">
-                                                <h4 className="font-bold text-gray-900 dark:text-white text-sm">{lead.name}</h4>
-                                                <button
-                                                    onClick={() => onDeleteLead(lead.id)}
-                                                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h4 
+                                                    onClick={() => setSelectedLeadForDetail(lead)}
+                                                    className="font-bold text-gray-900 dark:text-white text-sm hover:text-blue-600 transition-colors cursor-pointer"
                                                 >
-                                                    <X className="w-4 h-4" />
-                                                </button>
+                                                    {lead.name}
+                                                </h4>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button
+                                                        onClick={() => setSelectedLeadForDetail(lead)}
+                                                        className="text-gray-400 hover:text-blue-500 transition-all p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                        title={t('patients.actions.details')}
+                                                    >
+                                                        <Eye className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (window.confirm(t('common.confirm'))) {
+                                                                onDeleteLead(lead.id);
+                                                            }
+                                                        }}
+                                                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
                                             </div>
 
                                             <div className="flex flex-col gap-1.5 mb-3">
@@ -733,6 +798,78 @@ export const Leads: React.FC<LeadsProps> = ({
                                 className="w-full py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-bold transition-colors"
                             >
                                 {t('leads.fbModal.close')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {selectedLeadForDetail && (
+                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 transform transition-all max-h-[85vh] flex flex-col">
+                        <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-gray-700 mb-4 flex-shrink-0">
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <Activity className="w-5 h-5 text-blue-500" />
+                                {t('leads.detailsModal.title')}
+                            </h2>
+                            <button
+                                onClick={() => setSelectedLeadForDetail(null)}
+                                className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto space-y-5 pr-1">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('leads.addLeadModal.name')}</p>
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white">{selectedLeadForDetail.name}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('leads.addLeadModal.phone')}</p>
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white">{selectedLeadForDetail.phone}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('leads.service')}</p>
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                        {selectedLeadForDetail.service || <span className="text-gray-400">—</span>}
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('leads.source')}</p>
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                        {selectedLeadForDetail.source || <span className="text-gray-400">—</span>}
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Status</p>
+                                    <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-bold ${
+                                        STAGES.find(s => s.id === selectedLeadForDetail.status)?.color || 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                        {t(`leads.stages.${selectedLeadForDetail.status.toLowerCase()}`)}
+                                    </span>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('leads.detailsModal.created')}</p>
+                                    <p className="text-xs font-bold text-gray-900 dark:text-white">
+                                        {new Date(selectedLeadForDetail.createdAt).toLocaleDateString()} {new Date(selectedLeadForDetail.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
+                                <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">{t('leads.addLeadModal.notes')}</p>
+                                {renderNotes(selectedLeadForDetail.notes, t)}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-gray-700 mt-4 flex-shrink-0">
+                            <button
+                                onClick={() => setSelectedLeadForDetail(null)}
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-semibold rounded-xl transition-all text-xs"
+                            >
+                                {t('leads.detailsModal.close')}
                             </button>
                         </div>
                     </div>

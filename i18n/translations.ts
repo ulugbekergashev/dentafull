@@ -732,6 +732,14 @@ export const translations = {
     'leads.sources.other': 'Boshqa',
     'common.select': 'Tanlang',
     'common.actions': 'Harakatlar',
+    'patients.alerts.duplicateName': "Bunday ism va familiyali bemor allaqachon mavjud! Iltimos, farqlash uchun otasining ismi yoki tug'ilgan yilini kiriting (masalan: Aliyev Toshkent 1990).",
+    'leads.detailsModal.title': "Lid batafsil ma'lumotlari",
+    'leads.detailsModal.created': "Yaratilgan sana",
+    'leads.detailsModal.close': "Yopish",
+    'finance.debtorsModal.filterByDoctor': "Shifokor bo'yicha saralash",
+    'finance.debtorsModal.allDoctors': "Barcha shifokorlar",
+    'finance.debtorsModal.filteredDebt': "Saralangan qarzdorlik",
+    'finance.debtorsModal.debtorsCount': "ta qarzdor",
   },
   ru: {
     // Navigation
@@ -1412,6 +1420,14 @@ export const translations = {
     'leads.sources.recommendation': 'Рекомендация',
     'leads.sources.banner': 'Баннер',
     'leads.sources.other': 'Другое',
+    'patients.alerts.duplicateName': "Пациент с таким именем и фамилией уже существует! Пожалуйста, добавьте отчество или год рождения для различия (например: Алиев Ташкент 1990).",
+    'leads.detailsModal.title': "Подробная информация о лиде",
+    'leads.detailsModal.created': "Дата создания",
+    'leads.detailsModal.close': "Закрыть",
+    'finance.debtorsModal.filterByDoctor': "Фильтр по докторам",
+    'finance.debtorsModal.allDoctors': "Все доктора",
+    'finance.debtorsModal.filteredDebt': "Отфильтрованный долг",
+    'finance.debtorsModal.debtorsCount': "должников",
   }
 };
 

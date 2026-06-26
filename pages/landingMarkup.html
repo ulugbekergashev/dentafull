@@ -1,0 +1,637 @@
+<style>
+  .dc-landing * { box-sizing: border-box; }
+  .dc-landing { scroll-behavior: smooth; }
+  .dc-landing { margin: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; color: #0F172A; background: #fff; -webkit-font-smoothing: antialiased; overflow-x: clip; }
+  [id] { scroll-margin-top: 88px; }
+  
+  /* Reveal Animation */
+  .rv { opacity: 0; transform: translateY(24px); transition: opacity .8s cubic-bezier(.22, 1, .36, 1), transform .8s cubic-bezier(.22, 1, .36, 1); will-change: opacity, transform; }
+  .dc-landing.dc-loaded .rv { opacity: 1!important; transform: none!important; }
+  
+  /* Premium range inputs */
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 999px; background: #E2E8F0; outline: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #2563EB; border: 4px solid #fff; box-shadow: 0 4px 12px rgba(37,99,235,0.4); cursor: pointer; transition: transform 0.15s ease; }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #2563EB; border: 4px solid #fff; box-shadow: 0 4px 12px rgba(37,99,235,0.4); cursor: pointer; transition: transform 0.15s ease; }
+  input[type=range]::-moz-range-thumb:hover { transform: scale(1.15); }
+
+  /* Gradient Text & Badges */
+  .gradient-text { background: linear-gradient(135deg, #2563EB 0%, #0EA5E9 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .text-danger-gradient { background: linear-gradient(135deg, #EF4444 0%, #B91C1C 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .leak-badge { background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.16); color: #EF4444; font-weight: 700; font-size: 12px; padding: 6px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
+  .success-badge { background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.16); color: #10B981; font-weight: 700; font-size: 12px; padding: 6px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
+
+  /* Premium Card Styles */
+  .premium-card { background: #fff; border: 1px solid #E2E8F0; border-radius: 24px; box-shadow: 0 10px 30px -15px rgba(15,23,42,0.08); transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+  .premium-card:hover { transform: translateY(-6px); border-color: #CBD5E1; box-shadow: 0 20px 40px -20px rgba(15,23,42,0.12); }
+  
+  /* Calculator Glassmorphic Card */
+  .calculator-card { background: linear-gradient(145deg, #0F172A 0%, #1E293B 100%); border: 1px solid rgba(255,255,255,0.06); border-radius: 28px; box-shadow: 0 30px 60px -20px rgba(15,23,42,0.4); padding: clamp(24px, 3.5vw, 36px); overflow: hidden; position: relative; }
+  .calculator-card::before { content: ''; position: absolute; top: -100px; right: -100px; width: 250px; height: 250px; border-radius: 50%; background: radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 70%); pointer-events: none; }
+
+  /* Float Keyframes */
+  @keyframes floatA { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+  @keyframes floatB { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-16px); } }
+  @keyframes floatC { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(1.5deg); } }
+  @keyframes pulseRing { 0%, 100% { transform: scale(0.96); opacity: 0.35; } 50% { transform: scale(1.04); opacity: 0.15; } }
+  
+  @media(max-width: 880px) {
+    .nav-links { display: none!important; }
+    .hero-stage { min-height: 400px!important; }
+    .float-hide { display: none!important; }
+  }
+</style>
+
+<div style="overflow-x:clip">
+  <!-- NAVIGATION -->
+  <nav style="position:sticky;top:0;z-index:50;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);background:rgba(255,255,255,0.76);border-bottom:1px solid rgba(226,232,240,0.8)">
+    <div style="max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <a href="#top" style="display:flex;align-items:center;gap:11px;text-decoration:none">
+        <svg width="34" height="34" viewBox="0 0 36 36" fill="none"><rect width="36" height="36" rx="9" fill="#2563EB"/><circle cx="13.5" cy="15" r="2.2" fill="#fff"/><circle cx="22.5" cy="15" r="2.2" fill="#fff"/><path d="M12 21c1.7 2.7 3.9 4 6 4s4.3-1.3 6-4" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>
+        <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:20px;color:#0F172A;letter-spacing:-.025em">DentaCRM</span>
+      </a>
+      <div class="nav-links" style="display:flex;align-items:center;gap:32px">
+        <a href="#muammo" style="text-decoration:none;color:#475569;font-weight:600;font-size:14px;transition:color 0.15s" onmouseover="this.style.color='#2563EB'" onmouseout="this.style.color='#475569'">Klinika muammolari</a>
+        <a href="#yechim" style="text-decoration:none;color:#475569;font-weight:600;font-size:14px;transition:color 0.15s" onmouseover="this.style.color='#2563EB'" onmouseout="this.style.color='#475569'">Nima uchun biz?</a>
+        <a href="#kalkulyator" style="text-decoration:none;color:#475569;font-weight:600;font-size:14px;transition:color 0.15s" onmouseover="this.style.color='#2563EB'" onmouseout="this.style.color='#475569'">Zarar kalkulyatori</a>
+        <a href="#imkoniyatlar" style="text-decoration:none;color:#475569;font-weight:600;font-size:14px;transition:color 0.15s" onmouseover="this.style.color='#2563EB'" onmouseout="this.style.color='#475569'">Imkoniyatlar</a>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <a href="#" id="nav-login" style="text-decoration:none;color:#2563EB;font-weight:700;font-size:14px;padding:9px 18px;border-radius:12px;border:1px solid #DBEAFE;background:#fff;transition:background 0.15s" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='#fff'">Kirish</a>
+        <a href="#demo" style="text-decoration:none;background:#2563EB;color:#fff;font-weight:700;font-size:14px;padding:10px 20px;border-radius:12px;box-shadow:0 8px 20px rgba(37,99,235,0.22);transition:transform 0.15s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">Bepul demo</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <!-- HERO SECTION -->
+    <section id="top" style="position:relative;background:radial-gradient(1100px 600px at 78% -8%,#EFF6FF 0%,rgba(239,246,255,0) 60%),linear-gradient(#fff,#F8FAFF);overflow:hidden">
+      <div style="max-width:1200px;margin:0 auto;padding:clamp(56px,8vw,104px) 24px clamp(64px,8vw,112px);display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:48px;align-items:center">
+        
+        <div style="min-width:0">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.12);color:#2563EB;font-weight:700;font-size:13px;padding:7px 14px;border-radius:999px;margin-bottom:24px">
+            <span style="width:7px;height:7px;border-radius:50%;background:#2563EB;display:inline-block"></span>
+            O'zbekistonda stomatologiyalarni raqamlashtirish tizimi
+          </div>
+          <h1 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(36px,4.5vw,56px);line-height:1.06;letter-spacing:-.025em;margin:0 0 20px;color:#0F172A">
+            Bemorlar oqimini va oylik daromadni <br>
+            <span class="gradient-text">100% nazorat ostiga</span> oling.
+          </h1>
+          <p style="font-size:clamp(17px,1.5vw,19px);line-height:1.6;color:#475569;margin:0 0 32px;max-width:540px">
+            Qog'oz daftarlar va yo'qolgan bemorlarni unuting. DentaCRM qabullar jadvali, moliya, materiallar sarfi va avtomatik Telegram botni bitta mukammal tizimda birlashtiradi.
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:38px">
+            <a href="#demo" style="text-decoration:none;display:inline-flex;align-items:center;gap:9px;background:#2563EB;color:#fff;font-weight:700;font-size:15px;padding:14px 28px;border-radius:14px;box-shadow:0 12px 28px rgba(37,99,235,0.28);transition:transform .15s,box-shadow .15s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 16px 36px rgba(37,99,235,0.36)'" onmouseout="this.style.transform='none';this.style.boxShadow='0 12px 28px rgba(37,99,235,0.28)'">
+              Demonstratsiyani boshlash
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </a>
+            <a href="#muammo" style="text-decoration:none;display:inline-flex;align-items:center;gap:9px;background:#fff;color:#0F172A;font-weight:700;font-size:15px;padding:14px 28px;border-radius:14px;border:1px solid #E2E8F0;box-shadow:0 4px 14px rgba(15,23,42,0.04);transition:border-color 0.15s, background 0.15s" onmouseover="this.style.borderColor='#cbd5e1';this.style.background='#f8fafc'" onmouseout="this.style.borderColor='#E2E8F0';this.style.background='#fff'">
+              Muammolarni o'rganish
+            </a>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div style="display:flex">
+              <div style="width:36px;height:36px;border-radius:50%;background:#2563EB;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:2px solid #fff">DK</div>
+              <div style="width:36px;height:36px;border-radius:50%;background:#0EA5E9;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:2px solid #fff;margin-left:-10px">AT</div>
+              <div style="width:36px;height:36px;border-radius:50%;background:#6366F1;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:2px solid #fff;margin-left:-10px">SM</div>
+              <div style="width:36px;height:36px;border-radius:50%;background:#EFF6FF;color:#2563EB;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:2px solid #fff;margin-left:-10px">50+</div>
+            </div>
+            <span style="font-size:14px;color:#64748B;font-weight:500">50 dan ortiq yetakchi stomatologiya klinikalari bizga ishonadi</span>
+          </div>
+        </div>
+
+        <!-- HERO GRAPHICS -->
+        <div id="hero-stage" class="hero-stage" style="position:relative;min-height:500px;min-width:0">
+          <div style="position:absolute;top:10%;left:5%;right:5%;height:70%;border-radius:40px;background:radial-gradient(circle at 50% 40%,rgba(37,99,235,0.18),rgba(14,165,233,0.03) 70%);filter:blur(8px);animation:pulseRing 6s ease-in-out infinite"></div>
+
+          <!-- Card: Schedule -->
+          <div style="position:absolute;top:16%;left:2%;z-index:3;--d:12;transform:translate3d(calc(var(--mx,0)*var(--d,12)*1px),calc(var(--my,0)*var(--d,12)*1px),0);transition:transform .3s ease-out;will-change:transform">
+            <div style="animation:floatA 7s ease-in-out infinite">
+              <div style="width:290px;background:#fff;border:1px solid rgba(226,232,240,0.8);border-radius:20px;box-shadow:0 25px 50px -15px rgba(15,23,42,0.16);padding:18px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                  <div style="display:flex;align-items:center;gap:9px">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span style="font-weight:700;font-size:14px;color:#0F172A">Jadval</span>
+                  </div>
+                  <span style="background:#EFF6FF;color:#2563EB;font-weight:700;font-size:11px;padding:3px 8px;border-radius:6px">Bugun</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:#F8FAFC">
+                    <span style="font-weight:700;font-size:11px;color:#64748B;width:34px">09:00</span>
+                    <span style="font-size:13px;font-weight:600;color:#334155;flex:1">Dilnoza K.</span>
+                    <span style="font-size:10px;font-weight:700;color:#15803D;background:#DCFCE7;padding:2px 7px;border-radius:6px">Keldi</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:#F8FAFC">
+                    <span style="font-weight:700;font-size:11px;color:#64748B;width:34px">10:30</span>
+                    <span style="font-size:13px;font-weight:600;color:#334155;flex:1">Akmal T.</span>
+                    <span style="font-size:10px;font-weight:700;color:#B45309;background:#FEF3C7;padding:2px 7px;border-radius:6px">Kutilmoqda</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: Earnings -->
+          <div style="position:absolute;top:8%;right:4%;z-index:4;--d:24;transform:translate3d(calc(var(--mx,0)*var(--d,24)*1px),calc(var(--my,0)*var(--d,24)*1px),0);transition:transform .3s ease-out;will-change:transform">
+            <div style="animation:floatB 8s ease-in-out infinite">
+              <div style="width:200px;background:#fff;border:1px solid rgba(226,232,240,0.8);border-radius:18px;box-shadow:0 20px 40px -12px rgba(15,23,42,0.14);padding:16px">
+                <span style="font-size:12px;font-weight:600;color:#64748B">Kunlik daromad</span>
+                <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:22px;color:#10B981;margin:4px 0 2px;letter-spacing:-.02em">+4.2 mln</div>
+                <span style="font-size:11px;color:#94A3B8;font-weight:500">100% nazorat ostida</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: Telegram Booking -->
+          <div class="float-hide" style="position:absolute;bottom:10%;right:2%;z-index:5;--d:20;transform:translate3d(calc(var(--mx,0)*var(--d,20)*1px),calc(var(--my,0)*var(--d,20)*1px),0);transition:transform .3s ease-out;will-change:transform">
+            <div style="animation:floatC 9s ease-in-out infinite">
+              <div style="width:250px;background:#fff;border:1px solid rgba(226,232,240,0.8);border-radius:18px;box-shadow:0 22px 44px -14px rgba(15,23,42,0.15);padding:14px;display:flex;gap:12px;align-items:center">
+                <div style="width:38px;height:38px;border-radius:11px;background:#039BE5;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M21.5 4.5L2.5 11.5l6 2 2 6 3-4.5 5 3.5 3-14z" fill="#fff"/></svg>
+                </div>
+                <div style="min-width:0">
+                  <div style="font-weight:700;font-size:13px;color:#0F172A">Telegram Bot</div>
+                  <div style="font-size:12px;color:#64748B;line-height:1.35">Bemor qabulga yozildi ✅</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: No-Show reduction -->
+          <div class="float-hide" style="position:absolute;bottom:12%;left:-2%;z-index:4;--d:32;transform:translate3d(calc(var(--mx,0)*var(--d,32)*1px),calc(var(--my,0)*var(--d,32)*1px),0);transition:transform .3s ease-out;will-change:transform">
+            <div style="animation:floatA 8.5s ease-in-out infinite">
+              <div style="width:170px;background:#fff;border:1px solid rgba(226,232,240,0.8);border-radius:18px;box-shadow:0 20px 40px -12px rgba(15,23,42,0.12);padding:16px">
+                <span style="font-size:12px;font-weight:600;color:#64748B">No-Show bemorlar</span>
+                <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:26px;color:#EF4444;margin:4px 0 2px;letter-spacing:-.025em">-68%</div>
+                <span style="font-size:11px;color:#94A3B8;font-weight:600">SMS-eslatma bilan</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: MUAMMO (THE PAIN) -->
+    <section id="muammo" style="padding:clamp(64px,8vw,104px) 0;background:#fff">
+      <div style="max-width:1200px;margin:0 auto;padding:0 24px">
+        <div class="rv" style="max-width:720px;margin:0 auto 52px;text-align:center">
+          <span class="leak-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Klinika muammolari
+          </span>
+          <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(28px,3.6vw,42px);line-height:1.15;letter-spacing:-.025em;margin:14px 0 16px;color:#0F172A">Tizimsizlik oqibatida oydan-oyga pul yo'qotyapsizmi?</h2>
+          <p style="font-size:clamp(16px,1.4vw,18px);line-height:1.6;color:#64748B;margin:0">Excel daftarlar, qog'ozlar va nazorat yo'qligi sababli o'rtacha klinika o'z daromadining kamida 30% qismini ko'rmaydi.</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px">
+          
+          <div class="rv premium-card" style="padding:28px">
+            <div style="width:48px;height:48px;border-radius:14px;background:#FEE2E2;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:18px;margin:0 0 8px;color:#0F172A">Bemorlar kelmaydi (No-Show)</h3>
+            <p style="font-size:14px;line-height:1.55;color:#64748B;margin:0">Bemorlar qabul vaqtini unutishadi, kreslolar bo'sh qoladi. Har bir bo'sh soat — klinika uchun to'g'ridan-to'g'ri zarar.</p>
+          </div>
+
+          <div class="rv premium-card" style="padding:28px">
+            <div style="width:48px;height:48px;border-radius:14px;background:#FEE2E2;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:18px;margin:0 0 8px;color:#0F172A">Qo'ng'iroq va lidlar yo'qoladi</h3>
+            <p style="font-size:14px;line-height:1.55;color:#64748B;margin:0">Instagram yoki Telegram orqali yozgan, telefon qilgan bemorlar ro'yxatga olinmaydi va raqobatchiga ketishadi.</p>
+          </div>
+
+          <div class="rv premium-card" style="padding:28px">
+            <div style="width:48px;height:48px;border-radius:14px;background:#FEF3C7;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:18px;margin:0 0 8px;color:#0F172A">Moliya bo'limidagi tartibsizlik</h3>
+            <p style="font-size:14px;line-height:1.55;color:#64748B;margin:0">Shifokorlar foizi, klinika xarajatlari, laboratoriya to'lovlari qog'ozda chalkashib ketadi. Sof foyda aniq emas.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: YECHIM (THE DREAM / OUTCOMES) -->
+    <section id="yechim" style="position:relative;padding:clamp(64px,8vw,104px) 0;background:linear-gradient(#F8FAFF,#EFF6FF);overflow:hidden">
+      <div style="position:relative;max-width:1200px;margin:0 auto;padding:0 24px">
+        <div class="rv" style="max-width:700px;margin:0 auto 52px;text-align:center">
+          <span class="success-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Tizimli boshqaruv
+          </span>
+          <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(28px,3.6vw,42px);line-height:1.15;letter-spacing:-.025em;margin:14px 0 16px;color:#0F172A">DentaCRM yordamida tartibsizlikka chek qo'ying</h2>
+          <p style="font-size:clamp(16px,1.4vw,18px);line-height:1.6;color:#475569;margin:0">Biz klinikangizni to'liq nazorat ostiga olishingiz uchun barcha sharoitlarni yaratdik.</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px">
+          
+          <div class="rv premium-card" style="padding:28px;background:#fff">
+            <div style="width:48px;height:48px;border-radius:14px;background:#E0F2FE;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0284C7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:18px;margin:0 0 8px;color:#0F172A">Moliya muammolarini butunlay unuting</h3>
+            <p style="font-size:14px;line-height:1.55;color:#64748B;margin:0">Moliya bo'limidagi tartibsizlik va asabbuzarliklarni unuting. Biz har bir shifokor ulushini, klinika xarajatlari va sof foydasini avtomatlashtiramiz.</p>
+          </div>
+
+          <div class="rv premium-card" style="padding:28px;background:#fff">
+            <div style="width:48px;height:48px;border-radius:14px;background:#E0F2FE;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0284C7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:18px;margin:0 0 8px;color:#0F172A">SMS va Telegram eslatmalar</h3>
+            <p style="font-size:14px;line-height:1.55;color:#64748B;margin:0">Eskiz.uz SMS provayderi orqali avtomatik eslatmalar yuboriladi. Bemorlar qabul vaqtini hech qachon unutishmaydi.</p>
+          </div>
+
+          <div class="rv premium-card" style="padding:28px;background:#fff">
+            <div style="width:48px;height:48px;border-radius:14px;background:#E0F2FE;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0284C7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:18px;margin:0 0 8px;color:#0F172A">DMED integratsiyasi</h3>
+            <p style="font-size:14px;line-height:1.55;color:#64748B;margin:0">Sog'liqni saqlash vazirligi DMED (Davlat tibbiyot axborot tizimi) bilan integratsiya yordamida barcha ma'lumotlar avtomatik sinxronlanadi.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: REVENUE LEAK CALCULATOR -->
+    <section id="kalkulyator" style="padding:clamp(64px,8vw,104px) 0;background:#fff">
+      <div style="max-width:1200px;margin:0 auto;padding:0 24px">
+        <div class="rv" style="max-width:720px;margin:0 auto 52px;text-align:center">
+          <span class="leak-badge">
+            ⚡ Moliya yo'qotishi
+          </span>
+          <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(28px,3.6vw,42px);line-height:1.15;letter-spacing:-.025em;margin:14px 0 16px;color:#0F172A">Klinikangiz har oy qancha pul yo'qotyapti?</h2>
+          <p style="font-size:clamp(16px,1.4vw,18px);line-height:1.6;color:#64748B;margin:0">Real ko'rsatkichlaringizni kiriting va tizimsiz ishlash sizga qanchaga tushayotganini ko'ring.</p>
+        </div>
+
+        <div class="rv" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:32px;align-items:stretch">
+          
+          <!-- INPUT SLIDERS -->
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:24px;padding:clamp(24px,3vw,34px);box-shadow:0 12px 30px rgba(15,23,42,0.04);display:flex;flex-direction:column;gap:28px">
+            
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;gap:12px">
+                <label style="font-size:15px;font-weight:700;color:#334155">Kunlik o'rtacha bemorlar</label>
+                <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#2563EB"><span id="o-patients">25</span> nafar</span>
+              </div>
+              <input type="range" min="5" max="80" value="25" id="cal-patients" data-min="5" data-max="80">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#94A3B8;margin-top:6px"><span>5</span><span>80</span></div>
+            </div>
+
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;gap:12px">
+                <label style="font-size:15px;font-weight:700;color:#334155">O'rtacha chek (bir bemordan)</label>
+                <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#2563EB"><span id="o-check">350 000</span> so'm</span>
+              </div>
+              <input type="range" min="100000" max="2000000" step="50000" value="350000" id="cal-check" data-min="100000" data-max="2000000">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#94A3B8;margin-top:6px"><span>100k</span><span>2.0 mln</span></div>
+            </div>
+
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;gap:12px">
+                <label style="font-size:15px;font-weight:700;color:#334155">Kelmaydigan bemorlar (No-Show)</label>
+                <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#2563EB"><span id="o-noshow">15</span>%</span>
+              </div>
+              <input type="range" min="0" max="40" value="15" id="cal-noshow" data-min="0" data-max="40">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#94A3B8;margin-top:6px"><span>0%</span><span>40%</span></div>
+            </div>
+
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;gap:12px">
+                <label style="font-size:15px;font-weight:700;color:#334155">Oylik yo'qoladigan lidlar (so'rovlar)</label>
+                <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#2563EB"><span id="o-leads">20</span> ta</span>
+              </div>
+              <input type="range" min="0" max="100" value="20" id="cal-leads" data-min="0" data-max="100">
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#94A3B8;margin-top:6px"><span>0</span><span>100</span></div>
+            </div>
+
+          </div>
+
+          <!-- DYNAMIC PAIN CALCULATOR RESULTS -->
+          <div class="calculator-card">
+            <div>
+              <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.2);color:#FCA5A5;font-size:13px;font-weight:700;padding:6px 14px;border-radius:999px;margin-bottom:18px">
+                <span style="width:7px;height:7px;border-radius:50%;background:#EF4444;display:inline-block"></span>
+                Siz har oy yo'qotyapsiz:
+              </div>
+              <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(34px,4.5vw,46px);line-height:1;letter-spacing:-.03em;color:#fff;margin-bottom:8px">
+                ~<span id="o-totalloss">0</span> <span style="font-size:18px;font-weight:700;color:#94A3B8">so'm</span>
+              </div>
+              <div style="display:flex;gap:16px;font-size:13px;color:#94A3B8;margin-bottom:24px">
+                <span>No-Show zarar: <strong style="color:#fff"><span id="o-nsloss">0</span></strong></span>
+                <span>Lidlar zarar: <strong style="color:#fff"><span id="o-leadloss">0</span></strong></span>
+              </div>
+
+              <div style="height:1px;background:rgba(255,255,255,0.1);margin-bottom:22px"></div>
+
+              <!-- Bleeding / Pain list -->
+              <div style="margin-bottom:24px">
+                <h4 style="color:#FCA5A5;font-size:13px;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.05em">Bu o'g'irlangan pul evaziga 1 yilda:</h4>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#E2E8F0">
+                    <span style="color:#EF4444;font-size:16px">🛒</span>
+                    <span><strong><span id="o-annual-loss-chairs" style="color:#fff">0</span> dona</strong> stomatologik kreslo</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#E2E8F0">
+                    <span style="color:#EF4444;font-size:16px">✈️</span>
+                    <span><strong><span id="o-annual-loss-trips" style="color:#fff">0</span> nafar</strong> shifokorni Yevropada o'qitish</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#E2E8F0">
+                    <span style="color:#EF4444;font-size:16px">🏢</span>
+                    <span><strong><span id="o-annual-loss-rent" style="color:#fff">0</span> oylik</strong> binoning ijara pulini yo'qotmoqdasiz</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="height:1px;background:rgba(255,255,255,0.1);margin-bottom:22px"></div>
+
+              <!-- DentaCRM savings -->
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:26px">
+                <div style="width:40px;height:40px;border-radius:10px;background:rgba(16,185,129,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div>
+                  <div style="font-size:13px;color:#94A3B8">DentaCRM ushbu yo'qotishning <strong style="color:#10B981"><span id="o-recpct">0</span>%</strong> qismini qaytaradi:</div>
+                  <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:20px;color:#10B981">+<span id="o-recovered">0</span> so'm/oy</div>
+                </div>
+              </div>
+
+              <a href="#demo" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;background:#2563EB;color:#fff;font-weight:800;font-size:15px;padding:15px;border-radius:12px;box-shadow:0 10px 24px rgba(37,99,235,0.3);transition:transform 0.15s, background 0.15s" onmouseover="this.style.transform='translateY(-2px)';this.style.background='#1d4ed8'" onmouseout="this.style.transform='none';this.style.background='#2563EB'">
+                Yo'qotishlarni to'xtatish
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </a>
+              <div style="font-size:11px;color:#64748B;text-align:center;margin-top:12px">Tizim o'zini o'rtacha <strong><span id="o-payback">0</span> kunda</strong> qoplaydi.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- INTERACTIVE MODUL DEMO TABS PLACEHOLDER -->
+    <!-- (Redefined in LandingPage.tsx between SPLIT marker) -->
+
+    <!-- SECTION: IMKONIYATLAR (FEATURES) -->
+    <section id="imkoniyatlar" style="padding:clamp(64px,8vw,104px) 0;background:#fff">
+      <div style="max-width:1200px;margin:0 auto;padding:0 24px">
+        <div class="rv" style="max-width:700px;margin:0 auto 48px;text-align:center">
+          <span class="success-badge">⚙️ Tizim imkoniyatlari</span>
+          <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(28px,3.6vw,42px);line-height:1.15;letter-spacing:-.025em;margin:14px 0 16px;color:#0F172A">Klinikangiz uchun barcha modullar bitta platformada</h2>
+          <p style="font-size:clamp(16px,1.4vw,18px);line-height:1.6;color:#64748B;margin:0">Stomatologiya klinikasini samarali boshqarish uchun zarur bo'lgan har bir modul tayyor holatda.</p>
+        </div>
+
+        <!-- MOCKUP DISPLAY -->
+        <div class="rv" style="margin:0 auto 56px;max-width:1020px;border:1px solid #E2E8F0;border-radius:24px;background:#fff;box-shadow:0 30px 60px -20px rgba(15,23,42,0.12);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid #F1F5F9;background:#FBFCFE">
+            <span style="width:11px;height:11px;border-radius:50%;background:#FF5F56"></span>
+            <span style="width:11px;height:11px;border-radius:50%;background:#FFBD2E"></span>
+            <span style="width:11px;height:11px;border-radius:50%;background:#27C93F"></span>
+            <span style="margin-left:14px;font-size:12px;color:#94A3B8;font-weight:600">app.dentacrm.uz</span>
+          </div>
+          <div style="display:grid;grid-template-columns:200px 1fr">
+            <!-- Sidebar -->
+            <div class="float-hide" style="background:#F8FAFF;border-right:1px solid #EEF2F7;padding:20px 14px">
+              <div style="display:flex;align-items:center;gap:9px;padding:0 6px 20px">
+                <svg width="24" height="24" viewBox="0 0 36 36" fill="none"><rect width="36" height="36" rx="9" fill="#2563EB"/><circle cx="13.5" cy="15" r="2.2" fill="#fff"/><circle cx="22.5" cy="15" r="2.2" fill="#fff"/><path d="M12 21c1.7 2.7 3.9 4 6 4s4.3-1.3 6-4" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>
+                <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:15px;color:#0F172A">DentaCRM</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;background:#2563EB;color:#fff;font-size:13px;font-weight:600">Panel</div>
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;color:#64748B;font-size:13px;font-weight:600">Bemorlar</div>
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;color:#64748B;font-size:13px;font-weight:600">Moliya</div>
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;color:#64748B;font-size:13px;font-weight:600">Jadval</div>
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:10px;color:#64748B;font-size:13px;font-weight:600">Ombor</div>
+              </div>
+            </div>
+            <!-- Main Board -->
+            <div style="padding:24px;background:#fff;min-width:0">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:12px">
+                <div>
+                  <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#0F172A">Tizim holati</div>
+                  <div style="font-size:12px;color:#94A3B8">Bugun, 25-iyun</div>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:6px;background:#E6F4EA;color:#137333;font-size:11px;font-weight:700;padding:5px 10px;border-radius:6px">Faol</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
+                <div style="background:#F8FAFC;border:1px solid #F1F5F9;border-radius:14px;padding:14px">
+                  <span style="font-size:11px;color:#94A3B8;font-weight:600">Qabullar</span>
+                  <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:20px;color:#0F172A">24 ta</div>
+                </div>
+                <div style="background:#F8FAFC;border:1px solid #F1F5F9;border-radius:14px;padding:14px">
+                  <span style="font-size:11px;color:#94A3B8;font-weight:600">Yangi bemorlar</span>
+                  <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:20px;color:#0F172A">8 nafar</div>
+                </div>
+                <div style="background:linear-gradient(135deg,#2563EB,#1D4ED8);border-radius:14px;padding:14px;box-shadow:0 8px 20px rgba(37,99,235,0.25)">
+                  <span style="font-size:11px;color:#BFDBFE;font-weight:600">Bugungi sof foyda</span>
+                  <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#fff">3.8M UZB</div>
+                </div>
+              </div>
+              <div style="background:#F8FAFC;border:1px solid #F1F5F9;border-radius:14px;padding:16px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                  <span style="font-size:13px;font-weight:700;color:#334155">Haftalik daromad dinamikasi</span>
+                  <span style="font-size:11px;color:#94A3B8">mln so'm</span>
+                </div>
+                <div style="display:flex;align-items:flex-end;gap:12px;height:80px">
+                  <div style="flex:1;height:40%;background:#DBEAFE;border-radius:4px 4px 0 0"></div>
+                  <div style="flex:1;height:55%;background:#DBEAFE;border-radius:4px 4px 0 0"></div>
+                  <div style="flex:1;height:70%;background:#93C5FD;border-radius:4px 4px 0 0"></div>
+                  <div style="flex:1;height:60%;background:#93C5FD;border-radius:4px 4px 0 0"></div>
+                  <div style="flex:1;height:95%;background:linear-gradient(to top, #2563EB, #3B82F6);border-radius:4px 4px 0 0"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULES LIST -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px">
+          
+          <div class="rv premium-card" style="padding:22px">
+            <div style="width:42px;height:42px;border-radius:12px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:16px;margin:0 0 6px;color:#0F172A">Bemorlar elektron bazasi</h3>
+            <p style="font-size:13.5px;line-height:1.5;color:#64748B;margin:0">Bemorlarning davolash tarixi, rentgen suratlari, rentgen tahlillari va tish kartasi bitta joyda.</p>
+          </div>
+
+          <div class="rv premium-card" style="padding:22px">
+            <div style="width:42px;height:42px;border-radius:12px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:16px;margin:0 0 6px;color:#0F172A">Avtomatlashtirilgan kalendar</h3>
+            <p style="font-size:13.5px;line-height:1.5;color:#64748B;margin:0">Shifokorlar ish jadvalini to'g'ri taqsimlash, vaqtlar kesishishini oldini olish.</p>
+          </div>
+
+          <div class="rv premium-card" style="padding:22px">
+            <div style="width:42px;height:42px;border-radius:12px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:16px;margin:0 0 6px;color:#0F172A">Ombor va materiallar</h3>
+            <p style="font-size:13.5px;line-height:1.5;color:#64748B;margin:0">Ishlatilgan materiallarni avtomatik hisobdan chiqarish va kam qolgan dorilarni eslatish.</p>
+          </div>
+
+          <div class="rv premium-card" style="padding:22px">
+            <div style="width:42px;height:42px;border-radius:12px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <h3 style="font-family:'Manrope',sans-serif;font-weight:700;font-size:16px;margin:0 0 6px;color:#0F172A">Moliyaviy tahlil</h3>
+            <p style="font-size:13.5px;line-height:1.5;color:#64748B;margin:0">Sof foyda, shifokorlar ish haqi va klinikaning kundalik xarajatlarini avtomatik hisoblash.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION: STATISTICS & REVIEWS -->
+    <section style="padding:clamp(56px,7vw,92px) 0;background:linear-gradient(#fff, #F8FAFF)">
+      <div style="max-width:1200px;margin:0 auto;padding:0 24px">
+        
+        <!-- Stats Count Grid -->
+        <div class="rv" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px;margin-bottom:64px">
+          
+          <div style="text-align:center;background:#fff;border:1px solid #EEF2F7;border-radius:20px;padding:32px 20px;box-shadow:0 10px 30px -20px rgba(15,23,42,0.1)">
+            <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(36px,4.5vw,48px);color:#2563EB;line-height:1">50+</div>
+            <div style="font-size:14px;color:#64748B;font-weight:600;margin-top:10px">Faol klinikalar</div>
+          </div>
+
+          <div style="text-align:center;background:#fff;border:1px solid #EEF2F7;border-radius:20px;padding:32px 20px;box-shadow:0 10px 30px -20px rgba(15,23,42,0.1)">
+            <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(36px,4.5vw,48px);color:#2563EB;line-height:1">100k+</div>
+            <div style="font-size:14px;color:#64748B;font-weight:600;margin-top:10px">Ro'yxatga olingan bemorlar</div>
+          </div>
+
+          <div style="text-align:center;background:#fff;border:1px solid #EEF2F7;border-radius:20px;padding:32px 20px;box-shadow:0 10px 30px -20px rgba(15,23,42,0.1)">
+            <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(36px,4.5vw,48px);color:#2563EB;line-height:1">24/7</div>
+            <div style="font-size:14px;color:#64748B;font-weight:600;margin-top:10px">Texnik yordam</div>
+          </div>
+
+          <div style="text-align:center;background:#fff;border:1px solid #EEF2F7;border-radius:20px;padding:32px 20px;box-shadow:0 10px 30px -20px rgba(15,23,42,0.1)">
+            <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(36px,4.5vw,48px);color:#2563EB;line-height:1">1 kun</div>
+            <div style="font-size:14px;color:#64748B;font-weight:600;margin-top:10px">Tizimni ishga tushirish</div>
+          </div>
+
+        </div>
+
+        <!-- TESTIMONIALS -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px">
+          
+          <div class="rv premium-card" style="padding:32px">
+            <div style="display:flex;gap:4px;margin-bottom:16px">
+              <span style="color:#FBBF24;font-size:16px">★</span><span style="color:#FBBF24;font-size:16px">★</span><span style="color:#FBBF24;font-size:16px">★</span><span style="color:#FBBF24;font-size:16px">★</span><span style="color:#FBBF24;font-size:16px">★</span>
+            </div>
+            <p style="font-size:15px;line-height:1.6;color:#334155;margin:0 0 24px">"No-show bemorlarimiz soni keskin kamaydi. Tizim yuboradigan avtomatlashtirilgan SMS-eslatmalar tufayli ish vaqtimiz samarali taqsimlanmoqda."</p>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:38px;height:38px;border-radius:50%;background:#2563EB;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">DK</div>
+              <div>
+                <div style="font-weight:700;font-size:14px;color:#0F172A">Dr. Dilshod Karimov</div>
+                <div style="font-size:12px;color:#94A3B8">Bosh shifokor · Toshkent</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rv premium-card" style="padding:32px">
+            <div style="display:flex;gap:4px;margin-bottom:16px">
+              <span style="color:#FBBF24;font-size:16px">★</span><span style="color:#FBBF24;font-size:16px">★</span><span style="color:#FBBF24;font-size:16px">★</span><span style="color:#FBBF24;font-size:16px">★</span><span style="color:#FBBF24;font-size:16px">★</span>
+            </div>
+            <p style="font-size:15px;line-height:1.6;color:#334155;margin:0 0 24px">"Shifokorlar ulushi va dorilar sarfini qo'lda hisoblash katta boshog'riq edi. DentaCRM bilan bu muammolarni esdan chiqardik, har bir tiyin nazoratda."</p>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:38px;height:38px;border-radius:50%;background:#0EA5E9;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">MR</div>
+              <div>
+                <div style="font-weight:700;font-size:14px;color:#0F172A">Madina Rashidova</div>
+                <div style="font-size:12px;color:#94A3B8">Klinika rahbari · Samarqand</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- SECTION: DEMO REGISTRATION -->
+    <section id="demo" style="position:relative;padding:clamp(64px,8vw,104px) 0;background:linear-gradient(#fff, #EFF6FF);overflow:hidden">
+      <div style="position:relative;max-width:1080px;margin:0 auto;padding:0 24px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:48px;align-items:center">
+          
+          <div class="rv">
+            <span class="success-badge">🚀 Bepul boshlash</span>
+            <h2 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(28px,3.4vw,40px);line-height:1.15;letter-spacing:-.025em;margin:14px 0 16px;color:#0F172A">Klinikangizni tartibga solish vaqti keldi</h2>
+            <p style="font-size:15px;line-height:1.6;color:#475569;margin:0 0 24px">Telefon raqamingizni qoldiring, mutaxassisimiz DentaCRM tizimini qanday ishlatishni bepul ko'rsatib beradi.</p>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#334155;font-weight:600">
+                <span style="color:#10B981">✓</span> Hech qanday majburiyatsiz, mutlaqo bepul demo
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#334155;font-weight:600">
+                <span style="color:#10B981">✓</span> Tizimni sozlash va administratorlarni o'qitish
+              </div>
+            </div>
+          </div>
+
+          <!-- Form Panel -->
+          <div class="rv" style="background:#fff;border:1px solid #E2E8F0;border-radius:24px;padding:clamp(24px,3vw,38px);box-shadow:0 30px 60px -20px rgba(37,99,235,0.18)">
+            <div id="form-view">
+              <form id="demo-form" style="display:flex;flex-direction:column;gap:18px">
+                <div>
+                  <label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px">Ismingiz <span style="color:#EF4444">*</span></label>
+                  <input type="text" name="fullName" required placeholder="Ism va familiyangiz" style="width:100%;padding:12px 14px;border:1px solid #CBD5E1;border-radius:10px;font-size:14px;outline:none;font-family:inherit">
+                </div>
+                <div>
+                  <label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px">Klinika nomi <span style="color:#EF4444">*</span></label>
+                  <input type="text" name="clinicName" required placeholder="Masalan, Denta Dent" style="width:100%;padding:12px 14px;border:1px solid #CBD5E1;border-radius:10px;font-size:14px;outline:none;font-family:inherit">
+                </div>
+                <div>
+                  <label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px">Telefon raqam <span style="color:#EF4444">*</span></label>
+                  <input type="tel" name="phone" required placeholder="+998 90 123 45 67" style="width:100%;padding:12px 14px;border:1px solid #CBD5E1;border-radius:10px;font-size:14px;outline:none;font-family:inherit">
+                </div>
+                <div>
+                  <label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px">Shahar</label>
+                  <input type="text" name="city" placeholder="Toshkent" style="width:100%;padding:12px 14px;border:1px solid #CBD5E1;border-radius:10px;font-size:14px;outline:none;font-family:inherit">
+                </div>
+                <button type="submit" style="width:100%;background:#2563EB;color:#fff;font-weight:800;font-size:15px;padding:14px;border:none;border-radius:10px;cursor:pointer;box-shadow:0 8px 20px rgba(37,99,235,0.3);transition:background 0.15s" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563EB'">Demo so'rovini yuborish</button>
+              </form>
+            </div>
+            
+            <div id="success-view" style="display:none;text-align:center;padding:24px 0">
+              <div style="width:64px;height:64px;border-radius:50%;background:#DCFCE7;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <h3 style="font-family:'Manrope',sans-serif;font-weight:800;font-size:20px;color:#0F172A;margin-bottom:8px">So'rovingiz qabul qilindi!</h3>
+              <p style="font-size:14px;color:#64748B;line-height:1.5;margin:0">Mutaxassisimiz tez orada siz bilan bog'lanadi.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer style="background:#F8FAFF;border-top:1px solid #EEF2F7;padding:56px 0 28px">
+    <div style="max-width:1200px;margin:0 auto;padding:0 24px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:32px;margin-bottom:32px">
+        
+        <div>
+          <a href="#top" style="display:flex;align-items:center;gap:11px;text-decoration:none;margin-bottom:16px">
+            <svg width="30" height="30" viewBox="0 0 36 36" fill="none"><rect width="36" height="36" rx="9" fill="#2563EB"/><circle cx="13.5" cy="15" r="2.2" fill="#fff"/><circle cx="22.5" cy="15" r="2.2" fill="#fff"/><path d="M12 21c1.7 2.7 3.9 4 6 4s4.3-1.3 6-4" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>
+            <span style="font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#0F172A;letter-spacing:-.02em">DentaCRM</span>
+          </a>
+          <p style="font-size:13px;line-height:1.6;color:#64748B;margin:0">Stomatologiya klinikalari uchun o'zbek tilidagi mukammal boshqaruv tizimi.</p>
+        </div>
+
+        <div>
+          <h4 style="font-size:13px;font-weight:700;color:#0F172A;margin:0 0 16px;text-transform:uppercase">Aloqa</h4>
+          <a href="tel:+998908242992" style="text-decoration:none;color:#475569;font-size:14px;font-weight:500;display:block;margin-bottom:8px">+998 90 824 29 92</a>
+          <span style="color:#64748B;font-size:13px">dentacrm.uz</span>
+        </div>
+
+      </div>
+
+      <div style="border-top:1px solid #EEF2F7;padding-top:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <span style="font-size:13px;color:#94A3B8">© 2026 DentaCRM. Barcha huquqlar himoyalangan.</span>
+        <span style="font-size:13px;color:#94A3B8">O'zbekistonda ishlab chiqilgan 🇺🇿</span>
+      </div>
+
+    </div>
+  </footer>
+</div>
