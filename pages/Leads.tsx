@@ -35,6 +35,20 @@ const parseNotesField = (notes: string | null | undefined, key: string): string 
     return line ? line.slice(key.length + 1).trim() : null;
 };
 
+const parseQAPairs = (notes: string | null | undefined): { q: string; a: string }[] => {
+    if (!notes) return [];
+    const marker = notes.indexOf('Savollar va Javoblar:');
+    const section = marker >= 0 ? notes.slice(marker + 'Savollar va Javoblar:'.length) : notes;
+    return section.split('\n')
+        .map(l => l.trim())
+        .filter(l => l.includes(':') && !l.startsWith('FB Lead'))
+        .map(l => {
+            const idx = l.indexOf(':');
+            return { q: l.slice(0, idx).trim(), a: l.slice(idx + 1).trim() };
+        })
+        .filter(p => p.q && p.a);
+};
+
 const renderNotes = (notes: string | null | undefined, t: any) => {
     if (!notes) return <span className="text-gray-400 dark:text-gray-500">Izohlar yo'q</span>;
 
@@ -482,25 +496,23 @@ export const Leads: React.FC<LeadsProps> = ({
                                                     {lead.phone}
                                                 </div>
                                                 {(() => {
-                                                    const clinicName = parseNotesField(lead.notes, 'Klinika nomi');
-                                                    const city = parseNotesField(lead.notes, 'Shahar');
-                                                    const doctors = parseNotesField(lead.notes, 'Shifokorlar soni');
-                                                    return (
-                                                        <>
-                                                            {clinicName && (
-                                                                <div className="flex items-center text-xs text-gray-600 dark:text-gray-300">
-                                                                    <Building2 className="w-3.5 h-3.5 mr-1.5 text-indigo-400 flex-shrink-0" />
-                                                                    <span className="font-medium truncate">{clinicName}</span>
-                                                                </div>
-                                                            )}
-                                                            {city && (
-                                                                <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                                                                    <MapPin className="w-3.5 h-3.5 mr-1.5 text-rose-400 flex-shrink-0" />
-                                                                    {city}{doctors ? ` · ${doctors} ta shifokor` : ''}
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    );
+                                                    const qaPairs = parseQAPairs(lead.notes);
+                                                    if (qaPairs.length > 0) {
+                                                        return (
+                                                            <div className="mt-1 space-y-1">
+                                                                {qaPairs.slice(0, 3).map((pair, i) => (
+                                                                    <div key={i} className="text-[11px] bg-gray-50 dark:bg-gray-700/50 rounded px-2 py-1">
+                                                                        <span className="text-gray-400 dark:text-gray-500">{pair.q}: </span>
+                                                                        <span className="font-semibold text-gray-700 dark:text-gray-200">{pair.a}</span>
+                                                                    </div>
+                                                                ))}
+                                                                {qaPairs.length > 3 && (
+                                                                    <span className="text-[10px] text-gray-400">+{qaPairs.length - 3} ta savol...</span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
                                                 })()}
                                                 {lead.service && (
                                                     <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded w-fit">
@@ -904,12 +916,33 @@ export const Leads: React.FC<LeadsProps> = ({
                                 </div>
                             </div>
 
-                            {selectedLeadForDetail.notes && !selectedLeadForDetail.notes.startsWith('Klinika nomi:') && (
-                                <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
-                                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">{t('leads.addLeadModal.notes')}</p>
-                                    {renderNotes(selectedLeadForDetail.notes, t)}
-                                </div>
-                            )}
+                            {selectedLeadForDetail.notes && (() => {
+                                const qaPairs = parseQAPairs(selectedLeadForDetail.notes);
+                                if (qaPairs.length > 0) {
+                                    return (
+                                        <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
+                                            <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Savol-Javoblar</p>
+                                            <div className="space-y-2">
+                                                {qaPairs.map((pair, i) => (
+                                                    <div key={i} className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                                                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{pair.q}</p>
+                                                        <p className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">{pair.a}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                if (!selectedLeadForDetail.notes.startsWith('FB Lead')) {
+                                    return (
+                                        <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
+                                            <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">{t('leads.addLeadModal.notes')}</p>
+                                            {renderNotes(selectedLeadForDetail.notes, t)}
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
                         </div>
 
                         <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-gray-700 mt-4 flex-shrink-0">
