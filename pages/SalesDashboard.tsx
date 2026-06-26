@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, TrendingUp, CheckCircle, Clock, LogOut, Plus, X, User, Lock, Phone as PhoneIcon, Eye, EyeOff, Calendar, ArrowRight, RefreshCw, Search } from 'lucide-react';
-import { Card, Button, Input, Badge } from '../components/Common';
+import { Building2, TrendingUp, CheckCircle, Clock, LogOut, Plus, X, Lock, CreditCard, Calendar, ArrowRight, RefreshCw, Search } from 'lucide-react';
+import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
 import { api } from '../services/api';
 
 interface SalesClinic {
@@ -36,24 +36,23 @@ const getDaysRemaining = (expiryDate: string) => {
   return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-/* ── Yangi klinika modal ─────────────────────────────────────── */
-const EMPTY_FORM = { name: '', adminName: '', username: '', password: '', phone: '+998 ', planId: '' };
+/* ── Yangi klinika modal (superadmin stili) ──────────────────── */
+const EMPTY_FORM = {
+  name: '', adminName: '', username: '', password: '', phone: '',
+  planId: '', useCustomPrice: false, customPrice: 0, doctorCount: 1,
+  subscriptionType: 'Trial' as 'Paid' | 'Trial',
+};
 
 function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose: () => void; onSuccess: () => void }) {
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [showPass, setShowPass] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM, planId: plans.length > 0 ? plans[0].id : '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const set = (k: keyof typeof EMPTY_FORM) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm(f => ({ ...f, [k]: e.target.value }));
-
   const generatePassword = () => {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$';
     let pass = '';
     for (let i = 0; i < 10; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length));
     setForm(f => ({ ...f, password: pass }));
-    setShowPass(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,7 +62,11 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
     setError('');
     try {
       const today = new Date().toISOString().split('T')[0];
-      const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const expDate = new Date();
+      if (form.subscriptionType === 'Trial') expDate.setDate(expDate.getDate() + 7);
+      else expDate.setMonth(expDate.getMonth() + 1);
+      const expiryDate = expDate.toISOString().split('T')[0];
+
       await (api.clinics.create as any)({
         name: form.name.trim(),
         adminName: form.adminName.trim(),
@@ -71,10 +74,11 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
         password: form.password,
         phone: form.phone.trim(),
         planId: form.planId,
-        status: 'Pending',
-        subscriptionType: 'Trial',
+        status: 'Active',
+        subscriptionType: form.subscriptionType,
         subscriptionStartDate: today,
-        expiryDate: expiry,
+        expiryDate,
+        customPrice: form.useCustomPrice ? form.customPrice : null,
       });
       onSuccess();
       onClose();
@@ -85,75 +89,72 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
     }
   };
 
-  const inp = "w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder:text-gray-300 outline-none transition-all";
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg z-10 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h2 className="text-base font-bold text-gray-900 dark:text-white">Yangi klinika ro'yxatdan o'tkazish</h2>
-            <p className="text-xs text-gray-500 mt-0.5">7 kunlik bepul sinov davri avtomatik boshlanadi</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
+    <Modal isOpen onClose={onClose} title="Yangi Klinika Qo'shish">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg px-4 py-2.5">{error}</div>}
+
+        <Input label="Klinika Nomi" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+        <div className="grid grid-cols-2 gap-4">
+          <Input label="Admin ismi" value={form.adminName} onChange={e => setForm({ ...form, adminName: e.target.value })} required />
+          <Input label="Telefon" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg px-4 py-2.5">{error}</div>}
+        <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4">
+          <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
+            <Lock className="w-4 h-4" /> Kirish Ma'lumotlari
+          </h4>
+          <Input label="Login" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required />
+          <div className="flex items-end gap-2">
+            <Input label="Parol" type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required className="flex-1" />
+            <Button type="button" variant="secondary" onClick={generatePassword} className="mb-[1px]">Generatsiya</Button>
+          </div>
+        </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5 text-blue-500" />Klinika nomi</label>
-            <input required value={form.name} onChange={set('name')} placeholder="Masalan: Asal Dental" className={inp} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-blue-500" />Admin ismi</label>
-            <input required value={form.adminName} onChange={set('adminName')} placeholder="Masalan: Aziz Karimov" className={inp} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-blue-500" />Login</label>
-              <input required value={form.username} onChange={set('username')} placeholder="azizkarimov" className={inp} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5"><Lock className="w-3.5 h-3.5 text-blue-500" />Parol</label>
-              <div className="relative">
-                <input required type={showPass ? 'text' : 'password'} value={form.password} onChange={set('password')} placeholder="Kuchli parol" className={inp + ' pr-16'} />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                  <button type="button" onClick={() => setShowPass(v => !v)} className="text-gray-400 hover:text-gray-600 cursor-pointer p-1">
-                    {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                  <button type="button" onClick={generatePassword} className="text-[10px] text-blue-600 hover:underline cursor-pointer font-semibold">Auto</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5"><PhoneIcon className="w-3.5 h-3.5 text-blue-500" />Telefon</label>
-              <input required value={form.phone} onChange={set('phone')} placeholder="+998 90 000 00 00" className={inp + ' font-mono'} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-600">Tarif</label>
-              <select required value={form.planId} onChange={set('planId')} className={inp + ' cursor-pointer'}>
-                <option value="">Tanlang...</option>
-                {plans.map(p => <option key={p.id} value={p.id}>{p.name} — {p.maxDoctors} sh.</option>)}
-              </select>
-            </div>
+        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
+          <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
+            <CreditCard className="w-4 h-4" /> Tarif va Obuna
+          </h4>
+
+          <div className="flex gap-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="subType" checked={form.subscriptionType === 'Paid'} onChange={() => setForm({ ...form, subscriptionType: 'Paid' })} className="text-blue-600" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">To'liq</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="subType" checked={form.subscriptionType === 'Trial'} onChange={() => setForm({ ...form, subscriptionType: 'Trial' })} className="text-blue-600" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">Sinov davri (Trial)</span>
+            </label>
           </div>
 
-          <div className="flex gap-3 pt-1">
-            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">Bekor qilish</Button>
-            <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-              {loading ? 'Yaratilmoqda...' : 'Ro\'yxatdan o\'tkazish'}
-            </Button>
+          <Select
+            label="Tarif Rejasi"
+            options={plans.map(p => ({ value: p.id, label: `${p.name} - ${p.price.toLocaleString()} UZS` }))}
+            value={form.planId}
+            onChange={e => setForm({ ...form, planId: e.target.value })}
+          />
+
+          <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <input type="checkbox" id="useCustomPrice" checked={form.useCustomPrice} onChange={e => setForm({ ...form, useCustomPrice: e.target.checked })}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded cursor-pointer" />
+            <label htmlFor="useCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">Maxsus narx belgilash</label>
           </div>
-        </form>
-      </div>
-    </div>
+
+          {form.useCustomPrice && (
+            <Input label="Maxsus oylik to'lov summasi" type="number" value={form.customPrice}
+              onChange={e => setForm({ ...form, customPrice: parseInt(e.target.value) || 0 })} required placeholder="Masalan: 800000" />
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4">
+          <Button type="button" variant="secondary" onClick={onClose}>Bekor qilish</Button>
+          <Button type="submit" disabled={loading}>
+            {loading ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+            {loading ? 'Yaratilmoqda...' : 'Yaratish'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
