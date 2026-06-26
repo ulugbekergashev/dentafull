@@ -16,6 +16,7 @@ import { Settings } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
 import { LandingPage } from './pages/LandingPage';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
+import { SalesDashboard } from './pages/SalesDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
 import { DoctorDetails } from './pages/DoctorDetails';
 import { Inventory } from './pages/Inventory';
@@ -124,7 +125,7 @@ const AppContent: React.FC = () => {
 
   // Subscription Block Logic
   const isSubscriptionBlocked = useMemo(() => {
-    if (!isAuthenticated || !currentClinic || userRole === UserRole.SUPER_ADMIN) return false;
+    if (!isAuthenticated || !currentClinic || userRole === UserRole.SUPER_ADMIN || userRole === UserRole.SALES_AGENT) return false;
     
     // Check Status
     if (currentClinic.status === 'Blocked') return true;
@@ -155,13 +156,14 @@ const AppContent: React.FC = () => {
           if (storedTechnicianId) setTechnicianId(storedTechnicianId);
           setIsAuthenticated(true);
           // Fetch current clinic info if not in demo mode
-          if (storedClinicId && role !== UserRole.SUPER_ADMIN) {
-            api.clinics.getById(storedClinicId).then(setCurrentClinic).catch(console.error);
-          } else if (role !== UserRole.SUPER_ADMIN && !storedClinicId) {
-            // Fallback or demo clinic
-            api.clinics.getAll().then(list => {
-              if (list.length > 0) setCurrentClinic(list[0]);
-            });
+          if (role !== UserRole.SUPER_ADMIN && role !== UserRole.SALES_AGENT) {
+            if (storedClinicId) {
+              api.clinics.getById(storedClinicId).then(setCurrentClinic).catch(console.error);
+            } else {
+              api.clinics.getAll().then(list => {
+                if (list.length > 0) setCurrentClinic(list[0]);
+              });
+            }
           }
         }
       } catch (e) {
@@ -180,6 +182,7 @@ const AppContent: React.FC = () => {
   // Load Data
   useEffect(() => {
     if (!isAuthenticated) return;
+    if (userRole === UserRole.SALES_AGENT) return;
 
     const loadData = async () => {
       setIsLoading(true);
@@ -280,6 +283,8 @@ const AppContent: React.FC = () => {
     // Navigate based on role
     if (role === UserRole.SUPER_ADMIN) {
       navigate('/admin');
+    } else if (role === UserRole.SALES_AGENT) {
+      navigate('/sales');
     } else if (role === UserRole.RECEPTIONIST) {
       navigate('/patients');
     } else if (role === UserRole.LAB_TECHNICIAN) {
@@ -803,6 +808,16 @@ const AppContent: React.FC = () => {
           <Route path="*" element={<SignIn onLogin={handleLogin} />} />
         </Routes>
         <InstallPWAButton />
+      </>
+    );
+  }
+
+  // Sales Agent — dedicated workspace, no clinic sidebar
+  if (userRole === UserRole.SALES_AGENT) {
+    return (
+      <>
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+        <SalesDashboard agentName={userName} onLogout={handleLogout} />
       </>
     );
   }

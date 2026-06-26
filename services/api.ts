@@ -743,6 +743,10 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+        myClinics: () => {
+            if (isDemoMode()) return Promise.resolve([]);
+            return fetchJson<any[]>('/sales/clinics');
+        },
     },
     diagnoses: {
         searchCodes: (query: string) => fetchJson<ICD10Code[]>(`/icd10?query=${query}`),
