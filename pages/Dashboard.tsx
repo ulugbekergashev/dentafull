@@ -3,7 +3,7 @@ import { Card, Badge, Input } from '../components/Common';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
-  Zap, FlaskConical, CreditCard, UserPlus
+  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -25,9 +25,10 @@ interface DashboardProps {
   leads: Lead[];
   labOrders?: LabOrder[];
   onPatientClick?: (id: string) => void;
+  onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], onPatientClick }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], onPatientClick, onUpdateAppointment }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
@@ -444,6 +445,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Xizmat</th>
                   <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Status</th>
                   <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Holat</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Amallar</th>
                 </tr>
               </thead>
               <tbody>
@@ -480,7 +482,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <td className="py-3.5 pr-4">
                         <Badge status={app.status} />
                       </td>
-                      <td className="py-3.5">
+                      <td className="py-3.5 pr-4">
                         <div className="flex items-center gap-1.5">
                           {hasDebt && (
                             <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-black rounded-full border border-red-100 dark:border-red-900/30" title="Qarz bor">
@@ -496,6 +498,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                             <span className="text-[10px] text-gray-300 dark:text-gray-600 font-medium">—</span>
                           )}
                         </div>
+                      </td>
+                      <td className="py-3.5">
+                        {app.status !== 'Completed' && app.status !== 'Cancelled' && onUpdateAppointment && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {app.status !== 'Checked-In' && (
+                              <button
+                                onClick={() => onUpdateAppointment(app.id, { status: 'Checked-In' })}
+                                title="Keldi — tasdiqlash"
+                                className="flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold rounded-lg transition-colors"
+                              >
+                                <UserCheck className="w-3 h-3" /> Keldi
+                              </button>
+                            )}
+                            <button
+                              onClick={() => navigate('/calendar')}
+                              title="Boshqa kunga ko'chirish"
+                              className="flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-lg transition-colors"
+                            >
+                              <CalendarClock className="w-3 h-3" /> Ko'chir
+                            </button>
+                            <button
+                              onClick={() => onUpdateAppointment(app.id, { status: 'Cancelled' })}
+                              title="Bekor qilish"
+                              className="flex items-center gap-1 px-2 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 text-[10px] font-bold rounded-lg transition-colors"
+                            >
+                              <XCircle className="w-3 h-3" /> Bekor
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

@@ -1236,6 +1236,7 @@ const AppContent: React.FC = () => {
                     leads={leads}
                     labOrders={labOrders}
                     onPatientClick={handlePatientClick}
+                    onUpdateAppointment={updateAppointment}
                   />
                 } />
               )}
@@ -1346,6 +1347,7 @@ const AppContent: React.FC = () => {
                   labOrders={labOrders}
                   setLabOrders={setLabOrders}
                   doctors={doctors}
+                  patients={patients}
                 />
               } />
 

@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { FlaskConical, Plus, Search, Clock, CheckCircle, Package, Truck, X, Edit2, Trash2, AlertCircle, ChevronDown, User, Stethoscope, Calendar } from 'lucide-react';
-import { LabTechnician, LabOrder } from '../types';
+import { LabTechnician, LabOrder, Patient } from '../types';
 import { api } from '../services/api';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
@@ -20,6 +20,7 @@ interface Props {
   labOrders: LabOrder[];
   setLabOrders: (orders: LabOrder[]) => void;
   doctors: any[];
+  patients?: Patient[];
 }
 
 const emptyForm = {
@@ -28,7 +29,7 @@ const emptyForm = {
   clinicianNotes: '', notes: '', status: 'Pending',
 };
 
-export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors }) => {
+export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [] }) => {
   const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterTech, setFilterTech]   = useState<string>('all');
@@ -37,6 +38,28 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
   const [form, setForm]               = useState({ ...emptyForm });
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
+
+  // Patient autocomplete state
+  const [patientSearch, setPatientSearch] = useState('');
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const patientRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (patientRef.current && !patientRef.current.contains(e.target as Node)) {
+        setShowPatientDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filteredPatients = patientSearch.length >= 1
+    ? patients.filter(p =>
+        `${p.lastName} ${p.firstName}`.toLowerCase().includes(patientSearch.toLowerCase()) ||
+        p.phone.includes(patientSearch)
+      ).slice(0, 8)
+    : [];
 
   const activeTechs = labTechnicians.filter(t => t.status === 'Active');
 
@@ -227,9 +250,46 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
               {error && <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-sm">{error}</div>}
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+                <div className="col-span-2" ref={patientRef}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bemor ismi *</label>
-                  <input value={form.patientName} onChange={e => setForm(f => ({...f, patientName: e.target.value}))} placeholder="Bemor to'liq ismi" className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                  <div className="relative">
+                    <input
+                      value={form.patientName || patientSearch}
+                      onChange={e => {
+                        setPatientSearch(e.target.value);
+                        setForm(f => ({ ...f, patientName: e.target.value }));
+                        setShowPatientDropdown(true);
+                      }}
+                      onFocus={() => setShowPatientDropdown(true)}
+                      placeholder="Bemor ismi yoki telefoni bilan qidiring..."
+                      className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                    {showPatientDropdown && filteredPatients.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-52 overflow-y-auto">
+                        {filteredPatients.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              const fullName = `${p.lastName} ${p.firstName}`;
+                              setForm(f => ({ ...f, patientName: fullName }));
+                              setPatientSearch('');
+                              setShowPatientDropdown(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-teal-50 dark:hover:bg-teal-900/20 text-left transition-colors"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center text-teal-700 dark:text-teal-300 text-xs font-bold flex-shrink-0">
+                              {p.firstName[0]}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white">{p.lastName} {p.firstName}</p>
+                              <p className="text-xs text-gray-400">{p.phone}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Shifokor</label>
