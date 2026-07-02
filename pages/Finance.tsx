@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
 import { UserRole, Transaction, Appointment, Patient, Clinic, LabOrder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer } from 'lucide-react';
+import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer, Plus, Banknote } from 'lucide-react';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { calculateTotalFinancials } from '../utils/financialCalculations';
@@ -21,12 +21,13 @@ interface FinanceProps {
   doctors: Doctor[];
   currentClinic?: Clinic;
   labOrders?: LabOrder[];
+  onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<void>;
 }
 
 import { Doctor, InstallmentPlan } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors, currentClinic, labOrders }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors, currentClinic, labOrders, onAddTransaction }) => {
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
@@ -36,6 +37,41 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const [filterStatus, setFilterStatus] = useState('Barchasi');
   const [remindedDebtors, setRemindedDebtors] = useState<Set<string>>(new Set());
   const [selectedDebtorDoctorId, setSelectedDebtorDoctorId] = useState<string>('All');
+
+  // Add Payment Modal State
+  const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
+  const [isExpense, setIsExpense] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    patientId: '',
+    service: '',
+    amount: '',
+    type: 'Cash' as 'Cash' | 'Card' | 'Insurance' | 'Balance' | 'Expense',
+    notes: '',
+  });
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
+  const handleAddPayment = async () => {
+    if (!paymentForm.amount || (!isExpense && !paymentForm.patientId)) return;
+    setPaymentLoading(true);
+    try {
+      const patient = patients.find(p => p.id === paymentForm.patientId);
+      const clinicId = patients[0]?.clinicId || '';
+      await onAddTransaction?.({
+        patientName: isExpense ? (paymentForm.service || 'Xarajat') : (patient ? `${patient.lastName} ${patient.firstName}` : ''),
+        date: today,
+        amount: parseFloat(paymentForm.amount),
+        type: isExpense ? 'Expense' : paymentForm.type,
+        service: paymentForm.service || (isExpense ? 'Umumiy Xarajat' : 'To\'lov'),
+        status: 'Paid',
+        clinicId,
+        patientId: isExpense ? undefined : paymentForm.patientId || undefined,
+      });
+      setIsAddPaymentOpen(false);
+      setPaymentForm({ patientId: '', service: '', amount: '', type: 'Cash', notes: '' });
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
 
   // Date Range State
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -154,12 +190,12 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
     .map((d, index) => {
       const debtDate = new Date(d.date);
       const isValidDate = !isNaN(debtDate.getTime());
-      const daysDiff = isValidDate 
+      const daysDiff = isValidDate
         ? Math.floor((new Date().getTime() - debtDate.getTime()) / (1000 * 60 * 60 * 24))
         : 0;
-      
+
       const patient = patients.find(p => p.id === d.patientId);
-        
+
       return {
         id: d.patientId || `debtor-${index}`,
         name: d.name,
@@ -361,29 +397,51 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           </p>
         </div>
 
-        {!isReceptionist && (
-          <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-end">
-            <div className="w-full sm:w-40">
-              <Input
-                type="date"
-                label={t('finance.startDate')}
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-9"
-              />
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Quick payment/expense buttons */}
+          {onAddTransaction && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setIsExpense(false); setIsAddPaymentOpen(true); }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                To'lov Qo'shish
+              </button>
+              <button
+                onClick={() => { setIsExpense(true); setIsAddPaymentOpen(true); }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+              >
+                <Banknote className="w-3.5 h-3.5" />
+                Xarajat
+              </button>
             </div>
-            <div className="w-full sm:w-40">
-              <Input
-                type="date"
-                label={t('finance.endDate')}
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-9"
-              />
+          )}
+
+          {!isReceptionist && (
+            <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-end">
+              <div className="w-full sm:w-40">
+                <Input
+                  type="date"
+                  label={t('finance.startDate')}
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <Input
+                  type="date"
+                  label={t('finance.endDate')}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <Button variant="secondary" onClick={handleExport} className="h-10 mt-6 sm:mt-0"><Download className="w-4 h-4 mr-2" /> {t('finance.exportCsv')}</Button>
             </div>
-            <Button variant="secondary" onClick={handleExport} className="h-10 mt-6 sm:mt-0"><Download className="w-4 h-4 mr-2" /> {t('finance.exportCsv')}</Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Main Stats */}
@@ -580,31 +638,31 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               <Button variant="ghost" className="w-full text-sm mt-2" onClick={() => setIsDebtorModalOpen(true)}>{t('finance.viewAll')}</Button>
             </div>
           </Card>
-          
+
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
-               <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Bo'lib to'lash rejalari</h3>
-                  <p className="text-sm text-gray-500">{installments.filter(p => p.status === 'Active').length} ta faol shartnoma</p>
-               </div>
-               <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600">
-                  <CreditCard className="w-5 h-5" />
-               </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">Bo'lib to'lash rejalari</h3>
+                <p className="text-sm text-gray-500">{installments.filter(p => p.status === 'Active').length} ta faol shartnoma</p>
+              </div>
+              <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600">
+                <CreditCard className="w-5 h-5" />
+              </div>
             </div>
             <div className="space-y-4">
-               {installments.filter(p => p.status === 'Active').slice(0, 3).map(plan => (
-                  <div key={plan.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700">
-                     <div>
-                        <p className="font-medium text-sm text-gray-900 dark:text-white">{plan.patient?.lastName} {plan.patient?.firstName}</p>
-                        <p className="text-xs text-gray-500">{plan.service}</p>
-                     </div>
-                     <div className="text-right">
-                        <p className="text-sm font-bold text-gray-900 dark:text-white">{(plan.totalAmount - plan.totalPaid).toLocaleString()} UZS</p>
-                        <p className="text-[10px] text-gray-500">Qoldiq</p>
-                     </div>
+              {installments.filter(p => p.status === 'Active').slice(0, 3).map(plan => (
+                <div key={plan.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700">
+                  <div>
+                    <p className="font-medium text-sm text-gray-900 dark:text-white">{plan.patient?.lastName} {plan.patient?.firstName}</p>
+                    <p className="text-xs text-gray-500">{plan.service}</p>
                   </div>
-               ))}
-               <Button variant="ghost" className="w-full text-sm mt-2" onClick={() => setIsInstallmentModalOpen(true)}>{t('finance.viewAll')}</Button>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">{(plan.totalAmount - plan.totalPaid).toLocaleString()} UZS</p>
+                    <p className="text-[10px] text-gray-500">Qoldiq</p>
+                  </div>
+                </div>
+              ))}
+              <Button variant="ghost" className="w-full text-sm mt-2" onClick={() => setIsInstallmentModalOpen(true)}>{t('finance.viewAll')}</Button>
             </div>
           </Card>
         </div>
@@ -657,9 +715,9 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                     <td className="px-6 py-4 font-medium">{t.amount.toLocaleString()} UZS</td>
                     <td className="px-6 py-4"><Badge status={t.status} /></td>
                     <td className="px-6 py-4 text-right">
-                       <Button size="sm" variant="secondary" onClick={() => { setReceiptTransaction(t); setIsReceiptModalOpen(true); }} title="Chek chiqarish">
-                          <Printer className="w-4 h-4" />
-                       </Button>
+                      <Button size="sm" variant="secondary" onClick={() => { setReceiptTransaction(t); setIsReceiptModalOpen(true); }} title="Chek chiqarish">
+                        <Printer className="w-4 h-4" />
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -673,44 +731,44 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
 
         {/* Installment Modal */}
         <Modal isOpen={isInstallmentModalOpen} onClose={() => setIsInstallmentModalOpen(false)} title="Bo'lib to'lash rejalari">
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-               {installments.map(plan => (
-                  <div key={plan.id} className="p-4 border border-gray-100 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-800/30">
-                     <div className="flex justify-between items-start mb-3">
-                        <div>
-                           <h4 className="font-bold text-gray-900 dark:text-white text-lg">
-                              {plan.patient?.lastName} {plan.patient?.firstName}
-                           </h4>
-                           <p className="text-sm text-gray-500 italic">{plan.service}</p>
-                        </div>
-                        <Badge status={plan.status === 'Active' ? 'pending' : 'completed'} />
-                     </div>
-                     <div className="grid grid-cols-3 gap-2 py-3 border-y border-gray-100 dark:border-gray-800 text-center">
-                        <div>
-                           <p className="text-[10px] text-gray-500 uppercase">Jami</p>
-                           <p className="font-bold text-sm">{plan.totalAmount.toLocaleString()}</p>
-                        </div>
-                        <div>
-                           <p className="text-[10px] text-gray-500 uppercase text-green-600">To'landi</p>
-                           <p className="font-bold text-sm text-green-600">{plan.totalPaid.toLocaleString()}</p>
-                        </div>
-                        <div>
-                           <p className="text-[10px] text-gray-500 uppercase text-red-600">Qoldiq</p>
-                           <p className="font-bold text-sm text-red-600">{(plan.totalAmount - plan.totalPaid).toLocaleString()}</p>
-                        </div>
-                     </div>
-                     <div className="mt-3 flex justify-end">
-                        <Button size="sm" variant="secondary" onClick={() => {
-                           setIsInstallmentModalOpen(false);
-                           if (plan.patientId) onPatientClick(plan.patientId);
-                        }}>Profilga o'tish</Button>
-                     </div>
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+            {installments.map(plan => (
+              <div key={plan.id} className="p-4 border border-gray-100 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-800/30">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h4 className="font-bold text-gray-900 dark:text-white text-lg">
+                      {plan.patient?.lastName} {plan.patient?.firstName}
+                    </h4>
+                    <p className="text-sm text-gray-500 italic">{plan.service}</p>
                   </div>
-               ))}
-               {installments.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">Hech qanday reja topilmadi.</div>
-               )}
-            </div>
+                  <Badge status={plan.status === 'Active' ? 'pending' : 'completed'} />
+                </div>
+                <div className="grid grid-cols-3 gap-2 py-3 border-y border-gray-100 dark:border-gray-800 text-center">
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Jami</p>
+                    <p className="font-bold text-sm">{plan.totalAmount.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase text-green-600">To'landi</p>
+                    <p className="font-bold text-sm text-green-600">{plan.totalPaid.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase text-red-600">Qoldiq</p>
+                    <p className="font-bold text-sm text-red-600">{(plan.totalAmount - plan.totalPaid).toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button size="sm" variant="secondary" onClick={() => {
+                    setIsInstallmentModalOpen(false);
+                    if (plan.patientId) onPatientClick(plan.patientId);
+                  }}>Profilga o'tish</Button>
+                </div>
+              </div>
+            ))}
+            {installments.length === 0 && (
+              <div className="text-center py-8 text-gray-500">Hech qanday reja topilmadi.</div>
+            )}
+          </div>
         </Modal>
 
         {/* Debtors Modal */}
@@ -755,7 +813,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                   if (session) return JSON.parse(session);
                   return null;
                 };
- 
+
                 const auth = getAuthData();
                 if (!auth || !auth.clinicId) {
                   alert('Klinika ma\'lumotlari topilmadi. Iltimos, qayta kiring.');
@@ -827,11 +885,105 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
       </>)}
 
       <ReceiptModal
-         isOpen={isReceiptModalOpen}
-         onClose={() => setIsReceiptModalOpen(false)}
-         transaction={receiptTransaction}
-         clinic={currentClinic}
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        transaction={receiptTransaction}
+        clinic={currentClinic}
       />
+
+      {/* Add Payment / Expense Quick Modal */}
+      <Modal
+        isOpen={isAddPaymentOpen}
+        onClose={() => setIsAddPaymentOpen(false)}
+        title={isExpense ? '➕ Xarajat Qo\'shish' : '💰 To\'lov Qo\'shish'}
+      >
+        <div className="space-y-4">
+          {!isExpense && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Bemor *</label>
+              <select
+                value={paymentForm.patientId}
+                onChange={e => setPaymentForm(f => ({ ...f, patientId: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              >
+                <option value="">Bemorni tanlang...</option>
+                {patients.map(p => (
+                  <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+              {isExpense ? 'Xarajat nomi' : 'Xizmat nomi'}
+            </label>
+            <input
+              type="text"
+              placeholder={isExpense ? 'Masalan: Ijara, kommunal...' : 'Masalan: Protez, davolash...'}
+              value={paymentForm.service}
+              onChange={e => setPaymentForm(f => ({ ...f, service: e.target.value }))}
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Summa (UZS) *</label>
+            <input
+              type="number"
+              placeholder="0"
+              value={paymentForm.amount}
+              onChange={e => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+            />
+          </div>
+
+          {!isExpense && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
+              <div className="flex gap-2 flex-wrap">
+                {(['Cash', 'Card', 'Insurance', 'Balance'] as const).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setPaymentForm(f => ({ ...f, type }))}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${paymentForm.type === type
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                      }`}
+                  >
+                    {type === 'Cash' ? 'Naqd' : type === 'Card' ? 'Karta' : type === 'Insurance' ? 'Sug\'urta' : 'Balans'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setIsAddPaymentOpen(false)}
+            >
+              Bekor
+            </Button>
+            <button
+              disabled={paymentLoading || !paymentForm.amount || (!isExpense && !paymentForm.patientId)}
+              onClick={handleAddPayment}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white transition-all ${isExpense
+                  ? 'bg-red-500 hover:bg-red-600 disabled:bg-red-300'
+                  : 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300'
+                } disabled:cursor-not-allowed`}
+            >
+              {paymentLoading ? (
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                isExpense ? <Banknote className="w-4 h-4" /> : <Plus className="w-4 h-4" />
+              )}
+              {isExpense ? 'Xarajat Saqlash' : 'To\'lovni Saqlash'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

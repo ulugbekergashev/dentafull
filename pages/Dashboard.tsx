@@ -2,15 +2,17 @@ import React, { useState, useMemo } from 'react';
 import { Card, Badge, Input } from '../components/Common';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
-  CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft
+  CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
+  Zap, FlaskConical, CreditCard, UserPlus
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
-import { Patient, Appointment, Transaction, UserRole, Doctor, Lead } from '../types';
+import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { useLanguage } from '../context/LanguageContext';
+import { useNavigate } from 'react-router-dom';
 
 interface DashboardProps {
   patients: Patient[];
@@ -21,9 +23,12 @@ interface DashboardProps {
   doctorId?: string;
   doctors: Doctor[];
   leads: Lead[];
+  labOrders?: LabOrder[];
+  onPatientClick?: (id: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], onPatientClick }) => {
+  const navigate = useNavigate();
   const { t } = useLanguage();
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
@@ -129,15 +134,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
   // New Stats Calculation
   const newLeadsCount = useMemo(() => leads.filter(l => l.status === 'New').length, [leads]);
-  
+
   const avgCheck = useMemo(() => {
     const completed = filteredAppointments.filter(a => a.status === 'Completed').length;
     return completed > 0 ? Math.round(totalRevenue / completed) : 0;
   }, [totalRevenue, filteredAppointments]);
 
-  const pendingRevenue = useMemo(() => 
+  const pendingRevenue = useMemo(() =>
     filteredTransactions.filter(t => t.status === 'Pending').reduce((acc, t) => acc + t.amount, 0)
-  , [filteredTransactions]);
+    , [filteredTransactions]);
 
   // Seasonal Intensity Data
   const intensityData = useMemo(() => {
@@ -148,7 +153,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       // Current Month Daily Distribution
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       const days: { [key: string]: number } = {};
-      
+
       for (let i = 1; i <= daysInMonth; i++) {
         days[i.toString()] = 0;
       }
@@ -164,7 +169,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     } else {
       // Last 12 Months Overview
       const result: { name: string, count: number, monthIndex: number, year: number }[] = [];
-      
+
       for (let i = 11; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         result.push({
@@ -187,6 +192,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     }
   }, [appointments, intensityView]);
 
+  // Today's Appointments
+  const todayAppointments = useMemo(() => {
+    const base = userRole === UserRole.DOCTOR && doctorId
+      ? appointments.filter(a => a.doctorId === doctorId)
+      : appointments;
+    return base
+      .filter(a => a.date === today)
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [appointments, today, userRole, doctorId]);
+
+  // Overdue lab orders (by patient name)
+  const overdueLabPatients = useMemo(() => {
+    return new Set(
+      labOrders
+        .filter(o => ['Pending', 'In-Progress'].includes(o.status) && o.deadline < today)
+        .map(o => o.patientName)
+    );
+  }, [labOrders, today]);
+
   return (
     <div className="space-y-6 animate-fade-in">
 
@@ -201,28 +225,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </p>
         </div>
 
-        {!isReceptionist && (
-          <div className="flex items-center gap-3 p-1.5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            <div className="flex items-center gap-2 px-3">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
-              />
-            </div>
-            <div className="w-px h-8 bg-gray-100 dark:bg-gray-700" />
-            <div className="flex items-center gap-2 px-3">
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
-              />
-            </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Quick Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/patients')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              Bemor
+            </button>
+            <button
+              onClick={() => navigate('/calendar')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Qabul
+            </button>
+            {!isReceptionist && (
+              <button
+                onClick={() => navigate('/finance')}
+                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                To'lov
+              </button>
+            )}
           </div>
-        )}
+
+          {!isReceptionist && (
+            <div className="flex items-center gap-3 p-1.5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+              <div className="flex items-center gap-2 px-3">
+                <Calendar className="w-4 h-4 text-gray-400" />
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
+                />
+              </div>
+              <div className="w-px h-8 bg-gray-100 dark:bg-gray-700" />
+              <div className="flex items-center gap-2 px-3">
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards Grid */}
@@ -351,6 +404,108 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </div>
       </div>
 
+      {/* Bugungi Qabullar */}
+      <Card className="p-6 rounded-[2rem]">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-xl font-black text-gray-900 dark:text-white">
+              Bugungi <span className="text-blue-600">Qabullar</span>
+            </h3>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
+              {new Date().toLocaleDateString('uz-UZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-black rounded-full">
+              {todayAppointments.length} ta
+            </span>
+            <button
+              onClick={() => navigate('/calendar')}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all"
+            >
+              Hammasi <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {todayAppointments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+            <Calendar className="w-10 h-10 mb-3 opacity-30" />
+            <p className="text-sm font-medium">Bugun qabul yo'q</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-800">
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Vaqt</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Bemor</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Shifokor</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Xizmat</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Status</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Holat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todayAppointments.map(app => {
+                  const patient = patients.find(p => p.id === app.patientId);
+                  const hasDebt = patient?.balance !== undefined && patient.balance < 0;
+                  const hasLabWarning = overdueLabPatients.has(app.patientName);
+                  const doctorColor = doctors.find(d => d.id === app.doctorId)?.color || '#3B82F6';
+                  return (
+                    <tr
+                      key={app.id}
+                      className="border-b border-gray-50 dark:border-gray-800/60 last:border-0 hover:bg-gray-50/70 dark:hover:bg-gray-800/30 transition-colors group"
+                    >
+                      <td className="py-3.5 pr-4">
+                        <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">{app.time}</span>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <button
+                          onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
+                          className="text-sm font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left"
+                        >
+                          {app.patientName}
+                        </button>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: doctorColor }} />
+                          <span className="text-sm text-gray-600 dark:text-gray-300">{app.doctorName}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">{app.type}</span>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <Badge status={app.status} />
+                      </td>
+                      <td className="py-3.5">
+                        <div className="flex items-center gap-1.5">
+                          {hasDebt && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-black rounded-full border border-red-100 dark:border-red-900/30" title="Qarz bor">
+                              <AlertCircle className="w-3 h-3" /> Qarz
+                            </span>
+                          )}
+                          {hasLabWarning && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[10px] font-black rounded-full border border-amber-100 dark:border-amber-900/30" title="Lab buyurtma muddati o'tgan">
+                              <FlaskConical className="w-3 h-3" /> Lab
+                            </span>
+                          )}
+                          {!hasDebt && !hasLabWarning && (
+                            <span className="text-[10px] text-gray-300 dark:text-gray-600 font-medium">—</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
       {/* Charts Row - hidden for receptionist */}
       {!isReceptionist && (<>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -374,21 +529,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 <AreaChart data={trendData}>
                   <defs>
                     <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorAppts" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark:stroke="#374151" strokeOpacity={0.4} />
-                  <XAxis 
-                    dataKey="name" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 600 }} 
-                    dy={10} 
+                  <XAxis
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 600 }}
+                    dy={10}
                   />
                   <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 600 }} />
                   <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 600 }} />
@@ -397,24 +552,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
                     labelStyle={{ color: '#9CA3AF', marginBottom: '0.5rem', fontWeight: 'bold' }}
                   />
-                  <Area 
-                    yAxisId="left" 
-                    type="monotone" 
-                    dataKey="revenue" 
-                    stroke="#3B82F6" 
-                    strokeWidth={4} 
-                    fillOpacity={1} 
-                    fill="url(#colorRevenue)" 
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#3B82F6"
+                    strokeWidth={4}
+                    fillOpacity={1}
+                    fill="url(#colorRevenue)"
                     activeDot={{ r: 6, fill: '#3B82F6', stroke: '#fff', strokeWidth: 2 }}
                   />
-                  <Area 
-                    yAxisId="right" 
-                    type="monotone" 
-                    dataKey="appointments" 
-                    stroke="#10B981" 
-                    strokeWidth={4} 
-                    fillOpacity={1} 
-                    fill="url(#colorAppts)" 
+                  <Area
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="appointments"
+                    stroke="#10B981"
+                    strokeWidth={4}
+                    fillOpacity={1}
+                    fill="url(#colorAppts)"
                     activeDot={{ r: 6, fill: '#10B981', stroke: '#fff', strokeWidth: 2 }}
                   />
                 </AreaChart>
@@ -447,10 +602,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <Cell key={`cell - ${index} `} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Legend 
-                    verticalAlign="bottom" 
-                    height={36} 
-                    iconType="circle" 
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    iconType="circle"
                     formatter={(value) => <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{value}</span>}
                   />
                   <Tooltip
@@ -619,32 +774,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 {intensityView === 'month' ? "Joriy oy kunlari bo'yicha" : "Oxirgi 12 oy davomida"}
               </p>
             </div>
-            
+
             {/* View Toggle */}
             <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
               <button
                 onClick={() => setIntensityView('month')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                  intensityView === 'month' 
-                    ? 'bg-white dark:bg-gray-700 text-rose-600 shadow-sm' 
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${intensityView === 'month'
+                  ? 'bg-white dark:bg-gray-700 text-rose-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
               >
                 OYLIK
               </button>
               <button
                 onClick={() => setIntensityView('year')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                  intensityView === 'year' 
-                    ? 'bg-white dark:bg-gray-700 text-rose-600 shadow-sm' 
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${intensityView === 'year'
+                  ? 'bg-white dark:bg-gray-700 text-rose-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
               >
                 YILLIK
               </button>
             </div>
           </div>
-          
+
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={intensityData}>
@@ -655,27 +808,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark:stroke="#374151" strokeOpacity={0.4} />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#9CA3AF', fontSize: 9, fontWeight: 700 }} 
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#9CA3AF', fontSize: 9, fontWeight: 700 }}
                   interval={intensityView === 'month' ? 1 : 0}
                 />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 700 }} 
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 700 }}
                 />
                 <Tooltip
                   cursor={{ fill: 'rgba(0,0,0,0.05)', radius: [8, 8, 4, 4] }}
                   contentStyle={{ backgroundColor: '#1F2937', borderRadius: '12px', border: 'none', color: '#fff' }}
                   labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
                 />
-                <Bar 
-                  dataKey="count" 
-                  fill="url(#barGradient)" 
-                  radius={[8, 8, 4, 4]} 
+                <Bar
+                  dataKey="count"
+                  fill="url(#barGradient)"
+                  radius={[8, 8, 4, 4]}
                   barSize={intensityView === 'month' ? 12 : 32}
                 />
               </BarChart>
@@ -686,7 +839,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <AlertCircle className="w-4 h-4 text-rose-500" />
             </div>
             <p className="leading-relaxed">
-              {intensityView === 'year' 
+              {intensityView === 'year'
                 ? "Yillik tahlil klinika faolligini oylar kesimida ko'rsatadi. Kunlik tahlilga o'tish uchun tepadan 'OYLIK' tugmasini bosing."
                 : "Joriy oy uchun kunlik qabullar soni. Bu qaysi kunlarda klinika yuklamasi yuqori ekanini ko'rsatadi."}
             </p>

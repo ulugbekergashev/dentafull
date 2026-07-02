@@ -130,16 +130,16 @@ const AppContent: React.FC = () => {
   // Subscription Block Logic
   const isSubscriptionBlocked = useMemo(() => {
     if (!isAuthenticated || !currentClinic || userRole === UserRole.SUPER_ADMIN || userRole === UserRole.SALES_AGENT) return false;
-    
+
     // Check Status
     if (currentClinic.status === 'Blocked') return true;
-    
+
     // Check Expiry
     if (currentClinic.expiryDate) {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
       return currentClinic.expiryDate < today;
     }
-    
+
     return false;
   }, [isAuthenticated, currentClinic, userRole]);
 
@@ -380,8 +380,8 @@ const AppContent: React.FC = () => {
       const normalizedFirst = patient.firstName.trim().toLowerCase();
       const normalizedLast = patient.lastName.trim().toLowerCase();
       const isDuplicate = patients.some(
-        p => p.firstName.trim().toLowerCase() === normalizedFirst && 
-             p.lastName.trim().toLowerCase() === normalizedLast
+        p => p.firstName.trim().toLowerCase() === normalizedFirst &&
+          p.lastName.trim().toLowerCase() === normalizedLast
       );
 
       if (isDuplicate) {
@@ -483,7 +483,7 @@ const AppContent: React.FC = () => {
         if (prev.find(t => t.id === newTx.id)) return prev;
         return [newTx, ...prev];
       });
-      
+
       // If patientId is linked, refetch patient to get updated balance
       if (tx.patientId) {
         api.patients.getById(tx.patientId).then(updatedPatient => {
@@ -807,7 +807,7 @@ const AppContent: React.FC = () => {
   // Select navigation
   const CURRENT_NAVIGATION = userRole === UserRole.SUPER_ADMIN ? SUPER_ADMIN_NAVIGATION
     : userRole === UserRole.SALES_AGENT ? SALES_NAVIGATION
-    : CLINIC_NAVIGATION;
+      : CLINIC_NAVIGATION;
 
   // --- Main Render ---
   if (!isAuthenticated) {
@@ -954,11 +954,10 @@ const AppContent: React.FC = () => {
                 <button
                   key={lang}
                   onClick={() => setLanguage(lang)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-                    language === lang
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${language === lang
                       ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
                       : 'text-gray-500 dark:text-gray-400'
-                  }`}
+                    }`}
                 >
                   <img
                     src={lang === 'uz' ? 'https://flagcdn.com/w40/uz.png' : 'https://flagcdn.com/w40/ru.png'}
@@ -1113,11 +1112,10 @@ const AppContent: React.FC = () => {
                   <button
                     key={lang}
                     onClick={() => setLanguage(lang)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-                      language === lang
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${language === lang
                         ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                    }`}
+                      }`}
                   >
                     <img
                       src={lang === 'uz' ? 'https://flagcdn.com/w40/uz.png' : 'https://flagcdn.com/w40/ru.png'}
@@ -1236,6 +1234,8 @@ const AppContent: React.FC = () => {
                     doctorId={doctorId}
                     doctors={doctors}
                     leads={leads}
+                    labOrders={labOrders}
+                    onPatientClick={handlePatientClick}
                   />
                 } />
               )}
@@ -1257,18 +1257,18 @@ const AppContent: React.FC = () => {
 
               {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
                 <Route path="/leads" element={
-                <Leads
-                  leads={leads}
-                  doctors={doctors}
-                  categories={categories}
-                  services={services}
-                  currentClinic={currentClinic}
-                  onAddLead={addLead}
-                  onUpdateLead={updateLead}
-                  onDeleteLead={deleteLead}
-                  onConvertLead={convertLeadToPatient}
-                />
-              } />
+                  <Leads
+                    leads={leads}
+                    doctors={doctors}
+                    categories={categories}
+                    services={services}
+                    currentClinic={currentClinic}
+                    onAddLead={addLead}
+                    onUpdateLead={updateLead}
+                    onDeleteLead={deleteLead}
+                    onConvertLead={convertLeadToPatient}
+                  />
+                } />
               )}
 
               <Route path="/patients/:patientId" element={
@@ -1312,19 +1312,20 @@ const AppContent: React.FC = () => {
 
               {userRole === UserRole.CLINIC_ADMIN && (
                 <Route path="/finance" element={
-                <Finance
-                  userRole={userRole}
-                  transactions={transactions}
-                  appointments={appointments}
-                  services={services}
-                  patients={patients}
-                  onPatientClick={handlePatientClick}
-                  doctorId={doctorId}
-                  doctors={doctors}
-                  currentClinic={currentClinic}
-                  labOrders={labOrders}
-                />
-              } />
+                  <Finance
+                    userRole={userRole}
+                    transactions={transactions}
+                    appointments={appointments}
+                    services={services}
+                    patients={patients}
+                    onPatientClick={handlePatientClick}
+                    doctorId={doctorId}
+                    doctors={doctors}
+                    currentClinic={currentClinic}
+                    labOrders={labOrders}
+                    onAddTransaction={addTransaction}
+                  />
+                } />
               )}
 
               <Route path="/queue" element={
@@ -1351,64 +1352,64 @@ const AppContent: React.FC = () => {
               {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
                 <>
                   <Route path="/doctors" element={
-                <DoctorsAnalytics
-                  doctors={doctors}
-                  appointments={appointments}
-                  services={services}
-                  transactions={transactions}
-                  reviews={reviews}
-                />
-              } />
+                    <DoctorsAnalytics
+                      doctors={doctors}
+                      appointments={appointments}
+                      services={services}
+                      transactions={transactions}
+                      reviews={reviews}
+                    />
+                  } />
 
-              <Route path="/doctors/:doctorId" element={
-                <DoctorDetails
-                  doctorId="" // Will be handled by useParams in a wrapper or directly if we use useParams inside DoctorDetails, but wait, let's just make DoctorDetails use useParams or pass a wrapper.
-                  doctors={doctors}
-                  appointments={appointments}
-                  transactions={transactions}
-                  patients={patients}
-                  services={services}
-                  onBack={() => navigate('/doctors')}
-                  onPatientClick={handlePatientClick}
-                />
-              } />
+                  <Route path="/doctors/:doctorId" element={
+                    <DoctorDetails
+                      doctorId="" // Will be handled by useParams in a wrapper or directly if we use useParams inside DoctorDetails, but wait, let's just make DoctorDetails use useParams or pass a wrapper.
+                      doctors={doctors}
+                      appointments={appointments}
+                      transactions={transactions}
+                      patients={patients}
+                      services={services}
+                      onBack={() => navigate('/doctors')}
+                      onPatientClick={handlePatientClick}
+                    />
+                  } />
 
-              <Route path="/inventory" element={
-                <Inventory
-                  items={inventoryItems}
-                  userName={userName}
-                  onAddItem={addInventoryItem}
-                  onUpdateStock={updateInventoryStock}
-                  onDeleteItem={deleteInventoryItem}
-                />
-              } />
+                  <Route path="/inventory" element={
+                    <Inventory
+                      items={inventoryItems}
+                      userName={userName}
+                      onAddItem={addInventoryItem}
+                      onUpdateStock={updateInventoryStock}
+                      onDeleteItem={deleteInventoryItem}
+                    />
+                  } />
 
-              <Route path="/settings" element={
-                <Settings
-                  userRole={userRole}
-                  services={services}
-                  categories={categories}
-                  doctors={doctors}
-                  receptionists={receptionists}
-                  labTechnicians={labTechnicians}
-                  onAddService={addService}
-                  onUpdateService={updateService}
-                  onAddCategory={addCategory}
-                  onDeleteCategory={deleteCategory}
-                  onAddDoctor={addDoctor}
-                  onUpdateDoctor={updateDoctor}
-                  onDeleteDoctor={deleteDoctor}
-                  onAddReceptionist={addReceptionist}
-                  onUpdateReceptionist={updateReceptionist}
-                  onDeleteReceptionist={deleteReceptionist}
-                  onAddLabTechnician={addLabTechnician}
-                  onUpdateLabTechnician={updateLabTechnician}
-                  onDeleteLabTechnician={deleteLabTechnician}
-                  currentClinic={currentClinic}
-                  plans={plans}
-                  reviews={reviews}
-                />
-              } />
+                  <Route path="/settings" element={
+                    <Settings
+                      userRole={userRole}
+                      services={services}
+                      categories={categories}
+                      doctors={doctors}
+                      receptionists={receptionists}
+                      labTechnicians={labTechnicians}
+                      onAddService={addService}
+                      onUpdateService={updateService}
+                      onAddCategory={addCategory}
+                      onDeleteCategory={deleteCategory}
+                      onAddDoctor={addDoctor}
+                      onUpdateDoctor={updateDoctor}
+                      onDeleteDoctor={deleteDoctor}
+                      onAddReceptionist={addReceptionist}
+                      onUpdateReceptionist={updateReceptionist}
+                      onDeleteReceptionist={deleteReceptionist}
+                      onAddLabTechnician={addLabTechnician}
+                      onUpdateLabTechnician={updateLabTechnician}
+                      onDeleteLabTechnician={deleteLabTechnician}
+                      currentClinic={currentClinic}
+                      plans={plans}
+                      reviews={reviews}
+                    />
+                  } />
                 </>
               )}
 
