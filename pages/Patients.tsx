@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
-import { Search, Plus, MoreHorizontal, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity, User, Building } from 'lucide-react';
+import { Search, Plus, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity } from 'lucide-react';
 import { Patient, Doctor, Appointment, Transaction, Clinic } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { BulkSmsModal } from '../components/BulkSmsModal';
 
 interface PatientsProps {
   userRole: string;
@@ -47,8 +46,6 @@ export const Patients: React.FC<PatientsProps> = ({
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null);
-  const [isBulkSmsModalOpen, setIsBulkSmsModalOpen] = useState(false);
-  const [isBulkSending, setIsBulkSending] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -297,15 +294,6 @@ export const Patients: React.FC<PatientsProps> = ({
         
         <div className="flex flex-wrap gap-3 w-full lg:w-auto">
           <Button
-            variant="secondary"
-            className="flex-1 lg:flex-none justify-center gap-2 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all active:scale-95 py-2.5"
-            onClick={() => setIsBulkSmsModalOpen(true)}
-          >
-            <MoreHorizontal className="w-4 h-4" /> 
-            <span className="whitespace-nowrap">{t('patients.buttons.remind')}</span>
-          </Button>
-          
-          <Button 
             variant="secondary" 
             className="flex-1 lg:flex-none justify-center gap-2 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all active:scale-95 py-2.5"
             onClick={handleExport}
@@ -815,32 +803,6 @@ export const Patients: React.FC<PatientsProps> = ({
         </form>
       </Modal>
 
-      <BulkSmsModal 
-        isOpen={isBulkSmsModalOpen}
-        onClose={() => setIsBulkSmsModalOpen(false)}
-        title="Qarzdorlarga Eslatma Yuborish"
-        recipientCount={stats.debtors}
-        loading={isBulkSending}
-        defaultMessage={`💰 Qarzdorlikni eslatish!\n\nHurmatli {BEMOR}, sizning {KLINIKA} klinikasida {MIQDOR} UZS miqdorida to'lanmagan qarzingiz mavjud.\n\nIltimos, to'lovni amalga oshirishingizni so'raymiz!`}
-        placeholders={[
-          { key: '{BEMOR}', label: 'Bemor ismi', icon: User },
-          { key: '{MIQDOR}', label: 'Qarz miqdori', icon: Wallet },
-          { key: '{KLINIKA}', label: 'Klinika nomi', icon: Building },
-        ]}
-        onSend={async (msg) => {
-          setIsBulkSending(true);
-          try {
-            const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
-            const response = await api.batch.remindDebts(user.clinicId, [], msg);
-            alert(response.message || 'Eslatmalar yuborildi');
-            setIsBulkSmsModalOpen(false);
-          } catch (e: any) {
-            alert('Xatolik yuz berdi: ' + (e.message || 'Server error'));
-          } finally {
-            setIsBulkSending(false);
-          }
-        }}
-      />
     </div>
   );
 };

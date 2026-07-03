@@ -51,7 +51,6 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDebtorModalOpen, setIsDebtorModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Barchasi');
-  const [remindedDebtors, setRemindedDebtors] = useState<Set<string>>(new Set());
   const [selectedDebtorDoctorId, setSelectedDebtorDoctorId] = useState<string>('All');
 
   // To'lovlar | Xarajatlar tab
@@ -960,32 +959,9 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             </div>
           </div>
 
-          <div className="flex justify-end mb-4">
-            <Button onClick={async () => {
-              if (!confirm('Barcha qarzdorlarga eslatma yuborilsinmi?')) return;
-              try {
-                const getAuthData = () => {
-                  const local = localStorage.getItem('dentalflow_auth');
-                  if (local) return JSON.parse(local);
-                  const session = sessionStorage.getItem('dentalflow_auth');
-                  if (session) return JSON.parse(session);
-                  return null;
-                };
-
-                const auth = getAuthData();
-                if (!auth || !auth.clinicId) {
-                  alert('Klinika ma\'lumotlari topilmadi. Iltimos, qayta kiring.');
-                  return;
-                }
-                const response = await api.batch.remindDebts(auth.clinicId, filteredDebtors.map(d => ({ name: d.name, amount: d.amount })));
-                alert(response.message || 'Eslatmalar yuborildi');
-              } catch (e) {
-                alert('Xatolik yuz berdi');
-              }
-            }}>
-              <Bot className="w-4 h-4 mr-2" />
-              Barchasiga Eslatish
-            </Button>
+          <div className="flex items-center gap-2 px-4 py-3 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 rounded-xl text-sm text-blue-700 dark:text-blue-400">
+            <Bot className="w-4 h-4 shrink-0" />
+            <span>Qarzdorlarga ommaviy eslatma yuborish uchun <strong>Xabarlar → Qo'lda</strong> bo'limidan "Qarzdorlar" filtridan foydalaning.</span>
           </div>
           <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
             {filteredDebtors.map(d => (
@@ -1010,26 +986,6 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 <div className="text-right">
                   <p className="text-lg font-bold text-red-600">{d.amount.toLocaleString()} UZS</p>
                   <p className="text-xs text-red-500 font-medium">{d.days} kun kechikkan</p>
-                  {d.patientId && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className={`mt-2 ${remindedDebtors.has(d.patientId) ? 'bg-green-100 text-green-700 border-green-200' : ''}`}
-                      disabled={remindedDebtors.has(d.patientId)}
-                      onClick={async () => {
-                        try {
-                          await api.patients.remindDebt(d.patientId!, d.amount);
-                          setRemindedDebtors(prev => new Set(prev).add(d.patientId!));
-                          alert('Eslatma yuborildi!');
-                        } catch (e) {
-                          alert('Xatolik: Bemor botga ulanmagan bo\'lishi mumkin');
-                        }
-                      }}
-                    >
-                      <Bot className="w-3 h-3 mr-1" />
-                      {remindedDebtors.has(d.patientId) ? 'Eslatildi' : 'Eslatish'}
-                    </Button>
-                  )}
                 </div>
               </div>
             ))}

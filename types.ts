@@ -134,6 +134,48 @@ export interface Expense {
   createdAt?: string;
 }
 
+// ─── Xabarlar (yagona xabarlar tizimi) ───
+export type MessageChannel = 'sms' | 'telegram' | 'both';
+export type AutomationTrigger = 'before_appointment' | 'birthday' | 'no_show';
+
+export interface MessageTemplate {
+  id: string;
+  clinicId: string;
+  name: string;
+  text: string;
+  createdAt?: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  clinicId: string;
+  name: string;
+  templateId: string;
+  trigger: AutomationTrigger;
+  hoursBefore?: number | null;
+  channel: MessageChannel;
+  doctorId?: string | null;
+  active: boolean;
+  createdAt?: string;
+}
+
+export interface MessageLog {
+  id: string;
+  clinicId: string;
+  patientId?: string | null;
+  type: string;
+  status: 'Sent' | 'Failed';
+  message?: string | null;
+  error?: string | null;
+  sentAt: string;
+  channel: 'sms' | 'telegram';
+  source: string; // 'manual' | 'auto' | 'bulk' | 'debt' | 'birthday' | 'noshow' | 'retry'
+  ruleId?: string | null;
+  refId?: string | null;
+  recipient?: string | null;
+  patient?: { id: string; firstName: string; lastName: string; phone?: string } | null;
+}
+
 export interface InstallmentPlan {
   id: string;
   patientId: string;

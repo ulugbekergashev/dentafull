@@ -1,5 +1,5 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan } from '../types';
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, saveDemoData } from './demoData';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel } from '../types';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -865,16 +865,138 @@ export const api = {
         },
     },
     batch: {
-        remindAppointments: (clinicId: string, message?: string) => fetchJson<{ success: true; message: string }>('/batch/remind-appointments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clinicId, message }),
-        }),
-        remindDebts: (clinicId: string, debtors: any[], message?: string) => fetchJson<{ success: true; count: number; message?: string }>('/batch/remind-debts?clinicId=' + clinicId, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clinicId, debtors, message }),
-        }),
+        remindAppointments: (clinicId: string, message?: string) => {
+            if (isDemoMode()) return Promise.resolve({ success: true as const, message: 'Demo rejim: xabarlar yuborilmadi' });
+            return fetchJson<{ success: true; message: string }>('/batch/remind-appointments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, message }),
+            });
+        },
+        remindDebts: (clinicId: string, debtors: any[], message?: string) => {
+            if (isDemoMode()) return Promise.resolve({ success: true as const, count: 0, message: 'Demo rejim: xabarlar yuborilmadi' });
+            return fetchJson<{ success: true; count: number; message?: string }>('/batch/remind-debts?clinicId=' + clinicId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, debtors, message }),
+            });
+        },
+    },
+    messageTemplates: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_MESSAGE_TEMPLATES);
+            return fetchJson<MessageTemplate[]>(`/message-templates?clinicId=${clinicId}`);
+        },
+        create: (data: Omit<MessageTemplate, 'id'>) => {
+            if (isDemoMode()) {
+                const newTpl = { ...data, id: `demo-tpl-${Date.now()}`, createdAt: new Date().toISOString() } as MessageTemplate;
+                DEMO_MESSAGE_TEMPLATES.unshift(newTpl);
+                saveDemoData();
+                return Promise.resolve(newTpl);
+            }
+            return fetchJson<MessageTemplate>('/message-templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<MessageTemplate>) => {
+            if (isDemoMode()) {
+                const index = DEMO_MESSAGE_TEMPLATES.findIndex(t => t.id === id);
+                if (index !== -1) {
+                    DEMO_MESSAGE_TEMPLATES[index] = { ...DEMO_MESSAGE_TEMPLATES[index], ...data };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_MESSAGE_TEMPLATES[index]);
+                }
+                return Promise.reject('Template not found');
+            }
+            return fetchJson<MessageTemplate>(`/message-templates/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_MESSAGE_TEMPLATES.findIndex(t => t.id === id);
+                if (index !== -1) { DEMO_MESSAGE_TEMPLATES.splice(index, 1); saveDemoData(); }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/message-templates/${id}`, { method: 'DELETE' });
+        },
+    },
+    automationRules: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_AUTOMATION_RULES);
+            return fetchJson<AutomationRule[]>(`/automation-rules?clinicId=${clinicId}`);
+        },
+        create: (data: Omit<AutomationRule, 'id'>) => {
+            if (isDemoMode()) {
+                const newRule = { ...data, id: `demo-rule-${Date.now()}`, createdAt: new Date().toISOString() } as AutomationRule;
+                DEMO_AUTOMATION_RULES.unshift(newRule);
+                saveDemoData();
+                return Promise.resolve(newRule);
+            }
+            return fetchJson<AutomationRule>('/automation-rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<AutomationRule>) => {
+            if (isDemoMode()) {
+                const index = DEMO_AUTOMATION_RULES.findIndex(r => r.id === id);
+                if (index !== -1) {
+                    DEMO_AUTOMATION_RULES[index] = { ...DEMO_AUTOMATION_RULES[index], ...data };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_AUTOMATION_RULES[index]);
+                }
+                return Promise.reject('Rule not found');
+            }
+            return fetchJson<AutomationRule>(`/automation-rules/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_AUTOMATION_RULES.findIndex(r => r.id === id);
+                if (index !== -1) { DEMO_AUTOMATION_RULES.splice(index, 1); saveDemoData(); }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/automation-rules/${id}`, { method: 'DELETE' });
+        },
+    },
+    messages: {
+        sendBulk: (clinicId: string, patientIds: string[], message: string, channel: MessageChannel) => {
+            if (isDemoMode()) {
+                return Promise.resolve({ total: patientIds.length, sent: patientIds.length, failed: 0, details: [] as any[] });
+            }
+            return fetchJson<{ total: number; sent: number; failed: number; details: any[] }>('/messages/send-bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, patientIds, message, channel }),
+            });
+        },
+        getLogs: (clinicId: string, limit = 200) => {
+            if (isDemoMode()) {
+                const sent = DEMO_MESSAGE_LOGS.filter(l => l.status === 'Sent').length;
+                return Promise.resolve({
+                    logs: DEMO_MESSAGE_LOGS,
+                    stats: { total: DEMO_MESSAGE_LOGS.length, sent, failed: DEMO_MESSAGE_LOGS.length - sent }
+                });
+            }
+            return fetchJson<{ logs: MessageLog[]; stats: { total: number; sent: number; failed: number } }>(`/messages/logs?clinicId=${clinicId}&limit=${limit}`);
+        },
+        retry: (clinicId: string, logIds: string[]) => {
+            if (isDemoMode()) return Promise.resolve({ retried: logIds.length, success: logIds.length, failed: 0 });
+            return fetchJson<{ retried: number; success: number; failed: number }>('/messages/retry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, logIds }),
+            });
+        },
     },
     inventory: {
         getAll: (clinicId: string) => {

@@ -810,23 +810,40 @@ class BotManager {
         }
     }
 
-    public async notifyClinicUser(clinicId: string, chatId: string, message: string, patientId?: string, type: string = 'Manual', replyMarkup?: any) {
+    public async notifyClinicUser(
+        clinicId: string,
+        chatId: string,
+        message: string,
+        patientId?: string,
+        type: string = 'Manual',
+        replyMarkup?: any,
+        logExtra?: { source?: string; ruleId?: string; refId?: string }
+    ): Promise<{ success: boolean; error?: string }> {
         const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
-        if (!clinic || !clinic.botToken) return;
+        if (!clinic || !clinic.botToken) return { success: false, error: 'Bot sozlanmagan' };
+
+        const extra = {
+            channel: 'telegram',
+            source: logExtra?.source || 'manual',
+            ruleId: logExtra?.ruleId || null,
+            refId: logExtra?.refId || null,
+            recipient: chatId,
+        };
 
         const bot = this.bots.get(clinic.botToken);
-        if (bot) {
-            try {
-                await bot.telegram.sendMessage(chatId, message, replyMarkup ? { reply_markup: replyMarkup } : undefined);
-                await prisma.telegramLog.create({
-                    data: { clinicId, patientId, type, status: 'Sent', message }
-                });
-            } catch (e: any) {
-                console.error(`Failed to send message in clinic ${clinicId}:`, e);
-                await prisma.telegramLog.create({
-                    data: { clinicId, patientId, type, status: 'Failed', message, error: e.message }
-                });
-            }
+        if (!bot) return { success: false, error: 'Bot instance topilmadi' };
+        try {
+            await bot.telegram.sendMessage(chatId, message, replyMarkup ? { reply_markup: replyMarkup } : undefined);
+            await prisma.telegramLog.create({
+                data: { clinicId, patientId, type, status: 'Sent', message, ...extra }
+            });
+            return { success: true };
+        } catch (e: any) {
+            console.error(`Failed to send message in clinic ${clinicId}:`, e);
+            await prisma.telegramLog.create({
+                data: { clinicId, patientId, type, status: 'Failed', message, error: e.message, ...extra }
+            });
+            return { success: false, error: e.message };
         }
     }
 

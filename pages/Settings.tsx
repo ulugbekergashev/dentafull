@@ -47,7 +47,7 @@ export const Settings: React.FC<SettingsProps> = ({
    userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, currentClinic, plans, reviews
 }) => {
    const { t } = useLanguage();
-   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'bot' | 'facebook' | 'sms' | 'dmed'>('services');
+   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed'>('services');
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
    const [categoryForm, setCategoryForm] = useState({ name: '' });
@@ -211,7 +211,7 @@ export const Settings: React.FC<SettingsProps> = ({
             }
          }
       };
-      if (activeTab === 'sms') {
+      if (activeTab === 'messaging') {
           fetchSms();
       }
    }, [currentClinic?.id, activeTab]);
@@ -716,8 +716,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   { id: 'doctors', name: t('settings.tabs.doctors'), icon: Users },
                   { id: 'receptionists', name: t('settings.tabs.receptionists'), icon: Phone },
                   { id: 'labTechnicians', name: t('settings.tabs.labTechnicians'), icon: FlaskConical },
-                  { id: 'bot', name: t('settings.tabs.bot'), icon: Bot },
-                  { id: 'sms', name: "SMS Sozlamalari", icon: MessageSquare },
+                  { id: 'messaging', name: "SMS va Telegram", icon: MessageSquare },
                   { id: 'dmed', name: "DMED (IT-MED)", icon: Activity },
                ].map((item) => (
                   <button
@@ -816,6 +815,71 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="pt-4 flex items-center gap-4">
                               <Button type="submit">{t('common.save')}</Button>
                               {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
+                           </div>
+                        </form>
+                     </Card>
+
+                     {/* Prepayment Settings Card */}
+                     <Card className="p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                           <div className="p-3 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl text-emerald-600 dark:text-emerald-400">
+                              <DollarSign className="w-8 h-8" />
+                           </div>
+                           <div>
+                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Oldindan To'lov (Bron uchun)</h3>
+                              <p className="text-sm text-gray-500">Bemor bot orqali qabulga yozilganda oldindan to'lov talab qilish.</p>
+                           </div>
+                        </div>
+
+                        <form onSubmit={handlePrepaymentSave} className="space-y-5">
+                           <div className="bg-gray-50 dark:bg-gray-800/50 p-5 rounded-2xl border border-gray-100 dark:border-gray-700">
+                              <label className="flex items-center justify-between cursor-pointer">
+                                 <div>
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Oldindan to'lovni yoqish</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Yoqilsa, bemor qabulga yozilgandan keyin to'lov cheki yuborishi shart bo'ladi</p>
+                                 </div>
+                                 <div className="relative w-12 h-6 flex-shrink-0">
+                                    <input
+                                       type="checkbox"
+                                       className="sr-only"
+                                       checked={prepaymentForm.prepaymentEnabled}
+                                       onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentEnabled: e.target.checked })}
+                                    />
+                                    <div className={`w-12 h-6 rounded-full transition-colors ${prepaymentForm.prepaymentEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                                       <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prepaymentForm.prepaymentEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </div>
+                                 </div>
+                              </label>
+                           </div>
+
+                           {prepaymentForm.prepaymentEnabled && (
+                              <div className="space-y-4">
+                                 <Input
+                                    label="Karta raqami"
+                                    value={prepaymentForm.prepaymentCardNumber}
+                                    onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentCardNumber: e.target.value })}
+                                    placeholder="8600 1234 5678 9012"
+                                 />
+                                 <Input
+                                    label="Bron summasi (so'm)"
+                                    type="number"
+                                    value={prepaymentForm.prepaymentAmount === 0 ? '' : String(prepaymentForm.prepaymentAmount)}
+                                    onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentAmount: Number(e.target.value) })}
+                                    placeholder="50000"
+                                 />
+                                 <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Bemor to'lov chekini (rasm yoki fayl) telegram bot orqali yuborganda, bu chek admin telegram chatiga avtomatik yuboriladi.
+                                 </p>
+                              </div>
+                           )}
+
+                           <div className="flex items-center gap-4">
+                              <Button type="submit" variant="primary">Saqlash</Button>
+                              {prepaymentSaved && (
+                                 <span className="text-green-600 text-sm flex items-center gap-1">
+                                    <CheckCircle className="w-4 h-4" /> Saqlandi
+                                 </span>
+                              )}
                            </div>
                         </form>
                      </Card>
@@ -1161,8 +1225,8 @@ export const Settings: React.FC<SettingsProps> = ({
                   </Card>
                )}
 
-               {/* Bot Tab */}
-               {activeTab === 'bot' && (
+               {/* SMS va Telegram Tab (birlashtirilgan) */}
+               {activeTab === 'messaging' && (
                   <div className="space-y-6">
                   <Card className="p-6">
                      <div className="flex items-center gap-4 mb-6">
@@ -1183,11 +1247,11 @@ export const Settings: React.FC<SettingsProps> = ({
                            </p>
 
                            <form onSubmit={handleBotSave} className="space-y-4">
-                              <Input 
-                                 label="Telegram Bot Token" 
-                                 value={botToken} 
-                                 onChange={e => setBotToken(e.target.value)} 
-                                 placeholder="7451241151:AAEi-y2F4_abcdefghijklmnopqrst..." 
+                              <Input
+                                 label="Telegram Bot Token"
+                                 value={botToken}
+                                 onChange={e => setBotToken(e.target.value)}
+                                 placeholder="7451241151:AAEi-y2F4_abcdefghijklmnopqrst..."
                               />
                               <div className="flex items-center gap-4">
                                  <Button type="submit">{t('common.save')}</Button>
@@ -1215,76 +1279,6 @@ export const Settings: React.FC<SettingsProps> = ({
                      </div>
                   </Card>
 
-                  {/* Prepayment Settings Card */}
-                  <Card className="p-6 mt-6">
-                     <div className="flex items-center gap-4 mb-6">
-                        <div className="p-3 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl text-emerald-600 dark:text-emerald-400">
-                           <DollarSign className="w-8 h-8" />
-                        </div>
-                        <div>
-                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">Oldindan To'lov (Bron uchun)</h3>
-                           <p className="text-sm text-gray-500">Bemor bot orqali qabulga yozilganda oldindan to'lov talab qilish.</p>
-                        </div>
-                     </div>
-
-                     <form onSubmit={handlePrepaymentSave} className="space-y-5">
-                        <div className="bg-gray-50 dark:bg-gray-800/50 p-5 rounded-2xl border border-gray-100 dark:border-gray-700">
-                           <label className="flex items-center justify-between cursor-pointer">
-                              <div>
-                                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Oldindan to'lovni yoqish</p>
-                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Yoqilsa, bemor qabulga yozilgandan keyin to'lov cheki yuborishi shart bo'ladi</p>
-                              </div>
-                              <div className="relative w-12 h-6 flex-shrink-0">
-                                 <input
-                                    type="checkbox"
-                                    className="sr-only"
-                                    checked={prepaymentForm.prepaymentEnabled}
-                                    onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentEnabled: e.target.checked })}
-                                 />
-                                 <div className={`w-12 h-6 rounded-full transition-colors ${prepaymentForm.prepaymentEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prepaymentForm.prepaymentEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                                 </div>
-                              </div>
-                           </label>
-                        </div>
-
-                        {prepaymentForm.prepaymentEnabled && (
-                           <div className="space-y-4">
-                              <Input
-                                 label="Karta raqami"
-                                 value={prepaymentForm.prepaymentCardNumber}
-                                 onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentCardNumber: e.target.value })}
-                                 placeholder="8600 1234 5678 9012"
-                              />
-                              <Input
-                                 label="Bron summasi (so'm)"
-                                 type="number"
-                                 value={prepaymentForm.prepaymentAmount === 0 ? '' : String(prepaymentForm.prepaymentAmount)}
-                                 onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentAmount: Number(e.target.value) })}
-                                 placeholder="50000"
-                              />
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                 Bemor to'lov chekini (rasm yoki fayl) telegram bot orqali yuborganda, bu chek admin telegram chatiga avtomatik yuboriladi.
-                              </p>
-                           </div>
-                        )}
-
-                        <div className="flex items-center gap-4">
-                           <Button type="submit" variant="primary">Saqlash</Button>
-                           {prepaymentSaved && (
-                              <span className="text-green-600 text-sm flex items-center gap-1">
-                                 <CheckCircle className="w-4 h-4" /> Saqlandi
-                              </span>
-                           )}
-                        </div>
-                     </form>
-                  </Card>
-                  </div>
-               )}
-
-               {/* SMS Tab */}
-               {activeTab === 'sms' && (
-                  <div className="space-y-6">
                      <Card className="p-6">
                         <div className="flex items-center gap-4 mb-6">
                            <div className="p-3 bg-purple-100 dark:bg-purple-900/40 rounded-xl text-purple-600 dark:text-purple-400">
@@ -1297,7 +1291,8 @@ export const Settings: React.FC<SettingsProps> = ({
                         </div>
                         <form onSubmit={handleSmsSave} className="space-y-8">
                            <div>
-                              <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">1. Rejimni tanlang</h4>
+                              <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">1. Standart kanalni tanlang</h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">Bu rejim Xabarlar bo'limidagi "avtomatik" (auto) yuborishlar uchun standart kanal sifatida ishlatiladi.</p>
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                  <label className={`relative flex cursor-pointer rounded-lg border bg-white dark:bg-gray-800 p-4 shadow-sm focus:outline-none ${smsForm.notificationMode === 'telegram_only' ? 'border-purple-500 ring-1 ring-purple-500' : 'border-gray-300 dark:border-gray-700'}`}>
                                     <input 

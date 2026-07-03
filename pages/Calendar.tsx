@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { Card, Button, Modal, Input, Select, Badge, SearchableSelect } from '../components/Common';
-import { 
-  ChevronLeft, ChevronRight, Plus, Clock, User, FileText, 
-  XCircle, CheckCircle, Bot, Send, Bell, Edit2, Loader2, 
-  Search, Building, Calendar as CalendarIcon 
+import {
+  ChevronLeft, ChevronRight, Plus, Clock, User, FileText,
+  XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
+  Search
 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { BulkSmsModal } from '../components/BulkSmsModal';
 
 interface CalendarProps {
   appointments: Appointment[];
@@ -51,8 +50,6 @@ export const Calendar: React.FC<CalendarProps> = ({
   // Message Modal State
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
   const [messageText, setMessageText] = useState('');
-  const [isBulkSmsModalOpen, setIsBulkSmsModalOpen] = useState(false);
-  const [isBulkSending, setIsBulkSending] = useState(false);
   const [messageType, setMessageType] = useState('Custom');
   const [messagePatientId, setMessagePatientId] = useState<string | null>(null);
 
@@ -490,12 +487,6 @@ export const Calendar: React.FC<CalendarProps> = ({
           </div>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          <Button
-            variant="secondary"
-            onClick={() => setIsBulkSmsModalOpen(true)}
-          >
-            <Bot className="w-4 h-4 mr-2" /> {t('calendar.sendReminder')}
-          </Button>
           <Button onClick={openAddModal} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>
         </div>
       </div>
@@ -1101,39 +1092,6 @@ export const Calendar: React.FC<CalendarProps> = ({
         </form>
       </Modal>
 
-      {/* Bulk SMS Modal */}
-      <BulkSmsModal 
-        isOpen={isBulkSmsModalOpen}
-        onClose={() => setIsBulkSmsModalOpen(false)}
-        title="Qabullarga Eslatma Yuborish"
-        recipientCount={appointments.filter(a => {
-          const tomorrow = new Date();
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          return a.date === tomorrow.toISOString().split('T')[0] && (a.status === 'Confirmed' || a.status === 'Pending');
-        }).length}
-        loading={isBulkSending}
-        defaultMessage={`🔔 Eslatma!\n\nHurmatli {BEMOR}, sizning ertaga {SANA} kuni soat {VAQT} da {DOKTOR} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`}
-        placeholders={[
-          { key: '{BEMOR}', label: 'Bemor ismi', icon: User },
-          { key: '{VAQT}', label: 'Qabul vaqti', icon: Clock },
-          { key: '{SANA}', label: 'Sana', icon: CalendarIcon },
-          { key: '{DOKTOR}', label: 'Shifokor ismi', icon: Building },
-          { key: '{KLINIKA}', label: 'Klinika nomi', icon: Building },
-        ]}
-        onSend={async (msg) => {
-          setIsBulkSending(true);
-          try {
-            const user = JSON.parse(localStorage.getItem('dentalflow_user') || '{}');
-            const response = await api.batch.remindAppointments(user.clinicId, msg);
-            alert(response.message || 'Eslatmalar yuborildi');
-            setIsBulkSmsModalOpen(false);
-          } catch (e: any) {
-            alert('Xatolik yuz berdi: ' + (e.message || 'Server error'));
-          } finally {
-            setIsBulkSending(false);
-          }
-        }}
-      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog } from '../types';
 
 // --- PERSISTENCE HELPERS ---
 const STORAGE_KEY = 'dentalflow_demo_data';
@@ -45,7 +45,10 @@ export const saveDemoData = () => {
             installments: DEMO_INSTALLMENTS,
             labTechnicians: DEMO_LAB_TECHNICIANS,
             labOrders: DEMO_LAB_ORDERS,
-            expenses: DEMO_EXPENSES
+            expenses: DEMO_EXPENSES,
+            messageTemplates: DEMO_MESSAGE_TEMPLATES,
+            automationRules: DEMO_AUTOMATION_RULES,
+            messageLogs: DEMO_MESSAGE_LOGS
         };
         const stringified = JSON.stringify(data);
         localStorage.setItem(STORAGE_KEY, stringified);
@@ -372,6 +375,48 @@ export let DEMO_EXPENSES: Expense[] = savedData?.expenses || [
         method: 'Cash',
         clinicId: 'demo-clinic-1',
         doctorId: 'demo-doctor-1',
+    },
+];
+
+// Demo Xabarlar (Messages)
+export let DEMO_MESSAGE_TEMPLATES: MessageTemplate[] = savedData?.messageTemplates || [
+    {
+        id: 'demo-tpl-1',
+        clinicId: 'demo-clinic-1',
+        name: 'Qabul eslatmasi',
+        text: "Hurmatli {bemor_ismi}, qabulingiz {sana} kuni {vaqt} da. {klinika_nomi}",
+        createdAt: new Date('2026-01-10').toISOString(),
+    },
+];
+
+export let DEMO_AUTOMATION_RULES: AutomationRule[] = savedData?.automationRules || [
+    {
+        id: 'demo-rule-1',
+        clinicId: 'demo-clinic-1',
+        name: 'Qabuldan 2 soat oldin eslatma',
+        templateId: 'demo-tpl-1',
+        trigger: 'before_appointment',
+        hoursBefore: 2,
+        channel: 'telegram',
+        doctorId: null,
+        active: true,
+        createdAt: new Date('2026-01-10').toISOString(),
+    },
+];
+
+export let DEMO_MESSAGE_LOGS: MessageLog[] = savedData?.messageLogs || [
+    {
+        id: 'demo-log-msg-1',
+        clinicId: 'demo-clinic-1',
+        patientId: 'demo-patient-1',
+        type: 'Manual',
+        status: 'Sent',
+        message: 'Hurmatli Aziza, qabulingiz eslatmasi.',
+        sentAt: new Date('2026-01-27T10:00:00').toISOString(),
+        channel: 'telegram',
+        source: 'manual',
+        recipient: '123456789',
+        patient: { id: 'demo-patient-1', firstName: 'Aziza', lastName: 'Rahimova', phone: '+998901234567' },
     },
 ];
 

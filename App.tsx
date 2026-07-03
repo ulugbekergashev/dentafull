@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
@@ -22,6 +22,7 @@ import { DoctorDetails } from './pages/DoctorDetails';
 import { Inventory } from './pages/Inventory';
 import { OnlineQueue } from './pages/OnlineQueue';
 import { LabOrders } from './pages/LabOrders';
+import { MessagesManagement } from './pages/MessagesManagement';
 import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
@@ -42,6 +43,7 @@ const CLINIC_NAVIGATION = [
   { id: 'inventory', labelKey: 'inventory.title', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'queue', labelKey: 'nav.queue', icon: ListOrdered, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST, UserRole.DOCTOR] },
   { id: 'lab', labelKey: 'nav.lab', icon: FlaskConical, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.LAB_TECHNICIAN] },
+  { id: 'messages', labelKey: 'nav.messages', icon: MessageSquare, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'settings', labelKey: 'nav.settings', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
 ];
 
@@ -65,6 +67,7 @@ const getPageLabelKey = (pathname: string): any => {
   if (pathname === '/inventory') return 'inventory.title';
   if (pathname === '/queue') return 'nav.queue';
   if (pathname === '/lab') return 'nav.lab';
+  if (pathname === '/messages') return 'nav.messages';
   if (pathname === '/settings') return 'nav.settings';
   if (pathname === '/admin') return 'nav.saas';
   return 'nav.dashboard';
@@ -1438,6 +1441,18 @@ const AppContent: React.FC = () => {
                       onAddItem={addInventoryItem}
                       onUpdateStock={updateInventoryStock}
                       onDeleteItem={deleteInventoryItem}
+                    />
+                  } />
+
+                  <Route path="/messages" element={
+                    <MessagesManagement
+                      clinicId={clinicId}
+                      currentClinic={currentClinic}
+                      patients={patients}
+                      doctors={doctors}
+                      appointments={appointments}
+                      transactions={transactions}
+                      addToast={addToast}
                     />
                   } />
 

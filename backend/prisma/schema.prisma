@@ -300,6 +300,8 @@ model Clinic {
   labTechnicians          LabTechnician[]
   labOrders               LabOrder[]
   expenses                Expense[]
+  messageTemplates        MessageTemplate[]
+  automationRules         AutomationRule[]
 
   @@index([botToken])
 }
@@ -419,11 +421,46 @@ model TelegramLog {
   message   String?
   error     String?
   sentAt    DateTime @default(now())
+  channel   String   @default("telegram")
+  source    String   @default("manual")
+  ruleId    String?
+  refId     String?
+  recipient String?
   clinic    Clinic   @relation(fields: [clinicId], references: [id])
   patient   Patient? @relation(fields: [patientId], references: [id])
 
   @@index([clinicId])
   @@index([patientId])
+  @@index([ruleId, refId])
+}
+
+model MessageTemplate {
+  id        String           @id @default(uuid())
+  clinicId  String
+  name      String
+  text      String
+  createdAt DateTime         @default(now())
+  clinic    Clinic           @relation(fields: [clinicId], references: [id])
+  rules     AutomationRule[]
+
+  @@index([clinicId])
+}
+
+model AutomationRule {
+  id          String          @id @default(uuid())
+  clinicId    String
+  name        String
+  templateId  String
+  trigger     String // 'before_appointment' | 'birthday' | 'no_show'
+  hoursBefore Int?
+  channel     String // 'sms' | 'telegram' | 'both'
+  doctorId    String?
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  clinic      Clinic          @relation(fields: [clinicId], references: [id])
+  template    MessageTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([clinicId])
 }
 
 model InstallmentPlan {

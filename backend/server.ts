@@ -241,42 +241,108 @@ const canAccessClinic = (req: any, clinicId: string): boolean => {
     return u?.clinicId === clinicId;
 };
 
-// ─── Markaziy xabar yuborish funksiyasi ───────────────────────────────────────
-// notificationMode ga qarab Telegram va/yoki SMS orqali xabar yuboradi.
+// ─── Markaziy (yagona) xabar yuborish funksiyasi ─────────────────────────────
+// Barcha kanallar (Telegram/SMS) shu yerdan o'tadi va yagona TelegramLog tarixiga yoziladi.
+type UnifiedSendOpts = {
+    channel: 'sms' | 'telegram' | 'both' | 'auto'; // 'auto' = clinic.notificationMode bo'yicha
+    source?: string;   // 'manual' | 'auto' | 'debt' | 'birthday' | 'noshow' | 'bulk' | 'retry'...
+    ruleId?: string;   // AutomationRule dedupe uchun
+    refId?: string;    // masalan appointmentId
+    type?: string;     // TelegramLog.type (eski maydon)
+    replyMarkup?: any;
+};
+
+async function sendUnified(
+    clinic: any,
+    patient: { firstName: string; lastName?: string; telegramChatId?: string | null; phone?: string | null; id?: string | null },
+    message: string,
+    opts: UnifiedSendOpts
+): Promise<{ success: boolean; error?: string }> {
+    const mode = clinic.notificationMode || 'telegram_only';
+    let channel = opts.channel;
+    if (channel === 'auto') {
+        channel = mode === 'sms_only' ? 'sms' : mode === 'both' ? 'both' : 'telegram';
+    }
+    const patientName = `${patient.firstName} ${patient.lastName || ''}`.trim();
+    const logExtra = { source: opts.source || 'manual', ruleId: opts.ruleId, refId: opts.refId };
+    const logType = opts.type || 'Manual';
+
+    let attempted = false;
+    let anySuccess = false;
+    let lastError: string | undefined;
+
+    // Telegram
+    if ((channel === 'telegram' || channel === 'both') && clinic.botToken && patient.telegramChatId) {
+        attempted = true;
+        const result = await botManager.notifyClinicUser(clinic.id, patient.telegramChatId, message, patient.id || undefined, logType, opts.replyMarkup, logExtra);
+        if (result.success) anySuccess = true; else lastError = result.error;
+        console.log(`[Notification] Telegram ${result.success ? 'sent' : 'FAILED'} → ${patientName}`);
+    }
+
+    // SMS
+    if ((channel === 'sms' || channel === 'both') && clinic.eskizEmail && patient.phone) {
+        attempted = true;
+        try {
+            const result = await smsService.sendSms(clinic.id, patient.phone, message);
+            await prisma.telegramLog.create({
+                data: {
+                    clinicId: clinic.id,
+                    patientId: patient.id || null,
+                    type: logType,
+                    status: result.success ? 'Sent' : 'Failed',
+                    message,
+                    error: result.success ? null : (result.error || 'SMS yuborilmadi'),
+                    channel: 'sms',
+                    source: logExtra.source,
+                    ruleId: logExtra.ruleId || null,
+                    refId: logExtra.refId || null,
+                    recipient: patient.phone,
+                }
+            }).catch((err: any) => console.error('SMS log error:', err));
+            if (result.success) anySuccess = true; else lastError = result.error;
+            console.log(`[Notification] SMS ${result.success ? 'sent' : 'FAILED'} → ${patientName}`);
+        } catch (e: any) {
+            lastError = e.message;
+            console.error(`[Notification] SMS exception for ${patientName}:`, e.message);
+        }
+    }
+
+    // Hech qaysi kanal urinilmagan bo'lsa — sababi bilan Failed log yoziladi (tarixda ko'rinishi uchun)
+    if (!attempted) {
+        const reason = channel === 'sms'
+            ? (!clinic.eskizEmail ? 'Eskiz SMS ulanmagan' : 'Bemorda telefon raqami yo\'q')
+            : channel === 'telegram'
+                ? (!clinic.botToken ? 'Telegram bot sozlanmagan' : 'Bemor botga ulanmagan')
+                : 'Aloqa kanali mavjud emas';
+        await prisma.telegramLog.create({
+            data: {
+                clinicId: clinic.id,
+                patientId: patient.id || null,
+                type: logType,
+                status: 'Failed',
+                message,
+                error: reason,
+                channel: channel === 'both' ? 'telegram' : channel,
+                source: logExtra.source,
+                ruleId: logExtra.ruleId || null,
+                refId: logExtra.refId || null,
+                recipient: patient.phone || patient.telegramChatId || null,
+            }
+        }).catch((err: any) => console.error('Skip log error:', err));
+        return { success: false, error: reason };
+    }
+
+    return { success: anySuccess, error: anySuccess ? undefined : lastError };
+}
+
+// Eski nom bilan moslik: notificationMode bo'yicha yuboradi
 async function sendNotification(
     clinic: any,
     patient: { firstName: string; lastName?: string; telegramChatId?: string | null; phone?: string | null; id?: string | null },
     message: string,
     replyMarkup?: any
 ): Promise<void> {
-    const mode = clinic.notificationMode || 'telegram_only';
-    const patientName = `${patient.firstName} ${patient.lastName || ''}`.trim();
-    
-    console.log(`[Notification] Target: ${patientName}, Mode: ${mode}`);
-
-    // Telegram
-    if ((mode === 'telegram_only' || mode === 'both') && clinic.botToken && patient.telegramChatId) {
-        try {
-            await botManager.notifyClinicUser(clinic.id, patient.telegramChatId, message, patient.id || undefined, 'Manual', replyMarkup);
-            console.log(`[Notification] Telegram sent to ${patientName}`);
-        } catch (e: any) {
-            console.error(`[Notification] Telegram failed for ${patientName}:`, e.message);
-        }
-    }
-
-    // SMS
-    if ((mode === 'sms_only' || mode === 'both') && clinic.eskizEmail && patient.phone) {
-        try {
-            const result = await smsService.sendSms(clinic.id, patient.phone, message);
-            if (result.success) {
-                console.log(`[Notification] SMS sent to ${patientName} via Eskiz`);
-            } else {
-                console.error(`[Notification] SMS failed for ${patientName}:`, result.error);
-            }
-        } catch (e: any) {
-            console.error(`[Notification] SMS exception for ${patientName}:`, e.message);
-        }
-    }
+    await sendUnified(clinic, patient, message, { channel: 'auto', replyMarkup });
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -384,6 +450,260 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
         }
     } catch (error: any) {
         res.status(500).json({ error: 'Test SMS yuborishda xatolik: ' + error.message });
+    }
+});
+
+// ─── Xabarlar: Shablonlar / Avto qoidalar / Bulk yuborish / Tarix ───────────
+
+const AUTOMATION_TRIGGERS = ['before_appointment', 'birthday', 'no_show'];
+const MESSAGE_CHANNELS = ['sms', 'telegram', 'both'];
+
+// Templates CRUD
+app.get('/api/message-templates', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const templates = await prisma.messageTemplate.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(templates);
+    } catch (error) {
+        res.status(500).json({ error: 'Shablonlarni olishda xatolik' });
+    }
+});
+
+app.post('/api/message-templates', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { name, text } = req.body;
+        if (!name || !text) return res.status(400).json({ error: 'Nomi va matni kiritilishi shart' });
+        const template = await prisma.messageTemplate.create({
+            data: { name, text, clinicId: clinicId as string }
+        });
+        res.json(template);
+    } catch (error) {
+        res.status(500).json({ error: 'Shablonni saqlashda xatolik' });
+    }
+});
+
+app.put('/api/message-templates/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
+        const { name, text } = req.body;
+        const template = await prisma.messageTemplate.update({
+            where: { id: req.params.id },
+            data: {
+                ...(name !== undefined && { name }),
+                ...(text !== undefined && { text }),
+            }
+        });
+        res.json(template);
+    } catch (error) {
+        res.status(500).json({ error: 'Shablonni yangilashda xatolik' });
+    }
+});
+
+app.delete('/api/message-templates/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
+        const usedByRules = await prisma.automationRule.count({ where: { templateId: req.params.id } });
+        if (usedByRules > 0) {
+            return res.status(400).json({ error: 'Bu shablon avtomatik qoidada ishlatilmoqda. Avval qoidani o\'chiring.' });
+        }
+        await prisma.messageTemplate.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Shablonni o\'chirishda xatolik' });
+    }
+});
+
+// Automation rules CRUD
+app.get('/api/automation-rules', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const rules = await prisma.automationRule.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(rules);
+    } catch (error) {
+        res.status(500).json({ error: 'Qoidalarni olishda xatolik' });
+    }
+});
+
+app.post('/api/automation-rules', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { name, templateId, trigger, hoursBefore, channel, doctorId } = req.body;
+        if (!name || !templateId) return res.status(400).json({ error: 'Qoida nomi va shablon tanlanishi shart' });
+        if (!AUTOMATION_TRIGGERS.includes(trigger)) return res.status(400).json({ error: 'Noto\'g\'ri trigger turi' });
+        if (!MESSAGE_CHANNELS.includes(channel)) return res.status(400).json({ error: 'Noto\'g\'ri kanal' });
+        const template = await prisma.messageTemplate.findUnique({ where: { id: templateId } });
+        if (!template || template.clinicId !== clinicId) return res.status(400).json({ error: 'Shablon topilmadi' });
+
+        const rule = await prisma.automationRule.create({
+            data: {
+                name,
+                templateId,
+                trigger,
+                hoursBefore: trigger === 'before_appointment' ? (parseInt(hoursBefore) || 2) : null,
+                channel,
+                doctorId: doctorId || null,
+                clinicId: clinicId as string,
+            }
+        });
+        res.json(rule);
+    } catch (error) {
+        console.error('Automation rule create error:', error);
+        res.status(500).json({ error: 'Qoidani saqlashda xatolik' });
+    }
+});
+
+app.put('/api/automation-rules/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'automationRule', req.params.id))) return;
+        const { name, templateId, trigger, hoursBefore, channel, doctorId, active } = req.body;
+        if (trigger !== undefined && !AUTOMATION_TRIGGERS.includes(trigger)) return res.status(400).json({ error: 'Noto\'g\'ri trigger turi' });
+        if (channel !== undefined && !MESSAGE_CHANNELS.includes(channel)) return res.status(400).json({ error: 'Noto\'g\'ri kanal' });
+        const rule = await prisma.automationRule.update({
+            where: { id: req.params.id },
+            data: {
+                ...(name !== undefined && { name }),
+                ...(templateId !== undefined && { templateId }),
+                ...(trigger !== undefined && { trigger }),
+                ...(hoursBefore !== undefined && { hoursBefore: parseInt(hoursBefore) || null }),
+                ...(channel !== undefined && { channel }),
+                ...(doctorId !== undefined && { doctorId: doctorId || null }),
+                ...(active !== undefined && { active: !!active }),
+            }
+        });
+        res.json(rule);
+    } catch (error) {
+        res.status(500).json({ error: 'Qoidani yangilashda xatolik' });
+    }
+});
+
+app.delete('/api/automation-rules/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'automationRule', req.params.id))) return;
+        await prisma.automationRule.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Qoidani o\'chirishda xatolik' });
+    }
+});
+
+// Qo'lda bulk yuborish: tanlangan bemorlarga shaxsiylashtirilgan xabar
+app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { patientIds, message, channel } = req.body;
+        if (!Array.isArray(patientIds) || patientIds.length === 0) return res.status(400).json({ error: 'Bemorlar tanlanmagan' });
+        if (!message || !message.trim()) return res.status(400).json({ error: 'Xabar matni bo\'sh' });
+        if (!MESSAGE_CHANNELS.includes(channel)) return res.status(400).json({ error: 'Noto\'g\'ri kanal' });
+
+        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId as string } });
+        if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+
+        const patients = await prisma.patient.findMany({
+            where: { id: { in: patientIds }, clinicId: clinicId as string }
+        });
+
+        // {qarz} uchun: Pending tranzaksiyalar + faol bo'lib to'lash qoldiqlari
+        const pendingTx = await prisma.transaction.findMany({
+            where: { clinicId: clinicId as string, status: 'Pending', patientId: { in: patientIds } },
+            select: { patientId: true, amount: true }
+        });
+        const activePlans = await prisma.installmentPlan.findMany({
+            where: { clinicId: clinicId as string, status: 'Active', patientId: { in: patientIds } },
+            select: { patientId: true, totalAmount: true, totalPaid: true }
+        });
+        const debtMap = new Map<string, number>();
+        pendingTx.forEach((t: any) => { if (t.patientId) debtMap.set(t.patientId, (debtMap.get(t.patientId) || 0) + t.amount); });
+        activePlans.forEach((p: any) => debtMap.set(p.patientId, (debtMap.get(p.patientId) || 0) + Math.max(0, p.totalAmount - p.totalPaid)));
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        let sent = 0;
+        let failed = 0;
+        const details: any[] = [];
+
+        for (const patient of patients) {
+            const personalized = processTemplate(message, {
+                patientName: `${patient.firstName} ${patient.lastName}`,
+                firstName: patient.firstName,
+                lastName: patient.lastName,
+                date: todayStr,
+                clinicName: clinic.name,
+                amount: debtMap.get(patient.id) || 0,
+            });
+            const result = await sendUnified(clinic, patient, personalized, { channel, source: 'bulk', type: 'Bulk' });
+            if (result.success) sent++; else failed++;
+            details.push({ patientId: patient.id, name: `${patient.firstName} ${patient.lastName}`, success: result.success, error: result.error });
+        }
+
+        res.json({ total: patients.length, sent, failed, details });
+    } catch (error: any) {
+        console.error('Bulk send error:', error);
+        res.status(500).json({ error: 'Xabarlarni yuborishda xatolik' });
+    }
+});
+
+// Yagona tarix (Telegram + SMS) + statistika
+app.get('/api/messages/logs', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const limit = Math.min(parseInt(req.query.limit as string) || 200, 500);
+        const [logs, total, sentCount, failedCount] = await Promise.all([
+            prisma.telegramLog.findMany({
+                where: { clinicId: clinicId as string },
+                include: { patient: { select: { id: true, firstName: true, lastName: true, phone: true } } },
+                orderBy: { sentAt: 'desc' },
+                take: limit
+            }),
+            prisma.telegramLog.count({ where: { clinicId: clinicId as string } }),
+            prisma.telegramLog.count({ where: { clinicId: clinicId as string, status: 'Sent' } }),
+            prisma.telegramLog.count({ where: { clinicId: clinicId as string, status: 'Failed' } }),
+        ]);
+        res.json({ logs, stats: { total, sent: sentCount, failed: failedCount } });
+    } catch (error) {
+        res.status(500).json({ error: 'Tarixni olishda xatolik' });
+    }
+});
+
+// Xato xabarlarni qayta yuborish
+app.post('/api/messages/retry', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { logIds } = req.body;
+        if (!Array.isArray(logIds) || logIds.length === 0) return res.status(400).json({ error: 'Loglar tanlanmagan' });
+
+        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId as string } });
+        if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+
+        const logs = await prisma.telegramLog.findMany({
+            where: { id: { in: logIds }, clinicId: clinicId as string, status: 'Failed' },
+            include: { patient: true }
+        });
+
+        let success = 0;
+        let failed = 0;
+        for (const log of logs) {
+            if (!log.patient || !log.message) { failed++; continue; }
+            const channel = (log.channel === 'sms' ? 'sms' : 'telegram') as 'sms' | 'telegram';
+            const result = await sendUnified(clinic, log.patient, log.message, { channel, source: 'retry', type: log.type });
+            if (result.success) success++; else failed++;
+        }
+        res.json({ retried: logs.length, success, failed });
+    } catch (error) {
+        console.error('Retry error:', error);
+        res.status(500).json({ error: 'Qayta yuborishda xatolik' });
     }
 });
 
@@ -861,9 +1181,9 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
         if (status === 'No-Show') {
             const clinic = appointment.patient.clinic as any;
             const message = `❗️ Siz ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinic.phone}`;
-            
+
             // Unified notification sender
-            await sendNotification(clinic, appointment.patient, message);
+            await sendUnified(clinic, appointment.patient, message, { channel: 'auto', source: 'noshow', refId: appointment.id, type: 'NoShow' });
         }
 
         // Check if status changed to 'Completed' and send rating request after 1 hour
@@ -926,7 +1246,7 @@ app.post('/api/appointments/:id/remind', authenticateToken, async (req, res) => 
         const doctorName = appointment.doctor ? `${appointment.doctor.firstName} ${appointment.doctor.lastName}` : 'Shifokor';
         const message = `🔔 Eslatma!\n\nHurmatli ${appointment.patient.firstName},\nSizning ${date} kuni soat ${time} da ${doctorName} qabuliga yozilganingizni eslatamiz.\n\nIltimos, kechikmasdan keling!`;
 
-        await sendNotification(clinic, appointment.patient, message);
+        await sendUnified(clinic, appointment.patient, message, { channel: 'auto', source: 'manual', refId: appointment.id, type: 'Reminder' });
 
         res.json({ success: true });
     } catch (error) {
@@ -957,7 +1277,7 @@ app.post('/api/patients/:id/remind-debt', authenticateToken, async (req, res) =>
 
         const message = `💰 To'lov eslatmasi!\n\nHurmatli ${patient.firstName}, ${debtMessage}\n\nIltimos, to'lovni amalga oshiring.`;
 
-        await sendNotification(clinic, patient, message);
+        await sendUnified(clinic, patient, message, { channel: 'auto', source: 'debt', type: 'DebtReminder' });
 
         res.json({ success: true });
     } catch (error) {
@@ -3199,59 +3519,185 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // AUTOMATED REMINDER SYSTEM
 // ============================================
 
-/**
- * Helper function: Send birthday greetings to patients
- */
-async function sendBirthdayReminders() {
+// ─── Avtomatika dvigateli (AutomationRule asosida) ───────────────────────────
+// Toshkent vaqti (UTC+5, DST yo'q): qabul sanasi/vaqti klinika devor soatida saqlanadi.
+const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
+const tashkentNowMs = () => Date.now() + TASHKENT_OFFSET_MS;
+const tashkentDateStr = (offsetDays = 0) =>
+    new Date(Date.now() + TASHKENT_OFFSET_MS + offsetDays * 86400000).toISOString().split('T')[0];
+
+// Bemor tug'ilgan kunini MM-DD ga keltirish (YYYY-MM-DD yoki DD.MM.YYYY formatlari)
+function dobToMonthDay(dob: string): string {
+    if (!dob) return '';
+    if (dob.includes('-')) {
+        const parts = dob.split('-');
+        if (parts.length === 3) return `${parts[1]}-${parts[2]}`;
+    } else if (dob.includes('.')) {
+        const parts = dob.split('.');
+        if (parts.length >= 2) return `${parts[1]}-${parts[0]}`;
+    }
+    return '';
+}
+
+async function loadRulesWithClinics(trigger: string) {
+    const rules = await prisma.automationRule.findMany({
+        where: { active: true, trigger },
+        include: { template: true }
+    });
+    if (rules.length === 0) return { rules, clinicMap: new Map<string, any>() };
+    const clinicIds = [...new Set(rules.map((r: any) => r.clinicId))];
+    const clinics = await prisma.clinic.findMany({ where: { id: { in: clinicIds } } });
+    return { rules, clinicMap: new Map<string, any>(clinics.map((c: any) => [c.id, c])) };
+}
+
+// Har 10 daqiqada: "Qabuldan N soat oldin" qoidalari
+async function processBeforeAppointmentRules() {
     try {
-        console.log('🎂 Running birthday reminder job...');
+        const { rules, clinicMap } = await loadRulesWithClinics('before_appointment');
+        if (rules.length === 0) return;
 
-        // Get today's date in MM-DD format for matching
-        const today = new Date();
-        const todayMonthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const todayStr = tashkentDateStr(0);
+        const tomorrowStr = tashkentDateStr(1);
+        const nowMs = tashkentNowMs();
 
-        // Find all patients with Telegram connected
-        const patients = await prisma.patient.findMany({
-            where: {
-                telegramChatId: { not: null },
-                status: 'Active'
-            },
-            include: {
-                clinic: true
-            }
-        });
+        for (const rule of rules) {
+            const clinic = clinicMap.get(rule.clinicId);
+            if (!clinic) continue;
+            const hours = rule.hoursBefore || 2;
 
-        let sentCount = 0;
-        for (const patient of patients) {
-            // Handle both YYYY-MM-DD (standard) and DD.MM.YYYY (legacy) formats
-            let patientMonthDay = '';
+            const appointments = await prisma.appointment.findMany({
+                where: {
+                    clinicId: rule.clinicId,
+                    date: { in: [todayStr, tomorrowStr] },
+                    status: { in: ['Confirmed', 'Pending'] },
+                    ...(rule.doctorId ? { doctorId: rule.doctorId } : {}),
+                },
+                include: { patient: true, doctor: true }
+            });
 
-            if (patient.dob.includes('-')) {
-                // Format: YYYY-MM-DD
-                const parts = patient.dob.split('-');
-                if (parts.length === 3) {
-                    patientMonthDay = `${parts[1]}-${parts[2]}`;
-                }
-            } else if (patient.dob.includes('.')) {
-                // Format: DD.MM.YYYY
-                const parts = patient.dob.split('.');
-                if (parts.length >= 2) {
-                    patientMonthDay = `${parts[1]}-${parts[0]}`; // Convert to MM-DD
-                }
-            }
+            for (const appt of appointments) {
+                const apptMs = Date.parse(`${appt.date}T${appt.time}:00Z`);
+                if (isNaN(apptMs)) continue;
+                const sendFromMs = apptMs - hours * 3600000;
+                // Yuborish oynasi: (qabul - N soat) dan qabul vaqtigacha
+                if (nowMs < sendFromMs || nowMs >= apptMs) continue;
 
-            if (patientMonthDay === todayMonthDay) {
-                const message = `🎉 Tug'ilgan kuningiz bilan!\n\nHurmatli ${patient.firstName}, sizni tug'ilgan kuningiz bilan chin dildan tabriklaymiz! Sog'lig'ingiz mustahkam bo'lsin! 🎂`;
+                // Dedupe: shu qoida shu qabulga allaqachon yuborilgan (yoki urinilgan)
+                const existing = await prisma.telegramLog.findFirst({ where: { ruleId: rule.id, refId: appt.id } });
+                if (existing) continue;
 
-                await sendNotification(patient.clinic, patient, message);
-                sentCount++;
-                console.log(`✅ Birthday greeting processed for ${patient.firstName} ${patient.lastName}`);
+                const message = processTemplate(rule.template.text, {
+                    patientName: `${appt.patient.firstName} ${appt.patient.lastName}`,
+                    firstName: appt.patient.firstName,
+                    lastName: appt.patient.lastName,
+                    date: appt.date,
+                    time: appt.time,
+                    clinicName: clinic.name,
+                    doctorName: `${appt.doctor.firstName} ${appt.doctor.lastName}`,
+                });
+
+                await sendUnified(clinic, appt.patient, message, {
+                    channel: rule.channel as any, source: 'auto', ruleId: rule.id, refId: appt.id, type: 'AutoReminder'
+                });
+                await prisma.appointment.update({ where: { id: appt.id }, data: { reminderSent: true } }).catch(() => { });
             }
         }
-
-        console.log(`🎂 Birthday reminder job completed. Sent ${sentCount} greetings.`);
     } catch (error) {
-        console.error('❌ Birthday reminder job error:', error);
+        console.error('❌ before_appointment rule engine error:', error);
+    }
+}
+
+// Har kuni 09:00: tug'ilgan kun qoidalari
+async function processBirthdayRules() {
+    try {
+        const { rules, clinicMap } = await loadRulesWithClinics('birthday');
+        if (rules.length === 0) return;
+
+        const now = new Date(tashkentNowMs());
+        const todayMonthDay = `${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+        const year = now.getUTCFullYear();
+        const todayStr = tashkentDateStr(0);
+
+        for (const rule of rules) {
+            const clinic = clinicMap.get(rule.clinicId);
+            if (!clinic) continue;
+
+            const patients = await prisma.patient.findMany({
+                where: { clinicId: rule.clinicId, status: 'Active' }
+            });
+
+            for (const patient of patients) {
+                if (dobToMonthDay(patient.dob) !== todayMonthDay) continue;
+
+                const refId = `${patient.id}:${year}`;
+                const existing = await prisma.telegramLog.findFirst({ where: { ruleId: rule.id, refId } });
+                if (existing) continue;
+
+                const message = processTemplate(rule.template.text, {
+                    patientName: `${patient.firstName} ${patient.lastName}`,
+                    firstName: patient.firstName,
+                    lastName: patient.lastName,
+                    date: todayStr,
+                    clinicName: clinic.name,
+                });
+
+                await sendUnified(clinic, patient, message, {
+                    channel: rule.channel as any, source: 'birthday', ruleId: rule.id, refId, type: 'Birthday'
+                });
+            }
+        }
+    } catch (error) {
+        console.error('❌ birthday rule engine error:', error);
+    }
+}
+
+// Har kuni 20:00: kelmagan bemorlar qoidalari
+async function processNoShowRules() {
+    try {
+        const { rules, clinicMap } = await loadRulesWithClinics('no_show');
+        if (rules.length === 0) return;
+
+        const todayStr = tashkentDateStr(0);
+
+        for (const rule of rules) {
+            const clinic = clinicMap.get(rule.clinicId);
+            if (!clinic) continue;
+
+            const appointments = await prisma.appointment.findMany({
+                where: {
+                    clinicId: rule.clinicId,
+                    date: todayStr,
+                    status: 'No-Show',
+                    ...(rule.doctorId ? { doctorId: rule.doctorId } : {}),
+                },
+                include: { patient: true, doctor: true }
+            });
+
+            for (const appt of appointments) {
+                const existing = await prisma.telegramLog.findFirst({ where: { ruleId: rule.id, refId: appt.id } });
+                if (existing) continue;
+
+                const message = processTemplate(rule.template.text, {
+                    patientName: `${appt.patient.firstName} ${appt.patient.lastName}`,
+                    firstName: appt.patient.firstName,
+                    lastName: appt.patient.lastName,
+                    date: appt.date,
+                    time: appt.time,
+                    clinicName: clinic.name,
+                    doctorName: `${appt.doctor.firstName} ${appt.doctor.lastName}`,
+                });
+
+                const replyMarkup = {
+                    inline_keyboard: [[{ text: "📅 Qabulga yozilish", callback_data: "start_booking" }]]
+                };
+
+                await sendUnified(clinic, appt.patient, message, {
+                    channel: rule.channel as any, source: 'noshow', ruleId: rule.id, refId: appt.id, type: 'NoShow', replyMarkup
+                });
+            }
+        }
+    } catch (error) {
+        console.error('❌ no_show rule engine error:', error);
     }
 }
 
@@ -3264,16 +3710,25 @@ async function sendBirthdayReminders() {
 function processTemplate(template: string, data: { [key: string]: any }) {
     let result = template;
     const placeholders: { [key: string]: string } = {
+        // Yangi (Xabarlar moduli) o'zgaruvchilar
+        '{bemor_ismi}': data.firstName || data.patientName || '',
+        '{bemor_familyasi}': data.lastName || '',
+        '{sana}': data.date || '',
+        '{vaqt}': data.time || '',
+        '{klinika_nomi}': data.clinicName || '',
+        '{shifokor_ismi}': data.doctorName || '',
+        '{qarz}': data.amount !== undefined ? Number(data.amount).toLocaleString() : '',
+        // Eski tokenlar (moslik uchun)
         '{BEMOR}': data.patientName || '',
         '{VAQT}': data.time || '',
         '{SANA}': data.date || '',
-        '{MIQDOR}': data.amount !== undefined ? data.amount.toLocaleString() : '',
+        '{MIQDOR}': data.amount !== undefined ? Number(data.amount).toLocaleString() : '',
         '{KLINIKA}': data.clinicName || '',
         '{DOKTOR}': data.doctorName || ''
     };
 
     Object.keys(placeholders).forEach(key => {
-        result = result.replace(new RegExp(key, 'g'), placeholders[key]);
+        result = result.split(key).join(placeholders[key]);
     });
     return result;
 }
@@ -3334,7 +3789,7 @@ async function sendAppointmentReminders(clinicId?: string, customMessage?: strin
             }
 
             try {
-                await sendNotification(clinic, appointment.patient, message);
+                await sendUnified(clinic, appointment.patient, message, { channel: 'auto', source: 'bulk', refId: appointment.id, type: 'Reminder' });
 
                 // Mark as reminded
                 await prisma.appointment.update({
@@ -3362,65 +3817,20 @@ async function sendAppointmentReminders(clinicId?: string, customMessage?: strin
     }
 }
 
-/**
- * Helper function: Send follow-up messages to patients who didn't show up
- */
-async function sendNoShowFollowups() {
-    try {
-        console.log('❗️ Running no-show follow-up job...');
-
-        // Get today's date in YYYY-MM-DD format
-        const today = new Date();
-        const todayFormatted = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-        // Find all appointments for today with No-Show status
-        const appointments = await prisma.appointment.findMany({
-            where: {
-                date: todayFormatted,
-                status: 'No-Show'
-            },
-            include: {
-                patient: {
-                    include: {
-                        clinic: true
-                    }
-                }
-            }
-        });
-
-        let sentCount = 0;
-        for (const appointment of appointments) {
-            const clinic = appointment.patient.clinic as any;
-            const message = `❗️ Siz bugun ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang yoki quyidagi tugma orqali qayta yoziling!\n\n📞 Telefon: ${clinic.phone}`;
-
-            const replyMarkup = {
-                inline_keyboard: [[{ text: "📅 Qabulga yozilish", callback_data: "start_booking" }]]
-            };
-
-            await sendNotification(clinic, appointment.patient, message, replyMarkup);
-            sentCount++;
-        }
-
-        console.log(`❗️ No-show follow-up job completed. Sent ${sentCount} messages.`);
-    } catch (error) {
-        console.error('❌ No-show follow-up job error:', error);
-    }
-}
-
 console.log('✅ Automated reminder cron jobs initialized');
 
-// Birthday reminders - Every day at 9:00 AM
+// Tug'ilgan kun qoidalari - har kuni 09:00
 cron.schedule('0 9 * * *', () => {
-    console.log('⏰ Cron: Birthday reminder job triggered');
-    sendBirthdayReminders();
+    console.log('⏰ Cron: Birthday rules job triggered');
+    processBirthdayRules();
 }, {
     timezone: "Asia/Tashkent"
 });
 
-// No-show follow-ups - Every day at 8:00 PM (Backup for missed manual updates)
+// Kelmagan bemorlar qoidalari - har kuni 20:00
 cron.schedule('0 20 * * *', () => {
-    console.log('⏰ Cron: No-show follow-up job triggered');
-    sendNoShowFollowups();
+    console.log('⏰ Cron: No-show rules job triggered');
+    processNoShowRules();
 }, {
     timezone: "Asia/Tashkent"
 });
@@ -3441,10 +3851,9 @@ cron.schedule('0 8 * * *', () => {
     timezone: "Asia/Tashkent"
 });
 
-// Appointment Reminders for tomorrow - Every day at 18:00 (6:00 PM)
-cron.schedule('0 18 * * *', () => {
-    console.log('⏰ Cron: Appointment reminder job triggered');
-    sendAppointmentReminders();
+// "Qabuldan oldin" qoidalari - har 10 daqiqada
+cron.schedule('*/10 * * * *', () => {
+    processBeforeAppointmentRules();
 }, {
     timezone: "Asia/Tashkent"
 });
@@ -3619,7 +4028,7 @@ app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
                 }
 
                 try {
-                    await sendNotification(fullClinic, patient, messageText);
+                    await sendUnified(fullClinic, patient, messageText, { channel: 'auto', source: 'debt', type: 'DebtReminder' });
                     sentCount++;
                     details.push(`Sent: ${patient.firstName} ${patient.lastName}`);
                 } catch (e) {
@@ -3695,8 +4104,8 @@ app.get('/api/debug/transactions', authenticateToken, async (req, res) => {
 
 app.post('/api/test/send-birthday-reminders', authenticateToken, async (req, res) => {
     try {
-        await sendBirthdayReminders();
-        res.json({ success: true, message: 'Birthday reminders sent' });
+        await processBirthdayRules();
+        res.json({ success: true, message: 'Birthday rules processed' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -3711,10 +4120,19 @@ app.post('/api/test/send-appointment-reminders', authenticateToken, async (req, 
     }
 });
 
+app.post('/api/test/process-before-appointment-rules', authenticateToken, async (req, res) => {
+    try {
+        await processBeforeAppointmentRules();
+        res.json({ success: true, message: 'Before-appointment rules processed' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/test/send-noshow-followups', authenticateToken, async (req, res) => {
     try {
-        await sendNoShowFollowups();
-        res.json({ success: true, message: 'No-show follow-ups sent' });
+        await processNoShowRules();
+        res.json({ success: true, message: 'No-show rules processed' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

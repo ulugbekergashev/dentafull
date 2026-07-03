@@ -40,6 +40,7 @@ export const translations = {
     'inventory.deleteConfirm': '<strong>{name}</strong> ni o\'chirmoqchimisiz? Bu amalni qaytarib bo\'lmaydi va barcha tarix ham o\'chiriladi.',
     'nav.queue': 'Online Navbat',
     'nav.lab': 'Laboratoriya',
+    'nav.messages': 'Xabarlar',
     'nav.settings': 'Sozlamalar',
     'nav.saas': 'SaaS Dashboard',
 
@@ -783,6 +784,7 @@ export const translations = {
     'inventory.deleteConfirm': 'Вы уверены, что хотите удалить <strong>{name}</strong>? Это действие нельзя отменить, и вся история также будет удалена.',
     'nav.queue': 'Онлайн очередь',
     'nav.lab': 'Лаборатория',
+    'nav.messages': 'Сообщения',
     'nav.settings': 'Настройки',
     'nav.saas': 'SaaS Панель',
 
