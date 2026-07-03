@@ -961,14 +961,16 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                     {services
                                        .filter(s => !selectedCategory || s.categoryId === selectedCategory)
-                                       .map((s, i) => (
-                                          <tr key={i} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                       .map((s) => {
+                                          const realIndex = services.indexOf(s);
+                                          return (
+                                          <tr key={realIndex} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
                                              <td className="px-4 py-3 text-gray-900 dark:text-gray-200 font-medium">{s.name}</td>
                                              <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
                                              <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-1">
                                                    <button
-                                                      onClick={() => handleOpenServiceModal(i)}
+                                                      onClick={() => handleOpenServiceModal(realIndex)}
                                                       className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
                                                    >
                                                       <Edit className="w-4 h-4" />
@@ -987,7 +989,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                                 </div>
                                              </td>
                                           </tr>
-                                       ))}
+                                       ); })}
                                     {services.filter(s => !selectedCategory || s.categoryId === selectedCategory).length === 0 && (
                                        <tr>
                                           <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
