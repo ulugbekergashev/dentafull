@@ -536,6 +536,14 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+        remove: (id: number) => {
+            if (isDemoMode()) {
+                const index = DEMO_SERVICES.findIndex(s => s.id === id);
+                if (index !== -1) { DEMO_SERVICES.splice(index, 1); saveDemoData(); }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/services/${id}`, { method: 'DELETE' });
+        },
     },
     categories: {
         getAll: (clinicId: string) => {

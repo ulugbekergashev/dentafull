@@ -627,6 +627,14 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const deleteService = async (id: number) => {
+    try {
+      await api.services.remove(id);
+      setServices(prev => prev.filter(s => s.id !== id));
+      addToast('success', 'Xizmat o\'chirildi.');
+    } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
+  };
+
   const addDoctor = async (doctor: Omit<Doctor, 'id'>) => {
     try {
       const newDoc = await api.doctors.create({ ...doctor, clinicId });
@@ -1396,6 +1404,7 @@ const AppContent: React.FC = () => {
                       labTechnicians={labTechnicians}
                       onAddService={addService}
                       onUpdateService={updateService}
+                      onDeleteService={deleteService}
                       onAddCategory={addCategory}
                       onDeleteCategory={deleteCategory}
                       onAddDoctor={addDoctor}

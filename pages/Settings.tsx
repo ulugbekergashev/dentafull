@@ -26,6 +26,7 @@ interface SettingsProps {
    categories: ServiceCategory[];
    onAddService: (service: Omit<Service, 'id' | 'clinicId'>) => void;
    onUpdateService: (index: number, service: Partial<Service>) => void;
+   onDeleteService?: (id: number) => Promise<void>;
    onAddCategory: (category: Omit<ServiceCategory, 'id' | 'clinicId'>) => void;
    onDeleteCategory: (id: string) => void;
    onAddDoctor: (doctor: Omit<Doctor, 'id'>) => void;
@@ -43,7 +44,7 @@ interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({
-   userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, currentClinic, plans, reviews
+   userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, currentClinic, plans, reviews
 }) => {
    const { t } = useLanguage();
    const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'bot' | 'facebook' | 'sms' | 'dmed'>('services');
@@ -965,12 +966,25 @@ export const Settings: React.FC<SettingsProps> = ({
                                              <td className="px-4 py-3 text-gray-900 dark:text-gray-200 font-medium">{s.name}</td>
                                              <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
                                              <td className="px-4 py-3 text-right">
-                                                <button
-                                                   onClick={() => handleOpenServiceModal(i)}
-                                                   className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
-                                                >
-                                                   <Edit className="w-4 h-4" />
-                                                </button>
+                                                <div className="flex items-center justify-end gap-1">
+                                                   <button
+                                                      onClick={() => handleOpenServiceModal(i)}
+                                                      className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
+                                                   >
+                                                      <Edit className="w-4 h-4" />
+                                                   </button>
+                                                   {onDeleteService && s.id && (
+                                                      <button
+                                                         onClick={async () => {
+                                                            if (!window.confirm(`"${s.name}" xizmatini o'chirishni tasdiqlaysizmi?`)) return;
+                                                            await onDeleteService(s.id as number);
+                                                         }}
+                                                         className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition-colors"
+                                                      >
+                                                         <Trash2 className="w-4 h-4" />
+                                                      </button>
+                                                   )}
+                                                </div>
                                              </td>
                                           </tr>
                                        ))}

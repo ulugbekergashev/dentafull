@@ -1803,6 +1803,21 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
     }
 });
 
+app.delete('/api/services/:id', authenticateToken, async (req, res) => {
+    try {
+        const u = (req as any).user;
+        if (u?.role !== 'SUPER_ADMIN') {
+            const existing = await prisma.service.findUnique({ where: { id: parseInt(req.params.id) } });
+            if (!existing) return res.status(404).json({ error: 'Topilmadi' });
+            if (existing.clinicId !== u?.clinicId) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        }
+        await prisma.service.delete({ where: { id: parseInt(req.params.id) } });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete service' });
+    }
+});
+
 // --- Super Admin: Clinics & Plans ---
 
 // --- Public demo request (landing page, no auth) ---

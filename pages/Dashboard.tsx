@@ -652,7 +652,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-6">
           <Card className="p-8 lg:col-span-2 rounded-[2rem]">
             <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">Qabullar <span className="text-purple-600">Tasmasi</span></h3>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">So'nggi <span className="text-purple-600">Qabullar</span></h3>
             </div>
 
             <div className="overflow-x-auto">

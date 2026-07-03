@@ -43,6 +43,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const [isExpense, setIsExpense] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     patientId: '',
+    doctorId: '',
     service: '',
     amount: '',
     type: 'Cash' as 'Cash' | 'Card' | 'Insurance' | 'Balance' | 'Expense',
@@ -55,6 +56,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
     setPaymentLoading(true);
     try {
       const patient = patients.find(p => p.id === paymentForm.patientId);
+      const doctor = doctors.find(d => d.id === paymentForm.doctorId);
       const clinicId = patients[0]?.clinicId || '';
       await onAddTransaction?.({
         patientName: isExpense ? (paymentForm.service || 'Xarajat') : (patient ? `${patient.lastName} ${patient.firstName}` : ''),
@@ -65,9 +67,11 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
         status: 'Paid',
         clinicId,
         patientId: isExpense ? undefined : paymentForm.patientId || undefined,
+        doctorId: paymentForm.doctorId || undefined,
+        doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : undefined,
       });
       setIsAddPaymentOpen(false);
-      setPaymentForm({ patientId: '', service: '', amount: '', type: 'Cash', notes: '' });
+      setPaymentForm({ patientId: '', doctorId: '', service: '', amount: '', type: 'Cash', notes: '' });
     } finally {
       setPaymentLoading(false);
     }
@@ -445,113 +449,135 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
       </div>
 
       {/* Main Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-none">
-          <p className="text-blue-100 text-sm font-medium">{isReceptionist ? t('finance.todayIncomeCard') : t('finance.totalIncome')}</p>
-          <h3 className="text-3xl font-bold mt-2">{totalRevenue.toLocaleString()} UZS</h3>
-          <div className="mt-4 flex items-center text-sm text-blue-100">
-            <Calendar className="w-4 h-4 mr-1" />
-            {isReceptionist ? today : (startDate || endDate ? t('finance.selectedPeriod') : t('finance.allTime'))}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 p-6 text-white shadow-lg shadow-blue-500/25">
+          <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
+          <div className="absolute -right-2 -bottom-8 w-32 h-32 rounded-full bg-white/5" />
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="p-1.5 bg-white/20 rounded-lg"><DollarSign className="w-4 h-4" /></div>
+              <p className="text-blue-100 text-xs font-semibold uppercase tracking-wider">{isReceptionist ? t('finance.todayIncomeCard') : t('finance.totalIncome')}</p>
+            </div>
+            <h3 className="text-3xl font-black">{totalRevenue.toLocaleString()}</h3>
+            <p className="text-blue-200 text-xs font-medium mt-0.5">UZS</p>
+            <div className="mt-4 flex items-center text-xs text-blue-200 font-medium">
+              <Calendar className="w-3.5 h-3.5 mr-1" />
+              {isReceptionist ? today : (startDate || endDate ? t('finance.selectedPeriod') : t('finance.allTime'))}
+            </div>
           </div>
-        </Card>
+        </div>
         {!isReceptionist && (
-          <Card className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-full">
-                <Wallet className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-400 via-orange-500 to-red-500 p-6 text-white shadow-lg shadow-orange-500/25">
+            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 bg-white/20 rounded-lg"><Wallet className="w-4 h-4" /></div>
+                <p className="text-orange-100 text-xs font-semibold uppercase tracking-wider">{t('finance.debt')}</p>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.debt')}</p>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{totalDebt.toLocaleString()} UZS</h3>
-              </div>
+              <h3 className="text-3xl font-black">{totalDebt.toLocaleString()}</h3>
+              <p className="text-orange-200 text-xs font-medium mt-0.5">UZS</p>
+              <div className="mt-4 text-xs text-orange-200 font-medium">{DEBTORS.length} ta qarzdor bemor</div>
             </div>
-          </Card>
+          </div>
         )}
         {!isReceptionist && (
-          <Card className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                <Clock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500 via-purple-600 to-purple-700 p-6 text-white shadow-lg shadow-purple-500/25">
+            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 bg-white/20 rounded-lg"><Clock className="w-4 h-4" /></div>
+                <p className="text-purple-100 text-xs font-semibold uppercase tracking-wider">Bo'lib to'lash</p>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Bo'lib to'lash (Oy)</p>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{upcomingInstallmentAmount.toLocaleString()} UZS</h3>
-              </div>
+              <h3 className="text-3xl font-black">{upcomingInstallmentAmount.toLocaleString()}</h3>
+              <p className="text-purple-200 text-xs font-medium mt-0.5">UZS</p>
+              <div className="mt-4 text-xs text-purple-200 font-medium">Shu oy kutilmoqda</div>
             </div>
-          </Card>
+          </div>
         )}
         {!isReceptionist && (
-          <Card className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full">
-                <CreditCard className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 p-6 text-white shadow-lg shadow-emerald-500/25">
+            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 bg-white/20 rounded-lg"><CreditCard className="w-4 h-4" /></div>
+                <p className="text-emerald-100 text-xs font-semibold uppercase tracking-wider">{t('finance.avgCheck')}</p>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.avgCheck')}</p>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {filteredTransactions.length ? Math.round(totalRevenue / filteredTransactions.length).toLocaleString() : 0} UZS
-                </h3>
-              </div>
+              <h3 className="text-3xl font-black">
+                {filteredTransactions.length ? Math.round(totalRevenue / filteredTransactions.length).toLocaleString() : 0}
+              </h3>
+              <p className="text-emerald-200 text-xs font-medium mt-0.5">UZS</p>
+              <div className="mt-4 text-xs text-emerald-200 font-medium">{filteredTransactions.length} ta tranzaksiya</div>
             </div>
-          </Card>
+          </div>
         )}
       </div>
 
       {/* Financial Breakdown, Loss Analysis, Charts, Transactions, Debtors - hidden for receptionist */}
       {!isReceptionist && (<>
         {/* Financial Breakdown Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
-          <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-red-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.techCosts')}</p>
-                <h3 className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{technicianCosts.toLocaleString()} UZS</h3>
+        <div className="mt-2">
+          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="w-6 h-0.5 bg-gray-300 dark:bg-gray-600 rounded" />
+            Xarajatlar va Foyda
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className="p-5 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-3">
+                <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-xl">
+                  <DollarSign className="w-5 h-5 text-red-500" />
+                </div>
+                <span className="text-[10px] font-bold text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full">Chiqim</span>
               </div>
-              <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
-                <DollarSign className="w-6 h-6 text-red-600 dark:text-red-400" />
-              </div>
-            </div>
-          </Card>
+              <p className="text-xs font-medium text-gray-400 dark:text-gray-500">{t('finance.techCosts')}</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{technicianCosts.toLocaleString()}</h3>
+              <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
+            </Card>
 
-          <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-orange-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Ombor Xarajatlari</p>
-                <h3 className="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1">{inventoryCosts.toLocaleString()} UZS</h3>
+            <Card className="p-5 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-3">
+                <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-xl">
+                  <Wallet className="w-5 h-5 text-orange-500" />
+                </div>
+                <span className="text-[10px] font-bold text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-full">Chiqim</span>
               </div>
-              <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-full">
-                <Wallet className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-              </div>
-            </div>
-          </Card>
+              <p className="text-xs font-medium text-gray-400 dark:text-gray-500">Ombor Xarajatlari</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{inventoryCosts.toLocaleString()}</h3>
+              <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
+            </Card>
 
-          <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-blue-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.doctorSalary')}</p>
-                <h3 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{doctorSalaries.toLocaleString()} UZS</h3>
+            <Card className="p-5 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-3">
+                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                  <Users className="w-5 h-5 text-blue-500" />
+                </div>
+                <span className="text-[10px] font-bold text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">Maosh</span>
               </div>
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-          </Card>
+              <p className="text-xs font-medium text-gray-400 dark:text-gray-500">{t('finance.doctorSalary')}</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{doctorSalaries.toLocaleString()}</h3>
+              <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
+            </Card>
 
-          <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('finance.netProfit')}</p>
-                <h3 className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{netProfit.toLocaleString()} UZS</h3>
+            <Card className={`p-5 hover:shadow-md transition-shadow ${netProfit >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20' : 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20'}`}>
+              <div className="flex items-start justify-between mb-3">
+                <div className={`p-2 rounded-xl ${netProfit >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                  <TrendingDown className={`w-5 h-5 rotate-180 ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`} />
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${netProfit >= 0 ? 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30' : 'text-red-500 bg-red-100 dark:bg-red-900/30'}`}>
+                  {netProfit >= 0 ? 'Foyda' : 'Zarar'}
+                </span>
               </div>
-              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
-                <TrendingDown className="w-6 h-6 text-green-600 dark:text-green-400 rotate-180" />
-              </div>
-            </div>
-          </Card>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('finance.netProfit')}</p>
+              <h3 className={`text-xl font-black mt-0.5 ${netProfit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{netProfit.toLocaleString()}</h3>
+              <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
+            </Card>
+          </div>
         </div>
 
         {/* Loss Analysis Section */}
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white pt-4">{t('finance.lossAnalysis')}</h3>
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest pt-2 flex items-center gap-2">
+          <span className="w-6 h-0.5 bg-gray-300 dark:bg-gray-600 rounded" />
+          {t('finance.lossAnalysis')}
+        </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Financial Loss */}
           <Card className="p-6 border-l-4 border-red-500">
@@ -909,6 +935,22 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 <option value="">Bemorni tanlang...</option>
                 {patients.map(p => (
                   <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!isExpense && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Shifokor</label>
+              <select
+                value={paymentForm.doctorId}
+                onChange={e => setPaymentForm(f => ({ ...f, doctorId: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              >
+                <option value="">Shifokorni tanlang (ixtiyoriy)</option>
+                {doctors.map(d => (
+                  <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>
                 ))}
               </select>
             </div>
