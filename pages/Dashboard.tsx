@@ -86,7 +86,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const periodAppointmentsCount = filteredAppointments.length;
   const pendingAppointments = filteredAppointments.filter(a => a.status === 'Pending').length;
 
-  const totalRevenue = filteredTransactions.reduce((acc, t) => acc + t.amount, 0);
+  // Daromad = to'langan to'lovlar (Finance sahifasi bilan izchil)
+  const totalRevenue = filteredTransactions.reduce((acc, t) => acc + (t.status === 'Paid' ? t.amount : 0), 0);
 
   // Dynamic Service Data from Appointments
   const SERVICE_DATA = useMemo(() => {
@@ -112,8 +113,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const trendData = useMemo(() => {
     const dataMap = new Map<string, { revenue: number, appointments: number }>();
 
-    // Aggregate Transactions
+    // Aggregate Transactions (faqat to'langanlari)
     filteredTransactions.forEach(t => {
+      if (t.status !== 'Paid') return;
       const current = dataMap.get(t.date) || { revenue: 0, appointments: 0 };
       dataMap.set(t.date, { ...current, revenue: current.revenue + t.amount });
     });

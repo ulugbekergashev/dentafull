@@ -96,7 +96,7 @@ export interface Transaction {
   patientName: string;
   date: string;
   amount: number;
-  type: 'Cash' | 'Card' | 'Insurance' | 'Balance' | 'Expense';
+  type: 'Cash' | 'Card' | 'Insurance' | 'Balance';
   service: string;
   status: 'Paid' | 'Pending' | 'Overdue';
   clinicId: string;
@@ -105,6 +105,33 @@ export interface Transaction {
   patientId?: string;     // Optional - for backward compatibility
   discountPercent?: number; // Chegirma foizi (0-100)
   discountAmount?: number;  // Chegirma summasi
+}
+
+export type ExpenseCategory = 'DoctorShare' | 'Salary' | 'Rent' | 'Utilities' | 'Inventory' | 'Lab' | 'Other';
+
+export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  DoctorShare: 'Shifokor ulushi',
+  Salary: 'Oylik',
+  Rent: 'Ijara',
+  Utilities: 'Kommunal',
+  Inventory: 'Ombor',
+  Lab: 'Laboratoriya',
+  Other: 'Boshqa',
+};
+
+export interface Expense {
+  id: string;
+  date: string;
+  amount: number;
+  category: ExpenseCategory;
+  title: string;
+  method?: 'Cash' | 'Card' | null;
+  note?: string | null;
+  clinicId: string;
+  doctorId?: string | null;      // 'DoctorShare' kategoriyasi uchun
+  labOrderId?: string | null;    // avtomatik Laboratoriya xarajati bog'lami
+  inventoryItemId?: string | null; // avtomatik Ombor xarajati bog'lami
+  createdAt?: string;
 }
 
 export interface InstallmentPlan {

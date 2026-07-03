@@ -1,5 +1,5 @@
-import { Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan } from '../types';
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, saveDemoData } from './demoData';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan } from '../types';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -404,6 +404,52 @@ export const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
+        },
+    },
+    expenses: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_EXPENSES);
+            return fetchJson<Expense[]>(`/expenses?clinicId=${clinicId}`);
+        },
+        create: (data: Omit<Expense, 'id'>) => {
+            if (isDemoMode()) {
+                const newExpense = { ...data, id: `demo-exp-${Date.now()}-${Math.floor(Math.random() * 1000)}` } as Expense;
+                DEMO_EXPENSES.push(newExpense);
+                saveDemoData();
+                return Promise.resolve(newExpense);
+            }
+            return fetchJson<Expense>('/expenses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<Expense>) => {
+            if (isDemoMode()) {
+                const index = DEMO_EXPENSES.findIndex(e => e.id === id);
+                if (index !== -1) {
+                    DEMO_EXPENSES[index] = { ...DEMO_EXPENSES[index], ...data };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_EXPENSES[index]);
+                }
+                return Promise.reject('Expense not found');
+            }
+            return fetchJson<Expense>(`/expenses/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_EXPENSES.findIndex(e => e.id === id);
+                if (index !== -1) {
+                    DEMO_EXPENSES.splice(index, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true });
+            }
+            return fetchJson<{ success: true }>(`/expenses/${id}`, { method: 'DELETE' });
         },
     },
     doctors: {
@@ -835,15 +881,27 @@ export const api = {
             if (isDemoMode()) return Promise.resolve(DEMO_INVENTORY);
             return fetchJson<InventoryItem[]>(`/inventory?clinicId=${clinicId}`);
         },
-        create: (data: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => {
+        create: (data: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'> & { initialCost?: number }) => {
             if (isDemoMode()) {
+                const { initialCost, ...rest } = data;
                 const newItem = {
-                    ...data,
+                    ...rest,
                     id: `demo-item-${Date.now()}`,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 } as InventoryItem;
                 DEMO_INVENTORY.push(newItem);
+                if (initialCost && initialCost > 0) {
+                    DEMO_EXPENSES.push({
+                        id: `demo-exp-${Date.now()}`,
+                        date: new Date().toISOString().split('T')[0],
+                        amount: initialCost,
+                        category: 'Inventory',
+                        title: `Ombor: ${newItem.name}`,
+                        clinicId: newItem.clinicId,
+                        inventoryItemId: newItem.id,
+                    });
+                }
                 saveDemoData();
                 return Promise.resolve(newItem);
             }
@@ -853,7 +911,7 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
-        updateStock: (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string; patientId?: string }) => {
+        updateStock: (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string; patientId?: string; cost?: number }) => {
             if (isDemoMode()) {
                 const index = DEMO_INVENTORY.findIndex(i => i.id === id);
                 if (index !== -1) {
@@ -874,6 +932,18 @@ export const api = {
                         patientId: data.patientId
                     };
                     DEMO_INVENTORY_LOGS.push(log);
+                    if (data.type === 'IN' && data.cost && data.cost > 0) {
+                        DEMO_EXPENSES.push({
+                            id: `demo-exp-${Date.now()}`,
+                            date: new Date().toISOString().split('T')[0],
+                            amount: data.cost,
+                            category: 'Inventory',
+                            title: `Ombor: ${item.name}`,
+                            note: data.note || null,
+                            clinicId: item.clinicId,
+                            inventoryItemId: item.id,
+                        });
+                    }
                     saveDemoData();
                     return Promise.resolve(item);
                 }

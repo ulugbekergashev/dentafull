@@ -28,6 +28,7 @@ model Doctor {
   clinic           Clinic            @relation(fields: [clinicId], references: [id])
   installmentPlans InstallmentPlan[]
   patients         Patient[]
+  expenses         Expense[]
 
   @@unique([clinicId, telegramChatId])
 }
@@ -194,6 +195,27 @@ model Transaction {
   visit           Visit?   @relation(fields: [visitId], references: [id])
 }
 
+model Expense {
+  id              String    @id @default(uuid())
+  date            String
+  amount          Float
+  category        String
+  title           String
+  method          String?
+  note            String?
+  clinicId        String
+  doctorId        String?
+  labOrderId      String?   @unique
+  inventoryItemId String?
+  createdAt       DateTime  @default(now())
+  clinic          Clinic    @relation(fields: [clinicId], references: [id])
+  doctor          Doctor?   @relation(fields: [doctorId], references: [id])
+  labOrder        LabOrder? @relation(fields: [labOrderId], references: [id])
+
+  @@index([clinicId])
+  @@index([doctorId])
+}
+
 model Service {
   id         Int              @id @default(autoincrement())
   name       String
@@ -277,6 +299,7 @@ model Clinic {
   salesAgent              SalesAgent?        @relation(fields: [salesAgentId], references: [id])
   labTechnicians          LabTechnician[]
   labOrders               LabOrder[]
+  expenses                Expense[]
 
   @@index([botToken])
 }
@@ -360,6 +383,7 @@ model InventoryLog {
   date      DateTime      @default(now())
   userName  String
   patientId String?
+  cost      Float?
   item      InventoryItem @relation(fields: [itemId], references: [id])
   patient   Patient?      @relation(fields: [patientId], references: [id])
 
@@ -481,6 +505,7 @@ model LabOrder {
   technicianNotes String?
   clinic          Clinic        @relation(fields: [clinicId], references: [id])
   technician      LabTechnician @relation(fields: [technicianId], references: [id])
+  expense         Expense?
 
   @@index([clinicId])
   @@index([technicianId])

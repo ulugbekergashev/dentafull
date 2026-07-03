@@ -7,7 +7,7 @@ import { useLanguage, TranslationKey } from '../context/LanguageContext';
 interface InventoryProps {
     items: InventoryItem[];
     userName: string;
-    onAddItem: (item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => void;
+    onAddItem: (item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'> & { initialCost?: number }) => void;
     onUpdateStock: (id: string, data: { change: number; type: 'IN' | 'OUT'; note?: string; userName: string; cost?: number }) => void;
     onDeleteItem: (id: string) => void;
 }
@@ -18,7 +18,7 @@ export const Inventory: React.FC<InventoryProps> = ({
     const { t } = useLanguage();
     // Add Item Modal State
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [addForm, setAddForm] = useState({ name: '', unit: '', quantity: '0', minQuantity: '10' });
+    const [addForm, setAddForm] = useState({ name: '', unit: '', quantity: '0', minQuantity: '10', initialCost: '' });
 
     // Update Stock Modal State
     const [isStockModalOpen, setIsStockModalOpen] = useState(false);
@@ -35,10 +35,11 @@ export const Inventory: React.FC<InventoryProps> = ({
             unit: addForm.unit,
             quantity: Number(addForm.quantity),
             minQuantity: Number(addForm.minQuantity),
+            initialCost: addForm.initialCost ? Number(addForm.initialCost) : undefined,
             clinicId: '' // Will be set by parent
         });
         setIsAddModalOpen(false);
-        setAddForm({ name: '', unit: '', quantity: '0', minQuantity: '10' });
+        setAddForm({ name: '', unit: '', quantity: '0', minQuantity: '10', initialCost: '' });
     };
 
     const handleOpenStockModal = (item: InventoryItem, type: 'IN' | 'OUT') => {
@@ -191,6 +192,15 @@ export const Inventory: React.FC<InventoryProps> = ({
                         min="0"
                         required
                         helperText={t('inventory.minQtyHelp')}
+                    />
+                    <Input
+                        label="Umumiy narxi (ixtiyoriy)"
+                        type="number"
+                        value={addForm.initialCost}
+                        onChange={e => setAddForm({ ...addForm, initialCost: e.target.value })}
+                        min="0"
+                        placeholder="Masalan: 500000"
+                        helperText="Kiritilsa, Moliya bo'limida 'Ombor' kategoriyali xarajat sifatida yoziladi"
                     />
                     <div className="flex justify-end gap-2 pt-4">
                         <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>

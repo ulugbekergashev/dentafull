@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder } from '../types';
 
 // --- PERSISTENCE HELPERS ---
 const STORAGE_KEY = 'dentalflow_demo_data';
@@ -44,7 +44,8 @@ export const saveDemoData = () => {
             leads: DEMO_LEADS,
             installments: DEMO_INSTALLMENTS,
             labTechnicians: DEMO_LAB_TECHNICIANS,
-            labOrders: DEMO_LAB_ORDERS
+            labOrders: DEMO_LAB_ORDERS,
+            expenses: DEMO_EXPENSES
         };
         const stringified = JSON.stringify(data);
         localStorage.setItem(STORAGE_KEY, stringified);
@@ -339,6 +340,38 @@ export let DEMO_TRANSACTIONS: Transaction[] = savedData?.transactions || [
         doctorName: 'Dr. Kamola Ahmedova',
         discountPercent: 0,
         discountAmount: 0
+    },
+];
+
+// Demo Expenses (Xarajatlar)
+export let DEMO_EXPENSES: Expense[] = savedData?.expenses || [
+    {
+        id: 'demo-exp-1',
+        date: new Date('2026-01-05').toISOString().split('T')[0],
+        amount: 2000000,
+        category: 'Rent',
+        title: 'Ijara (yanvar)',
+        method: 'Cash',
+        clinicId: 'demo-clinic-1',
+    },
+    {
+        id: 'demo-exp-2',
+        date: new Date('2026-01-10').toISOString().split('T')[0],
+        amount: 350000,
+        category: 'Utilities',
+        title: 'Kommunal to\'lovlar',
+        method: 'Card',
+        clinicId: 'demo-clinic-1',
+    },
+    {
+        id: 'demo-exp-3',
+        date: new Date('2026-01-28').toISOString().split('T')[0],
+        amount: 150000,
+        category: 'DoctorShare',
+        title: 'Shifokor ulushi',
+        method: 'Cash',
+        clinicId: 'demo-clinic-1',
+        doctorId: 'demo-doctor-1',
     },
 ];
 

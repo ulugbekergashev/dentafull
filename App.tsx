@@ -22,7 +22,7 @@ import { DoctorDetails } from './pages/DoctorDetails';
 import { Inventory } from './pages/Inventory';
 import { OnlineQueue } from './pages/OnlineQueue';
 import { LabOrders } from './pages/LabOrders';
-import { UserRole, Patient, Appointment, Transaction, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder } from './types';
+import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
@@ -93,6 +93,7 @@ const AppContent: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [currentClinic, setCurrentClinic] = useState<Clinic | undefined>();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -195,11 +196,12 @@ const AppContent: React.FC = () => {
         const isDemo = storedAuth ? JSON.parse(storedAuth).isDemo : false;
 
         if (isDemo && clinicId === 'demo-clinic-1') {
-          const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN, DEMO_CATEGORIES, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_RECEPTIONISTS, DEMO_LEADS, DEMO_INVENTORY } = await import('./services/demoData');
+          const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN, DEMO_CATEGORIES, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_RECEPTIONISTS, DEMO_LEADS, DEMO_INVENTORY } = await import('./services/demoData');
           setCurrentClinic(DEMO_CLINIC);
           setPatients(DEMO_PATIENTS);
           setAppointments(DEMO_APPOINTMENTS);
           setTransactions(DEMO_TRANSACTIONS);
+          setExpenses(DEMO_EXPENSES);
           setServices(DEMO_SERVICES);
           setCategories(DEMO_CATEGORIES);
           setDoctors(DEMO_DOCTORS);
@@ -224,10 +226,11 @@ const AppContent: React.FC = () => {
           setPlans(plns);
           setClinics(clns);
         } else if (clinicId) {
-          const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds] = await Promise.all([
+          const [pts, appts, txs, exps, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
+            api.expenses.getAll(clinicId),
             api.services.getAll(clinicId),
             api.doctors.getAll(clinicId),
             api.receptionists.getAll(clinicId),
@@ -244,6 +247,7 @@ const AppContent: React.FC = () => {
           setPatients(pts);
           setAppointments(appts);
           setTransactions(txs);
+          setExpenses(exps || []);
           setServices(svcs);
           setDoctors(docs);
           setReceptionists(recs);
@@ -329,10 +333,11 @@ const AppContent: React.FC = () => {
         setPlans(plns);
         setClinics(clns);
       } else if (clinicId) {
-        const [pts, appts, txs, svcs, docs, recs, plns, invItems, cats, revs, leadsData] = await Promise.all([
+        const [pts, appts, txs, exps, svcs, docs, recs, plns, invItems, cats, revs, leadsData] = await Promise.all([
           api.patients.getAll(clinicId),
           api.appointments.getAll(clinicId),
           api.transactions.getAll(clinicId),
+          api.expenses.getAll(clinicId),
           api.services.getAll(clinicId),
           api.doctors.getAll(clinicId),
           api.receptionists.getAll(clinicId),
@@ -345,6 +350,7 @@ const AppContent: React.FC = () => {
         setPatients(pts);
         setAppointments(appts);
         setTransactions(txs);
+        setExpenses(exps || []);
         setServices(svcs);
         setDoctors(docs);
         setReceptionists(recs);
@@ -516,6 +522,50 @@ const AppContent: React.FC = () => {
       addToast('success', 'To\'lov holati yangilandi.');
     } catch (e: any) {
       console.error('Transaction update error:', e);
+      addToast('error', e.message || 'Xatolik yuz berdi');
+    }
+  };
+
+  // Expense Actions (Xarajatlar)
+  const refreshExpenses = async () => {
+    try {
+      const exps = await api.expenses.getAll(clinicId);
+      setExpenses(exps || []);
+    } catch (e) {
+      console.error('Failed to refresh expenses:', e);
+    }
+  };
+
+  const addExpense = async (expense: Omit<Expense, 'id'>) => {
+    try {
+      const newExpense = await api.expenses.create({ ...expense, clinicId });
+      setExpenses(prev => [newExpense, ...prev]);
+      addToast('success', 'Xarajat qo\'shildi.');
+      return newExpense;
+    } catch (e: any) {
+      console.error('Add expense error:', e);
+      addToast('error', e.message || 'Xarajatni saqlashda xatolik yuz berdi');
+      throw e;
+    }
+  };
+
+  const updateExpense = async (id: string, data: Partial<Expense>) => {
+    try {
+      const updated = await api.expenses.update(id, data);
+      setExpenses(prev => prev.map(e => e.id === id ? updated : e));
+      addToast('success', 'Xarajat yangilandi.');
+    } catch (e: any) {
+      console.error('Expense update error:', e);
+      addToast('error', e.message || 'Xatolik yuz berdi');
+    }
+  };
+
+  const deleteExpense = async (id: string) => {
+    try {
+      await api.expenses.delete(id);
+      setExpenses(prev => prev.filter(e => e.id !== id));
+      addToast('info', 'Xarajat o\'chirildi.');
+    } catch (e: any) {
       addToast('error', e.message || 'Xatolik yuz berdi');
     }
   };
@@ -719,10 +769,12 @@ const AppContent: React.FC = () => {
 
 
   // Inventory Actions
-  const addInventoryItem = async (item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addInventoryItem = async (item: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'> & { initialCost?: number }) => {
     try {
       const newItem = await api.inventory.create({ ...item, clinicId });
       setInventoryItems(prev => [...prev, newItem]);
+      // Boshlang'ich narx kiritilgan bo'lsa backend Ombor xarajatini yozadi
+      if (item.initialCost && item.initialCost > 0) refreshExpenses();
       addToast('success', 'Material qo\'shildi!');
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
@@ -732,18 +784,8 @@ const AppContent: React.FC = () => {
       const updated = await api.inventory.updateStock(id, data);
       setInventoryItems(prev => prev.map(item => item.id === id ? updated : item));
 
-      if (data.type === 'IN' && data.cost && data.cost > 0) {
-        const newTx = await api.transactions.create({
-          patientName: `Ombor: ${updated.name}`,
-          date: new Date().toISOString().split('T')[0],
-          amount: data.cost,
-          type: 'Expense' as any,
-          service: 'Ombor Xarajati',
-          status: 'Paid',
-          clinicId
-        });
-        setTransactions(prev => [newTx, ...prev]);
-      }
+      // Kirim narxi bo'lsa backend Ombor xarajatini yaratadi — ro'yxatni yangilaymiz
+      if (data.type === 'IN' && data.cost && data.cost > 0) refreshExpenses();
 
       addToast('success', 'Miqdor yangilandi.');
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
@@ -1324,6 +1366,7 @@ const AppContent: React.FC = () => {
                   <Finance
                     userRole={userRole}
                     transactions={transactions}
+                    expenses={expenses}
                     appointments={appointments}
                     services={services}
                     patients={patients}
@@ -1333,6 +1376,9 @@ const AppContent: React.FC = () => {
                     currentClinic={currentClinic}
                     labOrders={labOrders}
                     onAddTransaction={addTransaction}
+                    onAddExpense={addExpense}
+                    onUpdateExpense={updateExpense}
+                    onDeleteExpense={deleteExpense}
                   />
                 } />
               )}
@@ -1356,6 +1402,7 @@ const AppContent: React.FC = () => {
                   setLabOrders={setLabOrders}
                   doctors={doctors}
                   patients={patients}
+                  onExpensesChanged={refreshExpenses}
                 />
               } />
 

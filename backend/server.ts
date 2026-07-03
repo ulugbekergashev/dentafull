@@ -1122,6 +1122,103 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Expenses (Xarajatlar) ---
+const EXPENSE_CATEGORIES = ['DoctorShare', 'Salary', 'Rent', 'Utilities', 'Inventory', 'Lab', 'Other'];
+
+app.get('/api/expenses', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const expenses = await prisma.expense.findMany({
+            where: { clinicId: clinicId as string },
+            orderBy: { date: 'desc' }
+        });
+        res.json(expenses);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch expenses' });
+    }
+});
+
+app.post('/api/expenses', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const { date, amount, category, title, method, note, doctorId } = req.body;
+        if (!EXPENSE_CATEGORIES.includes(category)) {
+            return res.status(400).json({ error: 'Noto\'g\'ri kategoriya' });
+        }
+        if (category === 'DoctorShare' && !doctorId) {
+            return res.status(400).json({ error: 'Shifokor ulushi uchun shifokor tanlanishi shart' });
+        }
+        const parsedAmount = parseFloat(amount);
+        if (!parsedAmount || parsedAmount <= 0) {
+            return res.status(400).json({ error: 'Summa noto\'g\'ri' });
+        }
+
+        const expense = await prisma.expense.create({
+            data: {
+                date: date || new Date().toISOString().split('T')[0],
+                amount: parsedAmount,
+                category,
+                title: title || 'Xarajat',
+                method: method || null,
+                note: note || null,
+                doctorId: doctorId || null,
+                clinicId: clinicId as string,
+            }
+        });
+        res.json(expense);
+    } catch (error) {
+        console.error('Expense create error:', error);
+        res.status(500).json({ error: 'Failed to create expense' });
+    }
+});
+
+app.put('/api/expenses/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'expense', req.params.id))) return;
+
+        const { date, amount, category, title, method, note, doctorId } = req.body;
+        if (category && !EXPENSE_CATEGORIES.includes(category)) {
+            return res.status(400).json({ error: 'Noto\'g\'ri kategoriya' });
+        }
+
+        const expense = await prisma.expense.update({
+            where: { id: req.params.id },
+            data: {
+                ...(date !== undefined && { date }),
+                ...(amount !== undefined && { amount: parseFloat(amount) || 0 }),
+                ...(category !== undefined && { category }),
+                ...(title !== undefined && { title }),
+                ...(method !== undefined && { method: method || null }),
+                ...(note !== undefined && { note: note || null }),
+                ...(doctorId !== undefined && { doctorId: doctorId || null }),
+            }
+        });
+        res.json(expense);
+    } catch (error) {
+        console.error('Expense update error:', error);
+        res.status(500).json({ error: 'Failed to update expense' });
+    }
+});
+
+app.delete('/api/expenses/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'expense', req.params.id))) return;
+        await prisma.expense.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Expense delete error:', error);
+        res.status(500).json({ error: 'Failed to delete expense' });
+    }
+});
+
 // --- Installments ---
 app.get('/api/installments', authenticateToken, async (req, res) => {
     try {
@@ -1648,6 +1745,41 @@ app.post('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
     }
 });
 
+// Lab buyurtma "Delivered" bo'lganda avtomatik Laboratoriya xarajatini sinxronlaydi:
+// yetkazilgan + narx>0 → expense yaratiladi/yangilanadi; aks holda bog'langan expense o'chiriladi.
+const syncLabOrderExpense = async (order: any) => {
+    try {
+        const existing = await prisma.expense.findUnique({ where: { labOrderId: order.id } });
+        if (order.status === 'Delivered' && (order.price || 0) > 0) {
+            const title = `Lab: ${order.patientName} — ${order.orderType}`;
+            const date = (order.deliveredAt ? new Date(order.deliveredAt) : new Date()).toISOString().split('T')[0];
+            if (existing) {
+                if (existing.amount !== order.price || existing.title !== title) {
+                    await prisma.expense.update({
+                        where: { id: existing.id },
+                        data: { amount: order.price, title }
+                    });
+                }
+            } else {
+                await prisma.expense.create({
+                    data: {
+                        date,
+                        amount: order.price,
+                        category: 'Lab',
+                        title,
+                        clinicId: order.clinicId,
+                        labOrderId: order.id,
+                    }
+                });
+            }
+        } else if (existing) {
+            await prisma.expense.delete({ where: { id: existing.id } });
+        }
+    } catch (err: any) {
+        console.error('Lab expense sync error:', err);
+    }
+};
+
 app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
     try {
         if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return;
@@ -1660,6 +1792,7 @@ app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => 
             where: { id: req.params.id },
             data: updateData
         });
+        await syncLabOrderExpense(order);
         res.json(order);
     } catch (error: any) {
         res.status(500).json({ error: error.message || 'Failed to update lab order' });
@@ -1669,6 +1802,7 @@ app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => 
 app.delete('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
     try {
         if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return;
+        await prisma.expense.deleteMany({ where: { labOrderId: req.params.id } });
         await (prisma as any).labOrder.delete({ where: { id: req.params.id } });
         res.json({ success: true });
     } catch (error: any) {
@@ -2885,7 +3019,7 @@ app.get('/api/inventory/analytics', authenticateToken, async (req, res) => {
 
 app.post('/api/inventory', authenticateToken, async (req, res) => {
     try {
-        const { name, unit, quantity, minQuantity, clinicId } = req.body;
+        const { name, unit, quantity, minQuantity, clinicId, initialCost } = req.body;
 
         const item = await prisma.inventoryItem.create({
             data: {
@@ -2896,6 +3030,22 @@ app.post('/api/inventory', authenticateToken, async (req, res) => {
                 clinicId
             }
         });
+
+        // Boshlang'ich zaxira narxi kiritilgan bo'lsa — Ombor xarajati yoziladi
+        const cost = parseFloat(initialCost) || 0;
+        if (cost > 0) {
+            await prisma.expense.create({
+                data: {
+                    date: new Date().toISOString().split('T')[0],
+                    amount: cost,
+                    category: 'Inventory',
+                    title: `Ombor: ${item.name}`,
+                    clinicId,
+                    inventoryItemId: item.id,
+                }
+            }).catch((err: any) => console.error('Inventory initial expense error:', err));
+        }
+
         res.json(item);
     } catch (error) {
         console.error('Create inventory item error:', error);
@@ -2905,7 +3055,7 @@ app.post('/api/inventory', authenticateToken, async (req, res) => {
 
 app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
     try {
-        const { change, type, note, userName, patientId } = req.body;
+        const { change, type, note, userName, patientId, cost } = req.body;
         const itemId = req.params.id;
 
         // Get current item
@@ -2931,6 +3081,8 @@ app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Insufficient stock' });
         }
 
+        const parsedCost = parseFloat(cost) || 0;
+
         // Update item and create log in a transaction
         const [updatedItem] = await prisma.$transaction([
             prisma.inventoryItem.update({
@@ -2944,10 +3096,26 @@ app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
                     type,
                     note,
                     userName,
-                    patientId: patientId || null
+                    patientId: patientId || null,
+                    cost: parsedCost > 0 ? parsedCost : null
                 }
             })
         ]);
+
+        // Kirim (IN) narx bilan bo'lsa — Ombor xarajati yoziladi
+        if (type === 'IN' && parsedCost > 0) {
+            await prisma.expense.create({
+                data: {
+                    date: new Date().toISOString().split('T')[0],
+                    amount: parsedCost,
+                    category: 'Inventory',
+                    title: `Ombor: ${currentItem.name}`,
+                    note: note || null,
+                    clinicId: currentItem.clinicId,
+                    inventoryItemId: itemId,
+                }
+            }).catch((err: any) => console.error('Inventory expense error:', err));
+        }
 
         res.json(updatedItem);
     } catch (error: any) {

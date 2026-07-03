@@ -41,3 +41,6 @@ lerna-debug.log*
 *.sqlite
 *.sqlite3
 dev.db
+
+# Data migration backups (may contain patient/financial data)
+backend/scripts/backup-*.json

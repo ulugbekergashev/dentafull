@@ -3,7 +3,7 @@ import { Doctor, Appointment, Service, Transaction, Review } from '../types';
 import { Card, Input } from '../components/Common';
 import { DollarSign, Calendar, Award, Users, Star } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
-import { calculateDoctorSalary } from '../utils/financialCalculations';
+import { calculateDoctorShare } from '../utils/financialCalculations';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { TranslationKey } from '../i18n/translations';
@@ -132,12 +132,11 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
 
             // Calculate metrics
             // Use shared financial calculation utility
-            const {
-                grossRevenue,
-                technicianCosts,
-                netRevenue: totalNetRevenue,
-                doctorSalary
-            } = calculateDoctorSalary(doctorTransactions, doctor, services);
+            // Hisoblangan ulush = to'langan to'lovlar × shifokor foizi
+            const share = calculateDoctorShare(doctorTransactions, doctor);
+            const grossRevenue = share.grossRevenue;
+            const doctorSalary = share.accrued;
+            const totalNetRevenue = grossRevenue - doctorSalary;
 
             // Unique Patients
             const uniquePatients = new Set(doctorAppts.map(a => a.patientId)).size;
@@ -200,7 +199,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
         }).sort((a, b) => b.revenue - a.revenue);
     }, [doctors, filteredAppointments, filteredTransactions, t]);
 
-    const totalRevenue = filteredTransactions.reduce((acc, t) => acc + t.amount, 0);
+    const totalRevenue = filteredTransactions.reduce((acc, t) => acc + (t.status === 'Paid' ? t.amount : 0), 0);
     const totalAppointments = analyticsData.reduce((sum, d) => sum + d.totalAppts, 0);
     const totalPatients = analyticsData.reduce((sum, d) => sum + d.uniquePatients, 0);
     const topPerformer = analyticsData.length > 0 ? analyticsData[0] : null;

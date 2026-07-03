@@ -21,6 +21,7 @@ interface Props {
   setLabOrders: (orders: LabOrder[]) => void;
   doctors: any[];
   patients?: Patient[];
+  onExpensesChanged?: () => void;
 }
 
 const emptyForm = {
@@ -29,7 +30,7 @@ const emptyForm = {
   clinicianNotes: '', notes: '', status: 'Pending',
 };
 
-export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [] }) => {
+export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [], onExpensesChanged }) => {
   const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterTech, setFilterTech]   = useState<string>('all');
@@ -96,6 +97,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
       if (editingOrder) {
         const updated = await api.labOrders.update(editingOrder.id, payload);
         setLabOrders(labOrders.map(o => o.id === editingOrder.id ? { ...o, ...updated } : o));
+        onExpensesChanged?.();
       } else {
         const created = await api.labOrders.create(payload);
         setLabOrders([created, ...labOrders]);
@@ -109,6 +111,8 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
     try {
       const updated = await api.labOrders.update(order.id, { status: newStatus });
       setLabOrders(labOrders.map(o => o.id === order.id ? { ...o, ...updated } : o));
+      // "Delivered" ga o'tganda backend Laboratoriya xarajatini yozadi/o'chiradi
+      onExpensesChanged?.();
     } catch {}
   };
 
@@ -117,6 +121,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
     try {
       await api.labOrders.delete(id);
       setLabOrders(labOrders.filter(o => o.id !== id));
+      onExpensesChanged?.();
     } catch {}
   };
 

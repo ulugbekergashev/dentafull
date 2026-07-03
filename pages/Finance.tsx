@@ -1,18 +1,20 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
-import { UserRole, Transaction, Appointment, Patient, Clinic, LabOrder } from '../types';
+import { UserRole, Transaction, Expense, ExpenseCategory, EXPENSE_CATEGORY_LABELS, Appointment, Patient, Clinic, LabOrder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer, Plus, Banknote } from 'lucide-react';
+import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer, Plus, Banknote, Pencil, Trash2, HandCoins } from 'lucide-react';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { calculateTotalFinancials } from '../utils/financialCalculations';
+import { calculateTotalFinancials, calculateDoctorShares } from '../utils/financialCalculations';
+import { exportFinanceToExcel } from '../utils/excelExport';
 
 import { ReceiptModal } from '../components/ReceiptModal';
 
 interface FinanceProps {
   userRole: UserRole;
   transactions: Transaction[];
+  expenses: Expense[];
   appointments: Appointment[];
   services: { name: string; price: number; duration: number }[];
   patients: Patient[];
@@ -21,13 +23,27 @@ interface FinanceProps {
   doctors: Doctor[];
   currentClinic?: Clinic;
   labOrders?: LabOrder[];
-  onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<void>;
+  onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
+  onAddExpense?: (expense: Omit<Expense, 'id'>) => Promise<any>;
+  onUpdateExpense?: (id: string, data: Partial<Expense>) => Promise<void>;
+  onDeleteExpense?: (id: string) => Promise<void>;
 }
 
 import { Doctor, InstallmentPlan } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appointments, services, patients, onPatientClick, doctorId, doctors, currentClinic, labOrders, onAddTransaction }) => {
+// Xarajat kategoriyalari uchun badge ranglari
+const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
+  DoctorShare: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  Salary: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
+  Rent: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  Utilities: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+  Inventory: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  Lab: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  Other: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+};
+
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, currentClinic, labOrders, onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense }) => {
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
@@ -38,35 +54,101 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const [remindedDebtors, setRemindedDebtors] = useState<Set<string>>(new Set());
   const [selectedDebtorDoctorId, setSelectedDebtorDoctorId] = useState<string>('All');
 
+  // To'lovlar | Xarajatlar tab
+  const [activeTab, setActiveTab] = useState<'payments' | 'expenses'>('payments');
+
   // Add Payment Modal State
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
-  const [isExpense, setIsExpense] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     patientId: '',
     doctorId: '',
     service: '',
     amount: '',
-    type: 'Cash' as 'Cash' | 'Card' | 'Insurance' | 'Balance' | 'Expense',
+    type: 'Cash' as 'Cash' | 'Card' | 'Insurance' | 'Balance',
     notes: '',
   });
   const [paymentLoading, setPaymentLoading] = useState(false);
 
+  // Expense Modal State
+  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [expenseForm, setExpenseForm] = useState({
+    category: 'Other' as ExpenseCategory,
+    title: '',
+    doctorId: '',
+    amount: '',
+    method: 'Cash' as 'Cash' | 'Card',
+    date: today,
+    note: '',
+  });
+  const [expenseLoading, setExpenseLoading] = useState(false);
+
+  const openExpenseModal = (preset?: Partial<typeof expenseForm>, expense?: Expense) => {
+    setEditingExpense(expense || null);
+    setExpenseForm({
+      category: (expense?.category || preset?.category || 'Other') as ExpenseCategory,
+      title: expense?.title || preset?.title || '',
+      doctorId: expense?.doctorId || preset?.doctorId || '',
+      amount: expense ? String(expense.amount) : (preset?.amount || ''),
+      method: (expense?.method || 'Cash') as 'Cash' | 'Card',
+      date: expense?.date ? expense.date.split('T')[0] : today,
+      note: expense?.note || '',
+    });
+    setIsExpenseModalOpen(true);
+  };
+
+  const handleSaveExpense = async () => {
+    const amount = parseFloat(expenseForm.amount);
+    if (!amount || amount <= 0) return;
+    if (expenseForm.category === 'DoctorShare' && !expenseForm.doctorId) return;
+    setExpenseLoading(true);
+    try {
+      const doctor = doctors.find(d => d.id === expenseForm.doctorId);
+      const payload = {
+        date: expenseForm.date || today,
+        amount,
+        category: expenseForm.category,
+        title: expenseForm.title || (expenseForm.category === 'DoctorShare' && doctor
+          ? `Shifokor ulushi — ${doctor.lastName} ${doctor.firstName}`
+          : EXPENSE_CATEGORY_LABELS[expenseForm.category]),
+        method: expenseForm.method,
+        note: expenseForm.note || undefined,
+        doctorId: expenseForm.doctorId || undefined,
+        clinicId: patients[0]?.clinicId || '',
+      };
+      if (editingExpense) {
+        await onUpdateExpense?.(editingExpense.id, payload);
+      } else {
+        await onAddExpense?.(payload as Omit<Expense, 'id'>);
+      }
+      setIsExpenseModalOpen(false);
+      setEditingExpense(null);
+    } finally {
+      setExpenseLoading(false);
+    }
+  };
+
+  const handleDeleteExpense = async (expense: Expense) => {
+    if (!confirm(`"${expense.title}" xarajatini o'chirishni tasdiqlaysizmi?`)) return;
+    await onDeleteExpense?.(expense.id);
+  };
+
   const handleAddPayment = async () => {
-    if (!paymentForm.amount || (!isExpense && !paymentForm.patientId)) return;
+    if (!paymentForm.amount || !paymentForm.patientId) return;
     setPaymentLoading(true);
     try {
       const patient = patients.find(p => p.id === paymentForm.patientId);
       const doctor = doctors.find(d => d.id === paymentForm.doctorId);
       const clinicId = patients[0]?.clinicId || '';
       await onAddTransaction?.({
-        patientName: isExpense ? (paymentForm.service || 'Xarajat') : (patient ? `${patient.lastName} ${patient.firstName}` : ''),
+        patientName: patient ? `${patient.lastName} ${patient.firstName}` : '',
         date: today,
         amount: parseFloat(paymentForm.amount),
-        type: isExpense ? 'Expense' : paymentForm.type,
-        service: paymentForm.service || (isExpense ? 'Umumiy Xarajat' : 'To\'lov'),
+        type: paymentForm.type,
+        service: paymentForm.service || 'To\'lov',
         status: 'Paid',
         clinicId,
-        patientId: isExpense ? undefined : paymentForm.patientId || undefined,
+        patientId: paymentForm.patientId || undefined,
         doctorId: paymentForm.doctorId || undefined,
         doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : undefined,
       });
@@ -126,11 +208,16 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
     return true;
   };
 
-  const filteredTransactions = filteredTransactionsByDoctor.filter(t => {
-    const matchesStatus = filterStatus === 'Barchasi' || t.status === filterStatus;
-    const matchesDate = isDateInRange(t.date);
-    return matchesStatus && matchesDate;
-  });
+  // Sana bo'yicha filtrlangan to'lovlar (statistika uchun asos)
+  const dateFilteredTransactions = filteredTransactionsByDoctor.filter(t => isDateInRange(t.date));
+
+  // Jadval uchun: sana + status filtri
+  const filteredTransactions = dateFilteredTransactions.filter(t =>
+    filterStatus === 'Barchasi' || t.status === filterStatus
+  );
+
+  // Sana bo'yicha filtrlangan xarajatlar
+  const filteredExpenses = expenses.filter(e => isDateInRange(e.date));
 
   // Filter appointments for Lost Revenue calculation to match the selected timeframe
   const filteredAppointments = filteredAppointmentsByDoctor.filter(a => isDateInRange(a.date));
@@ -223,25 +310,20 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const [receiptTransaction, setReceiptTransaction] = useState<Transaction | null>(null);
 
   const PAYMENT_METHOD_DATA = [
-    { name: 'Naqd', value: filteredTransactions.filter(t => t.type === 'Cash').length, color: '#10B981' },
-    { name: 'Karta', value: filteredTransactions.filter(t => t.type === 'Card').length, color: '#3B82F6' },
-    { name: 'Sug\'urta', value: filteredTransactions.filter(t => t.type === 'Insurance').length, color: '#8B5CF6' },
+    { name: 'Naqd', value: dateFilteredTransactions.filter(t => t.type === 'Cash').length, color: '#10B981' },
+    { name: 'Karta', value: dateFilteredTransactions.filter(t => t.type === 'Card').length, color: '#3B82F6' },
+    { name: 'Sug\'urta', value: dateFilteredTransactions.filter(t => t.type === 'Insurance').length, color: '#8B5CF6' },
   ];
 
-  const totalRevenue = filteredTransactions.reduce((acc, t) => acc + (t.type !== 'Expense' ? t.amount : 0), 0);
-
   // --- Financial Breakdown Logic ---
-  // Use shared utility function for consistent calculations
-  const { doctorSalaries, inventoryCosts } = calculateTotalFinancials(
-    filteredTransactions,
-    doctors,
-    services
-  );
+  // Yagona manba: kirim (Paid), xarajatlar, shifokor ulushi, sof foyda
+  const financials = calculateTotalFinancials(dateFilteredTransactions, filteredExpenses, doctors);
+  const doctorShares = calculateDoctorShares(dateFilteredTransactions, filteredExpenses, doctors)
+    .filter(s => s.percentage > 0 || s.accrued > 0 || s.paid > 0);
 
-  // Calculate actual technician costs from lab orders
-  const filteredLabOrders = (labOrders || []).filter(o => o.status !== 'Cancelled' && isDateInRange(o.orderedAt));
-  const technicianCosts = filteredLabOrders.reduce((sum, o) => sum + (o.price || 0), 0);
-  const netProfit = totalRevenue - technicianCosts - doctorSalaries - inventoryCosts;
+  const totalRevenue = financials.totalRevenue;
+  const netProfit = financials.netProfit;
+  const paidTransactionCount = dateFilteredTransactions.filter(t => t.status === 'Paid').length;
 
   // --- Lost Revenue Logic ---
   const noShowAppointments = filteredAppointments.filter(a => a.status === 'No-Show');
@@ -269,125 +351,18 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
   const recoveredCount = recoveredPatientIds.size;
   const lostCustomersCount = uniqueNoShowPatients - recoveredCount;
 
+  // Excel eksport: Hisobot / To'lovlar / Xarajatlar / Qarzdorlar varaqlari
   const handleExport = () => {
-    // Comprehensive Financial Report with 20+ metrics
-    const now = new Date();
-    const reportDate = now.toLocaleDateString('uz-UZ');
-    const reportTime = now.toLocaleTimeString('uz-UZ');
-
-    // Calculate all metrics
-    const totalTransactions = filteredTransactions.length;
-    const paidTransactions = filteredTransactions.filter(t => t.status === 'Paid');
-    const pendingTransactions = filteredTransactions.filter(t => t.status === 'Pending');
-    const overdueTransactions = filteredTransactions.filter(t => t.status === 'Overdue');
-
-    const cashPayments = filteredTransactions.filter(t => t.type === 'Cash');
-    const cardPayments = filteredTransactions.filter(t => t.type === 'Card');
-    const insurancePayments = filteredTransactions.filter(t => t.type === 'Insurance');
-
-    const cashRevenue = cashPayments.reduce((sum, t) => sum + t.amount, 0);
-    const cardRevenue = cardPayments.reduce((sum, t) => sum + t.amount, 0);
-    const insuranceRevenue = insurancePayments.reduce((sum, t) => sum + t.amount, 0);
-
-    const paidRevenue = paidTransactions.reduce((sum, t) => sum + t.amount, 0);
-    const pendingRevenue = pendingTransactions.reduce((sum, t) => sum + t.amount, 0);
-    const overdueRevenue = overdueTransactions.reduce((sum, t) => sum + t.amount, 0);
-
-    const avgTransactionAmount = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
-    const avgPaidAmount = paidTransactions.length > 0 ? paidRevenue / paidTransactions.length : 0;
-
-    // Service breakdown
-    const serviceRevenue = new Map<string, number>();
-    filteredTransactions.forEach(t => {
-      serviceRevenue.set(t.service, (serviceRevenue.get(t.service) || 0) + t.amount);
+    exportFinanceToExcel({
+      startDate,
+      endDate,
+      transactions: dateFilteredTransactions,
+      expenses: filteredExpenses,
+      financials,
+      doctorShares,
+      doctors,
+      debtors: DEBTORS.map(d => ({ name: d.name, amount: d.amount, days: d.days })),
     });
-    const topService = Array.from(serviceRevenue.entries()).sort((a, b) => b[1] - a[1])[0];
-
-    // Patient analysis
-    const uniquePatients = new Set(filteredTransactions.map(t => t.patientName)).size;
-    const avgRevenuePerPatient = uniquePatients > 0 ? totalRevenue / uniquePatients : 0;
-
-    // Build CSV content
-    let csvContent = "MOLIYA HISOBOTI\n";
-    csvContent += `Sana: ${reportDate}\n`;
-    csvContent += `Vaqt: ${reportTime}\n`;
-    csvContent += `Davr: ${startDate || 'Boshlanish'} - ${endDate || 'Tugash'}\n`;
-    csvContent += "\n";
-
-    // Summary Metrics
-    csvContent += "UMUMIY KO'RSATKICHLAR\n";
-    csvContent += "Ko'rsatkich,Qiymat\n";
-    csvContent += `1. Jami Daromad,${totalRevenue.toLocaleString()} UZS\n`;
-    csvContent += `2. To'langan Daromad,${paidRevenue.toLocaleString()} UZS\n`;
-    csvContent += `3. Kutilayotgan To'lovlar,${pendingRevenue.toLocaleString()} UZS\n`;
-    csvContent += `4. Qarzdorlik,${overdueRevenue.toLocaleString()} UZS\n`;
-    csvContent += `5. Jami Tranzaksiyalar,${totalTransactions} ta\n`;
-    csvContent += `6. To'langan Tranzaksiyalar,${paidTransactions.length} ta\n`;
-    csvContent += `7. Kutilayotgan Tranzaksiyalar,${pendingTransactions.length} ta\n`;
-    csvContent += `8. Qarzdor Tranzaksiyalar,${overdueTransactions.length} ta\n`;
-    csvContent += `9. O'rtacha Chek,${Math.round(avgTransactionAmount).toLocaleString()} UZS\n`;
-    csvContent += `10. O'rtacha To'langan Chek,${Math.round(avgPaidAmount).toLocaleString()} UZS\n`;
-    csvContent += "\n";
-
-    // Payment Methods
-    csvContent += "TO'LOV USULLARI\n";
-    csvContent += "Usul,Soni,Summa\n";
-    csvContent += `Naqd,${cashPayments.length} ta,${cashRevenue.toLocaleString()} UZS\n`;
-    csvContent += `Karta,${cardPayments.length} ta,${cardRevenue.toLocaleString()} UZS\n`;
-    csvContent += `Sug'urta,${insurancePayments.length} ta,${insuranceRevenue.toLocaleString()} UZS\n`;
-    csvContent += "\n";
-
-    // Patient Metrics
-    csvContent += "BEMOR STATISTIKASI\n";
-    csvContent += "Ko'rsatkich,Qiymat\n";
-    csvContent += `11. Unikal Bemorlar,${uniquePatients} ta\n`;
-    csvContent += `12. Bemor Boshiga O'rtacha Daromad,${Math.round(avgRevenuePerPatient).toLocaleString()} UZS\n`;
-    csvContent += `13. Jami Qarzdorlar,${DEBTORS.length} ta\n`;
-    csvContent += `14. Jami Qarzdorlik,${totalDebt.toLocaleString()} UZS\n`;
-    csvContent += "\n";
-
-    // Loss Analysis
-    csvContent += "YO'QOTISHLAR TAHLILI\n";
-    csvContent += "Ko'rsatkich,Qiymat\n";
-    csvContent += `15. Yo'qotilgan Daromad (No-Show),${lostRevenue.toLocaleString()} UZS\n`;
-    csvContent += `16. Kelmagan Qabullar,${noShowAppointments.length} ta\n`;
-    csvContent += `17. Kelmagan Unikal Bemorlar,${uniqueNoShowPatients} ta\n`;
-    csvContent += `18. Qaytarilgan Mijozlar,${recoveredCount} ta\n`;
-    csvContent += `19. Yo'qotilgan Mijozlar,${lostCustomersCount} ta\n`;
-    csvContent += `20. Qaytarish Darajasi,${uniqueNoShowPatients > 0 ? Math.round((recoveredCount / uniqueNoShowPatients) * 100) : 0}%\n`;
-    csvContent += "\n";
-
-    // Top Service
-    csvContent += "ENG DAROMADLI XIZMAT\n";
-    csvContent += `Xizmat,Daromad\n`;
-    csvContent += `${topService ? topService[0] : 'N/A'},${topService ? topService[1].toLocaleString() : 0} UZS\n`;
-    csvContent += "\n";
-
-    // Detailed Transactions
-    csvContent += "BATAFSIL TRANZAKSIYALAR\n";
-    csvContent += "Sana,Bemor,Xizmat,To'lov Usuli,Summa,Status\n";
-    filteredTransactions.forEach(t => {
-      csvContent += `${t.date},${t.patientName},${t.service},${t.type},${t.amount},${t.status}\n`;
-    });
-    csvContent += "\n";
-
-    // Debtors List
-    csvContent += "QARZDORLAR RO'YXATI\n";
-    csvContent += "Bemor,Summa,Kechikkan Kunlar\n";
-    DEBTORS.forEach(d => {
-      csvContent += `${d.name},${d.amount.toLocaleString()} UZS,${d.days} kun\n`;
-    });
-
-    // Create and download file
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `moliya_hisoboti_${reportDate.replace(/\//g, '-')}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   return (
@@ -403,24 +378,26 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Quick payment/expense buttons */}
-          {onAddTransaction && (
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            {onAddTransaction && (
               <button
-                onClick={() => { setIsExpense(false); setIsAddPaymentOpen(true); }}
+                onClick={() => setIsAddPaymentOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
                 <Plus className="w-3.5 h-3.5" />
                 To'lov Qo'shish
               </button>
+            )}
+            {onAddExpense && (
               <button
-                onClick={() => { setIsExpense(true); setIsAddPaymentOpen(true); }}
+                onClick={() => { openExpenseModal(); setActiveTab('expenses'); }}
                 className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
                 <Banknote className="w-3.5 h-3.5" />
                 Xarajat
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
           {!isReceptionist && (
             <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-end">
@@ -503,10 +480,10 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 <p className="text-emerald-100 text-xs font-semibold uppercase tracking-wider">{t('finance.avgCheck')}</p>
               </div>
               <h3 className="text-3xl font-black">
-                {filteredTransactions.length ? Math.round(totalRevenue / filteredTransactions.length).toLocaleString() : 0}
+                {paidTransactionCount ? Math.round(totalRevenue / paidTransactionCount).toLocaleString() : 0}
               </h3>
               <p className="text-emerald-200 text-xs font-medium mt-0.5">UZS</p>
-              <div className="mt-4 text-xs text-emerald-200 font-medium">{filteredTransactions.length} ta tranzaksiya</div>
+              <div className="mt-4 text-xs text-emerald-200 font-medium">{paidTransactionCount} ta to'lov</div>
             </div>
           </div>
         )}
@@ -523,13 +500,13 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-5 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
-                <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-xl">
-                  <DollarSign className="w-5 h-5 text-red-500" />
+                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
+                  <DollarSign className="w-5 h-5 text-purple-500" />
                 </div>
-                <span className="text-[10px] font-bold text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded-full">Chiqim</span>
+                <span className="text-[10px] font-bold text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded-full">Chiqim</span>
               </div>
               <p className="text-xs font-medium text-gray-400 dark:text-gray-500">{t('finance.techCosts')}</p>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{technicianCosts.toLocaleString()}</h3>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{financials.labCosts.toLocaleString()}</h3>
               <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
             </Card>
 
@@ -541,8 +518,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 <span className="text-[10px] font-bold text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-full">Chiqim</span>
               </div>
               <p className="text-xs font-medium text-gray-400 dark:text-gray-500">Umumiy Xarajatlar</p>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{inventoryCosts.toLocaleString()}</h3>
-              <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{financials.otherExpenses.toLocaleString()}</h3>
+              <p className="text-[10px] text-gray-400 mt-0.5">UZS · shifokor ulushisiz</p>
             </Card>
 
             <Card className="p-5 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
@@ -553,8 +530,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 <span className="text-[10px] font-bold text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">Maosh</span>
               </div>
               <p className="text-xs font-medium text-gray-400 dark:text-gray-500">{t('finance.doctorSalary')}</p>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{doctorSalaries.toLocaleString()}</h3>
-              <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{Math.round(financials.doctorShareAccrued).toLocaleString()}</h3>
+              <p className="text-[10px] text-gray-400 mt-0.5">UZS · to'langani: {Math.round(financials.doctorSharePaid).toLocaleString()}</p>
             </Card>
 
             <Card className={`p-5 hover:shadow-md transition-shadow ${netProfit >= 0 ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20' : 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20'}`}>
@@ -567,11 +544,71 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 </span>
               </div>
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('finance.netProfit')}</p>
-              <h3 className={`text-xl font-black mt-0.5 ${netProfit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{netProfit.toLocaleString()}</h3>
+              <h3 className={`text-xl font-black mt-0.5 ${netProfit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{Math.round(netProfit).toLocaleString()}</h3>
               <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
             </Card>
           </div>
         </div>
+
+        {/* Shifokor hisobi: hisoblangan / to'langan / qoldiq */}
+        {doctorShares.length > 0 && (
+          <div className="mt-2">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <span className="w-6 h-0.5 bg-gray-300 dark:bg-gray-600 rounded" />
+              Shifokor Hisobi
+            </h3>
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-gray-50 dark:bg-gray-800/50">
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Shifokor</th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Ulush %</th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Kirim</th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Hisoblangan</th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">To'langan</th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Qoldiq</th>
+                      <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase text-right">Amal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm text-gray-700 dark:text-gray-300">
+                    {doctorShares.map(s => (
+                      <tr key={s.doctorId} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="px-6 py-4 font-medium">{s.doctorName}</td>
+                        <td className="px-6 py-4">{s.percentage}%</td>
+                        <td className="px-6 py-4">{s.grossRevenue.toLocaleString()}</td>
+                        <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{Math.round(s.accrued).toLocaleString()}</td>
+                        <td className="px-6 py-4 font-medium text-emerald-600 dark:text-emerald-400">{Math.round(s.paid).toLocaleString()}</td>
+                        <td className={`px-6 py-4 font-bold ${s.balance > 0 ? 'text-red-500' : 'text-gray-500'}`}>{Math.round(s.balance).toLocaleString()}</td>
+                        <td className="px-6 py-4 text-right">
+                          {onAddExpense && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={s.balance <= 0}
+                              title="Shifokor ulushini to'lash"
+                              onClick={() => openExpenseModal({
+                                category: 'DoctorShare',
+                                doctorId: s.doctorId,
+                                amount: s.balance > 0 ? String(Math.round(s.balance)) : '',
+                                title: `Shifokor ulushi — ${s.doctorName}`,
+                              })}
+                            >
+                              <HandCoins className="w-4 h-4 mr-1" /> To'lash
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="px-6 py-3 text-[11px] text-gray-400 border-t border-gray-100 dark:border-gray-700">
+                Hisoblangan = to'langan to'lovlar × shifokor foizi. "To'lash" bosilganda "Shifokor ulushi" kategoriyali xarajat yoziladi — u sof foydadan qayta ayirilmaydi.
+              </p>
+            </Card>
+          </div>
+        )}
 
         {/* Loss Analysis Section */}
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest pt-2 flex items-center gap-2">
@@ -693,66 +730,161 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
           </Card>
         </div>
 
-        {/* Transaction Table */}
+        {/* To'lovlar / Xarajatlar (tablar) */}
         <Card className="overflow-hidden">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-            <h3 className="font-semibold text-gray-900 dark:text-white">{t('finance.transactions')}</h3>
-            <div className="relative">
-              <Button variant="secondary" size="sm" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-                <Filter className="w-4 h-4 mr-2" /> {filterStatus}
-              </Button>
-              {isFilterOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10">
-                  {['Barchasi', 'Paid', 'Pending', 'Overdue'].map(status => (
-                    <button
-                      key={status}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-                      onClick={() => { setFilterStatus(status); setIsFilterOpen(false); }}
-                    >
-                      {status === 'Paid' ? 'To\'langan' : status === 'Pending' ? 'Kutilmoqda' : status === 'Overdue' ? 'Qarzdor' : status}
-                    </button>
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center gap-3">
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+              <button
+                onClick={() => setActiveTab('payments')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'payments'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              >
+                {t('finance.transactions')} ({filteredTransactions.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('expenses')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'expenses'
+                  ? 'bg-white dark:bg-gray-700 text-red-600 dark:text-red-400 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+              >
+                {t('finance.expenses')} ({filteredExpenses.length})
+              </button>
+            </div>
+
+            {activeTab === 'payments' ? (
+              <div className="relative">
+                <Button variant="secondary" size="sm" onClick={() => setIsFilterOpen(!isFilterOpen)}>
+                  <Filter className="w-4 h-4 mr-2" /> {filterStatus}
+                </Button>
+                {isFilterOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                    {['Barchasi', 'Paid', 'Pending', 'Overdue'].map(status => (
+                      <button
+                        key={status}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                        onClick={() => { setFilterStatus(status); setIsFilterOpen(false); }}
+                      >
+                        {status === 'Paid' ? 'To\'langan' : status === 'Pending' ? 'Kutilmoqda' : status === 'Overdue' ? 'Qarzdor' : status}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              onAddExpense && (
+                <Button size="sm" onClick={() => openExpenseModal()}>
+                  <Plus className="w-4 h-4 mr-1" /> Xarajat Qo'shish
+                </Button>
+              )
+            )}
+          </div>
+
+          {activeTab === 'payments' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-gray-50 dark:bg-gray-800/50">
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.date')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.patient')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.doctor')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.service')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.method')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.amount')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.status')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase text-right">Amal</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm text-gray-700 dark:text-gray-300">
+                  {filteredTransactions.map(t => (
+                    <tr key={t.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="px-6 py-4">{t.date}</td>
+                      <td className="px-6 py-4 font-medium">{t.patientName}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{t.doctorName || '-'}</td>
+                      <td className="px-6 py-4">{t.service}</td>
+                      <td className="px-6 py-4">{t.type === 'Cash' ? 'Naqd' : t.type === 'Card' ? 'Karta' : t.type === 'Insurance' ? 'Sug\'urta' : 'Balans'}</td>
+                      <td className="px-6 py-4 font-medium">{t.amount.toLocaleString()} UZS</td>
+                      <td className="px-6 py-4"><Badge status={t.status} /></td>
+                      <td className="px-6 py-4 text-right">
+                        <Button size="sm" variant="secondary" onClick={() => { setReceiptTransaction(t); setIsReceiptModalOpen(true); }} title="Chek chiqarish">
+                          <Printer className="w-4 h-4" />
+                        </Button>
+                      </td>
+                    </tr>
                   ))}
+                  {filteredTransactions.length === 0 && (
+                    <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-500">To'lovlar topilmadi.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-gray-50 dark:bg-gray-800/50">
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.date')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Kategoriya</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Nomi</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.doctor')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.method')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.amount')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase text-right">Amal</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm text-gray-700 dark:text-gray-300">
+                  {filteredExpenses.map(e => {
+                    const expenseDoctor = e.doctorId ? doctors.find(d => d.id === e.doctorId) : undefined;
+                    const isAutoLab = !!e.labOrderId;
+                    return (
+                      <tr key={e.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="px-6 py-4">{e.date?.split('T')[0]}</td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${CATEGORY_COLORS[e.category] || CATEGORY_COLORS.Other}`}>
+                            {EXPENSE_CATEGORY_LABELS[e.category] || e.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-medium">{e.title}</td>
+                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{expenseDoctor ? `${expenseDoctor.lastName} ${expenseDoctor.firstName}` : '-'}</td>
+                        <td className="px-6 py-4">{e.method === 'Cash' ? 'Naqd' : e.method === 'Card' ? 'Karta' : '-'}</td>
+                        <td className="px-6 py-4 font-bold text-red-600 dark:text-red-400">-{e.amount.toLocaleString()} UZS</td>
+                        <td className="px-6 py-4 text-right">
+                          {isAutoLab ? (
+                            <span className="text-[10px] font-bold text-purple-500 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded-full" title="Laboratoriya buyurtmasidan avtomatik yozilgan — Lab sahifasida boshqariladi">
+                              Avto
+                            </span>
+                          ) : (
+                            <div className="flex justify-end gap-1">
+                              {onUpdateExpense && (
+                                <Button size="sm" variant="secondary" title="Tahrirlash" onClick={() => openExpenseModal(undefined, e)}>
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {onDeleteExpense && (
+                                <Button size="sm" variant="secondary" title="O'chirish" onClick={() => handleDeleteExpense(e)}>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredExpenses.length === 0 && (
+                    <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500">Xarajatlar topilmadi.</td></tr>
+                  )}
+                </tbody>
+              </table>
+              {filteredExpenses.length > 0 && (
+                <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                  <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                    Jami: -{financials.totalExpenses.toLocaleString()} UZS
+                  </span>
                 </div>
               )}
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-gray-50 dark:bg-gray-800/50">
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.date')}</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.patient')}</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.doctor')}</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.service')}</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.method')}</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.amount')}</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.status')}</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase text-right">Amal</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm text-gray-700 dark:text-gray-300">
-                {filteredTransactions.map(t => (
-                  <tr key={t.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="px-6 py-4">{t.date}</td>
-                    <td className="px-6 py-4 font-medium">{t.patientName}</td>
-                    <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{t.doctorName || '-'}</td>
-                    <td className="px-6 py-4">{t.service}</td>
-                    <td className="px-6 py-4">{t.type}</td>
-                    <td className="px-6 py-4 font-medium">{t.amount.toLocaleString()} UZS</td>
-                    <td className="px-6 py-4"><Badge status={t.status} /></td>
-                    <td className="px-6 py-4 text-right">
-                      <Button size="sm" variant="secondary" onClick={() => { setReceiptTransaction(t); setIsReceiptModalOpen(true); }} title="Chek chiqarish">
-                        <Printer className="w-4 h-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {filteredTransactions.length === 0 && (
-                  <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-500">Tranzaksiyalar topilmadi.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          )}
         </Card>
 
         {/* Installment Modal */}
@@ -917,76 +1049,60 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
         clinic={currentClinic}
       />
 
-      {/* Add Payment / Expense Quick Modal */}
+      {/* Add Payment Quick Modal */}
       <Modal
         isOpen={isAddPaymentOpen}
         onClose={() => setIsAddPaymentOpen(false)}
-        title={isExpense ? '➕ Xarajat Qo\'shish' : '💰 To\'lov Qo\'shish'}
+        title={'💰 To\'lov Qo\'shish'}
       >
         <div className="space-y-4">
-          {!isExpense && (
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Bemor *</label>
-              <select
-                value={paymentForm.patientId}
-                onChange={e => setPaymentForm(f => ({ ...f, patientId: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
-              >
-                <option value="">Bemorni tanlang...</option>
-                {patients.map(p => (
-                  <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {!isExpense && (
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Shifokor</label>
-              <select
-                value={paymentForm.doctorId}
-                onChange={e => setPaymentForm(f => ({ ...f, doctorId: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
-              >
-                <option value="">Shifokorni tanlang (ixtiyoriy)</option>
-                {doctors.map(d => (
-                  <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Bemor *</label>
+            <select
+              value={paymentForm.patientId}
+              onChange={e => setPaymentForm(f => ({ ...f, patientId: e.target.value }))}
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+            >
+              <option value="">Bemorni tanlang...</option>
+              {patients.map(p => (
+                <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>
+              ))}
+            </select>
+          </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-              {isExpense ? 'Xarajat nomi' : 'Xizmat nomi'}
-            </label>
-            {isExpense ? (
-              <input
-                type="text"
-                placeholder="Masalan: Ijara, kommunal xarajatlar..."
-                value={paymentForm.service}
-                onChange={e => setPaymentForm(f => ({ ...f, service: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
-              />
-            ) : (
-              <select
-                value={paymentForm.service}
-                onChange={e => {
-                  const svc = services.find(s => s.name === e.target.value);
-                  setPaymentForm(f => ({
-                    ...f,
-                    service: e.target.value,
-                    amount: svc ? String(svc.price) : f.amount,
-                  }));
-                }}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
-              >
-                <option value="">Xizmatni tanlang...</option>
-                {services.map((s, i) => (
-                  <option key={i} value={s.name}>{s.name} — {s.price.toLocaleString()} UZS</option>
-                ))}
-              </select>
-            )}
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Shifokor</label>
+            <select
+              value={paymentForm.doctorId}
+              onChange={e => setPaymentForm(f => ({ ...f, doctorId: e.target.value }))}
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+            >
+              <option value="">Shifokorni tanlang (ixtiyoriy)</option>
+              {doctors.map(d => (
+                <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Xizmat nomi</label>
+            <select
+              value={paymentForm.service}
+              onChange={e => {
+                const svc = services.find(s => s.name === e.target.value);
+                setPaymentForm(f => ({
+                  ...f,
+                  service: e.target.value,
+                  amount: svc ? String(svc.price) : f.amount,
+                }));
+              }}
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+            >
+              <option value="">Xizmatni tanlang...</option>
+              {services.map((s, i) => (
+                <option key={i} value={s.name}>{s.name} — {s.price.toLocaleString()} UZS</option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -1000,25 +1116,23 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
             />
           </div>
 
-          {!isExpense && (
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
-              <div className="flex gap-2 flex-wrap">
-                {(['Cash', 'Card', 'Insurance', 'Balance'] as const).map(type => (
-                  <button
-                    key={type}
-                    onClick={() => setPaymentForm(f => ({ ...f, type }))}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${paymentForm.type === type
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'
-                      }`}
-                  >
-                    {type === 'Cash' ? 'Naqd' : type === 'Card' ? 'Karta' : type === 'Insurance' ? 'Sug\'urta' : 'Balans'}
-                  </button>
-                ))}
-              </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
+            <div className="flex gap-2 flex-wrap">
+              {(['Cash', 'Card', 'Insurance', 'Balance'] as const).map(type => (
+                <button
+                  key={type}
+                  onClick={() => setPaymentForm(f => ({ ...f, type }))}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${paymentForm.type === type
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                    }`}
+                >
+                  {type === 'Cash' ? 'Naqd' : type === 'Card' ? 'Karta' : type === 'Insurance' ? 'Sug\'urta' : 'Balans'}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           <div className="flex gap-3 pt-2">
             <Button
@@ -1029,19 +1143,146 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
               Bekor
             </Button>
             <button
-              disabled={paymentLoading || !paymentForm.amount || (!isExpense && !paymentForm.patientId)}
+              disabled={paymentLoading || !paymentForm.amount || !paymentForm.patientId}
               onClick={handleAddPayment}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white transition-all ${isExpense
-                  ? 'bg-red-500 hover:bg-red-600 disabled:bg-red-300'
-                  : 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300'
-                } disabled:cursor-not-allowed`}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white transition-all bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed"
             >
               {paymentLoading ? (
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                isExpense ? <Banknote className="w-4 h-4" /> : <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4" />
               )}
-              {isExpense ? 'Xarajat Saqlash' : 'To\'lovni Saqlash'}
+              To'lovni Saqlash
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add / Edit Expense Modal */}
+      <Modal
+        isOpen={isExpenseModalOpen}
+        onClose={() => { setIsExpenseModalOpen(false); setEditingExpense(null); }}
+        title={editingExpense ? '✏️ Xarajatni Tahrirlash' : '➕ Xarajat Qo\'shish'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Kategoriya *</label>
+            <select
+              value={expenseForm.category}
+              onChange={e => setExpenseForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))}
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+            >
+              {(Object.keys(EXPENSE_CATEGORY_LABELS) as ExpenseCategory[]).map(cat => (
+                <option key={cat} value={cat}>{EXPENSE_CATEGORY_LABELS[cat]}</option>
+              ))}
+            </select>
+          </div>
+
+          {expenseForm.category === 'DoctorShare' && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Shifokor *</label>
+              <select
+                value={expenseForm.doctorId}
+                onChange={e => setExpenseForm(f => ({ ...f, doctorId: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              >
+                <option value="">Shifokorni tanlang...</option>
+                {doctors.map(d => (
+                  <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>
+                ))}
+              </select>
+              {expenseForm.doctorId && (() => {
+                const share = doctorShares.find(s => s.doctorId === expenseForm.doctorId);
+                return share ? (
+                  <p className="text-[11px] text-gray-400 mt-1.5">
+                    Tanlangan davrda qoldiq: <span className={`font-bold ${share.balance > 0 ? 'text-red-500' : 'text-emerald-600'}`}>{Math.round(share.balance).toLocaleString()} UZS</span>
+                  </p>
+                ) : null;
+              })()}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nomi</label>
+            <input
+              type="text"
+              placeholder={expenseForm.category === 'DoctorShare' ? 'Shifokor ulushi' : 'Masalan: Ijara (iyul), kommunal...'}
+              value={expenseForm.title}
+              onChange={e => setExpenseForm(f => ({ ...f, title: e.target.value }))}
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Summa (UZS) *</label>
+              <input
+                type="number"
+                placeholder="0"
+                value={expenseForm.amount}
+                onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Sana</label>
+              <input
+                type="date"
+                value={expenseForm.date}
+                onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
+            <div className="flex gap-2">
+              {(['Cash', 'Card'] as const).map(method => (
+                <button
+                  key={method}
+                  onClick={() => setExpenseForm(f => ({ ...f, method }))}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${expenseForm.method === method
+                      ? 'bg-red-500 text-white border-red-500'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-red-400'
+                    }`}
+                >
+                  {method === 'Cash' ? 'Naqd' : 'Karta'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Izoh</label>
+            <input
+              type="text"
+              placeholder="Ixtiyoriy izoh..."
+              value={expenseForm.note}
+              onChange={e => setExpenseForm(f => ({ ...f, note: e.target.value }))}
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => { setIsExpenseModalOpen(false); setEditingExpense(null); }}
+            >
+              Bekor
+            </Button>
+            <button
+              disabled={expenseLoading || !expenseForm.amount || (expenseForm.category === 'DoctorShare' && !expenseForm.doctorId)}
+              onClick={handleSaveExpense}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white transition-all bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed"
+            >
+              {expenseLoading ? (
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Banknote className="w-4 h-4" />
+              )}
+              {editingExpense ? 'Saqlash' : 'Xarajat Qo\'shish'}
             </button>
           </div>
         </div>

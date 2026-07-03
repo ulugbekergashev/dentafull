@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Doctor, Appointment, Transaction, Patient, Service } from '../types';
 import { Card, Button, Badge } from '../components/Common';
 import { ArrowLeft, Phone, Mail, Award, Calendar, DollarSign, Users, Star } from 'lucide-react';
-import { calculateDoctorSalary } from '../utils/financialCalculations';
+import { calculateDoctorShare } from '../utils/financialCalculations';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -92,13 +92,14 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
             return d >= monthStart && d <= monthEnd;
         });
 
-        const financial = calculateDoctorSalary(monthTx, doctor, services);
+        // Hisoblangan ulush = to'langan to'lovlar × shifokor foizi
+        const share = calculateDoctorShare(monthTx, doctor);
         const uniquePats = new Set(monthAppts.map(a => a.patientId)).size;
 
         return {
-            gross: financial.grossRevenue,
-            net: financial.netRevenue,
-            salary: financial.doctorSalary,
+            gross: share.grossRevenue,
+            net: share.grossRevenue - share.accrued,
+            salary: share.accrued,
             apptCount: monthAppts.length,
             uniquePatients: uniquePats
         };
