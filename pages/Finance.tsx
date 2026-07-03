@@ -540,7 +540,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
                 </div>
                 <span className="text-[10px] font-bold text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded-full">Chiqim</span>
               </div>
-              <p className="text-xs font-medium text-gray-400 dark:text-gray-500">Ombor Xarajatlari</p>
+              <p className="text-xs font-medium text-gray-400 dark:text-gray-500">Umumiy Xarajatlar</p>
               <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{inventoryCosts.toLocaleString()}</h3>
               <p className="text-[10px] text-gray-400 mt-0.5">UZS</p>
             </Card>
@@ -960,13 +960,33 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, appoin
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
               {isExpense ? 'Xarajat nomi' : 'Xizmat nomi'}
             </label>
-            <input
-              type="text"
-              placeholder={isExpense ? 'Masalan: Ijara, kommunal...' : 'Masalan: Protez, davolash...'}
-              value={paymentForm.service}
-              onChange={e => setPaymentForm(f => ({ ...f, service: e.target.value }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
-            />
+            {isExpense ? (
+              <input
+                type="text"
+                placeholder="Masalan: Ijara, kommunal xarajatlar..."
+                value={paymentForm.service}
+                onChange={e => setPaymentForm(f => ({ ...f, service: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+              />
+            ) : (
+              <select
+                value={paymentForm.service}
+                onChange={e => {
+                  const svc = services.find(s => s.name === e.target.value);
+                  setPaymentForm(f => ({
+                    ...f,
+                    service: e.target.value,
+                    amount: svc ? String(svc.price) : f.amount,
+                  }));
+                }}
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              >
+                <option value="">Xizmatni tanlang...</option>
+                {services.map((s, i) => (
+                  <option key={i} value={s.name}>{s.name} — {s.price.toLocaleString()} UZS</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>

@@ -77,7 +77,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
     overdue:    labOrders.filter(o => ['Pending','In-Progress'].includes(o.status) && o.deadline < new Date().toISOString().split('T')[0]).length,
   };
 
-  const openAdd = () => { setEditingOrder(null); setForm({ ...emptyForm }); setError(''); setShowModal(true); };
+  const openAdd = () => { setEditingOrder(null); setForm({ ...emptyForm }); setPatientSearch(''); setShowPatientDropdown(false); setError(''); setShowModal(true); };
   const openEdit = (o: LabOrder) => {
     setEditingOrder(o);
     setForm({ patientName: o.patientName, doctorName: o.doctorName, technicianId: o.technicianId, orderType: o.orderType, material: o.material||'', toothNumbers: o.toothNumbers||'', deadline: o.deadline, price: String(o.price||0), priority: o.priority, clinicianNotes: o.clinicianNotes||'', notes: o.notes||'', status: o.status });
@@ -253,17 +253,32 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                 <div className="col-span-2" ref={patientRef}>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bemor ismi *</label>
                   <div className="relative">
-                    <input
-                      value={form.patientName || patientSearch}
-                      onChange={e => {
-                        setPatientSearch(e.target.value);
-                        setForm(f => ({ ...f, patientName: e.target.value }));
-                        setShowPatientDropdown(true);
-                      }}
-                      onFocus={() => setShowPatientDropdown(true)}
-                      placeholder="Bemor ismi yoki telefoni bilan qidiring..."
-                      className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
+                    {form.patientName && !patientSearch ? (
+                      <div className="flex items-center gap-2 px-3 py-2.5 border border-teal-400 bg-teal-50 dark:bg-teal-900/20 dark:border-teal-600 rounded-xl">
+                        <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {form.patientName[0]}
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900 dark:text-white flex-1">{form.patientName}</span>
+                        <button
+                          type="button"
+                          onClick={() => { setForm(f => ({ ...f, patientName: '' })); setPatientSearch(''); }}
+                          className="text-gray-400 hover:text-gray-600 text-xs px-1"
+                        >✕</button>
+                      </div>
+                    ) : (
+                      <input
+                        value={patientSearch}
+                        onChange={e => {
+                          setPatientSearch(e.target.value);
+                          setForm(f => ({ ...f, patientName: '' }));
+                          setShowPatientDropdown(true);
+                        }}
+                        onFocus={() => { if (patientSearch) setShowPatientDropdown(true); }}
+                        placeholder="Bemor ismi yoki telefoni bilan qidiring..."
+                        className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        autoFocus={!form.patientName}
+                      />
+                    )}
                     {showPatientDropdown && filteredPatients.length > 0 && (
                       <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-52 overflow-y-auto">
                         {filteredPatients.map(p => (

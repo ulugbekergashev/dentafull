@@ -54,7 +54,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
    // Service Modal State
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
-   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
+   const [editingServiceId, setEditingServiceId] = useState<number | null>(null);
    const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '' });
 
    // Doctor Modal State
@@ -346,18 +346,17 @@ export const Settings: React.FC<SettingsProps> = ({
 
 
    // Handlers
-   const handleOpenServiceModal = (index?: number) => {
-      if (index !== undefined) {
-         setEditingServiceIndex(index);
-         const s = services[index];
+   const handleOpenServiceModal = (service?: Service) => {
+      if (service) {
+         setEditingServiceId(service.id as number);
          setServiceForm({
-            name: s.name,
-            price: s.price.toString(),
-            cost: (s.cost || 0).toString(),
-            categoryId: s.categoryId || ''
+            name: service.name,
+            price: service.price.toString(),
+            cost: (service.cost || 0).toString(),
+            categoryId: service.categoryId || ''
          });
       } else {
-         setEditingServiceIndex(null);
+         setEditingServiceId(null);
          setServiceForm({ name: '', price: '', cost: '', categoryId: selectedCategory || '' });
       }
       setIsServiceModalOpen(true);
@@ -373,8 +372,9 @@ export const Settings: React.FC<SettingsProps> = ({
          categoryId: serviceForm.categoryId || undefined
       };
 
-      if (editingServiceIndex !== null) {
-         onUpdateService(editingServiceIndex, data);
+      if (editingServiceId !== null) {
+         const realIndex = services.findIndex(s => s.id === editingServiceId);
+         if (realIndex !== -1) onUpdateService(realIndex, data);
       } else {
          onAddService(data);
       }
@@ -961,16 +961,14 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                     {services
                                        .filter(s => !selectedCategory || s.categoryId === selectedCategory)
-                                       .map((s) => {
-                                          const realIndex = services.indexOf(s);
-                                          return (
-                                          <tr key={realIndex} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+                                       .map((s) => (
+                                          <tr key={s.id ?? s.name} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
                                              <td className="px-4 py-3 text-gray-900 dark:text-gray-200 font-medium">{s.name}</td>
                                              <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
                                              <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-1">
                                                    <button
-                                                      onClick={() => handleOpenServiceModal(realIndex)}
+                                                      onClick={() => handleOpenServiceModal(s)}
                                                       className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
                                                    >
                                                       <Edit className="w-4 h-4" />
@@ -989,7 +987,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                                 </div>
                                              </td>
                                           </tr>
-                                       ); })}
+                                       ))}
                                     {services.filter(s => !selectedCategory || s.categoryId === selectedCategory).length === 0 && (
                                        <tr>
                                           <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
@@ -1456,7 +1454,7 @@ export const Settings: React.FC<SettingsProps> = ({
          </div>
 
          {/* Add/Edit Service Modal */}
-         <Modal isOpen={isServiceModalOpen} onClose={() => setIsServiceModalOpen(false)} title={editingServiceIndex !== null ? t('settings.services.edit') : t('settings.services.addModal')}>
+         <Modal isOpen={isServiceModalOpen} onClose={() => setIsServiceModalOpen(false)} title={editingServiceId !== null ? t('settings.services.edit') : t('settings.services.addModal')}>
             <form onSubmit={handleServiceSubmit} className="space-y-4">
                <Input label={t('settings.services.thName')} value={serviceForm.name} onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} required />
 
