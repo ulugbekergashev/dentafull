@@ -22,7 +22,7 @@ interface LeadsProps {
 }
 
 const STAGES = [
-    { id: 'New', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' },
+    { id: 'New', color: 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-400' },
     { id: 'Contacted', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' },
     { id: 'Thinking', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400' },
     { id: 'Booked', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' },
@@ -359,7 +359,7 @@ export const Leads: React.FC<LeadsProps> = ({
                 <div className="flex items-center gap-4">
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-                            {t('leads.title').split(' ')[0]} <span className="text-[#1B6AFB] dark:text-blue-400">{t('leads.title').split(' ').slice(1).join(' ')}</span>
+                            {t('leads.title').split(' ')[0]} <span className="text-primary dark:text-primary-400">{t('leads.title').split(' ').slice(1).join(' ')}</span>
                         </h1>
                         <p className="text-sm text-gray-500 mt-1">{t('leads.subtitle')}</p>
                     </div>
@@ -368,14 +368,14 @@ export const Leads: React.FC<LeadsProps> = ({
                     <div className="hidden lg:flex items-center gap-3 pl-4 border-l border-gray-100 dark:border-gray-700">
                         {currentClinic?.facebookPageId ? (
                             <div className="flex items-center gap-2 group">
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-semibold border border-blue-100/50 dark:border-blue-800/50 transition-all">
-                                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 rounded-lg text-xs font-semibold border border-primary-100/50 dark:border-primary-800/50 transition-all">
+                                    <div className="w-2 h-2 bg-primary-500 rounded-full animate-pulse" />
                                     <Facebook className="w-3.5 h-3.5 fill-current" />
                                     <span>{currentClinic.facebookPageName}</span>
                                 </div>
                                 <button
                                     onClick={() => handleFetchFBPages()}
-                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                                    className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-md transition-all opacity-0 group-hover:opacity-100"
                                     title={t('leads.tooltips.changePage')}
                                 >
                                     <RefreshCw className="w-3.5 h-3.5" />
@@ -397,7 +397,7 @@ export const Leads: React.FC<LeadsProps> = ({
                             <button
                                 onClick={handleConnectFB}
                                 disabled={isFBLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-[#1877F2] hover:bg-blue-600 text-white rounded-xl text-sm font-bold shadow-md transition-all disabled:opacity-50 active:scale-95"
+                                className="flex items-center gap-2 px-4 py-2 bg-[#1877F2] hover:bg-primary-600 text-white rounded-xl text-sm font-bold shadow-md transition-all disabled:opacity-50 active:scale-95"
                             >
                                 {isFBLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Facebook className="w-4 h-4 fill-current" />}
                                 <span>{t('leads.connectFb')}</span>
@@ -414,12 +414,12 @@ export const Leads: React.FC<LeadsProps> = ({
                             placeholder={t('leads.search')}
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-[#1B6AFB]/20 outline-none transition-all dark:text-white"
+                            className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all dark:text-white"
                         />
                     </div>
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="flex items-center justify-center gap-2 bg-[#1B6AFB] hover:bg-blue-600 active:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap"
+                        className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-600 active:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap"
                     >
                         <Plus className="w-5 h-5" />
                         <span className="hidden sm:inline">{t('leads.newLead')}</span>
@@ -453,7 +453,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     </div>
                                 </div>
 
-                                <div className={`flex-1 p-3 space-y-3 overflow-y-auto min-h-[500px] transition-colors ${isDragOverTarget ? 'bg-gray-100/30 dark:bg-gray-800/50 ring-2 ring-inset ring-blue-500/20 rounded-b-xl' : ''}`}>
+                                <div className={`flex-1 p-3 space-y-3 overflow-y-auto min-h-[500px] transition-colors ${isDragOverTarget ? 'bg-gray-100/30 dark:bg-gray-800/50 ring-2 ring-inset ring-primary-500/20 rounded-b-xl' : ''}`}>
                                     {columnLeads.map(lead => (
                                         <div
                                             key={lead.id}
@@ -465,14 +465,14 @@ export const Leads: React.FC<LeadsProps> = ({
                                             <div className="flex justify-between items-start mb-2">
                                                 <h4 
                                                     onClick={() => setSelectedLeadForDetail(lead)}
-                                                    className="font-bold text-gray-900 dark:text-white text-sm hover:text-blue-600 transition-colors cursor-pointer"
+                                                    className="font-bold text-gray-900 dark:text-white text-sm hover:text-primary-600 transition-colors cursor-pointer"
                                                 >
                                                     {lead.name}
                                                 </h4>
                                                 <div className="flex items-center gap-1.5">
                                                     <button
                                                         onClick={() => setSelectedLeadForDetail(lead)}
-                                                        className="text-gray-400 hover:text-blue-500 transition-all p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                        className="text-gray-400 hover:text-primary-500 transition-all p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
                                                         title={t('patients.actions.details')}
                                                     >
                                                         <Eye className="w-3.5 h-3.5" />
@@ -492,7 +492,7 @@ export const Leads: React.FC<LeadsProps> = ({
 
                                             <div className="flex flex-col gap-1.5 mb-3">
                                                 <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                                                    <Phone className="w-3.5 h-3.5 mr-1.5 text-blue-500" />
+                                                    <Phone className="w-3.5 h-3.5 mr-1.5 text-primary-500" />
                                                     {lead.phone}
                                                 </div>
                                                 {(() => {
@@ -579,7 +579,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     required
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:text-white"
+                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white"
                                 />
                             </div>
                             <div>
@@ -591,7 +591,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     required
                                     value={formData.phone}
                                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:text-white"
+                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white"
                                 />
                             </div>
                             <div>
@@ -603,7 +603,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     placeholder={t('leads.addLeadModal.servicePlaceholder')}
                                     value={formData.service}
                                     onChange={(e) => setFormData({ ...formData, service: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:text-white"
+                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white"
                                 />
                             </div>
                             <div>
@@ -613,7 +613,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                 <select
                                     value={formData.source}
                                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:text-white"
+                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white"
                                 >
                                     <option value="">{t('common.select')}...</option>
                                     <option value="Instagram">{t('leads.sources.instagram')}</option>
@@ -631,7 +631,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     value={formData.notes}
                                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                     rows={2}
-                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:text-white resize-none"
+                                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all dark:text-white resize-none"
                                 />
                             </div>
 
@@ -645,7 +645,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-2.5 bg-[#1B6AFB] text-white rounded-xl hover:bg-blue-600 font-medium shadow-sm transition-all"
+                                    className="flex-1 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-600 font-medium shadow-sm transition-all"
                                 >
                                     {t('leads.addLeadModal.save')}
                                 </button>
@@ -681,7 +681,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     required
                                     value={apptData.doctorId}
                                     onChange={(e) => setApptData({ ...apptData, doctorId: e.target.value })}
-                                    className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500 outline-none"
                                 >
                                     <option value="">— {t('leads.convertModal.selectDoctor')} —</option>
                                     {doctors.map((d) => (
@@ -697,7 +697,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                         required
                                         value={apptData.date}
                                         onChange={e => setApptData({ ...apptData, date: e.target.value })}
-                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500 outline-none"
                                     />
                                 </div>
                                 <div>
@@ -707,7 +707,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                         required
                                         value={apptData.time}
                                         onChange={e => setApptData({ ...apptData, time: e.target.value })}
-                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500 outline-none"
                                     />
                                 </div>
                             </div>
@@ -718,7 +718,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     <select
                                         value={apptData.categoryId}
                                         onChange={(e) => setApptData({ ...apptData, categoryId: e.target.value, type: '' })}
-                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500 outline-none"
                                     >
                                         <option value="">{t('leads.convertModal.allCategories')}</option>
                                         {categories.map(c => (
@@ -740,7 +740,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                                 duration: service?.duration || apptData.duration
                                             });
                                         }}
-                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500 outline-none"
                                     >
                                         {services
                                             .filter(s => !apptData.categoryId || (s as any).categoryId === apptData.categoryId)
@@ -756,7 +756,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                         required
                                         value={apptData.duration}
                                         onChange={e => setApptData({ ...apptData, duration: Number(e.target.value) })}
-                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500 outline-none"
                                     />
                                 </div>
                             </div>
@@ -805,21 +805,21 @@ export const Leads: React.FC<LeadsProps> = ({
                                 <button
                                     key={page.id}
                                     onClick={() => handleSelectFBPage(page)}
-                                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-gray-100 dark:border-gray-700 rounded-xl transition-all group"
+                                    className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-primary-50 dark:hover:bg-primary-900/30 border border-gray-100 dark:border-gray-700 rounded-xl transition-all group"
                                 >
                                     <div className="flex items-center gap-3 text-left">
-                                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                        <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/40 rounded-lg flex items-center justify-center text-primary-600 dark:text-primary-400">
                                             <Facebook className="w-6 h-6" />
                                         </div>
                                         <div>
-                                            <div className="font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                            <div className="font-bold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                                                 {page.name}
                                             </div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">ID: {page.id}</div>
                                         </div>
                                     </div>
-                                    <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 flex items-center justify-center group-hover:border-blue-500 transition-colors">
-                                        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
+                                    <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 flex items-center justify-center group-hover:border-primary-500 transition-colors">
+                                        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-primary-500" />
                                     </div>
                                 </button>
                             ))}
@@ -849,7 +849,7 @@ export const Leads: React.FC<LeadsProps> = ({
                     <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 transform transition-all max-h-[85vh] flex flex-col">
                         <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-gray-700 mb-4 flex-shrink-0">
                             <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                <Activity className="w-5 h-5 text-blue-500" />
+                                <Activity className="w-5 h-5 text-primary-500" />
                                 {t('leads.detailsModal.title')}
                             </h2>
                             <button

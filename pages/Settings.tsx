@@ -724,7 +724,7 @@ export const Settings: React.FC<SettingsProps> = ({
                      onClick={() => setActiveTab(item.id as any)}
                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-colors 
                    ${activeTab === item.id
-                           ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                           ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
                            : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                         }`}
                   >
@@ -803,7 +803,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                     type="checkbox"
                                     checked={generalForm.enableReceipts}
                                     onChange={(e) => setGeneralForm({ ...generalForm, enableReceipts: e.target.checked })}
-                                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                                    className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
                                  />
                                  <div>
                                     <p className="text-sm font-medium text-gray-900 dark:text-white">Chek chiqarish funksiyasi</p>
@@ -900,8 +900,8 @@ export const Settings: React.FC<SettingsProps> = ({
                            </div>
                         </div>
 
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800/40 mb-6">
-                           <p className="text-sm text-blue-800 dark:text-blue-200">
+                        <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-100 dark:border-primary-800/40 mb-6">
+                           <p className="text-sm text-primary-800 dark:text-primary-200">
                               <strong>Eslatma:</strong> DMED tizimiga ulanish uchun klinika rasmiy ravishda SSV (Uzinfocom) orqali Client ID va Client Secret kalitlarini olgan bo'lishi shart.
                            </p>
                         </div>
@@ -982,7 +982,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         <div className="space-y-1">
                            <button
                               onClick={() => setSelectedCategory(null)}
-                              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${!selectedCategory ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
+                              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${!selectedCategory ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
                            >
                               {t('settings.services.all')}
                            </button>
@@ -990,7 +990,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               <div key={cat.id} className="group flex items-center justify-between">
                                  <button
                                     onClick={() => setSelectedCategory(cat.id)}
-                                    className={`flex-1 text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${selectedCategory === cat.id ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
+                                    className={`flex-1 text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${selectedCategory === cat.id ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
                                  >
                                     {cat.name}
                                  </button>
@@ -1033,7 +1033,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                                 <div className="flex items-center justify-end gap-1">
                                                    <button
                                                       onClick={() => handleOpenServiceModal(s)}
-                                                      className="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors"
+                                                      className="text-primary-600 hover:text-primary-800 p-1 hover:bg-primary-50 rounded transition-colors"
                                                    >
                                                       <Edit className="w-4 h-4" />
                                                    </button>
@@ -1110,7 +1110,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{doc.status === 'Active' ? t('settings.staff.statusActive') : t('settings.staff.statusVoc')}</span>
                                  <button
                                     onClick={() => handleOpenDoctorModal(doc)}
-                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                                    className="p-2 text-primary-600 hover:bg-primary-50 rounded-md"
                                  >
                                     <Edit className="w-4 h-4" />
                                  </button>
@@ -1153,7 +1153,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{rec.status === 'Active' ? t('settings.staff.statusActive') : t('settings.staff.statusVoc')}</span>
                                  <button
                                     onClick={() => handleOpenReceptionistModal(rec)}
-                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                                    className="p-2 text-primary-600 hover:bg-primary-50 rounded-md"
                                  >
                                     <Edit className="w-4 h-4" />
                                  </button>
@@ -1203,7 +1203,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  </span>
                                  <button
                                     onClick={() => handleOpenLabTechModal(tech)}
-                                    className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md"
+                                    className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md"
                                  >
                                     <Edit className="w-4 h-4" />
                                  </button>
@@ -1230,7 +1230,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   <div className="space-y-6">
                   <Card className="p-6">
                      <div className="flex items-center gap-4 mb-6">
-                        <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-xl text-blue-600 dark:text-blue-400">
+                        <div className="p-3 bg-primary-100 dark:bg-primary-900/40 rounded-xl text-primary-600 dark:text-primary-400">
                            <Bot className="w-8 h-8" />
                         </div>
                         <div>
@@ -1537,7 +1537,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               key={color.value}
                               type="button"
                               onClick={() => setDoctorForm({ ...doctorForm, color: color.value })}
-                              className={`w-8 h-8 rounded-full border-2 transition-all ${doctorForm.color === color.value ? 'border-blue-500 scale-110 shadow-md' : 'border-transparent hover:scale-105'}`}
+                              className={`w-8 h-8 rounded-full border-2 transition-all ${doctorForm.color === color.value ? 'border-primary-500 scale-110 shadow-md' : 'border-transparent hover:scale-105'}`}
                               style={{ backgroundColor: color.value }}
                               title={color.name}
                            />
@@ -1556,7 +1556,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         <select
                            value={doctorForm.startHour}
                            onChange={e => setDoctorForm({ ...doctorForm, startHour: e.target.value })}
-                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                            <option value="">— Klinika vaqti —</option>
                            {Array.from({ length: 18 }, (_, i) => i + 6).map(h => (
@@ -1569,7 +1569,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         <select
                            value={doctorForm.endHour}
                            onChange={e => setDoctorForm({ ...doctorForm, endHour: e.target.value })}
-                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                            <option value="">— Klinika vaqti —</option>
                            {Array.from({ length: 18 }, (_, i) => i + 6).map(h => (
@@ -1603,7 +1603,7 @@ export const Settings: React.FC<SettingsProps> = ({
                      href="https://t.me/ergashevulugbekk"
                      target="_blank"
                      rel="noopener noreferrer"
-                     className="flex items-center justify-center gap-2 text-blue-500 hover:text-blue-600 font-medium"
+                     className="flex items-center justify-center gap-2 text-primary-500 hover:text-primary-600 font-medium"
                   >
                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.11.02-1.93 1.23-5.46 3.62-.51.35-.98.52-1.4.51-.46-.01-1.35-.26-2.01-.48-.81-.27-1.44-.42-1.38-.88.03-.24.38-.49 1.03-.75 4.06-1.77 6.77-2.94 8.13-3.51 3.87-1.6 4.67-1.88 5.2-1.88.11 0 .37.03.54.17.14.12.18.28.2.45-.02.07-.02.13-.03.23z" />
@@ -1780,21 +1780,21 @@ export const Settings: React.FC<SettingsProps> = ({
                      <button
                         key={page.id}
                         onClick={() => handleSelectFBPage(page)}
-                        className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-gray-100 dark:border-gray-700 rounded-xl transition-all group"
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-primary-50 dark:hover:bg-primary-900/30 border border-gray-100 dark:border-gray-700 rounded-xl transition-all group"
                      >
                         <div className="flex items-center gap-3 text-left">
-                           <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400">
+                           <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/40 rounded-lg flex items-center justify-center text-primary-600 dark:text-primary-400">
                               <Facebook className="w-6 h-6" />
                            </div>
                            <div>
-                              <div className="font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                              <div className="font-bold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                                  {page.name}
                                </div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">ID: {page.id}</div>
                            </div>
                         </div>
-                        <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 flex items-center justify-center group-hover:border-blue-500 transition-colors">
-                           <Plus className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
+                        <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 flex items-center justify-center group-hover:border-primary-500 transition-colors">
+                           <Plus className="w-4 h-4 text-gray-400 group-hover:text-primary-500" />
                         </div>
                      </button>
                   ))}

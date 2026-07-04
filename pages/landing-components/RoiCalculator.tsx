@@ -30,7 +30,7 @@ export default function RoiCalculator() {
         
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-          <span className="px-3 py-1 rounded-full bg-blue-100 border border-blue-200 text-xs font-bold text-blue-800 uppercase tracking-widest">
+          <span className="px-3 py-1 rounded-full bg-primary-100 border border-primary-200 text-xs font-bold text-primary-800 uppercase tracking-widest">
             Moliyaviy Samara Kalkulyatori
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -52,7 +52,7 @@ export default function RoiCalculator() {
             <div className="space-y-3 text-left">
               <div className="flex justify-between items-center text-sm">
                 <span className="font-semibold text-slate-600">Shifokorlar soni:</span>
-                <span className="px-3 py-1 bg-blue-50 border border-blue-200 rounded-lg font-bold text-blue-700 font-mono">
+                <span className="px-3 py-1 bg-primary-50 border border-primary-200 rounded-lg font-bold text-primary-700 font-mono">
                   {doctorsCount} ta shifokor
                 </span>
               </div>
@@ -62,7 +62,7 @@ export default function RoiCalculator() {
                 max="25"
                 value={doctorsCount}
                 onChange={(e) => setDoctorsCount(parseInt(e.target.value))}
-                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none"
+                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary-600 focus:outline-none"
               />
               <div className="flex justify-between text-[10px] text-slate-400 font-mono">
                 <span>1 ta</span>
@@ -107,7 +107,7 @@ export default function RoiCalculator() {
             {/* Hour saved card */}
             <div className="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col justify-between text-left group hover:border-slate-300 transition-colors shadow-sm">
               <div className="space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                <div className="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center text-primary-600">
                   <Clock className="w-6 h-6" />
                 </div>
                 <div>
@@ -143,9 +143,9 @@ export default function RoiCalculator() {
             </div>
 
             {/* Big Revenue card (Spans 2 columns on SM if grid, otherwise block) */}
-            <div className="sm:col-span-2 bg-gradient-to-br from-blue-50/50 to-indigo-50 border border-blue-200 rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between text-left gap-6 shadow-sm">
+            <div className="sm:col-span-2 bg-gradient-to-br from-primary-50/50 to-indigo-50 border border-primary-200 rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between text-left gap-6 shadow-sm">
               <div className="space-y-3 max-w-md">
-                <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-700">
+                <div className="w-12 h-12 rounded-2xl bg-primary-100 flex items-center justify-center text-primary-700">
                   <Landmark className="w-6 h-6" />
                 </div>
                 <div>
@@ -155,11 +155,11 @@ export default function RoiCalculator() {
               </div>
 
               <div className="shrink-0 text-center sm:text-right space-y-1">
-                <span className="text-2xl sm:text-3xl font-extrabold text-blue-800 font-mono block">
+                <span className="text-2xl sm:text-3xl font-extrabold text-primary-800 font-mono block">
                   +{totalMonthlyGain.toLocaleString("uz-UZ")} UZS
                 </span>
                 <span className="text-[10px] text-slate-500 block font-bold uppercase tracking-wider">HAR OY QO'SHIMCHA DAROMAD</span>
-                <span className="px-3 py-1 rounded-full bg-blue-100 text-[10px] text-blue-800 font-bold inline-block mt-2">DentaCRM narxidan 20 barobar ko'p</span>
+                <span className="px-3 py-1 rounded-full bg-primary-100 text-[10px] text-primary-800 font-bold inline-block mt-2">DentaCRM narxidan 20 barobar ko'p</span>
               </div>
             </div>
 

@@ -88,7 +88,14 @@ const AppContent: React.FC = () => {
   const [receptionistId, setReceptionistId] = useState<string>('');
   const [technicianId, setTechnicianId] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Dark mode holatini saqlash: localStorage → tizim sozlamasi
+    try {
+      const stored = localStorage.getItem('dentalflow_theme');
+      if (stored) return stored === 'dark';
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch { return false; }
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -279,13 +286,14 @@ const AppContent: React.FC = () => {
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Theme toggle
+  // Theme toggle (localStorage'ga saqlanadi)
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
+    try { localStorage.setItem('dentalflow_theme', isDarkMode ? 'dark' : 'light'); } catch {}
   }, [isDarkMode]);
 
   // --- Auth Actions ---
@@ -883,7 +891,7 @@ const AppContent: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 dark:text-blue-400 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 text-primary-600 dark:text-primary-400 animate-spin mx-auto mb-4" />
           <p className="text-lg font-medium text-gray-700 dark:text-gray-300">{t('common.loading')}</p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{t('common.pleaseWait')}</p>
         </div>
@@ -905,7 +913,7 @@ const AppContent: React.FC = () => {
             <button
               onClick={retryLoadData}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white rounded-lg font-medium transition-colors"
             >
               <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
               {isLoading ? t('common.loading') : t('common.retry')}
@@ -934,7 +942,7 @@ const AppContent: React.FC = () => {
 
       {/* Mobile Header (Hidden on Desktop) */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
-        <div className="flex items-center gap-2 font-bold text-xl text-[#1B6AFB] dark:text-blue-400">
+        <div className="flex items-center gap-2 font-bold text-xl text-primary dark:text-primary-400">
           <div className="w-8 h-8 rounded-[8px] overflow-hidden shadow-sm">
             <img src="/logo-icon.png" alt="Logo" className="w-full h-full object-cover" />
           </div>
@@ -949,7 +957,7 @@ const AppContent: React.FC = () => {
       <aside className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex flex-col h-full pb-16">
           <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2 font-bold text-xl text-[#1B6AFB] dark:text-blue-400">
+            <div className="flex items-center gap-2 font-bold text-xl text-primary dark:text-primary-400">
               <div className="w-8 h-8 rounded-[8px] overflow-hidden shadow-sm">
                 <img src="/logo-icon.png" alt="Logo" className="w-full h-full object-cover" />
               </div>
@@ -971,13 +979,13 @@ const AppContent: React.FC = () => {
                   onClick={() => setIsSidebarOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-colors group ${isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'))
-                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                      ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
                       : 'text-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'
                     }`
                   }
                 >
                   <item.icon className={`w-5 h-5 mr-3 ${location.pathname === to || (item.id === 'patients' && location.pathname.startsWith('/patients'))
-                    ? 'text-[#1B6AFB] dark:text-blue-400'
+                    ? 'text-primary dark:text-primary-400'
                     : 'text-gray-400 group-hover:text-gray-500'
                     }`} />
                   {t(item.labelKey as any)}
@@ -989,7 +997,7 @@ const AppContent: React.FC = () => {
           <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center overflow-hidden flex-1 mr-2">
-                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs uppercase ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-[#1B6AFB]'}`}>
+                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xs uppercase ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-primary'}`}>
                   {userName ? userName.slice(0, 2) : 'A'}
                 </div>
                 <div className="ml-3 truncate">
@@ -1033,7 +1041,7 @@ const AppContent: React.FC = () => {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-6">
               {/* Logo */}
-              <div className="flex items-center gap-3 font-extrabold text-[#1B6AFB] dark:text-blue-400 text-2xl tracking-tight">
+              <div className="flex items-center gap-3 font-extrabold text-primary dark:text-primary-400 text-2xl tracking-tight">
                 <div className="w-10 h-10 rounded-[10px] overflow-hidden shadow-md">
                   <img src="/logo-icon.png" alt="DentaCRM" className="w-full h-full object-cover" />
                 </div>
@@ -1041,7 +1049,7 @@ const AppContent: React.FC = () => {
               </div>
 
               {clinicId === 'demo-clinic-1' && (
-                <span className="px-2 py-1 text-xs font-bold bg-blue-100 dark:bg-blue-900/40 text-[#1B6AFB] dark:text-blue-400 rounded-full border border-blue-200 dark:border-blue-800">
+                <span className="px-2 py-1 text-xs font-bold bg-primary-100 dark:bg-primary-900/40 text-primary dark:text-primary-400 rounded-full border border-primary-200 dark:border-primary-800">
                   🧪 DEMO MODE
                 </span>
               )}
@@ -1049,14 +1057,14 @@ const AppContent: React.FC = () => {
               {/* Search and Branch Control */}
               <div className="flex items-center gap-3 ml-4 bg-gray-50 dark:bg-gray-800/50 p-1 rounded-xl border border-gray-100 dark:border-gray-700">
                 <div className="relative group">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                   <input
                     type="text"
                     placeholder={t('header.search')}
                     value={searchBarTerm}
                     onChange={(e) => setSearchBarTerm(e.target.value)}
                     onFocus={() => setIsSearchFocused(true)}
-                    className="pl-9 pr-4 py-2 w-72 bg-white dark:bg-gray-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 placeholder-gray-400 transition-all outline-none"
+                    className="pl-9 pr-4 py-2 w-72 bg-white dark:bg-gray-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary-500/20 placeholder-gray-400 transition-all outline-none"
                   />
 
                   {/* Search Results Dropdown */}
@@ -1088,9 +1096,9 @@ const AppContent: React.FC = () => {
                                       setSearchBarTerm('');
                                       setIsSearchFocused(false);
                                     }}
-                                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#1B6AFB]/5 dark:hover:bg-blue-400/10 group transition-all text-left"
+                                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-primary/5 dark:hover:bg-primary-400/10 group transition-all text-left"
                                   >
-                                    <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs shrink-0 group-hover:scale-110 transition-transform">
+                                    <div className="w-9 h-9 rounded-lg bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xs shrink-0 group-hover:scale-110 transition-transform">
                                       {p.firstName[0]}{p.lastName[0]}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -1118,7 +1126,7 @@ const AppContent: React.FC = () => {
                                       setSearchBarTerm('');
                                       setIsSearchFocused(false);
                                     }}
-                                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#1B6AFB]/5 dark:hover:bg-blue-400/10 group transition-all text-left"
+                                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-primary/5 dark:hover:bg-primary-400/10 group transition-all text-left"
                                   >
                                     <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xs shrink-0 group-hover:scale-110 transition-transform">
                                       {d.firstName[0]}{d.lastName[0]}
@@ -1182,7 +1190,7 @@ const AppContent: React.FC = () => {
 
               {/* User Profile Info */}
               <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700 ml-2">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm uppercase shadow-sm ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-[#1B6AFB]'}`}>
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm uppercase shadow-sm ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-primary'}`}>
                   {userName ? userName.slice(0, 2) : 'A'}
                 </div>
                 <div className="flex flex-col">
@@ -1214,7 +1222,7 @@ const AppContent: React.FC = () => {
                     className={({ isActive }) => {
                       const active = isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
                       return `relative flex items-center h-12 px-4 text-sm font-medium transition-colors whitespace-nowrap group ${active
-                        ? 'text-[#1B6AFB] dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
+                        ? 'text-primary dark:text-primary-400 bg-primary-50/60 dark:bg-primary-900/20'
                         : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`
                     }}
@@ -1223,10 +1231,10 @@ const AppContent: React.FC = () => {
                       const active = isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
                       return (
                         <>
-                          <item.icon className={`w-4 h-4 mr-2 ${active ? 'text-[#1B6AFB] dark:text-blue-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
+                          <item.icon className={`w-4 h-4 mr-2 ${active ? 'text-primary dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
                           {t(item.labelKey as any)}
                           {active && (
-                            <span className="absolute bottom-0 left-0 w-full h-0.5 bg-[#1B6AFB] dark:bg-blue-400 rounded-t-full"></span>
+                            <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary dark:bg-primary-400 rounded-t-full"></span>
                           )}
                         </>
                       );
@@ -1288,8 +1296,15 @@ const AppContent: React.FC = () => {
                     doctors={doctors}
                     leads={leads}
                     labOrders={labOrders}
+                    services={services}
+                    currentClinic={currentClinic}
+                    clinicId={clinicId}
                     onPatientClick={handlePatientClick}
                     onUpdateAppointment={updateAppointment}
+                    onAddPatient={addPatient}
+                    onAddTransaction={addTransaction}
+                    onAddAppointment={addAppointment}
+                    addToast={addToast}
                   />
                 } />
               )}

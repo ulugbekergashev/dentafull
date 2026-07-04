@@ -79,7 +79,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-4 font-sans">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-4 transform rotate-3">
+          <div className="mx-auto w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-4 transform rotate-3">
             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -88,7 +88,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
           <p className="text-gray-500 dark:text-gray-400 mt-2">{t('auth.subtitle')}</p>
         </div>
 
-        <Card className="p-8 shadow-xl border-t-4 border-t-blue-600">
+        <Card className="p-8 shadow-xl border-t-4 border-t-primary-600">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg flex items-center gap-3 text-red-600 dark:text-red-400 text-sm animate-fade-in">
@@ -106,7 +106,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
                 <input
                   type="text"
                   required
-                  className="pl-10 block w-full rounded-lg border border-gray-300 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 py-2.5 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                  className="pl-10 block w-full rounded-lg border border-gray-300 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 py-2.5 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
                   placeholder={t('auth.usernamePlaceholder')}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -123,7 +123,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
                 <input
                   type={showPassword ? "text" : "password"}
                   required
-                  className="pl-10 pr-10 block w-full rounded-lg border border-gray-300 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 py-2.5 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                  className="pl-10 pr-10 block w-full rounded-lg border border-gray-300 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 py-2.5 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -144,7 +144,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
 
             <Button
               type="submit"
-              className="w-full py-2.5 text-base shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 transition-all"
+              className="w-full py-2.5 text-base shadow-lg shadow-primary-500/30 hover:shadow-primary-500/40 transition-all"
               disabled={isLoading}
             >
               {isLoading ? t('auth.checking') : t('auth.signIn')}
@@ -153,20 +153,20 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
 
           <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700 text-center">
             {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+              <div className="mb-4 p-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg">
+                <p className="text-xs text-primary-600 dark:text-primary-400 font-medium">
                   🧪 Localhost - Demo rejimi mavjud
                 </p>
-                <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">
-                  {t('auth.login')}: <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">demoklinikaadmin</code>
+                <p className="text-xs text-primary-500 dark:text-primary-400 mt-1">
+                  {t('auth.login')}: <code className="bg-primary-100 dark:bg-primary-900/40 px-1 rounded">demoklinikaadmin</code>
                   <br />
-                  {t('auth.password')}: <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">demoklinikaparol</code>
+                  {t('auth.password')}: <code className="bg-primary-100 dark:bg-primary-900/40 px-1 rounded">demoklinikaparol</code>
                 </p>
               </div>
             )}
             <p className="text-xs text-gray-400">
               {t('auth.support')} <br />
-              <span className="font-medium text-blue-600">+998 90 824 29 92</span>
+              <span className="font-medium text-primary-600">+998 90 824 29 92</span>
             </p>
           </div>
         </Card>

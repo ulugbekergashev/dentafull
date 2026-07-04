@@ -46,7 +46,7 @@ const SOURCE_LABELS: Record<string, string> = {
     retry: 'Qayta yuborish',
 };
 
-const inputCls = "w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400";
+const inputCls = "w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400";
 const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5";
 
 // Bemor tug'ilgan kunini MM-DD ga keltirish
@@ -315,7 +315,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     key={v.token}
                     type="button"
                     onClick={() => onInsert(v.token)}
-                    className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                    className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors"
                 >
                     {v.label}
                 </button>
@@ -334,8 +334,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         <div className="space-y-6 animate-fade-in">
             {/* Header */}
             <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                    <MessageSquare className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                <div className="w-11 h-11 rounded-xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                    <MessageSquare className="w-6 h-6 text-primary-600 dark:text-primary-400" />
                 </div>
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Xabarlar</h1>
@@ -350,7 +350,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id
-                            ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                            ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
                             : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                     >
                         <tab.icon className="w-4 h-4" />
@@ -365,7 +365,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap gap-1.5">
                             {TEMPLATE_VARS.map(v => (
-                                <span key={v.token} className="px-2 py-0.5 text-xs font-mono text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-md bg-white dark:bg-gray-800">
+                                <span key={v.token} className="px-2 py-0.5 text-xs font-mono text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-md bg-white dark:bg-gray-800">
                                     {v.token}
                                 </span>
                             ))}
@@ -417,7 +417,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 whitespace-pre-wrap break-words">{tpl.text}</p>
                                 </div>
                                 <div className="flex gap-1 shrink-0">
-                                    <button onClick={() => openTemplateForm(tpl)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="Tahrirlash">
+                                    <button onClick={() => openTemplateForm(tpl)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors" title="Tahrirlash">
                                         <Pencil className="w-4 h-4" />
                                     </button>
                                     <button onClick={() => handleDeleteTemplate(tpl)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="O'chirish">
@@ -512,8 +512,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                             type="button"
                                             onClick={() => setRuleForm(f => ({ ...f, channel: ch }))}
                                             className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${ruleForm.channel === ch
-                                                ? 'bg-blue-600 text-white border-blue-600'
-                                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'}`}
+                                                ? 'bg-primary-600 text-white border-primary-600'
+                                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                                         >
                                             {lbl}
                                         </button>
@@ -590,16 +590,16 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         <button
                             onClick={() => setManualChannel('sms')}
                             className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold border transition-all ${manualChannel === 'sms'
-                                ? 'bg-blue-600 text-white border-blue-600'
-                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'}`}
+                                ? 'bg-primary-600 text-white border-primary-600'
+                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                         >
                             <Smartphone className="w-4 h-4" /> SMS {!smsConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
                         </button>
                         <button
                             onClick={() => setManualChannel('telegram')}
                             className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold border transition-all ${manualChannel === 'telegram'
-                                ? 'bg-blue-600 text-white border-blue-600'
-                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'}`}
+                                ? 'bg-primary-600 text-white border-primary-600'
+                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                         >
                             ✈️ Telegram {!telegramConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
                         </button>
@@ -660,20 +660,20 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     key={key}
                                     onClick={() => setQuickFilter(f => f === key ? 'none' : key)}
                                     className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${quickFilter === key
-                                        ? 'bg-blue-600 text-white border-blue-600'
-                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'}`}
+                                        ? 'bg-primary-600 text-white border-primary-600'
+                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                                 >
                                     {lbl}
                                 </button>
                             ))}
                         </div>
-                        <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 rounded-xl text-sm">
-                            <Eye className="w-4 h-4 text-blue-600 shrink-0" />
-                            <span className="text-blue-700 dark:text-blue-400">
+                        <div className="flex items-center gap-2 px-4 py-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-sm">
+                            <Eye className="w-4 h-4 text-primary-600 shrink-0" />
+                            <span className="text-primary-700 dark:text-primary-400">
                                 <strong>{recipients.length} ta bemor</strong>
                                 {' '}({manualChannel === 'sms' ? '📱 telefon raqami bor' : '✈️ Telegramga ulangan'})
                                 {recipients.length > 0 && (
-                                    <span className="text-blue-600/70 dark:text-blue-400/70">
+                                    <span className="text-primary-600/70 dark:text-primary-400/70">
                                         {' — '}
                                         {recipients.slice(0, 3).map(r => `${r.firstName} ${r.lastName}`).join(', ')}
                                         {recipients.length > 3 ? ` va yana ${recipients.length - 3} ta` : ''}
@@ -696,7 +696,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         <button
                                             key={tpl.id}
                                             onClick={() => setManualMessage(tpl.text)}
-                                            className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:border-blue-400 hover:text-blue-600 transition-colors bg-white dark:bg-gray-800"
+                                            className="px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:border-primary-400 hover:text-primary-600 transition-colors bg-white dark:bg-gray-800"
                                         >
                                             {tpl.name}
                                         </button>
@@ -715,7 +715,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         <button
                             disabled={manualSending || !manualMessage.trim() || recipients.length === 0}
                             onClick={handleManualSend}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-white transition-all bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-white transition-all bg-primary-600 hover:bg-primary-700 disabled:bg-primary-300 disabled:cursor-not-allowed"
                         >
                             {manualSending ? (
                                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -795,14 +795,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         key={key}
                                         onClick={() => setHistoryFilter(key)}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${historyFilter === key
-                                            ? 'bg-blue-600 text-white'
+                                            ? 'bg-primary-600 text-white'
                                             : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                                     >
                                         {lbl}
                                     </button>
                                 ))}
                             </div>
-                            <button onClick={loadLogs} className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700">
+                            <button onClick={loadLogs} className="flex items-center gap-1.5 text-xs font-bold text-primary-600 hover:text-primary-700">
                                 <RefreshCw className="w-3.5 h-3.5" /> Yangilash
                             </button>
                         </div>

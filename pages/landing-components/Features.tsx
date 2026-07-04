@@ -9,7 +9,7 @@ const features = [
     icon: FolderHeart,
     title: "Elektron Bemor Kartasi",
     desc: "To'liq tibbiy tarix, rentgen suratlari, tish xaritasi va retseptlar — xavfsiz bulutda.",
-    iconBg: "bg-blue-50", iconColor: "text-blue-600", border: "hover:border-blue-200",
+    iconBg: "bg-primary-50", iconColor: "text-primary-600", border: "hover:border-primary-200",
   },
   {
     icon: CalendarCheck,
@@ -62,7 +62,7 @@ export default function Features() {
 
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-16 space-y-4">
-          <span className="px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-xs font-bold text-blue-700 uppercase tracking-widest">
+          <span className="px-3 py-1.5 rounded-full bg-primary-50 border border-primary-100 text-xs font-bold text-primary-700 uppercase tracking-widest">
             Nega aynan DentaCRM?
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">

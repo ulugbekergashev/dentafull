@@ -10,7 +10,7 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
   return (
     <section id="hero" className="relative pt-40 pb-28 overflow-hidden bg-slate-50 border-b border-slate-200">
       {/* Background gradients */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl -z-10"></div>
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary-500/5 rounded-full blur-3xl -z-10"></div>
       <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-indigo-500/5 rounded-full blur-3xl -z-10"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
@@ -20,15 +20,15 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
           <div className="lg:col-span-7 space-y-8 text-left">
 
             {/* Promo Tag */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-xs text-blue-700 font-bold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-50 border border-primary-100 text-xs text-primary-700 font-bold uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5 text-primary-600 animate-pulse" />
               <span>Stomatologiyalar uchun #1 SaaS yechimi</span>
             </div>
 
             {/* Title */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 leading-[1.1]">
               Klinikangizni <br />
-              <span className="text-blue-600">
+              <span className="text-primary-600">
                 aqlli boshqaruv
               </span> tizimiga o'tkazing
             </h1>
@@ -42,7 +42,7 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
               <button
                 onClick={onOpenDemoModal}
-                className="group px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2 cursor-pointer"
+                className="group px-8 py-4 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-bold text-lg transition-all shadow-lg shadow-primary-200 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Demoni boshlash</span>
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -58,7 +58,7 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
             {/* Quick Badges */}
             <div className="pt-8 border-t border-slate-200 grid grid-cols-3 gap-4 sm:gap-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center text-primary-600 shrink-0">
                   <TrendingUp className="w-5 h-5" />
                 </div>
                 <div>
@@ -93,7 +93,7 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
             <div className="relative mx-auto max-w-md lg:max-w-none">
 
               {/* Outer decorative glowing borders */}
-              <div className="absolute inset-0 bg-blue-500/10 rounded-3xl opacity-50 blur-xl"></div>
+              <div className="absolute inset-0 bg-primary-500/10 rounded-3xl opacity-50 blur-xl"></div>
 
               {/* Main Illustration Device Mockup */}
               <div className="relative bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl overflow-hidden">
@@ -118,7 +118,7 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 relative group overflow-hidden">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-blue-600" />
+                        <Calendar className="w-4 h-4 text-primary-600" />
                         <span className="text-xs font-semibold text-slate-700">Shifokor Jadvali (Bugun)</span>
                       </div>
                       <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-[10px] text-emerald-800 font-semibold">98% bandlik</span>
@@ -130,7 +130,7 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
                           <p className="font-semibold text-slate-900">Dr. Azimov S. (Terapevt)</p>
                           <p className="text-[10px] text-slate-500">Bemor: Jamoliddin R. - 14:00</p>
                         </div>
-                        <span className="px-2 py-1 rounded bg-blue-50 text-[10px] text-blue-600 font-semibold">Plombalash</span>
+                        <span className="px-2 py-1 rounded bg-primary-50 text-[10px] text-primary-600 font-semibold">Plombalash</span>
                       </div>
                       <div className="p-2.5 rounded-lg bg-white border border-slate-200/60 flex items-center justify-between text-xs">
                         <div>
@@ -152,13 +152,13 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                       <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Navbatdagi Bemorlar</p>
                       <p className="text-lg font-bold text-slate-900 mt-1">14 ta faol</p>
-                      <span className="text-[9px] text-blue-600 font-semibold">Kutish: 8 daqiqa</span>
+                      <span className="text-[9px] text-primary-600 font-semibold">Kutish: 8 daqiqa</span>
                     </div>
                   </div>
 
                   {/* Automated Notification Simulator */}
                   <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center shrink-0">
                       <Zap className="w-4 h-4" />
                     </div>
                     <div className="flex-1 text-xs text-left">
@@ -177,7 +177,7 @@ export default function Hero({ onOpenDemoModal, scrollToSection }: HeroProps) {
               {/* Floating Element - Satisfied Patients Badge */}
               <div className="absolute -bottom-5 -left-5 bg-white border border-slate-200 rounded-2xl p-3 shadow-xl flex items-center space-x-2.5 backdrop-blur-sm">
                 <div className="flex -space-x-2">
-                  <div className="w-7 h-7 rounded-full bg-blue-600 border border-white flex items-center justify-center text-[9px] font-bold text-white">U</div>
+                  <div className="w-7 h-7 rounded-full bg-primary-600 border border-white flex items-center justify-center text-[9px] font-bold text-white">U</div>
                   <div className="w-7 h-7 rounded-full bg-teal-500 border border-white flex items-center justify-center text-[9px] font-bold text-white">A</div>
                   <div className="w-7 h-7 rounded-full bg-pink-500 border border-white flex items-center justify-center text-[9px] font-bold text-white">S</div>
                 </div>

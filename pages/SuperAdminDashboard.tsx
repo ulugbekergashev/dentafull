@@ -48,7 +48,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       New: 'Yangi', Contacted: 'Bog\'lashildi', Thinking: 'O\'ylamoqda', Booked: 'Oldi', Cancelled: 'Bekor'
    };
    const DEMO_STAGE_COLORS: Record<string, string> = {
-      New: 'bg-blue-100 text-blue-700', Contacted: 'bg-amber-100 text-amber-700',
+      New: 'bg-primary-100 text-primary-700', Contacted: 'bg-amber-100 text-amber-700',
       Thinking: 'bg-purple-100 text-purple-700', Booked: 'bg-emerald-100 text-emerald-700',
       Cancelled: 'bg-red-100 text-red-700'
    };
@@ -352,14 +352,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                {!salesAgentMode && (
                   <button
                      onClick={() => handleTabChange('overview')}
-                     className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+                     className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
                   >
                      {t('superAdmin.tabs.overview')}
                   </button>
                )}
                <button
                   onClick={() => handleTabChange('clinics')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'clinics' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'clinics' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
                >
                   {t('superAdmin.tabs.clinics')}
                </button>
@@ -367,13 +367,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <>
                      <button
                         onClick={() => handleTabChange('plans')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
                      >
                         {t('superAdmin.tabs.plans')}
                      </button>
                      <button
                         onClick={() => handleTabChange('sales')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'sales' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-gray-600 dark:text-gray-400'}`}
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'sales' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
                      >
                         Sotuvchilar
                      </button>
@@ -421,8 +421,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            <span className="text-red-500 font-medium flex items-center"><Ban className="w-3 h-3 mr-1" /> {blockedCount} Bloklangan</span>
                         </div>
                      </div>
-                     <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
-                        <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                     <div className="p-3 bg-primary-50 dark:bg-primary-900/30 rounded-full">
+                        <Building2 className="w-6 h-6 text-primary-600 dark:text-primary-400" />
                      </div>
                   </div>
                </Card>
@@ -467,11 +467,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <div className="flex justify-between items-start">
                      <div>
                         <p className="text-gray-500 dark:text-gray-400 font-medium">Yangi (Bu oy)</p>
-                        <h3 className="text-3xl font-bold mt-2 text-blue-600">{newClinicsThisMonth}</h3>
+                        <h3 className="text-3xl font-bold mt-2 text-primary-600">{newClinicsThisMonth}</h3>
                         <p className="text-xs text-gray-500 mt-2">O'tgan oyga nisbatan +{newClinicsThisMonth > 0 ? '100%' : '0%'}</p>
                      </div>
-                     <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full">
-                        <Users className="w-6 h-6 text-blue-600" />
+                     <div className="p-3 bg-primary-50 dark:bg-primary-900/30 rounded-full">
+                        <Users className="w-6 h-6 text-primary-600" />
                      </div>
                   </div>
                </Card>
@@ -542,7 +542,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     onClick={() => setSelectedClinic(clinic)}
                                  >
                                     <td className="p-4">
-                                       <div className="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">{clinic.name}</div>
+                                       <div className="font-medium text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors">{clinic.name}</div>
                                        <div className="text-xs text-gray-500">{clinic.adminName}</div>
                                     </td>
                                     <td className="p-4">
@@ -555,7 +555,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                           {plans.find(p => p.id === clinic.planId)?.name}
                                        </span>
                                        {clinic.subscriptionType === 'Trial' && (
-                                          <span className="ml-2 px-2 py-1 rounded-md text-xs font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                          <span className="ml-2 px-2 py-1 rounded-md text-xs font-bold uppercase bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">
                                              TRIAL
                                           </span>
                                        )}
@@ -737,13 +737,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            <ShieldCheck className="w-24 h-24" />
                         </div>
                         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{plan.name}</h3>
-                        <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-6">
+                        <div className="text-3xl font-bold text-primary-600 dark:text-primary-400 mb-6">
                            {plan.price.toLocaleString()} <span className="text-sm text-gray-500 font-normal">UZS/oy</span>
                         </div>
 
                         <div className="space-y-3 flex-1">
                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                              <Users className="w-4 h-4 text-blue-500" />
+                              <Users className="w-4 h-4 text-primary-500" />
                               <span>{plan.maxDoctors} {t('superAdmin.plans.maxDoctors')}</span>
                            </div>
                            {plan.features.map((feat, i) => (
@@ -829,7 +829,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  <td className="p-4 font-medium text-gray-900 dark:text-white">
                                     {agent.name}
                                  </td>
-                                 <td className="p-4 font-mono text-blue-600 dark:text-blue-400">
+                                 <td className="p-4 font-mono text-primary-600 dark:text-primary-400">
                                     {agent.username}
                                  </td>
                                  <td className="p-4">
@@ -901,8 +901,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            </div>
                            <div className="space-y-1.5 mb-3">
                               <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                                 <Phone className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                                 <a href={`tel:${req.phone}`} className="hover:text-blue-600 font-medium">{req.phone}</a>
+                                 <Phone className="w-3.5 h-3.5 text-primary-500 flex-shrink-0" />
+                                 <a href={`tel:${req.phone}`} className="hover:text-primary-600 font-medium">{req.phone}</a>
                               </div>
                               {req.clinicName && (
                                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
@@ -933,7 +933,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               </select>
                               <a
                                  href={`tel:${req.phone}`}
-                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors"
+                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-lg transition-colors"
                               >
                                  <Phone className="w-3 h-3" /> Qo'ng'iroq
                               </a>
@@ -963,7 +963,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </div>
                </div>
 
-               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
+               <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800 space-y-4">
                   <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
                      <CreditCard className="w-4 h-4" /> Tarif va Narx
                   </h4>
@@ -975,7 +975,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            name="subscriptionType"
                            checked={newClinicForm.subscriptionType === 'Paid'}
                            onChange={() => setNewClinicForm({ ...newClinicForm, subscriptionType: 'Paid' })}
-                           className="text-blue-600"
+                           className="text-primary-600"
                         />
                         <span className="text-sm font-medium text-gray-900 dark:text-white">{t('superAdmin.forms.paid')}</span>
                      </label>
@@ -985,7 +985,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            name="subscriptionType"
                            checked={newClinicForm.subscriptionType === 'Trial'}
                            onChange={() => setNewClinicForm({ ...newClinicForm, subscriptionType: 'Trial' })}
-                           className="text-blue-600"
+                           className="text-primary-600"
                         />
                         <span className="text-sm font-medium text-gray-900 dark:text-white">{t('superAdmin.forms.trial')}</span>
                      </label>
@@ -1037,7 +1037,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         id="useCustomPrice"
                         checked={newClinicForm.useCustomPrice}
                         onChange={(e) => setNewClinicForm({ ...newClinicForm, useCustomPrice: e.target.checked })}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"
                      />
                      <label htmlFor="useCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">
                         {t('superAdmin.forms.customPrice')}
@@ -1083,7 +1083,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <div className="flex gap-2 justify-end">
                            <Badge status={editClinicData.status === 'Active' ? 'active' : 'blocked'} />
                            {editClinicData.subscriptionType === 'Trial' && (
-                              <span className="px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">TRIAL</span>
+                              <span className="px-2 py-1 rounded-full text-xs font-bold bg-primary-100 text-primary-800">TRIAL</span>
                            )}
                         </div>
                      </div>
@@ -1098,23 +1098,23 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <div className="grid grid-cols-3 gap-3">
                         <button
                            onClick={() => handleExtendSubscription(1)}
-                           className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-200 transition-all"
+                           className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-200 transition-all"
                         >
-                           <span className="font-bold text-lg text-blue-600">+1 Oy</span>
+                           <span className="font-bold text-lg text-primary-600">+1 Oy</span>
                            <span className="text-xs text-gray-500">Uzaytirish</span>
                         </button>
                         <button
                            onClick={() => handleExtendSubscription(3)}
-                           className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-200 transition-all"
+                           className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-200 transition-all"
                         >
-                           <span className="font-bold text-lg text-blue-600">+3 Oy</span>
+                           <span className="font-bold text-lg text-primary-600">+3 Oy</span>
                            <span className="text-xs text-gray-500">Uzaytirish</span>
                         </button>
                         <button
                            onClick={() => handleExtendSubscription(12)}
-                           className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-200 transition-all"
+                           className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-200 transition-all"
                         >
-                           <span className="font-bold text-lg text-blue-600">+1 Yil</span>
+                           <span className="font-bold text-lg text-primary-600">+1 Yil</span>
                            <span className="text-xs text-gray-500">Uzaytirish</span>
                         </button>
                      </div>
@@ -1143,7 +1143,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  name="editSubscriptionType"
                                  checked={editClinicData.subscriptionType === 'Paid'}
                                  onChange={() => handleSubscriptionTypeChange('Paid')}
-                                 className="text-blue-600"
+                                 className="text-primary-600"
                               />
                               <span className="text-sm font-medium text-gray-900 dark:text-white">{t('superAdmin.forms.paid')}</span>
                            </label>
@@ -1153,7 +1153,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  name="editSubscriptionType"
                                  checked={editClinicData.subscriptionType === 'Trial'}
                                  onChange={() => handleSubscriptionTypeChange('Trial')}
-                                 className="text-blue-600"
+                                 className="text-primary-600"
                               />
                               <span className="text-sm font-medium text-gray-900 dark:text-white">Sinov Davri (Trial)</span>
                            </label>
@@ -1161,7 +1161,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </div>
                   </div>
 
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
+                  <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800 space-y-4">
                      <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
                         <CreditCard className="w-4 h-4" /> Tarif va Narx
                      </h4>
@@ -1172,7 +1172,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            id="editUseCustomPrice"
                            checked={editClinicData.useCustomPrice}
                            onChange={(e) => setEditClinicData({ ...editClinicData, useCustomPrice: e.target.checked })}
-                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                           className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"
                         />
                         <label htmlFor="editUseCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">
                            Maxsus narx belgilash
@@ -1269,7 +1269,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </div>
                   <div className="flex justify-between">
                      <span className="text-gray-500 text-sm">{t('superAdmin.creds.login')}</span>
-                     <span className="font-mono font-bold text-blue-600">{createdClinicCreds?.username}</span>
+                     <span className="font-mono font-bold text-primary-600">{createdClinicCreds?.username}</span>
                   </div>
                   <div className="flex justify-between">
                      <span className="text-gray-500 text-sm">{t('superAdmin.creds.password')}</span>
@@ -1312,8 +1312,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          {/* Password Change Modal */}
          <Modal isOpen={!!passwordChangeClinic} onClose={() => { setPasswordChangeClinic(null); setNewPassword(''); }} title={t('superAdmin.modals.changePassword')}>
             <div className="space-y-4">
-               <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <p className="text-sm text-blue-800 dark:text-blue-200">
+               <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-200 dark:border-primary-800">
+                  <p className="text-sm text-primary-800 dark:text-primary-200">
                      <strong>{passwordChangeClinic?.name}</strong> {t('superAdmin.modals.passwordDesc')}
                   </p>
                </div>

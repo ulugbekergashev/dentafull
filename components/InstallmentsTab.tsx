@@ -150,7 +150,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
 
          {plans.length === 0 ? (
             <Card className="p-8 text-center flex flex-col items-center">
-               <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mb-4">
+               <div className="w-16 h-16 bg-primary-50 dark:bg-primary-900/20 text-primary-500 rounded-full flex items-center justify-center mb-4">
                   <CreditCard className="w-8 h-8" />
                </div>
                <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Bo'lib to'lash rejalari yo'q</h4>
@@ -205,7 +205,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                                        item.status === 'Paid' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
                                        isOverdue ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
-                                       'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                                       'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
                                     }`}>
                                        {item.status === 'Paid' ? <Check className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
                                     </div>
@@ -301,9 +301,9 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
                </div>
                
                <div className="pt-2">
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl">
-                     <p className="text-sm text-blue-800 dark:text-blue-300 mb-1">Oylik to'lov summasi:</p>
-                     <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                  <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-xl">
+                     <p className="text-sm text-primary-800 dark:text-primary-300 mb-1">Oylik to'lov summasi:</p>
+                     <p className="text-lg font-bold text-primary-900 dark:text-primary-100">
                         {createForm.totalAmount && createForm.months ? 
                            Math.round((parseFloat(createForm.totalAmount) - parseFloat(createForm.initialPayment || '0')) / parseInt(createForm.months)).toLocaleString() + ' UZS' 
                            : '0 UZS'}

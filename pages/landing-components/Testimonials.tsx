@@ -38,7 +38,7 @@ export default function Testimonials() {
 
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
-          <span className="px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-xs font-bold text-blue-700 uppercase tracking-widest">
+          <span className="px-3 py-1.5 rounded-full bg-primary-50 border border-primary-100 text-xs font-bold text-primary-700 uppercase tracking-widest">
             Mijozlar fikri
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -49,8 +49,8 @@ export default function Testimonials() {
         {/* Stats — mobile: 3 col, desktop: 3 col */}
         <div className="grid grid-cols-3 gap-4 mb-12">
           {stats.map((s) => (
-            <div key={s.label} className="bg-blue-50 border border-blue-100 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-center">
-              <span className="text-2xl sm:text-4xl font-extrabold text-blue-700 font-mono block">{s.value}</span>
+            <div key={s.label} className="bg-primary-50 border border-primary-100 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-center">
+              <span className="text-2xl sm:text-4xl font-extrabold text-primary-700 font-mono block">{s.value}</span>
               <span className="text-[10px] sm:text-xs text-slate-500 font-semibold mt-1 block leading-tight">{s.label}</span>
             </div>
           ))}
@@ -78,13 +78,13 @@ export default function Testimonials() {
               </div>
 
               <div className="flex items-center gap-3 mt-6 pt-5 border-t border-slate-100">
-                <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-extrabold text-xs shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-primary-600 flex items-center justify-center text-white font-extrabold text-xs shrink-0">
                   {rev.initials}
                 </div>
                 <div>
                   <p className="text-xs font-extrabold text-slate-900">{rev.name}</p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{rev.role}</p>
-                  <span className="text-[9px] text-blue-600 font-bold">📍 {rev.city}</span>
+                  <span className="text-[9px] text-primary-600 font-bold">📍 {rev.city}</span>
                 </div>
               </div>
             </div>

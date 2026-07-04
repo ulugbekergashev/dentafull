@@ -65,7 +65,7 @@ const RealisticTooth: React.FC<{
       className="flex flex-col items-center cursor-pointer group relative transition-transform hover:-translate-y-1"
     >
       {/* Tooth Number */}
-      <span className={`mb-1 text-[10px] sm:text-xs font-bold font-mono ${!isHealthy ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}`}>
+      <span className={`mb-1 text-[10px] sm:text-xs font-bold font-mono ${!isHealthy ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'}`}>
         {displayNumber}
       </span>
 
@@ -383,7 +383,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
           <button
             onClick={() => setToothType('permanent')}
             className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-sm font-medium rounded-md transition-all duration-200 ${toothType === 'permanent'
-              ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+              ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-sm'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
           >
@@ -392,7 +392,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
           <button
             onClick={() => setToothType('primary')}
             className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-sm font-medium rounded-md transition-all duration-200 ${toothType === 'primary'
-              ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+              ? 'bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 shadow-sm'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
           >
@@ -405,7 +405,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
       <div className="flex justify-center mb-4 sm:hidden">
         <button
           onClick={() => setShowLegend(!showLegend)}
-          className="text-xs text-blue-600 font-medium px-3 py-1 rounded-full bg-blue-50 border border-blue-100"
+          className="text-xs text-primary-600 font-medium px-3 py-1 rounded-full bg-primary-50 border border-primary-100"
         >
           {showLegend ? t('patients.details.teethChart.hideLegend') : t('patients.details.teethChart.showLegend')}
         </button>
@@ -430,7 +430,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
           <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">{t('patients.details.teethChart.upperJaw')}</div>
           <div className="flex gap-0.5 sm:gap-1 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.upper : PRIMARY_TOOTH_NUMBERS.upper).map(num => (
-              <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
+              <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-primary-500 ring-offset-2' : ''}`}>
                 <RealisticTooth
                   number={num}
                   conditions={teethData[num]?.conditions || []}
@@ -449,7 +449,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
           <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">{t('patients.details.teethChart.lowerJaw')}</div>
           <div className="flex gap-0.5 sm:gap-1 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.lower : PRIMARY_TOOTH_NUMBERS.lower).map(num => (
-              <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}>
+              <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-primary-500 ring-offset-2' : ''}`}>
                 <RealisticTooth
                   number={num}
                   conditions={teethData[num]?.conditions || []}
@@ -508,13 +508,13 @@ export const TeethChart: React.FC<TeethChartProps> = ({
                         onClick={() => toggleCondition(s)}
                         className={`px-3 py-2 text-sm rounded-lg border transition-all duration-200 flex items-center gap-2 text-left
                            ${tempConditions.includes(s)
-                            ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200 dark:ring-blue-900'
+                            ? 'bg-primary-600 text-white border-primary-600 ring-2 ring-primary-200 dark:ring-primary-900'
                             : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                           }`}
                       >
                         <div className={`w-3 h-3 rounded flex-shrink-0 border-2 flex items-center justify-center
                            ${tempConditions.includes(s) ? 'border-white bg-white' : 'border-gray-400'}`}>
-                          {tempConditions.includes(s) && <div className="w-1.5 h-1.5 bg-blue-600 rounded-sm"></div>}
+                          {tempConditions.includes(s) && <div className="w-1.5 h-1.5 bg-primary-600 rounded-sm"></div>}
                         </div>
                         <span className="font-medium text-xs">{STATUS_LABELS[s]}</span>
                       </button>
@@ -532,7 +532,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
                         onClick={() => toggleCondition(s)}
                         className={`px-3 py-2 text-sm rounded-lg border transition-all duration-200 flex items-center gap-2 text-left
                            ${tempConditions.includes(s)
-                            ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200 dark:ring-blue-900'
+                            ? 'bg-primary-600 text-white border-primary-600 ring-2 ring-primary-200 dark:ring-primary-900'
                             : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                           }`}
                       >
@@ -557,7 +557,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
                   {t('patients.details.teethChart.doctorNote')}
                 </label>
                 <textarea
-                  className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm h-28 dark:border-gray-600 dark:bg-gray-800/50 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none transition-shadow focus:shadow-md"
+                  className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm h-28 dark:border-gray-600 dark:bg-gray-800/50 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none resize-none transition-shadow focus:shadow-md"
                   placeholder={t('patients.details.teethChart.notePlaceholder')}
                   value={tempNotes}
                   onChange={(e) => setTempNotes(e.target.value)}
@@ -576,9 +576,9 @@ export const TeethChart: React.FC<TeethChartProps> = ({
                     procedures
                       .filter(p => p.toothNumber === internalSelectedTooth)
                       .map((proc, idx) => (
-                        <div key={proc.id || idx} className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800 flex justify-between items-center">
-                          <span className="text-xs font-medium text-blue-900 dark:text-blue-100">{proc.serviceName}</span>
-                          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-mono">{proc.date}</span>
+                        <div key={proc.id || idx} className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-100 dark:border-primary-800 flex justify-between items-center">
+                          <span className="text-xs font-medium text-primary-900 dark:text-primary-100">{proc.serviceName}</span>
+                          <span className="text-[10px] text-primary-600 dark:text-primary-400 font-mono">{proc.date}</span>
                         </div>
                       ))
                   )}

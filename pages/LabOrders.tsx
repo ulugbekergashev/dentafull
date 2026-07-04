@@ -5,7 +5,7 @@ import { api } from '../services/api';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   'Pending':     { label: 'Kutilmoqda',    color: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400',   icon: Clock },
-  'In-Progress': { label: 'Ishlayapti',    color: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400',        icon: FlaskConical },
+  'In-Progress': { label: 'Ishlayapti',    color: 'bg-primary-100 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-400',        icon: FlaskConical },
   'Ready':       { label: 'Tayyor',        color: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400', icon: CheckCircle },
   'Delivered':   { label: 'Topshirildi',   color: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400', icon: Truck },
   'Cancelled':   { label: 'Bekor qilindi', color: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400',             icon: X },
@@ -149,7 +149,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Kutilmoqda',  value: stats.pending,    color: 'from-amber-400 to-orange-500',  icon: Clock },
-          { label: 'Ishlayapti',  value: stats.inProgress, color: 'from-blue-500 to-indigo-600',   icon: FlaskConical },
+          { label: 'Ishlayapti',  value: stats.inProgress, color: 'from-primary-500 to-indigo-600',   icon: FlaskConical },
           { label: 'Tayyor',      value: stats.ready,      color: 'from-emerald-400 to-green-500', icon: CheckCircle },
           { label: 'Muddati o\'tgan', value: stats.overdue, color: 'from-red-400 to-rose-500',    icon: AlertCircle },
         ].map(s => (
@@ -225,7 +225,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   <div className="flex items-center gap-1.5 shrink-0">
                     {/* Quick status change */}
                     {order.status === 'Pending' && (
-                      <button onClick={() => handleStatusChange(order, 'In-Progress')} className="px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">Boshlash</button>
+                      <button onClick={() => handleStatusChange(order, 'In-Progress')} className="px-2.5 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">Boshlash</button>
                     )}
                     {order.status === 'In-Progress' && (
                       <button onClick={() => handleStatusChange(order, 'Ready')} className="px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">Tayyor</button>
@@ -233,7 +233,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                     {order.status === 'Ready' && (
                       <button onClick={() => handleStatusChange(order, 'Delivered')} className="px-2.5 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">Topshirish</button>
                     )}
-                    <button onClick={() => openEdit(order)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
+                    <button onClick={() => openEdit(order)} className="p-1.5 text-gray-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
                     <button onClick={() => handleDelete(order.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>

@@ -17,8 +17,33 @@
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
           },
+          colors: {
+            // Yagona brend rangi (primary) + semantik tokenlar
+            primary: {
+              50: '#EFF6FF', 100: '#DBEAFE', 200: '#BFDBFE', 300: '#93C5FD', 400: '#60A5FA',
+              500: '#3B82F6', 600: '#2563EB', 700: '#1D4ED8', 800: '#1E40AF', 900: '#1E3A8A',
+              DEFAULT: '#2563EB',
+            },
+            success: {
+              50: '#ECFDF5', 100: '#D1FAE5', 200: '#A7F3D0', 500: '#10B981', 600: '#059669', 700: '#047857',
+              DEFAULT: '#059669',
+            },
+            warning: {
+              50: '#FFFBEB', 100: '#FEF3C7', 200: '#FDE68A', 500: '#F59E0B', 600: '#D97706', 700: '#B45309',
+              DEFAULT: '#D97706',
+            },
+            danger: {
+              50: '#FEF2F2', 100: '#FEE2E2', 200: '#FECACA', 500: '#EF4444', 600: '#DC2626', 700: '#B91C1C',
+              DEFAULT: '#DC2626',
+            },
+            info: {
+              50: '#F0F9FF', 100: '#E0F2FE', 200: '#BAE6FD', 500: '#0EA5E9', 600: '#0284C7', 700: '#0369A1',
+              DEFAULT: '#0EA5E9',
+            },
+          },
           animation: {
             'fade-in': 'fadeIn 0.3s ease-in-out',
+            'in': 'fadeIn 0.2s ease-out',
           },
           keyframes: {
             fadeIn: {
@@ -58,6 +83,25 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #94a3b8;
     }
+
+    /* Scrollbarni yashirish (nav/qidiruv qatorlari uchun) */
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Mobil pastki xavfsiz zona (BottomNav) */
+    .pb-safe-area-inset-bottom {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    /* Ochilish animatsiyalari (dropdown/menyular) */
+    .animate-in {
+      animation: fadeIn 0.2s ease-out;
+    }
   </style>
   <script type="importmap">
 {
@@ -70,7 +114,6 @@
   }
 }
 </script>
-  <link rel="stylesheet" href="/index.css">
 </head>
 
 <body>

@@ -131,7 +131,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                     </div>
                     <div className="mt-2 text-center">
                         <p className="text-sm text-gray-500">
-                            {t('patients.details.modals.selectedTooth')} {selectedTooth ? <span className="font-bold text-blue-600 px-2 py-1 bg-blue-100 rounded-md">#{selectedTooth}</span> : t('patients.details.modals.common')}
+                            {t('patients.details.modals.selectedTooth')} {selectedTooth ? <span className="font-bold text-primary-600 px-2 py-1 bg-primary-100 rounded-md">#{selectedTooth}</span> : t('patients.details.modals.common')}
                         </p>
                     </div>
                 </div>
@@ -143,7 +143,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm mb-4 shrink-0">
                         <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 flex items-center justify-between">
                             <span>2. {t('patients.details.modals.stepAddService')} {selectedTooth ? `(#${selectedTooth})` : `(${t('patients.details.modals.common')})`}</span>
-                            {selectedTooth && <button onClick={() => setSelectedTooth(null)} className="text-xs text-blue-500 hover:underline">{t('patients.details.modals.switchToCommon')}</button>}
+                            {selectedTooth && <button onClick={() => setSelectedTooth(null)} className="text-xs text-primary-500 hover:underline">{t('patients.details.modals.switchToCommon')}</button>}
                         </h4>
 
                         <div className="space-y-4">
@@ -209,7 +209,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                     <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-xl p-4 overflow-hidden flex flex-col">
                         <h4 className="text-sm font-bold text-gray-500 uppercase mb-3 flex items-center justify-between">
                             <span>{t('patients.details.modals.totalList')} ({queue.length})</span>
-                            <span className="text-blue-600 font-bold">
+                            <span className="text-primary-600 font-bold">
                                 {queue.reduce((sum, item) => sum + item.price, 0).toLocaleString()} UZS
                             </span>
                         </h4>
@@ -225,7 +225,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                     <div key={idx} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3 rounded-lg flex justify-between items-center shadow-sm group">
                                         <div className="flex items-center gap-3">
                                             {item.toothNumber ? (
-                                                <span className="w-8 h-8 flex items-center justify-center bg-blue-100 text-blue-700 text-xs font-bold rounded-lg shrink-0">
+                                                <span className="w-8 h-8 flex items-center justify-center bg-primary-100 text-primary-700 text-xs font-bold rounded-lg shrink-0">
                                                     #{item.toothNumber}
                                                 </span>
                                             ) : (

@@ -70,7 +70,7 @@ function DashboardTab() {
     <div className="space-y-4">
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={Users}       label="Jami bemorlar"    value="342"   badge="+8 faol"     badgeColor="bg-green-50 text-green-700" iconBg="bg-blue-50"   iconColor="text-blue-600" />
+        <KpiCard icon={Users}       label="Jami bemorlar"    value="342"   badge="+8 faol"     badgeColor="bg-green-50 text-green-700" iconBg="bg-primary-50"   iconColor="text-primary-600" />
         <KpiCard icon={Calendar}    label="Bugungi qabullar" value="18"    badge="4 kutilmoqda" badgeColor="bg-amber-50 text-amber-700" iconBg="bg-purple-50" iconColor="text-purple-600" />
         <KpiCard icon={DollarSign}  label="Oy daromadi"      value="84.2M" badge="+12% ↑"      badgeColor="bg-green-50 text-green-700" iconBg="bg-green-50"  iconColor="text-green-600" />
         <KpiCard icon={Star}        label="Yangi lidlar"     value="7"     badge="Yangi"        badgeColor="bg-indigo-50 text-indigo-700" iconBg="bg-indigo-50" iconColor="text-indigo-600" />
@@ -92,7 +92,7 @@ function DashboardTab() {
             {chartBars.map((h, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
                 <div
-                  className={`w-full rounded-sm transition-all ${i === 9 ? 'bg-blue-600' : 'bg-blue-100 hover:bg-blue-300'}`}
+                  className={`w-full rounded-sm transition-all ${i === 9 ? 'bg-primary-600' : 'bg-primary-100 hover:bg-primary-300'}`}
                   style={{ height: `${h}%` }}
                 />
                 <span className="text-[7px] text-gray-400 font-medium">{months[i]}</span>
@@ -105,7 +105,7 @@ function DashboardTab() {
         <div className="bg-white rounded-[1.5rem] border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Bugungi jadval</p>
-            <span className="text-[10px] text-blue-600 font-bold cursor-pointer hover:underline">Hammasi →</span>
+            <span className="text-[10px] text-primary-600 font-bold cursor-pointer hover:underline">Hammasi →</span>
           </div>
           <div className="space-y-2">
             {appointments.slice(0,4).map((a, i) => (
@@ -162,7 +162,7 @@ function PatientsTab() {
         {filtered.map((p, i) => (
           <div key={i} className="grid grid-cols-12 items-center px-4 py-3 border-b border-gray-50 hover:bg-gray-50/70 transition-colors">
             <div className="col-span-4 flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-xl bg-blue-50 flex items-center justify-center text-blue-700 font-black text-[10px] shrink-0">
+              <div className="w-7 h-7 rounded-xl bg-primary-50 flex items-center justify-center text-primary-700 font-black text-[10px] shrink-0">
                 {p.name.split(' ').map(n => n[0]).join('').slice(0,2)}
               </div>
               <span className="text-[11px] font-bold text-gray-800 truncate">{p.name}</span>
@@ -201,7 +201,7 @@ function FinancesTab() {
         {[
           { l:"Oy daromadi",   v:"84,200,000", sub:"+12%", c:"text-green-600", bg:"bg-green-50 border-green-100" },
           { l:"Xarajat",       v:"31,500,000", sub:"-4%",  c:"text-red-500",   bg:"bg-red-50 border-red-100" },
-          { l:"Sof foyda",     v:"52,700,000", sub:"",     c:"text-blue-600",  bg:"bg-blue-50 border-blue-100" },
+          { l:"Sof foyda",     v:"52,700,000", sub:"",     c:"text-primary-600",  bg:"bg-primary-50 border-primary-100" },
         ].map(s => (
           <div key={s.l} className={`rounded-2xl border p-4 ${s.bg}`}>
             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{s.l}</p>
@@ -307,7 +307,7 @@ export default function DashboardDemo() {
 
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-10 space-y-3">
-          <span className="px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-xs font-bold text-blue-700 uppercase tracking-widest">
+          <span className="px-3 py-1.5 rounded-full bg-primary-50 border border-primary-100 text-xs font-bold text-primary-700 uppercase tracking-widest">
             Interaktiv demo
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -337,7 +337,7 @@ export default function DashboardDemo() {
           {/* Mobile header */}
           <div className="sm:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white font-black text-xs">S</div>
+              <div className="w-7 h-7 rounded-lg bg-primary-600 flex items-center justify-center text-white font-black text-xs">S</div>
               <div>
                 <p className="text-xs font-black text-gray-800">SmilePro</p>
                 <p className="text-[9px] text-green-500 font-semibold">● Klinika rahbari</p>
@@ -355,7 +355,7 @@ export default function DashboardDemo() {
                 <button
                   key={t.id}
                   onClick={() => setActive(t.id)}
-                  className={`flex-1 min-w-fit flex flex-col items-center gap-1 px-3 py-2.5 text-center transition-all cursor-pointer border-b-2 ${on ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}
+                  className={`flex-1 min-w-fit flex flex-col items-center gap-1 px-3 py-2.5 text-center transition-all cursor-pointer border-b-2 ${on ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-400'}`}
                 >
                   <Icon className="w-4 h-4" />
                   <span className="text-[9px] font-bold whitespace-nowrap">{t.label.split(' ')[0]}</span>
@@ -370,7 +370,7 @@ export default function DashboardDemo() {
             {/* Sidebar — desktop only */}
             <div className="hidden sm:flex w-48 shrink-0 bg-white border-r border-gray-100 p-3 flex-col gap-1">
               <div className="flex items-center gap-2 p-2.5 mb-2">
-                <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm">S</div>
+                <div className="w-8 h-8 rounded-xl bg-primary-600 flex items-center justify-center text-white font-black text-sm">S</div>
                 <div>
                   <p className="text-[10px] font-black text-gray-800 leading-tight">SmilePro</p>
                   <p className="text-[8px] text-green-500 font-semibold">● Klinika rahbari</p>
@@ -384,16 +384,16 @@ export default function DashboardDemo() {
                   <button
                     key={t.id}
                     onClick={() => setActive(t.id)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer ${on ? 'bg-blue-600 text-white shadow-sm shadow-blue-200' : 'text-gray-600 hover:bg-gray-50'}`}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer ${on ? 'bg-primary-600 text-white shadow-sm shadow-primary-200' : 'text-gray-600 hover:bg-gray-50'}`}
                   >
                     <Icon className={`w-3.5 h-3.5 shrink-0 ${on ? 'text-white' : 'text-gray-400'}`} />
                     <span className={`text-[10px] font-bold ${on ? 'text-white' : 'text-gray-700'}`}>{t.label}</span>
                   </button>
                 );
               })}
-              <div className="mt-auto p-2.5 bg-blue-50 border border-blue-100 rounded-xl">
-                <p className="text-[8px] font-black text-blue-700 uppercase tracking-wide">SMS Paket xizmati</p>
-                <p className="text-[9px] text-blue-500 font-semibold mt-0.5">Faol</p>
+              <div className="mt-auto p-2.5 bg-primary-50 border border-primary-100 rounded-xl">
+                <p className="text-[8px] font-black text-primary-700 uppercase tracking-wide">SMS Paket xizmati</p>
+                <p className="text-[9px] text-primary-500 font-semibold mt-0.5">Faol</p>
               </div>
             </div>
 

@@ -67,15 +67,15 @@ export default function AiAssistantWidget() {
   return (
     <section id="ai-advisor" className="py-24 bg-slate-50 relative overflow-hidden border-b border-slate-200">
       {/* Decorative blurred rings */}
-      <div className="absolute top-1/4 right-0 w-80 h-80 bg-blue-500/5 rounded-full blur-3xl -z-10"></div>
+      <div className="absolute top-1/4 right-0 w-80 h-80 bg-primary-500/5 rounded-full blur-3xl -z-10"></div>
       <div className="absolute bottom-1/4 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl -z-10"></div>
  
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-          <span className="px-3.5 py-1.5 rounded-full bg-blue-100 border border-blue-200 text-xs font-bold text-blue-800 tracking-wider inline-flex items-center gap-1.5 uppercase">
-            <Bot className="w-4 h-4 animate-bounce text-blue-600" />
+          <span className="px-3.5 py-1.5 rounded-full bg-primary-100 border border-primary-200 text-xs font-bold text-primary-800 tracking-wider inline-flex items-center gap-1.5 uppercase">
+            <Bot className="w-4 h-4 animate-bounce text-primary-600" />
             DentaAI • Sun'iy Intellekt Maslahatchisi
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -93,7 +93,7 @@ export default function AiAssistantWidget() {
           <div className="md:col-span-5 flex flex-col justify-between space-y-6">
             <div className="space-y-4">
               <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <BrainCircuit className="w-4 h-4 text-blue-600" />
+                <BrainCircuit className="w-4 h-4 text-primary-600" />
                 Maslahat yo'nalishini tanlang
               </h3>
  
@@ -103,7 +103,7 @@ export default function AiAssistantWidget() {
                   onClick={() => setTopic("treatment_plan")}
                   className={`w-full text-left p-3 rounded-xl border transition-all text-xs font-semibold flex items-center justify-between cursor-pointer ${
                     topic === "treatment_plan"
-                      ? "border-blue-500 bg-blue-50 text-blue-800"
+                      ? "border-primary-500 bg-primary-50 text-primary-800"
                       : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                   }`}
                 >
@@ -115,7 +115,7 @@ export default function AiAssistantWidget() {
                   onClick={() => setTopic("sms_generator")}
                   className={`w-full text-left p-3 rounded-xl border transition-all text-xs font-semibold flex items-center justify-between cursor-pointer ${
                     topic === "sms_generator"
-                      ? "border-blue-500 bg-blue-50 text-blue-800"
+                      ? "border-primary-500 bg-primary-50 text-primary-800"
                       : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                   }`}
                 >
@@ -127,7 +127,7 @@ export default function AiAssistantWidget() {
                   onClick={() => setTopic("staff_optimization")}
                   className={`w-full text-left p-3 rounded-xl border transition-all text-xs font-semibold flex items-center justify-between cursor-pointer ${
                     topic === "staff_optimization"
-                      ? "border-blue-500 bg-blue-50 text-blue-800"
+                      ? "border-primary-500 bg-primary-50 text-primary-800"
                       : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
                   }`}
                 >
@@ -162,7 +162,7 @@ export default function AiAssistantWidget() {
                   value={inputData}
                   onChange={(e) => setInputData(e.target.value)}
                   rows={3}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-755 focus:outline-none focus:border-blue-500 focus:bg-white leading-relaxed resize-none text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-755 focus:outline-none focus:border-primary-500 focus:bg-white leading-relaxed resize-none text-slate-800"
                   placeholder="Bu yerga tafsilotlarni yozing..."
                 />
               </div>
@@ -170,7 +170,7 @@ export default function AiAssistantWidget() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md"
+                className="w-full py-3 px-4 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md"
               >
                 {loading ? (
                   <>
@@ -191,7 +191,7 @@ export default function AiAssistantWidget() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
                   <span>DentaAI JAVOBI</span>
-                  {loading && <span className="text-blue-600 animate-pulse">Generatsiya qilinmoqda...</span>}
+                  {loading && <span className="text-primary-600 animate-pulse">Generatsiya qilinmoqda...</span>}
                 </div>
                 
                 {error && (

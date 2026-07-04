@@ -145,7 +145,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">{t('doctors.details.contactInfo')}</h3>
                     <div className="space-y-4">
                         <div className="flex items-center gap-3 text-sm">
-                            <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                            <div className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center text-primary-600 dark:text-primary-400">
                                 <Phone className="w-4 h-4" />
                             </div>
                             <div>
@@ -155,7 +155,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                         </div>
                         {doctor.secondaryPhone && (
                             <div className="flex items-center gap-3 text-sm">
-                                <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                <div className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center text-primary-600 dark:text-primary-400">
                                     <Phone className="w-4 h-4" />
                                 </div>
                                 <div>
@@ -213,12 +213,12 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                         <p className="text-xl font-bold text-gray-900 dark:text-white">{currentMonthStats.gross.toLocaleString()} UZS</p>
                     </Card>
 
-                    <Card className="p-4 flex flex-col justify-center bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30">
-                        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mb-2">
+                    <Card className="p-4 flex flex-col justify-center bg-primary-50 dark:bg-primary-900/10 border-primary-100 dark:border-primary-900/30">
+                        <div className="flex items-center gap-2 text-primary-600 dark:text-primary-400 mb-2">
                             <DollarSign className="w-4 h-4" />
                             <span className="text-xs font-medium uppercase tracking-wider">{t('doctors.details.monthSalary')}</span>
                         </div>
-                        <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{currentMonthStats.salary.toLocaleString()} UZS</p>
+                        <p className="text-xl font-bold text-primary-700 dark:text-primary-300">{currentMonthStats.salary.toLocaleString()} UZS</p>
                     </Card>
                 </div>
             </div>
@@ -229,7 +229,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <button
                         onClick={() => setActiveTab('upcoming_appointments')}
                         className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'upcoming_appointments'
-                            ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                            ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                     >
@@ -238,7 +238,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <button
                         onClick={() => setActiveTab('appointments')}
                         className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'appointments'
-                            ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                            ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                     >
@@ -247,7 +247,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <button
                         onClick={() => setActiveTab('transactions')}
                         className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'transactions'
-                            ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                            ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                     >
@@ -256,7 +256,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                     <button
                         onClick={() => setActiveTab('patients')}
                         className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'patients'
-                            ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                            ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                             }`}
                     >
@@ -307,7 +307,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <button
                                                     onClick={() => onPatientClick(appt.patientId)}
-                                                    className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+                                                    className="text-sm font-medium text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 hover:underline"
                                                 >
                                                     {appt.patientName}
                                                 </button>
@@ -322,7 +322,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <button
                                                 onClick={() => onPatientClick(p.id)}
-                                                className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+                                                className="text-sm font-medium text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 hover:underline"
                                             >
                                                 {p.lastName} {p.firstName}
                                             </button>
@@ -356,7 +356,7 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${tx.type === 'Cash' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                                                tx.type === 'Card' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                tx.type === 'Card' ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-400' :
                                                     'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
                                                 }`}>
                                                 {tx.type === 'Cash' ? t('doctors.details.valCash') : tx.type === 'Card' ? t('doctors.details.valCard') : t('doctors.details.valInsurance')}

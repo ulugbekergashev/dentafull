@@ -127,7 +127,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, tra
                </div>
             </div>
 
-            <Button onClick={handlePrint} className="w-full mt-4 flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg">
+            <Button onClick={handlePrint} className="w-full mt-4 flex justify-center items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white shadow-lg">
                <Printer className="w-4 h-4" /> POS Printerda chiqarish
             </Button>
          </div>

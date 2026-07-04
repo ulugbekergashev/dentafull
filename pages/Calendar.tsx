@@ -512,9 +512,9 @@ export const Calendar: React.FC<CalendarProps> = ({
                 displayDays.map((day, i) => {
                   const isToday = day.toDateString() === new Date().toDateString();
                   return (
-                    <div key={i} className={`p-4 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
-                      <p className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-900 dark:text-white'}`}>{dayNames[day.getDay()]}</p>
-                      <p className={`text-xs ${isToday ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>{day.getDate()}</p>
+                    <div key={i} className={`p-4 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
+                      <p className={`text-sm font-semibold ${isToday ? 'text-primary-600' : 'text-gray-900 dark:text-white'}`}>{dayNames[day.getDay()]}</p>
+                      <p className={`text-xs ${isToday ? 'text-primary-500' : 'text-gray-500 dark:text-gray-400'}`}>{day.getDate()}</p>
                     </div>
                   );
                 })
@@ -561,11 +561,11 @@ export const Calendar: React.FC<CalendarProps> = ({
                         return (
                           <React.Fragment key={hour}>
                             <div
-                              className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                              className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors"
                               onClick={() => openAddModal(dateStr, `${formattedHour}:00`)}
                             ></div>
                             <div
-                              className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                              className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors"
                               onClick={() => openAddModal(dateStr, `${formattedHour}:30`)}
                             ></div>
                           </React.Fragment>
@@ -585,11 +585,11 @@ export const Calendar: React.FC<CalendarProps> = ({
                           return (
                             <React.Fragment key={hour}>
                               <div
-                                className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                                className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors"
                                 onClick={() => openAddModal(dateStr, `${formattedHour}:00`, doc.id)}
                               ></div>
                               <div
-                                className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors"
+                                className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors"
                                 onClick={() => openAddModal(dateStr, `${formattedHour}:30`, doc.id)}
                               ></div>
                             </React.Fragment>
@@ -745,7 +745,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       </div>
                       {app.reminderSent && (
                         <div className="absolute top-1 right-1">
-                          <Bell className="w-3 h-3 text-blue-600 dark:text-blue-400 fill-current" />
+                          <Bell className="w-3 h-3 text-primary-600 dark:text-primary-400 fill-current" />
                         </div>
                       )}
                       <div className="truncate opacity-75">{app.type}</div>
@@ -858,7 +858,7 @@ export const Calendar: React.FC<CalendarProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <h3
-                  className={`text-xl font-bold text-gray-900 dark:text-white ${onPatientClick ? 'cursor-pointer hover:text-blue-600 transition-colors hover:underline title-transition' : ''}`}
+                  className={`text-xl font-bold text-gray-900 dark:text-white ${onPatientClick ? 'cursor-pointer hover:text-primary-600 transition-colors hover:underline title-transition' : ''}`}
                   onClick={() => {
                     if (onPatientClick) {
                       onPatientClick(selectedAppointment.patientId);
@@ -874,7 +874,7 @@ export const Calendar: React.FC<CalendarProps> = ({
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => openEditModal(selectedAppointment)}
-                  className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:text-gray-400 dark:hover:bg-gray-800 rounded-md transition-colors"
+                  className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:text-gray-400 dark:hover:bg-gray-800 rounded-md transition-colors"
                   title="Qabulni tahrirlash"
                 >
                   <Edit2 className="w-5 h-5" />
@@ -982,7 +982,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('calendar.messageText')}</label>
             <textarea
-              className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
               rows={4}
               placeholder={t('calendar.messageText')}
               value={messageText}
@@ -1054,7 +1054,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                   value="Male"
                   checked={patientFormData.gender === 'Male'}
                   onChange={e => setPatientFormData({ ...patientFormData, gender: e.target.value })}
-                  className="text-blue-600 focus:ring-blue-500"
+                  className="text-primary-600 focus:ring-primary-500"
                 /> <span>{t('patients.modal.male')}</span>
               </label>
               <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
@@ -1064,7 +1064,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                   value="Female"
                   checked={patientFormData.gender === 'Female'}
                   onChange={e => setPatientFormData({ ...patientFormData, gender: e.target.value })}
-                  className="text-blue-600 focus:ring-blue-500"
+                  className="text-primary-600 focus:ring-primary-500"
                 /> <span>{t('patients.modal.female')}</span>
               </label>
             </div>
@@ -1074,7 +1074,7 @@ export const Calendar: React.FC<CalendarProps> = ({
             <textarea
               value={patientFormData.medicalHistory}
               onChange={e => setPatientFormData({ ...patientFormData, medicalHistory: e.target.value })}
-              className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:text-white h-24 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:text-white h-24 focus:ring-2 focus:ring-primary-500 focus:outline-none"
               placeholder={t('patients.modal.medicalHistoryPlaceholder')}
             ></textarea>
           </div>

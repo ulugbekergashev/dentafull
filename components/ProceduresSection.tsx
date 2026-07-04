@@ -113,7 +113,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                             <div className="flex-1">
                                 <div className="flex items-center gap-2">
                                     {proc.toothNumber && (
-                                        <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-bold rounded">
+                                        <span className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 text-xs font-bold rounded">
                                             #{proc.toothNumber}
                                         </span>
                                     )}
@@ -148,7 +148,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                             <span className="text-lg font-medium text-gray-700 dark:text-gray-300">
                                 {t('patients.details.procedures.total')}
                             </span>
-                            <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                            <span className="text-2xl font-bold text-primary-600 dark:text-primary-400">
                                 {total.toLocaleString()} UZS
                             </span>
                         </div>
@@ -231,7 +231,7 @@ export const ProceduresSection: React.FC<ProceduresSectionProps> = ({
             {transactions.length > 5 && (
                 <button
                     onClick={onViewAll}
-                    className="w-full text-center text-sm text-blue-600 dark:text-blue-400 hover:underline pt-2 border-t border-gray-100 dark:border-gray-700"
+                    className="w-full text-center text-sm text-primary-600 dark:text-primary-400 hover:underline pt-2 border-t border-gray-100 dark:border-gray-700"
                 >
                     {t('patients.details.procedures.viewAll')}
                 </button>

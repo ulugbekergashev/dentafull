@@ -146,7 +146,7 @@ interface Props {
 
 const STATUS_COLORS: Record<QueueEntry['status'], string> = {
   'Waiting':     'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  'Called':      'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  'Called':      'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400',
   'In-Progress': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
   'Done':        'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   'Missed':      'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
@@ -804,7 +804,7 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
       entry.status === 'In-Progress'
         ? 'border-purple-300 dark:border-purple-700 ring-1 ring-purple-200 dark:ring-purple-800'
         : entry.status === 'Called'
-        ? 'border-blue-200 dark:border-blue-800'
+        ? 'border-primary-200 dark:border-primary-800'
         : 'border-gray-100 dark:border-gray-700'
     }`}>
       <div className="p-4 flex items-start gap-4">
@@ -874,7 +874,7 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
                   <button
                     onClick={() => onUpdateStatus(entry.id, 'Called')}
                     title="Chaqirish"
-                    className="p-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-400 rounded-lg transition-colors"
+                    className="p-2 bg-primary-100 hover:bg-primary-200 dark:bg-primary-900/30 dark:hover:bg-primary-900/50 text-primary-700 dark:text-primary-400 rounded-lg transition-colors"
                   >
                     <Bell className="w-4 h-4" />
                   </button>
@@ -892,7 +892,7 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
                   <button
                     onClick={() => onUpdateStatus(entry.id, 'Called')}
                     title="Qayta chaqirish"
-                    className="p-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-400 rounded-lg transition-colors"
+                    className="p-2 bg-primary-100 hover:bg-primary-200 dark:bg-primary-900/30 dark:hover:bg-primary-900/50 text-primary-700 dark:text-primary-400 rounded-lg transition-colors"
                   >
                     <Bell className="w-4 h-4" />
                   </button>

@@ -275,11 +275,11 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                 >
                                     <td className="p-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm">
+                                            <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-sm">
                                                 {doc.firstName[0]}{doc.lastName[0]}
                                             </div>
                                             <div>
-                                                <Link to={`/doctors/${doc.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline">
+                                                <Link to={`/doctors/${doc.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 hover:underline">
                                                     Dr. {doc.firstName} {doc.lastName}
                                                 </Link>
                                                 <p className="text-xs text-gray-500">{doc.phone}</p>
@@ -288,7 +288,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                     </td>
                                     <td className="p-4 text-gray-600 dark:text-gray-300 text-sm">{doc.specialty}</td>
                                     <td className="p-4 text-center">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">
                                             {doc.uniquePatients}
                                         </span>
                                     </td>
@@ -330,7 +330,7 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
                                         <div className="flex items-center justify-center gap-2">
                                             <div className="w-24 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                                 <div
-                                                    className="h-full bg-blue-500 rounded-full transition-all"
+                                                    className="h-full bg-primary-500 rounded-full transition-all"
                                                     style={{ width: `${doc.totalAppts > 0 ? (doc.completedAppts / doc.totalAppts) * 100 : 0}%` }}
                                                 ></div>
                                             </div>
@@ -355,10 +355,10 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <Card className="p-6 bg-gradient-to-br from-blue-500 to-blue-600 text-white border-none">
+                <Card className="p-6 bg-gradient-to-br from-primary-500 to-primary-600 text-white border-none">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-blue-100 text-sm font-medium mb-1">{t('doctors.analytics.thTotalRevenue')}</p>
+                            <p className="text-primary-100 text-sm font-medium mb-1">{t('doctors.analytics.thTotalRevenue')}</p>
                             <h3 className="text-3xl font-bold">{totalRevenue.toLocaleString()} UZS</h3>
                         </div>
                         <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
@@ -412,16 +412,16 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
             {/* Single Doctor Mode Indicator */}
             {
                 hasSingleDoctor && (
-                    <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                    <Card className="p-4 bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
-                                <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            <div className="p-2 bg-primary-100 dark:bg-primary-900/40 rounded-lg">
+                                <Users className="w-5 h-5 text-primary-600 dark:text-primary-400" />
                             </div>
                             <div className="flex-1">
-                                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                <p className="text-sm font-medium text-primary-900 dark:text-primary-100">
                                     {t('doctors.analytics.individualMode')}
                                 </p>
-                                <p className="text-xs text-blue-600 dark:text-blue-400">
+                                <p className="text-xs text-primary-600 dark:text-primary-400">
                                     {t('doctors.analytics.individualModeDesc').replace('{count}', filteredTransactions.length.toString())}
                                 </p>
                             </div>

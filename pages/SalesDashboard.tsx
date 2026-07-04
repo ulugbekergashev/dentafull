@@ -111,18 +111,18 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
           </div>
         </div>
 
-        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
+        <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800 space-y-4">
           <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
             <CreditCard className="w-4 h-4" /> Tarif va Obuna
           </h4>
 
           <div className="flex gap-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="subType" checked={form.subscriptionType === 'Paid'} onChange={() => setForm({ ...form, subscriptionType: 'Paid' })} className="text-blue-600" />
+              <input type="radio" name="subType" checked={form.subscriptionType === 'Paid'} onChange={() => setForm({ ...form, subscriptionType: 'Paid' })} className="text-primary-600" />
               <span className="text-sm font-medium text-gray-900 dark:text-white">To'liq</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="subType" checked={form.subscriptionType === 'Trial'} onChange={() => setForm({ ...form, subscriptionType: 'Trial' })} className="text-blue-600" />
+              <input type="radio" name="subType" checked={form.subscriptionType === 'Trial'} onChange={() => setForm({ ...form, subscriptionType: 'Trial' })} className="text-primary-600" />
               <span className="text-sm font-medium text-gray-900 dark:text-white">Sinov davri (Trial)</span>
             </label>
           </div>
@@ -136,7 +136,7 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
 
           <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             <input type="checkbox" id="useCustomPrice" checked={form.useCustomPrice} onChange={e => setForm({ ...form, useCustomPrice: e.target.checked })}
-              className="h-4 w-4 text-blue-600 border-gray-300 rounded cursor-pointer" />
+              className="h-4 w-4 text-primary-600 border-gray-300 rounded cursor-pointer" />
             <label htmlFor="useCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">Maxsus narx belgilash</label>
           </div>
 
@@ -184,7 +184,7 @@ function ClinicDetailModal({ clinic, plans, onClose }: { clinic: SalesClinic; pl
             <div className="flex flex-col items-end gap-1.5">
               <Badge status={clinic.status === 'Active' ? 'active' : 'blocked'} />
               {clinic.subscriptionType === 'Trial' && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">TRIAL</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-primary-100 text-primary-800">TRIAL</span>
               )}
             </div>
           </div>
@@ -277,7 +277,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
             <img src="/logo-icon.png" alt="DentaCRM" className="w-full h-full object-cover" />
           </div>
           <div>
-            <span className="text-lg font-bold text-blue-600">DentaCRM</span>
+            <span className="text-lg font-bold text-primary-600">DentaCRM</span>
             <p className="text-[11px] text-gray-400 -mt-0.5">Sotuvchi paneli</p>
           </div>
         </div>
@@ -286,7 +286,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
             <p className="text-sm font-semibold text-gray-800 dark:text-white">{agentName}</p>
             <p className="text-[11px] text-gray-400">Sotuvchi</p>
           </div>
-          <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm">{agentName.charAt(0).toUpperCase()}</div>
+          <div className="w-9 h-9 rounded-full bg-primary-600 flex items-center justify-center text-white font-bold text-sm">{agentName.charAt(0).toUpperCase()}</div>
           <button onClick={onLogout} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
             <LogOut className="w-4 h-4" />
             <span className="hidden sm:inline">Chiqish</span>
@@ -299,7 +299,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Jami klinikalar', value: stats.total,     icon: Building2,   color: 'bg-blue-50 text-blue-600' },
+            { label: 'Jami klinikalar', value: stats.total,     icon: Building2,   color: 'bg-primary-50 text-primary-600' },
             { label: 'Faol',            value: stats.active,    icon: CheckCircle, color: 'bg-green-50 text-green-600' },
             { label: 'Sinov rejimi',    value: stats.trial,     icon: Clock,       color: 'bg-indigo-50 text-indigo-600' },
             { label: 'Bu oyda',         value: `+${stats.thisMonth}`, icon: TrendingUp, color: 'bg-violet-50 text-violet-600' },
@@ -347,7 +347,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
               <Button onClick={() => setShowAddModal(true)}>
                 <Plus className="w-4 h-4 mr-2" /> Yangi klinika
               </Button>
-              <button onClick={loadData} className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer border border-gray-200 dark:border-gray-600">
+              <button onClick={loadData} className="p-2 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors cursor-pointer border border-gray-200 dark:border-gray-600">
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               </button>
             </div>
@@ -370,7 +370,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {loading ? (
                     <tr><td colSpan={5} className="p-8 text-center text-gray-400">
-                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-400" />
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary-400" />
                       Yuklanmoqda...
                     </td></tr>
                   ) : paginated.length === 0 ? (
@@ -378,7 +378,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
                       <Building2 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
                       <p className="text-gray-500 text-sm font-medium">Klinikalar topilmadi</p>
                       {clinics.length === 0 && (
-                        <button onClick={() => setShowAddModal(true)} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold cursor-pointer">
+                        <button onClick={() => setShowAddModal(true)} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold cursor-pointer">
                           <Plus className="w-4 h-4" /> Birinchi klinikani qo'shish
                         </button>
                       )}
@@ -390,7 +390,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
                     return (
                       <tr key={clinic.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer group" onClick={() => setSelectedClinic(clinic)}>
                         <td className="p-4">
-                          <div className="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">{clinic.name}</div>
+                          <div className="font-medium text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors">{clinic.name}</div>
                           <div className="text-xs text-gray-500">{clinic.adminName}</div>
                         </td>
                         <td className="p-4">
@@ -398,7 +398,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
                             {plans.find(p => p.id === clinic.planId)?.name || '—'}
                           </span>
                           {clinic.subscriptionType === 'Trial' && (
-                            <span className="ml-2 px-2 py-1 rounded-md text-xs font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">TRIAL</span>
+                            <span className="ml-2 px-2 py-1 rounded-md text-xs font-bold uppercase bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">TRIAL</span>
                           )}
                         </td>
                         <td className="p-4">

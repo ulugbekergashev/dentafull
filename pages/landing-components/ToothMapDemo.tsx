@@ -65,12 +65,12 @@ const RealisticTooth: React.FC<{
       onClick={onClick}
       className={`flex flex-col items-center cursor-pointer group transition-all duration-200 ${isUpper ? 'flex-col-reverse' : 'flex-col'}`}
     >
-      <span className={`text-[9px] sm:text-[10px] font-bold font-mono mb-0.5 ${!isHealthy ? 'text-blue-600' : 'text-gray-400'} ${isSelected ? 'text-blue-700' : ''}`}>
+      <span className={`text-[9px] sm:text-[10px] font-bold font-mono mb-0.5 ${!isHealthy ? 'text-primary-600' : 'text-gray-400'} ${isSelected ? 'text-primary-700' : ''}`}>
         {number}
       </span>
       <div className={`w-6 h-10 sm:w-9 sm:h-14 relative filter drop-shadow-sm transition-all duration-200 ${isSelected ? 'drop-shadow-md scale-110' : 'hover:scale-105'}`}>
         {isSelected && (
-          <div className="absolute -inset-1 rounded-xl border-2 border-blue-500 bg-blue-50/30 z-0" />
+          <div className="absolute -inset-1 rounded-xl border-2 border-primary-500 bg-primary-50/30 z-0" />
         )}
         <svg viewBox="0 0 100 120" className="w-full h-full overflow-visible relative z-10">
           <SVGDefs />
@@ -155,7 +155,7 @@ const CONDITIONS: { id: Condition; label: string; color: string; desc: string; p
   { id: "filled",   label: "Plomba",           color: "bg-teal-50 text-teal-700 border-teal-200",         desc: "Gelioplastik plomba",            price: 300000 },
   { id: "crown",    label: "Toj (Crown)",      color: "bg-yellow-50 text-yellow-700 border-yellow-200",   desc: "Metall-keramika toj",            price: 850000 },
   { id: "missing",  label: "Yo'q tish",        color: "bg-rose-50 text-rose-700 border-rose-200",         desc: "Protezlash zarur",               price: 0 },
-  { id: "implant",  label: "Implant",          color: "bg-blue-50 text-blue-700 border-blue-200",         desc: "Dental implant (Osstem)",        price: 3500000 },
+  { id: "implant",  label: "Implant",          color: "bg-primary-50 text-primary-700 border-primary-200",         desc: "Dental implant (Osstem)",        price: 3500000 },
 ];
 
 /* ── Main Component ──────────────────────────────────────────── */
@@ -202,7 +202,7 @@ export default function ToothMapDemo() {
           {/* Teeth visualizer */}
           <div className="lg:col-span-8 bg-white rounded-[1.5rem] border border-gray-100 shadow-sm p-5 sm:p-6 text-center">
             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-5 flex items-center justify-center gap-2">
-              <Heart className="w-3.5 h-3.5 text-blue-600" />
+              <Heart className="w-3.5 h-3.5 text-primary-600" />
               Tish Formula Kartasi
             </h3>
 
@@ -245,7 +245,7 @@ export default function ToothMapDemo() {
             {selected !== null && (
               <div className="mt-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 text-left">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="px-2 py-0.5 rounded-lg bg-blue-50 border border-blue-100 text-xs font-bold text-blue-800 font-mono">Tish #{selected}</span>
+                  <span className="px-2 py-0.5 rounded-lg bg-primary-50 border border-primary-100 text-xs font-bold text-primary-800 font-mono">Tish #{selected}</span>
                   <span className="text-[11px] text-gray-500">Holat:</span>
                   <span className="text-[11px] font-bold text-gray-800">{activeLabel}</span>
                 </div>
@@ -256,7 +256,7 @@ export default function ToothMapDemo() {
                       onClick={() => setCondition(c.id)}
                       className={`px-2.5 py-1 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
                         (activeConds.includes(c.id) || (activeConds.length === 0 && c.id === 'healthy'))
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
                           : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                       }`}
                     >
@@ -272,7 +272,7 @@ export default function ToothMapDemo() {
           <div className="lg:col-span-4 bg-white rounded-[1.5rem] border border-gray-100 shadow-sm p-5 flex flex-col gap-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Davolash Rejasi</p>
-              <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100">
+              <span className="text-[10px] font-bold px-2 py-0.5 bg-primary-50 text-primary-700 rounded-full border border-primary-100">
                 {treatmentTeeth.length} ta tish
               </span>
             </div>
@@ -287,7 +287,7 @@ export default function ToothMapDemo() {
                 treatmentTeeth.map(({ num, info }) => (
                   <div
                     key={num}
-                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${selected === num ? 'border-blue-300 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200 bg-gray-50/50'}`}
+                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${selected === num ? 'border-primary-300 bg-primary-50/50' : 'border-gray-100 hover:border-gray-200 bg-gray-50/50'}`}
                     onClick={() => setSelected(num)}
                   >
                     <div className="flex items-center justify-between">

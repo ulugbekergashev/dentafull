@@ -52,16 +52,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
                             key={item.id}
                             onClick={() => navigate(item.path)}
                             className={`flex flex-col items-center justify-center w-full h-full transition-all duration-200 relative ${active
-                                ? 'text-blue-600 dark:text-blue-400'
+                                ? 'text-primary-600 dark:text-primary-400'
                                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                 }`}
                         >
-                            <div className={`p-1.5 rounded-xl transition-all duration-300 ${active ? 'bg-blue-50 dark:bg-blue-900/30 scale-110' : ''}`}>
+                            <div className={`p-1.5 rounded-xl transition-all duration-300 ${active ? 'bg-primary-50 dark:bg-primary-900/30 scale-110' : ''}`}>
                                 <Icon className={`w-5 h-5 ${active ? 'fill-current' : ''}`} />
                             </div>
                             <span className="text-[10px] font-medium mt-1 truncate max-w-full px-1">{item.label}</span>
                             {active && (
-                                <div className="absolute bottom-1 w-1 h-1 bg-blue-600 dark:bg-blue-400 rounded-full" />
+                                <div className="absolute bottom-1 w-1 h-1 bg-primary-600 dark:bg-primary-400 rounded-full" />
                             )}
                         </button>
                     );
@@ -71,11 +71,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
                     <button
                         onClick={() => setIsSidebarOpen(true)}
                         className={`flex flex-col items-center justify-center w-full h-full transition-all duration-200 ${isSidebarOpen
-                            ? 'text-blue-600 dark:text-blue-400'
+                            ? 'text-primary-600 dark:text-primary-400'
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
                     >
-                        <div className={`p-1.5 rounded-xl transition-all duration-300 ${isSidebarOpen ? 'bg-blue-50 dark:bg-blue-900/30 scale-110' : ''}`}>
+                        <div className={`p-1.5 rounded-xl transition-all duration-300 ${isSidebarOpen ? 'bg-primary-50 dark:bg-primary-900/30 scale-110' : ''}`}>
                             <MoreHorizontal className="w-5 h-5" />
                         </div>
                         <span className="text-[10px] font-medium mt-1">Barchasi</span>

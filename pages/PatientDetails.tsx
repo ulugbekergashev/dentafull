@@ -904,6 +904,24 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          });
          setPendingProcedures([]);
          setVisitKey(prev => prev + 1);
+
+         // 3. Qabul yakunlangach — darhol to'lov oynasini oldindan to'ldirib ochamiz
+         if (total > 0) {
+            const breakdown = procedures.map(p => `${p.serviceName}|${p.price}`).join('||') + `||TOTAL|${total}`;
+            setDiscountType('percent');
+            setPaymentData({
+               amount: total.toString(),
+               paidAmount: total.toString(),
+               debtAmount: '0',
+               service: breakdown,
+               type: 'Cash',
+               status: 'Paid',
+               doctorId: finalDoctorId,
+               appointmentDate: today,
+               discountPercent: ''
+            });
+            setIsPaymentModalOpen(true);
+         }
       } catch (error: any) {
          console.error('Visit completion failed', error);
          // Error toast is already shown by App.tsx, but we can add more specific alert here if needed
@@ -927,11 +945,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <Card className="p-6">
                <div className="flex flex-col md:flex-row gap-6 items-start">
                   <div className="relative group flex-shrink-0">
-                     <div className="w-24 h-24 rounded-full bg-blue-100 dark:bg-blue-900 border-2 border-white dark:border-gray-700 shadow-md overflow-hidden flex items-center justify-center text-3xl font-bold">
+                     <div className="w-24 h-24 rounded-full bg-primary-100 dark:bg-primary-900 border-2 border-white dark:border-gray-700 shadow-md overflow-hidden flex items-center justify-center text-3xl font-bold">
                         {patient.avatarUrl ? (
                            <img src={patient.avatarUrl} alt={patient.firstName} className="w-full h-full object-cover" />
                         ) : (
-                           <span className="text-blue-600 dark:text-blue-200">{patient.firstName[0]}{patient.lastName[0]}</span>
+                           <span className="text-primary-600 dark:text-primary-200">{patient.firstName[0]}{patient.lastName[0]}</span>
                         )}
                      </div>
                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
@@ -989,7 +1007,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            <Clock className="w-4 h-4" /> {t('patients.details.lastVisit')} {patient.lastVisit}
                         </div>
                         {patient.doctorName && (
-                           <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium">
+                           <div className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-medium">
                               <User className="w-4 h-4" /> {t('patients.details.doctor')} {patient.doctorName}
                            </div>
                         )}
@@ -1032,14 +1050,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         className={`
                   group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
                   ${activeTab === tab.id
-                              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                              ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                               : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                            }
                 `}
                      >
                         <tab.icon className={`
                   -ml-0.5 mr-2 h-4 w-4
-                  ${activeTab === tab.id ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'}
+                  ${activeTab === tab.id ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'}
                 `} />
                         {tab.label}
                      </button>
@@ -1124,7 +1142,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           alert(t('patients.details.medicalHistory.alreadyAdded'));
                                        }
                                     }}
-                                    className="px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 rounded-full transition-colors border border-blue-100 dark:border-blue-800"
+                                    className="px-3 py-1.5 text-xs font-medium bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-900/30 dark:text-primary-300 dark:hover:bg-primary-900/50 rounded-full transition-colors border border-primary-100 dark:border-primary-800"
                                  >
                                     {disease}
                                  </button>
@@ -1179,9 +1197,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  return dateA.getTime() - dateB.getTime();
                               })
                               .map(app => (
-                                 <div key={app.id} className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg hover:shadow-md transition-all">
+                                 <div key={app.id} className="flex items-center justify-between p-4 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-lg hover:shadow-md transition-all">
                                     <div className="flex items-center gap-4">
-                                       <div className="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
+                                       <div className="w-12 h-12 rounded-full bg-primary-500 text-white flex items-center justify-center font-bold">
                                           {new Date(app.date).getDate()}
                                        </div>
                                        <div>
@@ -1321,7 +1339,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                 setActiveTab('installments');
                                              }}>Bo'lib to'lash</Button>
                                              {(patient.balance || 0) > 0 && (
-                                                <Button size="sm" variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100" onClick={async () => {
+                                                <Button size="sm" variant="secondary" className="bg-primary-50 text-primary-700 border-primary-100" onClick={async () => {
                                                    const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
                                                    if (confirm(`Ushbu qabul uchun ${total.toLocaleString()} UZS miqdorini bemor avansidan yechishga ruxsatingiz bormi?`)) {
                                                       const doctor = doctors.find(d => d.id === app.doctorId);
@@ -1366,7 +1384,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               </div>
                               <div className="text-right">
                                  <p className="text-sm text-gray-500">{t('patients.details.balance')}</p>
-                                 <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                                 <p className="text-xl font-bold text-primary-600 dark:text-primary-400">
                                     {(patient.balance || 0).toLocaleString()} UZS
                                  </p>
                               </div>
@@ -1596,14 +1614,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   {paymentData.service !== 'Avans' && (
                      <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📋 {t('patients.details.modals.doneServices')}</label>
-                        <div className="border-2 border-blue-100 dark:border-blue-800 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-4 space-y-0.5">
+                        <div className="border-2 border-primary-100 dark:border-primary-800 rounded-lg bg-gradient-to-br from-primary-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-4 space-y-0.5">
                            {paymentData.service && paymentData.service.includes('|') ? (
                               paymentData.service.split('||').filter(Boolean).map((item, idx) => {
                                  const parts = item.split('|');
                                  if (parts[0] === 'TOTAL') {
                                     return (
-                                       <div key={idx} className="pt-3 mt-3 border-t-2 border-blue-300 dark:border-blue-700">
-                                          <div className="flex justify-between items-center bg-blue-600 dark:bg-blue-700 text-white px-4 py-2.5 rounded-md font-bold text-base">
+                                       <div key={idx} className="pt-3 mt-3 border-t-2 border-primary-300 dark:border-primary-700">
+                                          <div className="flex justify-between items-center bg-primary-600 dark:bg-primary-700 text-white px-4 py-2.5 rounded-md font-bold text-base">
                                              <span className="flex items-center gap-2">💰 JAMI:</span>
                                              <span className="text-lg">{parts[1]} UZS</span>
                                           </div>
@@ -1611,9 +1629,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     );
                                  }
                                  return (
-                                    <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-800 px-3 py-2 rounded border border-blue-100 dark:border-gray-700">
+                                    <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-800 px-3 py-2 rounded border border-primary-100 dark:border-gray-700">
                                        <span className="text-gray-700 dark:text-gray-200 font-medium">{parts[0]}</span>
-                                       <span className="text-blue-600 dark:text-blue-400 font-semibold">{parts[1]} UZS</span>
+                                       <span className="text-primary-600 dark:text-primary-400 font-semibold">{parts[1]} UZS</span>
                                     </div>
                                  );
                               })
@@ -1669,7 +1687,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  type="button"
                                  className={`px-3 py-2 text-sm font-medium transition-colors ${
                                     discountType === 'percent'
-                                       ? 'bg-blue-600 text-white'
+                                       ? 'bg-primary-600 text-white'
                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                                  }`}
                                  onClick={() => {
@@ -1681,7 +1699,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  type="button"
                                  className={`px-3 py-2 text-sm font-medium transition-colors ${
                                     discountType === 'amount'
-                                       ? 'bg-blue-600 text-white'
+                                       ? 'bg-primary-600 text-white'
                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                                  }`}
                                  onClick={() => {
@@ -1746,7 +1764,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <Button 
                            type="button" 
                            variant="secondary" 
-                           className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800 flex items-center justify-center gap-2"
+                           className="w-full bg-primary-50 text-primary-700 hover:bg-primary-100 border-primary-200 dark:bg-primary-900/20 dark:text-primary-300 dark:border-primary-800 flex items-center justify-center gap-2"
                            onClick={() => {
                               const baseAmount = Number(paymentData.amount) || 0;
                               const discountVal = Number(paymentData.discountPercent) || 0;
@@ -1927,7 +1945,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <div>
                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.details.modals.msgText')}</label>
                      <textarea
-                        className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
                         rows={4}
                         placeholder={t('patients.details.modals.msgPlaceholder')}
                         value={messageText}
@@ -1987,7 +2005,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <div>
                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.details.modals.notes')}</label>
                      <textarea
-                        className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
                         rows={3}
                         value={apptData.notes}
                         onChange={(e) => setApptData({ ...apptData, notes: e.target.value })}
@@ -2018,10 +2036,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  {icd10Results.map(code => (
                                     <div
                                        key={code.code}
-                                       className="p-3 border rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-colors"
+                                       className="p-3 border rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 cursor-pointer transition-colors"
                                        onClick={() => setSelectedCode(code)}
                                     >
-                                       <div className="font-bold text-blue-600 dark:text-blue-400">{code.code}</div>
+                                       <div className="font-bold text-primary-600 dark:text-primary-400">{code.code}</div>
                                        <div className="text-sm text-gray-700 dark:text-gray-300">{code.name}</div>
                                     </div>
                                  ))}
@@ -2044,7 +2062,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     onClick={() => handleSearchICD10(category)}
                                  >
                                     <span className="font-medium text-gray-900 dark:text-white">{category}</span>
-                                    <ArrowLeft className="w-4 h-4 rotate-180 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                                    <ArrowLeft className="w-4 h-4 rotate-180 text-gray-400 group-hover:text-primary-500 transition-colors" />
                                  </div>
                               ))}
                            </div>
@@ -2053,10 +2071,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   ) : (
                      // Selected Code Confirmation
                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+                        <div className="flex items-center justify-between p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-100 dark:border-primary-800">
                            <div>
-                              <p className="font-bold text-blue-800 dark:text-blue-200">{selectedCode.code}</p>
-                              <p className="text-sm text-blue-700 dark:text-blue-300">{selectedCode.name}</p>
+                              <p className="font-bold text-primary-800 dark:text-primary-200">{selectedCode.code}</p>
+                              <p className="text-sm text-primary-700 dark:text-primary-300">{selectedCode.name}</p>
                            </div>
                            <Button variant="ghost" size="sm" onClick={() => setSelectedCode(null)}>{t('common.change')}</Button>
                         </div>
@@ -2064,7 +2082,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <div>
                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.details.modals.notes')}</label>
                            <textarea
-                              className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              className="w-full border rounded-md p-3 text-sm dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
                               rows={3}
                               placeholder={t('patients.details.modals.notesPlaceholder')}
                               value={diagnosisNote}
@@ -2158,12 +2176,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         onClick={() => handleAssignDoctor(doc.id)}
                         className={`w-full flex items-center justify-between p-4 rounded-lg border transition-all text-left group
                               ${patient.doctorId === doc.id
-                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                            }`}
                      >
                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
+                           <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold">
                               {doc.firstName[0]}{doc.lastName[0]}
                            </div>
                            <div>
@@ -2172,7 +2190,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            </div>
                         </div>
                         {patient.doctorId === doc.id && (
-                           <div className="bg-blue-500 text-white p-1 rounded-full">
+                           <div className="bg-primary-500 text-white p-1 rounded-full">
                               <UserCheck className="w-4 h-4" />
                            </div>
                         )}

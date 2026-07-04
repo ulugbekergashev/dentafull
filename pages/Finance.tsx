@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
+import { StatCard } from '../components/StatCard';
 import { UserRole, Transaction, Expense, ExpenseCategory, EXPENSE_CATEGORY_LABELS, Appointment, Patient, Clinic, LabOrder } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer, Plus, Banknote, Pencil, Trash2, HandCoins } from 'lucide-react';
@@ -34,7 +35,7 @@ import { getCurrentMonthRange } from '../utils/dateUtils';
 
 // Xarajat kategoriyalari uchun badge ranglari
 const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
-  DoctorShare: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  DoctorShare: 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400',
   Salary: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
   Rent: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   Utilities: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
@@ -426,65 +427,19 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
 
       {/* Main Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 p-6 text-white shadow-lg shadow-blue-500/25">
-          <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
-          <div className="absolute -right-2 -bottom-8 w-32 h-32 rounded-full bg-white/5" />
-          <div className="relative">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-white/20 rounded-lg"><DollarSign className="w-4 h-4" /></div>
-              <p className="text-blue-100 text-xs font-semibold uppercase tracking-wider">{isReceptionist ? t('finance.todayIncomeCard') : t('finance.totalIncome')}</p>
-            </div>
-            <h3 className="text-3xl font-black">{totalRevenue.toLocaleString()}</h3>
-            <p className="text-blue-200 text-xs font-medium mt-0.5">UZS</p>
-            <div className="mt-4 flex items-center text-xs text-blue-200 font-medium">
-              <Calendar className="w-3.5 h-3.5 mr-1" />
-              {isReceptionist ? today : (startDate || endDate ? t('finance.selectedPeriod') : t('finance.allTime'))}
-            </div>
-          </div>
-        </div>
+        <StatCard
+          label={isReceptionist ? t('finance.todayIncomeCard') : t('finance.totalIncome')}
+          value={totalRevenue.toLocaleString()} unit="UZS" icon={DollarSign} color="success" variant="gradient"
+          subtitle={<span className="flex items-center"><Calendar className="w-3.5 h-3.5 mr-1" />{isReceptionist ? today : (startDate || endDate ? t('finance.selectedPeriod') : t('finance.allTime'))}</span>}
+        />
         {!isReceptionist && (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-400 via-orange-500 to-red-500 p-6 text-white shadow-lg shadow-orange-500/25">
-            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
-            <div className="relative">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-1.5 bg-white/20 rounded-lg"><Wallet className="w-4 h-4" /></div>
-                <p className="text-orange-100 text-xs font-semibold uppercase tracking-wider">{t('finance.debt')}</p>
-              </div>
-              <h3 className="text-3xl font-black">{totalDebt.toLocaleString()}</h3>
-              <p className="text-orange-200 text-xs font-medium mt-0.5">UZS</p>
-              <div className="mt-4 text-xs text-orange-200 font-medium">{DEBTORS.length} ta qarzdor bemor</div>
-            </div>
-          </div>
+          <StatCard label={t('finance.debt')} value={totalDebt.toLocaleString()} unit="UZS" icon={Wallet} color="warning" variant="gradient" subtitle={`${DEBTORS.length} ta qarzdor bemor`} />
         )}
         {!isReceptionist && (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500 via-purple-600 to-purple-700 p-6 text-white shadow-lg shadow-purple-500/25">
-            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
-            <div className="relative">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-1.5 bg-white/20 rounded-lg"><Clock className="w-4 h-4" /></div>
-                <p className="text-purple-100 text-xs font-semibold uppercase tracking-wider">Bo'lib to'lash</p>
-              </div>
-              <h3 className="text-3xl font-black">{upcomingInstallmentAmount.toLocaleString()}</h3>
-              <p className="text-purple-200 text-xs font-medium mt-0.5">UZS</p>
-              <div className="mt-4 text-xs text-purple-200 font-medium">Shu oy kutilmoqda</div>
-            </div>
-          </div>
+          <StatCard label="Bo'lib to'lash" value={upcomingInstallmentAmount.toLocaleString()} unit="UZS" icon={Clock} color="info" variant="gradient" subtitle="Shu oy kutilmoqda" />
         )}
         {!isReceptionist && (
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 p-6 text-white shadow-lg shadow-emerald-500/25">
-            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
-            <div className="relative">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-1.5 bg-white/20 rounded-lg"><CreditCard className="w-4 h-4" /></div>
-                <p className="text-emerald-100 text-xs font-semibold uppercase tracking-wider">{t('finance.avgCheck')}</p>
-              </div>
-              <h3 className="text-3xl font-black">
-                {paidTransactionCount ? Math.round(totalRevenue / paidTransactionCount).toLocaleString() : 0}
-              </h3>
-              <p className="text-emerald-200 text-xs font-medium mt-0.5">UZS</p>
-              <div className="mt-4 text-xs text-emerald-200 font-medium">{paidTransactionCount} ta to'lov</div>
-            </div>
-          </div>
+          <StatCard label={t('finance.avgCheck')} value={paidTransactionCount ? Math.round(totalRevenue / paidTransactionCount).toLocaleString() : 0} unit="UZS" icon={CreditCard} color="primary" variant="gradient" subtitle={`${paidTransactionCount} ta to'lov`} />
         )}
       </div>
 
@@ -523,10 +478,10 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
 
             <Card className="p-5 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between mb-3">
-                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                  <Users className="w-5 h-5 text-blue-500" />
+                <div className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-xl">
+                  <Users className="w-5 h-5 text-primary-500" />
                 </div>
-                <span className="text-[10px] font-bold text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">Maosh</span>
+                <span className="text-[10px] font-bold text-primary-400 bg-primary-50 dark:bg-primary-900/20 px-2 py-0.5 rounded-full">Maosh</span>
               </div>
               <p className="text-xs font-medium text-gray-400 dark:text-gray-500">{t('finance.doctorSalary')}</p>
               <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{Math.round(financials.doctorShareAccrued).toLocaleString()}</h3>
@@ -576,7 +531,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                         <td className="px-6 py-4 font-medium">{s.doctorName}</td>
                         <td className="px-6 py-4">{s.percentage}%</td>
                         <td className="px-6 py-4">{s.grossRevenue.toLocaleString()}</td>
-                        <td className="px-6 py-4 font-medium text-blue-600 dark:text-blue-400">{Math.round(s.accrued).toLocaleString()}</td>
+                        <td className="px-6 py-4 font-medium text-primary-600 dark:text-primary-400">{Math.round(s.accrued).toLocaleString()}</td>
                         <td className="px-6 py-4 font-medium text-emerald-600 dark:text-emerald-400">{Math.round(s.paid).toLocaleString()}</td>
                         <td className={`px-6 py-4 font-bold ${s.balance > 0 ? 'text-red-500' : 'text-gray-500'}`}>{Math.round(s.balance).toLocaleString()}</td>
                         <td className="px-6 py-4 text-right">
@@ -707,7 +662,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 <h3 className="font-semibold text-gray-900 dark:text-white">Bo'lib to'lash rejalari</h3>
                 <p className="text-sm text-gray-500">{installments.filter(p => p.status === 'Active').length} ta faol shartnoma</p>
               </div>
-              <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600">
+              <div className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg text-primary-600">
                 <CreditCard className="w-5 h-5" />
               </div>
             </div>
@@ -938,7 +893,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               <select
                 value={selectedDebtorDoctorId}
                 onChange={(e) => setSelectedDebtorDoctorId(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
               >
                 <option value="All">{t('finance.debtorsModal.allDoctors')}</option>
                 {doctors.map(doc => (
@@ -959,7 +914,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             </div>
           </div>
 
-          <div className="flex items-center gap-2 px-4 py-3 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 rounded-xl text-sm text-blue-700 dark:text-blue-400">
+          <div className="flex items-center gap-2 px-4 py-3 mb-4 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-sm text-primary-700 dark:text-primary-400">
             <Bot className="w-4 h-4 shrink-0" />
             <span>Qarzdorlarga ommaviy eslatma yuborish uchun <strong>Xabarlar → Qo'lda</strong> bo'limidan "Qarzdorlar" filtridan foydalaning.</span>
           </div>
@@ -972,7 +927,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                       setIsDebtorModalOpen(false);
                       if (d.patientId) onPatientClick(d.patientId);
                     }}
-                    className="font-bold text-gray-900 dark:text-white hover:text-blue-600 hover:underline text-left"
+                    className="font-bold text-gray-900 dark:text-white hover:text-primary-600 hover:underline text-left"
                   >
                     {d.name}
                   </button>
@@ -1017,7 +972,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             <select
               value={paymentForm.patientId}
               onChange={e => setPaymentForm(f => ({ ...f, patientId: e.target.value }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
             >
               <option value="">Bemorni tanlang...</option>
               {patients.map(p => (
@@ -1031,7 +986,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             <select
               value={paymentForm.doctorId}
               onChange={e => setPaymentForm(f => ({ ...f, doctorId: e.target.value }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
             >
               <option value="">Shifokorni tanlang (ixtiyoriy)</option>
               {doctors.map(d => (
@@ -1052,7 +1007,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                   amount: svc ? String(svc.price) : f.amount,
                 }));
               }}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
             >
               <option value="">Xizmatni tanlang...</option>
               {services.map((s, i) => (
@@ -1068,7 +1023,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               placeholder="0"
               value={paymentForm.amount}
               onChange={e => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
             />
           </div>
 
@@ -1080,8 +1035,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                   key={type}
                   onClick={() => setPaymentForm(f => ({ ...f, type }))}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${paymentForm.type === type
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'
                     }`}
                 >
                   {type === 'Cash' ? 'Naqd' : type === 'Card' ? 'Karta' : type === 'Insurance' ? 'Sug\'urta' : 'Balans'}
@@ -1126,7 +1081,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             <select
               value={expenseForm.category}
               onChange={e => setExpenseForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
             >
               {(Object.keys(EXPENSE_CATEGORY_LABELS) as ExpenseCategory[]).map(cat => (
                 <option key={cat} value={cat}>{EXPENSE_CATEGORY_LABELS[cat]}</option>
@@ -1140,7 +1095,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               <select
                 value={expenseForm.doctorId}
                 onChange={e => setExpenseForm(f => ({ ...f, doctorId: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
               >
                 <option value="">Shifokorni tanlang...</option>
                 {doctors.map(d => (
@@ -1165,7 +1120,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               placeholder={expenseForm.category === 'DoctorShare' ? 'Shifokor ulushi' : 'Masalan: Ijara (iyul), kommunal...'}
               value={expenseForm.title}
               onChange={e => setExpenseForm(f => ({ ...f, title: e.target.value }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
             />
           </div>
 
@@ -1177,7 +1132,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 placeholder="0"
                 value={expenseForm.amount}
                 onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
               />
             </div>
             <div>
@@ -1186,7 +1141,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 type="date"
                 value={expenseForm.date}
                 onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white"
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
               />
             </div>
           </div>
@@ -1216,7 +1171,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               placeholder="Ixtiyoriy izoh..."
               value={expenseForm.note}
               onChange={e => setExpenseForm(f => ({ ...f, note: e.target.value }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-white placeholder-gray-400"
+              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
             />
           </div>
 

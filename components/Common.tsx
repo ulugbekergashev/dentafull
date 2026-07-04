@@ -16,12 +16,12 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   ...props
 }) => {
-  const baseStyles = "inline-flex items-center justify-center rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  const baseStyles = "inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
 
   const variants = {
-    primary: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 shadow-sm",
+    primary: "bg-primary text-white hover:bg-primary-700 focus:ring-primary-500 shadow-sm",
     secondary: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-gray-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700",
-    danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500",
+    danger: "bg-danger text-white hover:bg-danger-700 focus:ring-danger-500",
     ghost: "bg-transparent text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800",
   };
 
@@ -43,7 +43,7 @@ export const Button: React.FC<ButtonProps> = ({
 
 // --- Card ---
 export const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm ${className}`}>
+  <div className={`bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm ${className}`}>
     {children}
   </div>
 );
@@ -127,7 +127,7 @@ export const Input: React.FC<InputProps> = ({ label, error, helperText, classNam
     <div className={`${containerClassName} relative z-10`}>
       {label && <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>}
       <input
-        className={`flex h-10 w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-white ${props.type === 'date' ? 'cursor-pointer' : ''} ${className} ${error ? 'border-red-500 focus:ring-red-500' : ''}`}
+        className={`flex h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-white ${props.type === 'date' ? 'cursor-pointer' : ''} ${className} ${error ? 'border-red-500 focus:ring-red-500' : ''}`}
         {...props}
         onClick={handleClick}
       />
@@ -148,7 +148,7 @@ export const Select: React.FC<SelectProps> = ({ label, options, children, classN
     {label && <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>}
     <div className="relative">
       <select
-        className={`flex h-10 w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-white dark:bg-gray-800 appearance-none ${className}`}
+        className={`flex h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-white dark:bg-gray-800 appearance-none ${className}`}
         {...props}
       >
         {options ? options.map(opt => (
@@ -197,7 +197,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value
     <div className={`w-full relative ${className}`} ref={wrapperRef}>
       {label && <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>}
       <div
-        className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:text-white dark:bg-gray-800"
+        className="flex h-10 w-full items-center justify-between rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-700 dark:text-white dark:bg-gray-800"
         onClick={() => setIsOpen(!isOpen)}
       >
         <span className={selectedOption ? 'truncate' : 'text-gray-400'}>
@@ -211,7 +211,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value
           <div className="px-2 pb-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
             <input
               type="text"
-              className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-1.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:text-white"
+              className="w-full rounded-lg border border-gray-300 bg-transparent px-3 py-1.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:text-white"
               placeholder="Qidirish..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -226,7 +226,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value
               filteredOptions.map((opt) => (
                 <div
                   key={opt.value}
-                  className={`px-3 py-2 text-sm cursor-pointer rounded-md truncate ${opt.value === value ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 font-medium' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
+                  className={`px-3 py-2 text-sm cursor-pointer rounded-lg truncate ${opt.value === value ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200 font-medium' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
                   onClick={() => {
                     onChange(opt.value);
                     setIsOpen(false);
@@ -257,7 +257,7 @@ export const Modal: React.FC<{
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={onClose} />
-      <div className={`relative w-full ${className} transform rounded-xl bg-white dark:bg-gray-900 shadow-2xl transition-all overflow-hidden max-h-[90vh] flex flex-col`}>
+      <div className={`relative w-full ${className} transform rounded-2xl bg-white dark:bg-gray-900 shadow-2xl transition-all overflow-hidden max-h-[90vh] flex flex-col`}>
         <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 p-4 sm:px-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-500 focus:outline-none">
@@ -290,13 +290,13 @@ export const Toast: React.FC<ToastMessage & { onClose: (id: string) => void }> =
   const icons = {
     success: <CheckCircle className="w-5 h-5 text-green-500" />,
     error: <AlertCircle className="w-5 h-5 text-red-500" />,
-    info: <Info className="w-5 h-5 text-blue-500" />
+    info: <Info className="w-5 h-5 text-primary-500" />
   };
 
   const styles = {
     success: 'border-green-100 bg-green-50 dark:bg-green-900/20 dark:border-green-900',
     error: 'border-red-100 bg-red-50 dark:bg-red-900/20 dark:border-red-900',
-    info: 'border-blue-100 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-900'
+    info: 'border-primary-100 bg-primary-50 dark:bg-primary-900/20 dark:border-primary-900'
   };
 
   return (

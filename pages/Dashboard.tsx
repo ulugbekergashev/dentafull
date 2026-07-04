@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Badge, Input } from '../components/Common';
+import { StatCard } from '../components/StatCard';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
@@ -9,10 +10,13 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
-import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder } from '../types';
+import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
+import { AddPatientModal } from '../components/AddPatientModal';
+import { QuickPaymentModal } from '../components/QuickPaymentModal';
+import { CHART_COLORS, CHART } from '../utils/chartColors';
 
 interface DashboardProps {
   patients: Patient[];
@@ -24,13 +28,22 @@ interface DashboardProps {
   doctors: Doctor[];
   leads: Lead[];
   labOrders?: LabOrder[];
+  services?: Service[];
+  currentClinic?: Clinic;
+  clinicId?: string;
   onPatientClick?: (id: string) => void;
   onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
+  onAddPatient?: (data: Omit<Patient, 'id' | 'clinicId'>) => Promise<Patient | void>;
+  onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
+  onAddAppointment?: (appt: Omit<Appointment, 'id'>) => Promise<any>;
+  addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], onPatientClick, onUpdateAppointment }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', onPatientClick, onUpdateAppointment, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+  const [isQuickPaymentOpen, setIsQuickPaymentOpen] = useState(false);
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
@@ -98,7 +111,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       serviceCount.set(app.type, count + 1);
     });
 
-    const colors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+    const colors = CHART_COLORS;
 
     return Array.from(serviceCount.entries())
       .map(([name, value], index) => ({
@@ -229,26 +242,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Quick Actions */}
+          {/* Quick Actions — dashboarddan turib bajariladi */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate('/patients')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+              onClick={() => onAddPatient ? setIsAddPatientOpen(true) : navigate('/patients')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
             >
               <UserPlus className="w-3.5 h-3.5" />
               Bemor
             </button>
             <button
               onClick={() => navigate('/calendar')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
             >
               <Calendar className="w-3.5 h-3.5" />
               Qabul
             </button>
             {!isReceptionist && (
               <button
-                onClick={() => navigate('/finance')}
-                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+                onClick={() => onAddTransaction ? setIsQuickPaymentOpen(true) : navigate('/finance')}
+                className="flex items-center gap-1.5 px-3 py-2 bg-success hover:bg-success-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
                 <CreditCard className="w-3.5 h-3.5" />
                 To'lov
@@ -283,128 +296,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-        {/* Jami Bemorlar */}
-        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
-          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-blue-600 transition-transform duration-500 group-hover:scale-110">
-            <Users className="w-16 h-16" />
-          </div>
-          <div className="relative z-10">
-            <div className="p-2 w-fit bg-blue-50 dark:bg-blue-900/30 rounded-xl">
-              <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.totalPatients')}</p>
-              <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{totalPatients.toLocaleString()}</h3>
-              <div className="mt-3 flex items-center text-[10px]">
-                <span className="flex items-center font-bold text-green-600 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full">
-                  +{activePatients}
-                </span>
-                <span className="text-gray-500 ml-1.5 font-medium">{t('dashboard.active')}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Qabullar */}
-        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
-          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-purple-600 transition-transform duration-500 group-hover:scale-110">
-            <Calendar className="w-16 h-16" />
-          </div>
-          <div className="relative z-10">
-            <div className="p-2 w-fit bg-purple-50 dark:bg-purple-900/30 rounded-xl">
-              <Calendar className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.todayAppointments')}</p>
-              <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{periodAppointmentsCount}</h3>
-              <div className="mt-3">
-                {pendingAppointments > 0 ? (
-                  <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 rounded-full text-[9px] font-bold uppercase border border-amber-100 dark:border-amber-800/50">
-                    {pendingAppointments} {t('dashboard.pending')}
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-gray-400 font-medium">{t('dashboard.allOk')}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Yangi Lidlar */}
-        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
-          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-indigo-600 transition-transform duration-500 group-hover:scale-110">
-            <Star className="w-16 h-16" />
-          </div>
-          <div className="relative z-10">
-            <div className="p-2 w-fit bg-indigo-50 dark:bg-indigo-900/30 rounded-xl">
-              <Star className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.newLeads')}</p>
-              <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1 leading-none">{newLeadsCount}</h3>
-              <div className="mt-3">
-                <span className="text-[10px] text-gray-500 font-medium">{t('dashboard.fromAds')}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* O'rtacha Chek */}
-        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
-          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-rose-600 transition-transform duration-500 group-hover:scale-110">
-            <TrendingUp className="w-16 h-16" />
-          </div>
-          <div className="relative z-10">
-            <div className="p-2 w-fit bg-rose-50 dark:bg-rose-900/30 rounded-xl">
-              <TrendingUp className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-            </div>
-            <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.avgCheck')}</p>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-1 leading-none">{avgCheck.toLocaleString()} <span className="text-[10px] opacity-50 font-bold">UZS</span></h3>
-              <div className="mt-3">
-                <span className="text-[10px] text-gray-500 font-medium">{t('dashboard.perPatient')}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Kutilayotgan To'lov */}
-        <div className="relative group overflow-hidden bg-white dark:bg-gray-800 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all duration-300">
-          <div className="absolute -top-2 -right-2 p-4 opacity-5 text-amber-600 transition-transform duration-500 group-hover:scale-110">
-            <Clock className="w-16 h-16" />
-          </div>
-          <div className="relative z-10">
-            <div className="p-2 w-fit bg-amber-50 dark:bg-amber-900/30 rounded-xl">
-              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="mt-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{t('dashboard.pending')}</p>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white mt-1 leading-none">{pendingRevenue.toLocaleString()} <span className="text-[10px] opacity-50 font-bold">UZS</span></h3>
-              <div className="mt-3">
-                <span className="text-[10px] text-gray-500 font-medium">{t('dashboard.unpaid')}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Jami Daromad */}
-        <div className="relative group overflow-hidden bg-emerald-600 p-5 rounded-[1.5rem] shadow-lg shadow-emerald-600/10 hover:shadow-2xl hover:shadow-emerald-600/20 transition-all duration-300">
-          <div className="absolute -top-2 -right-2 p-4 opacity-10 text-white transition-transform duration-500 group-hover:scale-110">
-            <DollarSign className="w-16 h-16" />
-          </div>
-          <div className="relative z-10">
-            <div className="p-2 w-fit bg-white/20 rounded-xl backdrop-blur-sm">
-              <DollarSign className="w-5 h-5 text-white" />
-            </div>
-            <div className="mt-4">
-              <p className="text-[10px] font-black text-emerald-100 uppercase tracking-widest leading-none">{t('dashboard.todayRevenue')}</p>
-              <h3 className="text-xl font-black text-white mt-1 leading-none">{totalRevenue.toLocaleString()} <span className="text-[10px] opacity-80">UZS</span></h3>
-              <div className="mt-3">
-                <p className="text-[9px] font-bold text-emerald-100/80 uppercase">{t('dashboard.selectedPeriod')}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <StatCard
+          label={t('dashboard.totalPatients')} value={totalPatients.toLocaleString()} icon={Users} color="primary"
+          subtitle={<span className="flex items-center"><span className="font-bold text-success-600 bg-success-50 dark:bg-success-900/30 px-1.5 py-0.5 rounded-full">+{activePatients}</span><span className="ml-1.5">{t('dashboard.active')}</span></span>}
+        />
+        <StatCard
+          label={t('dashboard.todayAppointments')} value={periodAppointmentsCount} icon={Calendar} color="info"
+          subtitle={pendingAppointments > 0 ? `${pendingAppointments} ${t('dashboard.pending')}` : t('dashboard.allOk')}
+        />
+        <StatCard
+          label={t('dashboard.newLeads')} value={newLeadsCount} icon={Star} color="warning"
+          subtitle={t('dashboard.fromAds')}
+        />
+        <StatCard
+          label={t('dashboard.avgCheck')} value={avgCheck.toLocaleString()} unit="UZS" icon={TrendingUp} color="success"
+          subtitle={t('dashboard.perPatient')}
+        />
+        <StatCard
+          label={t('dashboard.pending')} value={pendingRevenue.toLocaleString()} unit="UZS" icon={Clock} color="warning"
+          subtitle={t('dashboard.unpaid')}
+        />
+        <StatCard
+          label={t('dashboard.todayRevenue')} value={totalRevenue.toLocaleString()} unit="UZS" icon={DollarSign} color="success" variant="gradient"
+          subtitle={t('dashboard.selectedPeriod')}
+        />
       </div>
 
       {/* Bugungi Qabullar */}
@@ -412,19 +327,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-xl font-black text-gray-900 dark:text-white">
-              Bugungi <span className="text-blue-600">Qabullar</span>
+              Bugungi <span className="text-primary">Qabullar</span>
             </h3>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
               {new Date().toLocaleDateString('uz-UZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-black rounded-full">
+            <span className="px-3 py-1.5 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 text-xs font-black rounded-full">
               {todayAppointments.length} ta
             </span>
             <button
               onClick={() => navigate('/calendar')}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-all"
             >
               Hammasi <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -467,7 +382,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <td className="py-3.5 pr-4">
                         <button
                           onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
-                          className="text-sm font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left"
+                          className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
                         >
                           {app.patientName}
                         </button>
@@ -516,7 +431,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                             <button
                               onClick={() => navigate('/calendar')}
                               title="Boshqa kunga ko'chirish"
-                              className="flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-lg transition-colors"
+                              className="flex items-center gap-1 px-2 py-1 bg-primary-50 hover:bg-primary-100 dark:bg-primary-900/20 dark:hover:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-[10px] font-bold rounded-lg transition-colors"
                             >
                               <CalendarClock className="w-3 h-3" /> Ko'chir
                             </button>
@@ -550,10 +465,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               </h3>
               <div className="flex gap-4">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400">
-                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500" /> {t('dashboard.income')}
+                  <div className="w-2.5 h-2.5 rounded-full bg-primary" /> {t('dashboard.income')}
                 </div>
                 <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> {t('dashboard.visits')}
+                  <div className="w-2.5 h-2.5 rounded-full bg-success" /> {t('dashboard.visits')}
                 </div>
               </div>
             </div>
@@ -562,12 +477,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 <AreaChart data={trendData}>
                   <defs>
                     <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorAppts" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#059669" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#059669" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark:stroke="#374151" strokeOpacity={0.4} />
@@ -589,21 +504,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     yAxisId="left"
                     type="monotone"
                     dataKey="revenue"
-                    stroke="#3B82F6"
+                    stroke="#2563EB"
                     strokeWidth={4}
                     fillOpacity={1}
                     fill="url(#colorRevenue)"
-                    activeDot={{ r: 6, fill: '#3B82F6', stroke: '#fff', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#2563EB', stroke: '#fff', strokeWidth: 2 }}
                   />
                   <Area
                     yAxisId="right"
                     type="monotone"
                     dataKey="appointments"
-                    stroke="#10B981"
+                    stroke="#059669"
                     strokeWidth={4}
                     fillOpacity={1}
                     fill="url(#colorAppts)"
-                    activeDot={{ r: 6, fill: '#10B981', stroke: '#fff', strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: '#059669', stroke: '#fff', strokeWidth: 2 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -654,7 +569,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-6">
           <Card className="p-8 lg:col-span-2 rounded-[2rem]">
             <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">So'nggi <span className="text-purple-600">Qabullar</span></h3>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">So'nggi <span className="text-primary">Qabullar</span></h3>
             </div>
 
             <div className="overflow-x-auto">
@@ -719,7 +634,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     text: `Yangi bemor ro'yxatga olindi: ${patient.lastName} ${patient.firstName}`,
                     time: createdDate,
                     icon: Users,
-                    color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                    color: 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
                   });
                 });
 
@@ -731,7 +646,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     text: `To'lov qabul qilindi: ${tx.amount.toLocaleString()} UZS - ${tx.service}`,
                     time: txDate,
                     icon: DollarSign,
-                    color: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                    color: 'bg-success-100 text-success-600 dark:bg-success-900/30 dark:text-success'
                   });
                 });
 
@@ -747,7 +662,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       text: `${appt.doctorName} ${appt.type} yakunladi`,
                       time: apptDate,
                       icon: CheckCircle,
-                      color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
+                      color: 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
                     });
                   });
 
@@ -801,7 +716,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
             <div>
               <h3 className="text-xl font-black text-gray-900 dark:text-white">
-                Qabullar <span className="text-rose-600">Intensivligi</span>
+                Qabullar <span className="text-danger">Intensivligi</span>
               </h3>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
                 {intensityView === 'month' ? "Joriy oy kunlari bo'yicha" : "Oxirgi 12 oy davomida"}
@@ -813,7 +728,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <button
                 onClick={() => setIntensityView('month')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${intensityView === 'month'
-                  ? 'bg-white dark:bg-gray-700 text-rose-600 shadow-sm'
+                  ? 'bg-white dark:bg-gray-700 text-danger shadow-sm'
                   : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                   }`}
               >
@@ -822,7 +737,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <button
                 onClick={() => setIntensityView('year')}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${intensityView === 'year'
-                  ? 'bg-white dark:bg-gray-700 text-rose-600 shadow-sm'
+                  ? 'bg-white dark:bg-gray-700 text-danger shadow-sm'
                   : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                   }`}
               >
@@ -879,6 +794,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </div>
         </Card>
       </>)}
+
+      {/* Tezkor amal modallari */}
+      {onAddPatient && (
+        <AddPatientModal
+          isOpen={isAddPatientOpen}
+          onClose={() => setIsAddPatientOpen(false)}
+          onAddPatient={onAddPatient}
+          doctors={doctors}
+          userRole={userRole}
+          doctorId={doctorId}
+          compact
+          onCreated={(p) => onPatientClick?.(p.id)}
+        />
+      )}
+      {onAddTransaction && (
+        <QuickPaymentModal
+          isOpen={isQuickPaymentOpen}
+          onClose={() => setIsQuickPaymentOpen(false)}
+          patients={patients}
+          doctors={doctors}
+          services={services}
+          clinicId={clinicId}
+          onAddTransaction={onAddTransaction}
+        />
+      )}
     </div>
   );
 };

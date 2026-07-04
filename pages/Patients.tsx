@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
+import { StatCard } from '../components/StatCard';
 import { Search, Plus, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity } from 'lucide-react';
 import { Patient, Doctor, Appointment, Transaction, Clinic } from '../types';
 import { api } from '../services/api';
@@ -279,7 +280,7 @@ export const Patients: React.FC<PatientsProps> = ({
             {t('patients.title')}
           </h1>
           <div className="flex items-center gap-4 mt-2">
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-bold border border-blue-100 dark:border-blue-800">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-xs font-bold border border-primary-100 dark:border-primary-800">
               <UsersIcon className="w-3.5 h-3.5" />
               {stats.total} {t('patients.badges.patientsCount')}
             </div>
@@ -303,7 +304,7 @@ export const Patients: React.FC<PatientsProps> = ({
           </Button>
           
           <Button 
-            className="flex-1 lg:flex-none justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25 transition-all active:scale-95 py-2.5 border-none"
+            className="flex-1 lg:flex-none justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white shadow-lg shadow-primary-500/25 transition-all active:scale-95 py-2.5 border-none"
             onClick={() => setIsAddModalOpen(true)}
           >
             <Plus className="w-4 h-4" /> 
@@ -314,105 +315,26 @@ export const Patients: React.FC<PatientsProps> = ({
 
       {/* Stats Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <button
+        <StatCard
+          label={t('patients.stats.total')} value={stats.total} icon={UsersIcon} color="primary"
+          active={activeStatFilter === null} subtitle={t('patients.stats.allTime')}
           onClick={() => setActiveStatFilter(null)}
-          className={`relative overflow-hidden group p-5 rounded-3xl border transition-all duration-300 text-left ${
-            activeStatFilter === null 
-              ? 'bg-blue-600 border-blue-500 shadow-xl shadow-blue-500/20 translate-y-[-4px]' 
-              : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-lg hover:translate-y-[-2px]'
-          }`}
-        >
-          <div className={`absolute top-0 right-0 p-6 opacity-10 transition-transform duration-500 group-hover:scale-110 ${activeStatFilter === null ? 'text-white' : 'text-blue-500'}`}>
-            <UsersIcon className="w-24 h-24" />
-          </div>
-          <div className="relative z-10 flex flex-col h-full justify-between">
-            <div className={`p-3 w-fit rounded-2xl ${activeStatFilter === null ? 'bg-white/20' : 'bg-blue-50 dark:bg-blue-900/40'}`}>
-              <UsersIcon className={`w-6 h-6 ${activeStatFilter === null ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
-            </div>
-            <div className="mt-8">
-              <p className={`text-xs font-bold uppercase tracking-widest ${activeStatFilter === null ? 'text-blue-100' : 'text-gray-400'}`}>{t('patients.stats.total')}</p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <h3 className={`text-3xl font-black ${activeStatFilter === null ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{stats.total}</h3>
-                <span className={`text-[10px] font-bold ${activeStatFilter === null ? 'text-blue-200' : 'text-gray-400'}`}>{t('patients.stats.allTime')}</span>
-              </div>
-            </div>
-          </div>
-        </button>
-
-        <button
+        />
+        <StatCard
+          label={t('patients.stats.new')} value={stats.newPatients} icon={UserPlusIcon} color="warning"
+          active={activeStatFilter === 'new'} subtitle={t('patients.stats.last7Days')}
           onClick={() => setActiveStatFilter(activeStatFilter === 'new' ? null : 'new')}
-          className={`relative overflow-hidden group p-5 rounded-3xl border transition-all duration-300 text-left ${
-            activeStatFilter === 'new' 
-              ? 'bg-amber-500 border-amber-400 shadow-xl shadow-amber-500/20 translate-y-[-4px]' 
-              : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-lg hover:translate-y-[-2px]'
-          }`}
-        >
-          <div className={`absolute top-0 right-0 p-6 opacity-10 transition-transform duration-500 group-hover:scale-110 ${activeStatFilter === 'new' ? 'text-white' : 'text-amber-500'}`}>
-            <UserPlusIcon className="w-24 h-24" />
-          </div>
-          <div className="relative z-10 flex flex-col h-full justify-between">
-            <div className={`p-3 w-fit rounded-2xl ${activeStatFilter === 'new' ? 'bg-white/20' : 'bg-amber-50 dark:bg-amber-900/40'}`}>
-              <UserPlusIcon className={`w-6 h-6 ${activeStatFilter === 'new' ? 'text-white' : 'text-amber-600 dark:text-amber-400'}`} />
-            </div>
-            <div className="mt-8">
-              <p className={`text-xs font-bold uppercase tracking-widest ${activeStatFilter === 'new' ? 'text-amber-100' : 'text-gray-400'}`}>{t('patients.stats.new')}</p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <h3 className={`text-3xl font-black ${activeStatFilter === 'new' ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{stats.newPatients}</h3>
-                <span className={`text-[10px] font-bold ${activeStatFilter === 'new' ? 'text-amber-200' : 'text-gray-400'}`}>{t('patients.stats.last7Days')}</span>
-              </div>
-            </div>
-          </div>
-        </button>
-
-        <button
+        />
+        <StatCard
+          label={t('patients.stats.debtors')} value={stats.debtors} icon={Wallet} color="success"
+          active={activeStatFilter === 'debtor'} subtitle={t('patients.stats.activeDebt')}
           onClick={() => setActiveStatFilter(activeStatFilter === 'debtor' ? null : 'debtor')}
-          className={`relative overflow-hidden group p-5 rounded-3xl border transition-all duration-300 text-left ${
-            activeStatFilter === 'debtor' 
-              ? 'bg-emerald-600 border-emerald-500 shadow-xl shadow-emerald-500/20 translate-y-[-4px]' 
-              : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:translate-y-[-2px]'
-          }`}
-        >
-          <div className={`absolute top-0 right-0 p-6 opacity-10 transition-transform duration-500 group-hover:scale-110 ${activeStatFilter === 'debtor' ? 'text-white' : 'text-emerald-500'}`}>
-            <Wallet className="w-24 h-24" />
-          </div>
-          <div className="relative z-10 flex flex-col h-full justify-between">
-            <div className={`p-3 w-fit rounded-2xl ${activeStatFilter === 'debtor' ? 'bg-white/20' : 'bg-emerald-50 dark:bg-emerald-900/40'}`}>
-              <Wallet className={`w-6 h-6 ${activeStatFilter === 'debtor' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`} />
-            </div>
-            <div className="mt-8">
-              <p className={`text-xs font-bold uppercase tracking-widest ${activeStatFilter === 'debtor' ? 'text-emerald-100' : 'text-gray-400'}`}>{t('patients.stats.debtors')}</p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <h3 className={`text-3xl font-black ${activeStatFilter === 'debtor' ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{stats.debtors}</h3>
-                <span className={`text-[10px] font-bold ${activeStatFilter === 'debtor' ? 'text-emerald-200' : 'text-gray-400'}`}>{t('patients.stats.activeDebt')}</span>
-              </div>
-            </div>
-          </div>
-        </button>
-
-        <button
+        />
+        <StatCard
+          label={t('patients.stats.waiting')} value={stats.waiting} icon={AlertCircle} color="danger"
+          active={activeStatFilter === 'waiting'} subtitle={t('patients.stats.paymentPending')}
           onClick={() => setActiveStatFilter(activeStatFilter === 'waiting' ? null : 'waiting')}
-          className={`relative overflow-hidden group p-5 rounded-3xl border transition-all duration-300 text-left ${
-            activeStatFilter === 'waiting' 
-              ? 'bg-rose-600 border-rose-500 shadow-xl shadow-rose-500/20 translate-y-[-4px]' 
-              : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-rose-300 dark:hover:border-rose-800 hover:shadow-lg hover:translate-y-[-2px]'
-          }`}
-        >
-          <div className={`absolute top-0 right-0 p-6 opacity-10 transition-transform duration-500 group-hover:scale-110 ${activeStatFilter === 'waiting' ? 'text-white' : 'text-rose-500'}`}>
-            <AlertCircle className="w-24 h-24" />
-          </div>
-          <div className="relative z-10 flex flex-col h-full justify-between">
-            <div className={`p-3 w-fit rounded-2xl ${activeStatFilter === 'waiting' ? 'bg-white/20' : 'bg-rose-50 dark:bg-rose-900/40'}`}>
-              <AlertCircle className={`w-6 h-6 ${activeStatFilter === 'waiting' ? 'text-white' : 'text-rose-600 dark:text-rose-400'}`} />
-            </div>
-            <div className="mt-8">
-              <p className={`text-xs font-bold uppercase tracking-widest ${activeStatFilter === 'waiting' ? 'text-rose-100' : 'text-gray-400'}`}>{t('patients.stats.waiting')}</p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <h3 className={`text-3xl font-black ${activeStatFilter === 'waiting' ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{stats.waiting}</h3>
-                <span className={`text-[10px] font-bold ${activeStatFilter === 'waiting' ? 'text-rose-200' : 'text-gray-400'}`}>{t('patients.stats.paymentPending')}</span>
-              </div>
-            </div>
-          </div>
-        </button>
+        />
       </div>
 
       {/* Search + Filter toggle row */}
@@ -423,7 +345,7 @@ export const Patients: React.FC<PatientsProps> = ({
             <input
               type="text"
               placeholder={t('patients.search.placeholder')}
-              className="pl-9 h-9 w-full rounded-md border border-gray-300 bg-transparent text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:text-white"
+              className="pl-9 h-9 w-full rounded-md border border-gray-300 bg-transparent text-sm focus:ring-2 focus:ring-primary-500 dark:border-gray-700 dark:text-white"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -431,14 +353,14 @@ export const Patients: React.FC<PatientsProps> = ({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 h-9 rounded-md border text-sm font-medium transition-colors ${showFilters || activeFiltersCount > 0
-              ? 'border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+              ? 'border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
               : 'border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
           >
             <Filter className="w-4 h-4" />
             {t('patients.filter.button')}
             {activeFiltersCount > 0 && (
-              <span className="ml-1 bg-blue-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+              <span className="ml-1 bg-primary-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
                 {activeFiltersCount}
               </span>
             )}
@@ -454,7 +376,7 @@ export const Patients: React.FC<PatientsProps> = ({
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">{t('patients.filter.all')}</option>
                 <option value="active">{t('patients.filter.active')}</option>
@@ -467,7 +389,7 @@ export const Patients: React.FC<PatientsProps> = ({
               <select
                 value={filterGender}
                 onChange={(e) => setFilterGender(e.target.value)}
-                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">{t('patients.filter.all')}</option>
                 <option value="male">{t('patients.filter.male')}</option>
@@ -479,7 +401,7 @@ export const Patients: React.FC<PatientsProps> = ({
               <select
                 value={filterDoctor}
                 onChange={(e) => setFilterDoctor(e.target.value)}
-                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">{t('patients.filter.all')}</option>
                 <option value="none">{t('patients.filter.unassigned')}</option>
@@ -494,7 +416,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 type="date"
                 value={filterDateFrom}
                 onChange={(e) => setFilterDateFrom(e.target.value)}
-                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
               />
             </div>
             <div>
@@ -503,7 +425,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 type="date"
                 value={filterDateTo}
                 onChange={(e) => setFilterDateTo(e.target.value)}
-                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
               />
             </div>
 
@@ -549,7 +471,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-sm group-hover:bg-blue-200 dark:group-hover:bg-blue-800 transition-colors overflow-hidden">
+                      <div className="h-9 w-9 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold text-sm group-hover:bg-primary-200 dark:group-hover:bg-primary-800 transition-colors overflow-hidden">
                         {patient.avatarUrl ? (
                           <img src={patient.avatarUrl} alt="" className="w-full h-full object-cover" />
                         ) : (
@@ -557,7 +479,7 @@ export const Patients: React.FC<PatientsProps> = ({
                         )}
                       </div>
                       <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                           {patient.lastName} {patient.firstName}
                         </div>
                         <div className="text-xs text-gray-500">ID: {patient.id}</div>
@@ -606,7 +528,7 @@ export const Patients: React.FC<PatientsProps> = ({
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); onPatientClick(patient.id); }}
-                        className="text-blue-600 hover:text-blue-900 dark:hover:text-blue-400 p-1.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                        className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-400 p-1.5 rounded-md hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                         title={t('patients.actions.details')}
                       >
                         <Eye className="w-4 h-4" />
@@ -643,7 +565,7 @@ export const Patients: React.FC<PatientsProps> = ({
         {selectedPatient && (
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 font-bold">
+              <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 font-bold">
                 {selectedPatient.firstName[0]}{selectedPatient.lastName[0]}
               </div>
               <div>
@@ -657,7 +579,7 @@ export const Patients: React.FC<PatientsProps> = ({
               <select
                 value={assignDoctorId}
                 onChange={(e) => setAssignDoctorId(e.target.value)}
-                className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">— Biriktirilmagan —</option>
                 {doctors.filter((d) => d.status === 'Active').map((d) => (
@@ -720,7 +642,7 @@ export const Patients: React.FC<PatientsProps> = ({
           <Input label="Tug'ilgan sana" type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText="Sanani qo'lda kiritish uchun maydonga bosing" />
           <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder="Toshkent sh., Chilonzor t..." />
 
-          <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-blue-200 dark:border-blue-800 rounded-xl bg-blue-50/50 dark:bg-blue-900/20 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors group cursor-pointer relative overflow-hidden">
+          <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-primary-200 dark:border-primary-800 rounded-xl bg-primary-50/50 dark:bg-primary-900/20 hover:bg-primary-100/50 dark:hover:bg-primary-900/30 transition-colors group cursor-pointer relative overflow-hidden">
             <input
               type="file"
               accept="image/*"
@@ -730,10 +652,10 @@ export const Patients: React.FC<PatientsProps> = ({
             />
             {selectedPhoto ? (
               <div className="flex flex-col items-center gap-2">
-                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-blue-500 shadow-lg">
+                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-primary-500 shadow-lg">
                   <img src={URL.createObjectURL(selectedPhoto)} alt="Preview" className="w-full h-full object-cover" />
                 </div>
-                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-3 py-1 rounded-full">
+                <span className="text-xs font-semibold text-primary-600 dark:text-primary-400 bg-primary-100 dark:bg-primary-900/40 px-3 py-1 rounded-full">
                   {selectedPhoto.name}
                 </span>
                 <button 
@@ -746,7 +668,7 @@ export const Patients: React.FC<PatientsProps> = ({
               </div>
             ) : (
               <div className="flex flex-col items-center text-center gap-2">
-                <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-primary-500 group-hover:scale-110 transition-transform">
                   <Plus className="w-6 h-6" />
                 </div>
                 <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('patients.modal.uploadPhoto')}</span>
@@ -762,7 +684,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 name="doctorId"
                 value={formData.doctorId}
                 onChange={handleInputChange}
-                className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">— Keyinroq biriktirish —</option>
                 {doctors.filter((d) => d.status === 'Active').map((d) => (
@@ -776,10 +698,10 @@ export const Patients: React.FC<PatientsProps> = ({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jins</label>
             <div className="flex gap-4">
               <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                <input type="radio" name="gender" value="Male" checked={formData.gender === 'Male'} onChange={handleInputChange} className="text-blue-600 focus:ring-blue-500" /> <span>Erkak</span>
+                <input type="radio" name="gender" value="Male" checked={formData.gender === 'Male'} onChange={handleInputChange} className="text-primary-600 focus:ring-primary-500" /> <span>Erkak</span>
               </label>
               <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                <input type="radio" name="gender" value="Female" checked={formData.gender === 'Female'} onChange={handleInputChange} className="text-blue-600 focus:ring-blue-500" /> <span>Ayol</span>
+                <input type="radio" name="gender" value="Female" checked={formData.gender === 'Female'} onChange={handleInputChange} className="text-primary-600 focus:ring-primary-500" /> <span>Ayol</span>
               </label>
             </div>
           </div>
@@ -790,7 +712,7 @@ export const Patients: React.FC<PatientsProps> = ({
               name="medicalHistory"
               value={formData.medicalHistory}
               onChange={handleInputChange}
-              className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:text-white h-24 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:text-white h-24 focus:ring-2 focus:ring-primary-500 focus:outline-none"
               placeholder="Allergiya, surunkali kasalliklar..."
             />
           </div>

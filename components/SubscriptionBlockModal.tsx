@@ -39,7 +39,7 @@ export const SubscriptionBlockModal: React.FC<SubscriptionBlockModalProps> = ({ 
 
           {/* Action Button - Replaced with primary contact button */}
           <Button 
-            className="w-full h-14 text-base font-bold uppercase tracking-wider bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-95 mb-4"
+            className="w-full h-14 text-base font-bold uppercase tracking-wider bg-primary-600 hover:bg-primary-700 text-white rounded-xl shadow-lg shadow-primary-500/20 transition-all active:scale-95 mb-4"
             onClick={() => window.open('https://t.me/dentacrm', '_blank')}
           >
             MENEJER BILAN BOG'LANISH
@@ -54,7 +54,7 @@ export const SubscriptionBlockModal: React.FC<SubscriptionBlockModalProps> = ({ 
               href="https://t.me/dentacrm" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="inline-flex items-center text-blue-600 dark:text-blue-400 font-bold hover:underline gap-1 uppercase text-xs"
+              className="inline-flex items-center text-primary-600 dark:text-primary-400 font-bold hover:underline gap-1 uppercase text-xs"
             >
               DENTACRM ADMIN
               <ExternalLink className="w-3 h-3" />
