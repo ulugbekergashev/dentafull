@@ -285,6 +285,7 @@ export interface Clinic {
   prepaymentEnabled?: boolean;
   prepaymentCardNumber?: string;
   prepaymentAmount?: number;
+  salesAgentId?: string | null; // Biriktirilgan sotuvchi (reseller)
 }
 
 export interface ICD10Code {

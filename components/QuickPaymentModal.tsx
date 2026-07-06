@@ -94,7 +94,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
 
                 <div>
                     <label className={labelCls}>Summa (UZS) *</label>
-                    <input type="number" placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} className={inputCls} />
+                    <input type="number" placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} onWheel={e => e.currentTarget.blur()} className={inputCls} />
                 </div>
 
                 <div>

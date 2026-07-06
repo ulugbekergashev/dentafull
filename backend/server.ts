@@ -938,9 +938,14 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
 
         const patients = await prisma.patient.findMany({
             where: whereClause,
-            orderBy: { id: 'desc' } // Newest patients first
+            orderBy: { createdAt: 'desc' }, // Eng yangi bemorlar birinchi (id UUID bo'lgani uchun vaqt tartibini bermaydi)
+            include: { doctor: { select: { firstName: true, lastName: true } } }
         });
-        res.json(patients);
+        // doctorName frontend uchun hisoblab beriladi (bazada bunday maydon yo'q)
+        res.json(patients.map(({ doctor, ...p }: any) => ({
+            ...p,
+            doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : null
+        })));
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch patients' });
     }
@@ -948,7 +953,7 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
 
 app.post('/api/patients', authenticateToken, async (req, res) => {
     try {
-        const { firstName, lastName, phone, clinicId, dob, gender, medicalHistory, pinfl } = req.body;
+        const { firstName, lastName, phone, clinicId, dob, gender, medicalHistory, pinfl, address, secondaryPhone } = req.body;
 
         // 1. Validate required fields
         if (!firstName || !lastName || !phone) {
@@ -981,7 +986,9 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
                 status: 'Active',
                 lastVisit: 'Never',
                 doctorId: assignedDoctorId,
-                pinfl: pinfl || ''
+                pinfl: pinfl || '',
+                address: address || null,
+                secondaryPhone: secondaryPhone || null
             }
         });
         res.json(patient);
@@ -2456,9 +2463,22 @@ app.post('/api/clinics', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AG
     }
 });
 
-app.put('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+app.put('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
     try {
-        const updateData = { ...req.body };
+        const user = (req as any).user;
+        let updateData = { ...req.body };
+
+        if (user.role === 'SALES_AGENT') {
+            const clinic = await prisma.clinic.findUnique({ where: { id: req.params.id } });
+            if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+            if (clinic.salesAgentId !== user.salesAgentId) {
+                return res.status(403).json({ error: 'Bu klinika sizga biriktirilmagan' });
+            }
+            // Sotuvchi faqat obuna bilan bog'liq maydonlarni o'zgartira oladi
+            const { status, expiryDate, planId, subscriptionType, customPrice } = updateData;
+            updateData = { status, expiryDate, planId, subscriptionType, customPrice };
+        }
+
         if (updateData.password) {
             const salt = await bcrypt.genSalt(10);
             updateData.password = await bcrypt.hash(updateData.password, salt);

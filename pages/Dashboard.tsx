@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service } from '../types';
 import { getCurrentMonthRange } from '../utils/dateUtils';
+import { transactionBelongsToDoctor } from '../utils/financialCalculations';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { AddPatientModal } from '../components/AddPatientModal';
@@ -61,20 +62,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
   const filteredTransactionsByDoctor = useMemo(() => {
     if (userRole === UserRole.DOCTOR && doctorId) {
-      // Filter transactions based on doctorId if available, or fall back to appointment matching
+      // Qat'iy atributsiya: doctorId yoki aniq ism tengligi (taxminiy moslashtirish yo'q)
+      const doctor = doctors.find(d => d.id === doctorId);
       return transactions.filter(t => {
-        if (t.doctorId) {
-          return t.doctorId === doctorId;
-        }
-        // Fallback: Match transaction to appointment by patient name and service
-        const matchingAppt = filteredAppointmentsByDoctor.find(a =>
-          a.patientName === t.patientName && a.type === t.service
-        );
-        return matchingAppt !== undefined;
+        if (t.doctorId) return t.doctorId === doctorId;
+        return doctor ? transactionBelongsToDoctor(t, doctor) : false;
       });
     }
     return transactions;
-  }, [transactions, filteredAppointmentsByDoctor, userRole, doctorId]);
+  }, [transactions, doctors, userRole, doctorId]);
 
   // --- Filter Logic ---
   const isDateInRange = (dateStr: string) => {

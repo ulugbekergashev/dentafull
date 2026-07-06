@@ -10,6 +10,7 @@ import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10C
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
+import { formatDobDDMMYYYY, calcAge } from '../utils/dateUtils';
 
 import { ReceiptModal } from '../components/ReceiptModal';
 
@@ -61,6 +62,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Payment Form State
    const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
    const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent'); // Chegirma turi: foiz yoki summa
+
+   // Chegirmadan keyingi jami summa (asl narx ma'lum bo'lganda)
+   const getDiscountedTotal = (): number => {
+      const baseAmount = Number(paymentData.amount) || 0;
+      if (baseAmount <= 0) return 0;
+      const discountVal = Number(paymentData.discountPercent) || 0;
+      return discountType === 'percent'
+         ? Math.round(baseAmount * (1 - discountVal / 100))
+         : Math.max(0, baseAmount - discountVal);
+   };
    const [pendingProcedures, setPendingProcedures] = useState<any[]>([]);
 
    // Installment quick-open state (from appointment row)
@@ -969,7 +980,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <div className="space-y-1">
                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{patient.firstName} {patient.lastName}</h2>
                         <p className="text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                           <span className="capitalize">{patient.gender === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}</span> • {patient.dob ? (new Date().getFullYear() - new Date(patient.dob).getFullYear()) : 'N/A'} {t('patients.details.age')}{patient.dob && ` (${new Date(patient.dob).toLocaleDateString('uz-UZ')})`}
+                           <span className="capitalize">{patient.gender === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}</span> • {calcAge(patient.dob) ?? 'N/A'} {t('patients.details.age')}{patient.dob && ` (${formatDobDDMMYYYY(patient.dob)})`}
                         </p>
                         <div className="pt-2 flex items-center gap-3">
                            <Badge status={patient.status} />
@@ -1794,7 +1805,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         label="To'lanayotgan Summa"
                         type="number"
                         value={paymentData.paidAmount}
-                        onChange={e => setPaymentData({ ...paymentData, paidAmount: e.target.value })}
+                        onChange={e => {
+                           // Asl narx ma'lum bo'lsa: qarz = jami - to'lanayotgan (qarz to'lovga qo'shilib ketmasligi uchun)
+                           const total = getDiscountedTotal();
+                           const paid = Number(e.target.value) || 0;
+                           setPaymentData({
+                              ...paymentData,
+                              paidAmount: e.target.value,
+                              debtAmount: total > 0 ? String(Math.max(0, total - paid)) : paymentData.debtAmount,
+                           });
+                        }}
                         placeholder="0.00"
                         required
                      />
@@ -1803,7 +1823,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            label="Qolgan Qarzdorlik"
                            type="number"
                            value={paymentData.debtAmount}
-                           onChange={e => setPaymentData({ ...paymentData, debtAmount: e.target.value })}
+                           onChange={e => {
+                              // Asl narx ma'lum bo'lsa: to'lanayotgan = jami - qarz (avtomatik ayriladi)
+                              const total = getDiscountedTotal();
+                              const debt = Number(e.target.value) || 0;
+                              setPaymentData({
+                                 ...paymentData,
+                                 debtAmount: e.target.value,
+                                 paidAmount: total > 0 ? String(Math.max(0, total - debt)) : paymentData.paidAmount,
+                              });
+                           }}
                            placeholder="0.00"
                         />
                      )}
@@ -2112,7 +2141,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <h2 className="text-xs font-bold uppercase text-gray-500 mb-1">Bemor</h2>
                   <p className="text-xl font-bold">{patient.lastName} {patient.firstName}</p>
                   <p className="text-sm">{patient.phone}</p>
-                  <p className="text-sm">{patient.dob ? new Date(patient.dob).toLocaleDateString('uz-UZ') : ''} ({patient.dob ? (new Date().getFullYear() - new Date(patient.dob).getFullYear()) : ''} yosh)</p>
+                  <p className="text-sm">{formatDobDDMMYYYY(patient.dob)} ({calcAge(patient.dob) ?? ''} yosh)</p>
                </div>
                <div className="text-right">
                   <h2 className="text-xs font-bold uppercase text-gray-500 mb-1">Sana</h2>

@@ -756,6 +756,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                         required
                                         value={apptData.duration}
                                         onChange={e => setApptData({ ...apptData, duration: Number(e.target.value) })}
+                                        onWheel={e => e.currentTarget.blur()}
                                         className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500 outline-none"
                                     />
                                 </div>

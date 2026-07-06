@@ -123,6 +123,15 @@ export const Input: React.FC<InputProps> = ({ label, error, helperText, classNam
     props.onClick?.(e);
   };
 
+  // number maydonlarda sichqoncha g'ildiragi qiymatni sezdirmasdan o'zgartirmasligi uchun
+  // (masalan 150000 -> 149999) fokusni olib tashlaymiz
+  const handleWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+    if (props.type === 'number') {
+      e.currentTarget.blur();
+    }
+    props.onWheel?.(e);
+  };
+
   return (
     <div className={`${containerClassName} relative z-10`}>
       {label && <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>}
@@ -130,6 +139,7 @@ export const Input: React.FC<InputProps> = ({ label, error, helperText, classNam
         className={`flex h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-white ${props.type === 'date' ? 'cursor-pointer' : ''} ${className} ${error ? 'border-red-500 focus:ring-red-500' : ''}`}
         {...props}
         onClick={handleClick}
+        onWheel={handleWheel}
       />
       {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
       {!error && helperText && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{helperText}</p>}

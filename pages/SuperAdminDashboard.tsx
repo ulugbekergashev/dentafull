@@ -65,13 +65,20 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const [createdSalesCreds, setCreatedSalesCreds] = useState<{ username: string, password: string, name: string } | null>(null);
    const [salesError, setSalesError] = useState<string | null>(null);
 
-   // Load Sales Agents when activeTab becomes 'sales'
+   const loadSalesAgents = () => {
+      api.sales.getAll()
+         .then(setSalesAgents)
+         .catch(err => console.error('Sotuvchilarni yuklashda xatolik:', err));
+   };
+
+   // Sotuvchilar ro'yxati boshida yuklanadi (klinikani biriktirish dropdown'i uchun kerak),
+   // 'sales' tabga o'tilganda esa qayta yangilanadi. Sotuvchi rejimida bu ma'lumot kerak emas
+   // (va sotuvchining bu endpointga ruxsati yo'q).
    useEffect(() => {
-      if (activeTab === 'sales') {
-         api.sales.getAll()
-            .then(setSalesAgents)
-            .catch(err => console.error('Sotuvchilarni yuklashda xatolik:', err));
-      }
+      if (!salesAgentMode) loadSalesAgents();
+   }, []);
+   useEffect(() => {
+      if (!salesAgentMode && activeTab === 'sales') loadSalesAgents();
    }, [activeTab]);
 
    // Create Clinic State
@@ -94,7 +101,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
    // Detail/Edit Modal State
    const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
-   const [editClinicData, setEditClinicData] = useState<{ status: string; expiryDate: string; planId: string; subscriptionType: 'Paid' | 'Trial'; customPrice: number; useCustomPrice: boolean } | null>(null);
+   const [editClinicData, setEditClinicData] = useState<{ status: string; expiryDate: string; planId: string; subscriptionType: 'Paid' | 'Trial'; customPrice: number; useCustomPrice: boolean; salesAgentId: string } | null>(null);
 
    // Delete Confirmation Modal
    const [deleteConfirmClinic, setDeleteConfirmClinic] = useState<Clinic | null>(null);
@@ -125,7 +132,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             planId: selectedClinic.planId,
             subscriptionType: selectedClinic.subscriptionType,
             customPrice: selectedClinic.customPrice || 0,
-            useCustomPrice: selectedClinic.customPrice !== undefined && selectedClinic.customPrice !== null
+            useCustomPrice: selectedClinic.customPrice !== undefined && selectedClinic.customPrice !== null,
+            salesAgentId: selectedClinic.salesAgentId || ''
          });
       } else {
          setEditClinicData(null);
@@ -318,7 +326,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             expiryDate: editClinicData.expiryDate,
             planId: editClinicData.planId,
             subscriptionType: editClinicData.subscriptionType,
-            customPrice: editClinicData.useCustomPrice ? editClinicData.customPrice : null
+            customPrice: editClinicData.useCustomPrice ? editClinicData.customPrice : null,
+            salesAgentId: editClinicData.salesAgentId || null
          });
          setSelectedClinic(null);
       }
@@ -519,13 +528,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thPlan')}</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thExpiry')}</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thStatus')}</th>
+                           {!salesAgentMode && <th className="p-4 font-medium text-gray-500">Sotuvchi</th>}
                            <th className="p-4 font-medium text-gray-500 text-right">{t('superAdmin.clinics.thAction')}</th>
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {paginatedClinics.length === 0 ? (
                            <tr>
-                              <td colSpan={5} className="p-8 text-center text-gray-500">
+                              <td colSpan={salesAgentMode ? 5 : 6} className="p-8 text-center text-gray-500">
                                  {t('common.noData')}
                               </td>
                            </tr>
@@ -574,6 +584,18 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     <td className="p-4">
                                        <Badge status={clinic.status === 'Active' ? 'active' : 'blocked'} />
                                     </td>
+                                    {!salesAgentMode && (
+                                       <td className="p-4">
+                                          {(() => {
+                                             const agent = salesAgents.find((a: any) => a.id === clinic.salesAgentId);
+                                             return agent ? (
+                                                <span className="px-2 py-1 rounded-md text-xs font-bold bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                                                   {agent.name}
+                                                </span>
+                                             ) : <span className="text-xs text-gray-400">—</span>;
+                                          })()}
+                                       </td>
+                                    )}
                                     <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                                        <Button
                                           size="sm"
@@ -1210,6 +1232,22 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            { value: 'Blocked', label: 'Bloklangan (Taqiqlangan)' }
                         ]}
                      />
+                     {!salesAgentMode && (
+                        <>
+                           <Select
+                              label="Sotuvchiga biriktirish"
+                              value={editClinicData.salesAgentId}
+                              onChange={(e) => setEditClinicData({ ...editClinicData, salesAgentId: e.target.value })}
+                              options={[
+                                 { value: '', label: 'Biriktirilmagan' },
+                                 ...salesAgents.map((a: any) => ({ value: a.id, label: `${a.name} (@${a.username})` }))
+                              ]}
+                           />
+                           <p className="text-xs text-gray-500">
+                              Biriktirilgan sotuvchi ushbu klinikani o'z panelida ko'radi va obunasini boshqara oladi.
+                           </p>
+                        </>
+                     )}
                   </div>
 
                   {/* Stats Preview */}

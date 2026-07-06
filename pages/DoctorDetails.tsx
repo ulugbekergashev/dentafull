@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Doctor, Appointment, Transaction, Patient, Service } from '../types';
 import { Card, Button, Badge } from '../components/Common';
 import { ArrowLeft, Phone, Mail, Award, Calendar, DollarSign, Users, Star } from 'lucide-react';
-import { calculateDoctorShare } from '../utils/financialCalculations';
+import { calculateDoctorShare, transactionBelongsToDoctor } from '../utils/financialCalculations';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -57,22 +57,11 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
 
     const doctorPatients = useMemo(() => patients.filter(p => p.doctorId === doctorId), [patients, doctorId]);
 
+    // Qat'iy atributsiya: doctorId yoki aniq ism tengligi (taxminiy moslashtirish yo'q)
     const doctorTransactions = useMemo(() => {
         if (!doctor) return [];
-
-        return transactions.filter(tx => {
-            if (tx.doctorId) return tx.doctorId === doctorId;
-
-            const docName = `${doctor.lastName} ${doctor.firstName}`.toLowerCase().trim();
-            const txDocName = (tx.doctorName || '').toLowerCase().trim();
-            if (txDocName && (docName === txDocName || docName.includes(txDocName) || txDocName.includes(docName))) {
-                return true;
-            }
-
-            const matchingAppt = doctorAppts.find(appt => appt.patientName === tx.patientName && appt.type === tx.service);
-            return matchingAppt !== undefined;
-        });
-    }, [transactions, doctor, doctorId, doctorAppts]);
+        return transactions.filter(tx => transactionBelongsToDoctor(tx, doctor));
+    }, [transactions, doctor]);
 
 
     // Current Month Stats (for the header cards)

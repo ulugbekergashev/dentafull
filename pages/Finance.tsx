@@ -7,7 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer, Plus, Banknote, Pencil, Trash2, HandCoins } from 'lucide-react';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { calculateTotalFinancials, calculateDoctorShares } from '../utils/financialCalculations';
+import { calculateTotalFinancials, calculateDoctorShares, transactionBelongsToDoctor } from '../utils/financialCalculations';
 import { exportFinanceToExcel } from '../utils/excelExport';
 
 import { ReceiptModal } from '../components/ReceiptModal';
@@ -186,13 +186,12 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     ? appointments.filter(a => a.doctorId === doctorId)
     : appointments;
 
+  // Qat'iy atributsiya: doctorId yoki aniq ism tengligi (taxminiy moslashtirish yo'q)
+  const doctorForFilter = userRole === UserRole.DOCTOR && doctorId ? doctors.find(d => d.id === doctorId) : undefined;
   const filteredTransactionsByDoctor = userRole === UserRole.DOCTOR && doctorId
     ? transactions.filter(t => {
-      // Match transaction to doctor's appointments
-      const matchingAppt = filteredAppointmentsByDoctor.find(a =>
-        a.patientName === t.patientName && a.type === t.service
-      );
-      return matchingAppt !== undefined;
+      if (t.doctorId) return t.doctorId === doctorId;
+      return doctorForFilter ? transactionBelongsToDoctor(t, doctorForFilter) : false;
     })
     : transactions;
 
@@ -1023,6 +1022,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               placeholder="0"
               value={paymentForm.amount}
               onChange={e => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
+              onWheel={e => e.currentTarget.blur()}
               className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
             />
           </div>
@@ -1132,6 +1132,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 placeholder="0"
                 value={expenseForm.amount}
                 onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
+                onWheel={e => e.currentTarget.blur()}
                 className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
               />
             </div>

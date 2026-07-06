@@ -5,6 +5,7 @@ import { Search, Plus, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertC
 import { Patient, Doctor, Appointment, Transaction, Clinic } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { calcAge } from '../utils/dateUtils';
 
 interface PatientsProps {
   userRole: string;
@@ -151,6 +152,15 @@ export const Patients: React.FC<PatientsProps> = ({
 
   const unassignedCount = patients.filter((p) => !p.doctorId).length;
 
+  // Shifokor ismi: API'dan kelgan doctorName yoki doctorId orqali doctors ro'yxatidan
+  // (doctorName bazada saqlanmaydi — doctorId asosiy manba)
+  const getPatientDoctorName = (p: Patient): string | null => {
+    if (p.doctorName) return p.doctorName;
+    if (!p.doctorId) return null;
+    const doc = doctors.find(d => d.id === p.doctorId);
+    return doc ? `${doc.lastName} ${doc.firstName}` : null;
+  };
+
   // CSV Export
   const handleExport = () => {
     const headers = ['ID', 'Familiya', 'Ism', 'Telefon', 'Tug\'ilgan sana', 'Jins', 'Status', 'Shifokor', 'Oxirgi tashrif'];
@@ -162,7 +172,7 @@ export const Patients: React.FC<PatientsProps> = ({
       p.dob,
       p.gender === 'Male' ? 'Erkak' : 'Ayol',
       p.status === 'Active' ? 'Faol' : 'Arxiv',
-      p.doctorName || 'Biriktirilmagan',
+      getPatientDoctorName(p) || 'Biriktirilmagan',
       p.lastVisit,
     ]);
     const csvContent = [headers, ...rows].map((r) => r.join(',')).join('\n');
@@ -488,21 +498,24 @@ export const Patients: React.FC<PatientsProps> = ({
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{patient.phone}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : 'N/A'} / {patient.gender === 'Male' ? 'Erkak' : 'Ayol'}
+                    {calcAge(patient.dob) ?? 'N/A'} / {patient.gender === 'Male' ? 'Erkak' : 'Ayol'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {patient.doctorName ? (
-                      <span className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
-                        <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-                          {patient.doctorName[0]}
-                        </div>
-                        {patient.doctorName}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-full">
-                        <AlertCircle className="w-3 h-3" /> Biriktirilmagan
-                      </span>
-                    )}
+                    {(() => {
+                      const docName = getPatientDoctorName(patient);
+                      return docName ? (
+                        <span className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
+                          <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                            {docName[0]}
+                          </div>
+                          {docName}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-full">
+                          <AlertCircle className="w-3 h-3" /> Biriktirilmagan
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{patient.lastVisit}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">

@@ -3,7 +3,7 @@ import { Doctor, Appointment, Service, Transaction, Review } from '../types';
 import { Card, Input } from '../components/Common';
 import { DollarSign, Calendar, Award, Users, Star } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
-import { calculateDoctorShare } from '../utils/financialCalculations';
+import { calculateDoctorShare, transactionBelongsToDoctor } from '../utils/financialCalculations';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { TranslationKey } from '../i18n/translations';
@@ -101,33 +101,13 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
             const doctorAppts = filteredAppointments.filter(a => a.doctorId === doctor.id);
             const completedAppts = doctorAppts.filter(a => a.status === 'Completed');
 
-            // Revenue Calculation - Use doctorId directly if available (new transactions)
-            // Fallback to appointment matching for old transactions without doctorId
+            // Qat'iy atributsiya: doctorId yoki aniq ism tengligi.
+            // Yagona shifokorli klinikada barcha kirim o'sha shifokorga tegishli (individual plan).
             const doctorTransactions = filteredTransactions.filter(tx => {
-                // SPECIAL CASE: If only 1 doctor, assign ALL transactions automatically
-                // This is for individual plans where all revenue goes to the single doctor
                 if (hasSingleDoctor) {
                     return true;
                 }
-
-                // If transaction has doctorId, use it directly (preferred method)
-                if (tx.doctorId) {
-                    return tx.doctorId === doctor.id;
-                }
-
-                // Check by name (like in Finance.tsx)
-                const docName = `${doctor.lastName} ${doctor.firstName}`.toLowerCase().trim();
-                const txDocName = (tx.doctorName || '').toLowerCase().trim();
-                if (txDocName && (docName === txDocName || docName.includes(txDocName) || txDocName.includes(docName))) {
-                    return true;
-                }
-
-                // Fallback: Match transaction to doctor's appointments by patient name and service
-                // (for backward compatibility with old transactions)
-                const matchingAppt = doctorAppts.find(appt =>
-                    appt.patientName === tx.patientName && appt.type === tx.service
-                );
-                return matchingAppt !== undefined;
+                return transactionBelongsToDoctor(tx, doctor);
             });
 
             // Calculate metrics

@@ -349,7 +349,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Narx (UZS)</label>
-                  <input type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} placeholder="0" className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                  <input type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} onWheel={e => e.currentTarget.blur()} placeholder="0" className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ustuvorlik</label>

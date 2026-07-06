@@ -28,14 +28,32 @@ export interface TotalFinancials {
     netProfit: number;          // sof foyda
 }
 
-// Tranzaksiyani shifokorga biriktirish: doctorId → ism bo'yicha → yagona shifokor fallback
+// Shifokor ismini qat'iy solishtirish uchun normalizatsiya:
+// "Dr. Alisher Atajanov" === "Atajanov Alisher" (prefiks/tartib/punktuatsiyadan qat'i nazar),
+// lekin qism-satr (includes) moslashtirish YO'Q — turli shifokorlar aralashmaydi.
+export function normalizeDoctorName(name: string): string {
+    return name
+        .toLowerCase()
+        .replace(/\bdr[._]?\s*/g, '')
+        .replace(/[.,_]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .sort()
+        .join(' ');
+}
+
+// Tranzaksiya shu shifokorga tegishlimi — qat'iy tekshiruv:
+// doctorId bor bo'lsa faqat id tengligi; yo'q bo'lsa (eski yozuvlar) faqat aniq ism tengligi.
+export function transactionBelongsToDoctor(tx: Transaction, doctor: Doctor): boolean {
+    if (tx.doctorId) return tx.doctorId === doctor.id;
+    const txDocName = (tx.doctorName || '').trim();
+    if (!txDocName) return false;
+    return normalizeDoctorName(txDocName) === normalizeDoctorName(`${doctor.lastName} ${doctor.firstName}`);
+}
+
+// Tranzaksiyani shifokorga biriktirish: doctorId → aniq ism → yagona shifokor fallback
 function findDoctorForTransaction(tx: Transaction, doctors: Doctor[]): Doctor | undefined {
-    let doctor = doctors.find(d => d.id === tx.doctorId) ||
-        doctors.find(d => {
-            const docName = `${d.lastName} ${d.firstName}`.toLowerCase();
-            const txDocName = (tx.doctorName || '').toLowerCase();
-            return !!txDocName && (docName === txDocName || docName.includes(txDocName) || txDocName.includes(docName));
-        });
+    let doctor = doctors.find(d => transactionBelongsToDoctor(tx, d));
 
     // Yagona shifokorli klinikada barcha kirim o'sha shifokorga tegishli
     if (!doctor && doctors.length === 1) {
