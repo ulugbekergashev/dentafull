@@ -435,13 +435,16 @@ model TelegramLog {
 }
 
 model MessageTemplate {
-  id        String           @id @default(uuid())
-  clinicId  String
-  name      String
-  text      String
-  createdAt DateTime         @default(now())
-  clinic    Clinic           @relation(fields: [clinicId], references: [id])
-  rules     AutomationRule[]
+  id               String           @id @default(uuid())
+  clinicId         String
+  name             String
+  text             String
+  eskizTemplateId  Int?             // Eskiz.uz'dagi shablon ID'si
+  eskizStatus      String?          // Eskiz'dan qaytgan moderatsiya holati (masalan: moderation/confirmed/declined)
+  eskizSubmittedAt DateTime?        // Oxirgi marta Eskiz'ga yuborilgan vaqt
+  createdAt        DateTime         @default(now())
+  clinic           Clinic           @relation(fields: [clinicId], references: [id])
+  rules            AutomationRule[]
 
   @@index([clinicId])
 }

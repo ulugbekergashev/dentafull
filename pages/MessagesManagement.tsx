@@ -49,6 +49,18 @@ const SOURCE_LABELS: Record<string, string> = {
 const inputCls = "w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400";
 const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5";
 
+// Eskiz'dan qaytgan xom holat matnini o'qiladigan yorliq + rangga aylantiradi.
+// Aniq enum kafolatlanmagani uchun kalit so'zlarga qarab taxminiy rang beriladi.
+function eskizStatusBadge(status?: string | null): { label: string; cls: string } | null {
+    if (!status) return null;
+    const s = status.toLowerCase();
+    if (s === 'error') return { label: 'Yuborishda xatolik', cls: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' };
+    if (s === 'not_found') return { label: 'Eskiz\'da topilmadi', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' };
+    if (/(declin|reject|rad)/.test(s)) return { label: `Rad etildi (${status})`, cls: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' };
+    if (/(confirm|approv|activ|tasdiq)/.test(s)) return { label: `Tasdiqlandi (${status})`, cls: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' };
+    return { label: `Moderatsiyada (${status})`, cls: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' };
+}
+
 // Bemor tug'ilgan kunini MM-DD ga keltirish
 function dobToMonthDay(dob?: string): string {
     if (!dob) return '';
@@ -124,6 +136,19 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             addToast('error', e.message || 'Xatolik yuz berdi');
         } finally {
             setTemplateSaving(false);
+        }
+    };
+
+    const [syncingTemplateId, setSyncingTemplateId] = useState<string | null>(null);
+    const handleSyncEskizStatus = async (tpl: MessageTemplate) => {
+        setSyncingTemplateId(tpl.id);
+        try {
+            const updated = await api.messageTemplates.syncEskizStatus(tpl.id);
+            setTemplates(prev => prev.map(t => t.id === tpl.id ? updated : t));
+        } catch (e: any) {
+            addToast('error', e.message || 'Holatni tekshirishda xatolik');
+        } finally {
+            setSyncingTemplateId(null);
         }
     };
 
@@ -375,6 +400,11 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         </Button>
                     </div>
 
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-xs text-primary-700 dark:text-primary-400">
+                        <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                        <span>Eskiz SMS ulangan bo'lsa, har bir shablon saqlanganda avtomatik Eskiz moderatsiyasiga yuboriladi. Holatini "🔄" tugmasi bilan yangilab turing.</span>
+                    </div>
+
                     {isTemplateFormOpen && (
                         <Card className="p-6 space-y-4">
                             <div className="flex items-center justify-between">
@@ -410,22 +440,42 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     )}
 
                     <div className="space-y-3">
-                        {templates.map(tpl => (
-                            <Card key={tpl.id} className="p-5 flex items-start justify-between gap-4">
-                                <div className="min-w-0">
-                                    <h4 className="font-bold text-gray-900 dark:text-white">{tpl.name}</h4>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 whitespace-pre-wrap break-words">{tpl.text}</p>
-                                </div>
-                                <div className="flex gap-1 shrink-0">
-                                    <button onClick={() => openTemplateForm(tpl)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors" title="Tahrirlash">
-                                        <Pencil className="w-4 h-4" />
-                                    </button>
-                                    <button onClick={() => handleDeleteTemplate(tpl)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="O'chirish">
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </Card>
-                        ))}
+                        {templates.map(tpl => {
+                            const badge = eskizStatusBadge(tpl.eskizStatus);
+                            return (
+                                <Card key={tpl.id} className="p-5 flex items-start justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h4 className="font-bold text-gray-900 dark:text-white">{tpl.name}</h4>
+                                            {badge && (
+                                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${badge.cls}`}>
+                                                    {badge.label}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 whitespace-pre-wrap break-words">{tpl.text}</p>
+                                    </div>
+                                    <div className="flex gap-1 shrink-0">
+                                        {tpl.eskizStatus && (
+                                            <button
+                                                onClick={() => handleSyncEskizStatus(tpl)}
+                                                disabled={syncingTemplateId === tpl.id}
+                                                className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                                                title="Eskiz holatini yangilash"
+                                            >
+                                                <RefreshCw className={`w-4 h-4 ${syncingTemplateId === tpl.id ? 'animate-spin' : ''}`} />
+                                            </button>
+                                        )}
+                                        <button onClick={() => openTemplateForm(tpl)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors" title="Tahrirlash">
+                                            <Pencil className="w-4 h-4" />
+                                        </button>
+                                        <button onClick={() => handleDeleteTemplate(tpl)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="O'chirish">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </Card>
+                            );
+                        })}
                         {templates.length === 0 && !isTemplateFormOpen && (
                             <Card className="p-10 text-center text-gray-500">
                                 Hozircha shablonlar yo'q. "Yangi shablon" tugmasi bilan birinchisini yarating.

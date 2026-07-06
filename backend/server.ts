@@ -473,15 +473,35 @@ app.get('/api/message-templates', authenticateToken, async (req, res) => {
     }
 });
 
+// Shablon matnini Eskiz moderatsiyasiga yuborib, natijani baza yozuviga qo'shadi.
+// Klinikada Eskiz ulanmagan bo'lsa jim o'tkazib yuboradi (eskizStatus null qoladi).
+const submitTemplateToEskizModeration = async (templateId: string, clinicId: string, text: string) => {
+    try {
+        const { eskizTemplateId, eskizStatus } = await smsService.submitAndSyncTemplate(clinicId, text);
+        if (eskizStatus === null && eskizTemplateId === null) return; // Eskiz ulanmagan — jim o'tkazamiz
+        await prisma.messageTemplate.update({
+            where: { id: templateId },
+            data: { eskizTemplateId, eskizStatus, eskizSubmittedAt: new Date() }
+        });
+    } catch (err) {
+        console.error('[MessageTemplate] Eskiz moderatsiyaga yuborishda xatolik:', err);
+    }
+};
+
 app.post('/api/message-templates', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { name, text } = req.body;
         if (!name || !text) return res.status(400).json({ error: 'Nomi va matni kiritilishi shart' });
-        const template = await prisma.messageTemplate.create({
+        let template = await prisma.messageTemplate.create({
             data: { name, text, clinicId: clinicId as string }
         });
+
+        // Shablonni darhol Eskiz moderatsiyasiga yuboramiz (javobni kutib, holatini saqlaymiz)
+        await submitTemplateToEskizModeration(template.id, clinicId as string, text);
+        template = await prisma.messageTemplate.findUnique({ where: { id: template.id } }) as any;
+
         res.json(template);
     } catch (error) {
         res.status(500).json({ error: 'Shablonni saqlashda xatolik' });
@@ -492,16 +512,47 @@ app.put('/api/message-templates/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
         const { name, text } = req.body;
-        const template = await prisma.messageTemplate.update({
+        const existing = await prisma.messageTemplate.findUnique({ where: { id: req.params.id } });
+        let template = await prisma.messageTemplate.update({
             where: { id: req.params.id },
             data: {
                 ...(name !== undefined && { name }),
                 ...(text !== undefined && { text }),
             }
         });
+
+        // Matn o'zgargan bo'lsa — Eskiz'da eski shablon endi mos kelmaydi, qayta yuboramiz
+        if (text !== undefined && text !== existing?.text) {
+            await submitTemplateToEskizModeration(template.id, template.clinicId, text);
+            template = await prisma.messageTemplate.findUnique({ where: { id: template.id } }) as any;
+        }
+
         res.json(template);
     } catch (error) {
         res.status(500).json({ error: 'Shablonni yangilashda xatolik' });
+    }
+});
+
+// Shablonning Eskiz'dagi moderatsiya holatini qayta yuborishsiz yangilaydi (faqat status tekshiruvi)
+app.post('/api/message-templates/:id/sync-eskiz-status', authenticateToken, async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
+        const existing = await prisma.messageTemplate.findUnique({ where: { id: req.params.id } });
+        if (!existing) return res.status(404).json({ error: 'Shablon topilmadi' });
+
+        const { templates, error } = await smsService.getTemplates(existing.clinicId);
+        if (error) return res.status(400).json({ error });
+
+        const match = [...templates].reverse().find((t: any) => t.original_text === existing.text || t.template === existing.text);
+        const template = await prisma.messageTemplate.update({
+            where: { id: req.params.id },
+            data: match
+                ? { eskizTemplateId: match.id, eskizStatus: match.status }
+                : { eskizStatus: 'not_found' }
+        });
+        res.json(template);
+    } catch (error) {
+        res.status(500).json({ error: 'Holatni tekshirishda xatolik' });
     }
 });
 

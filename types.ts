@@ -143,6 +143,9 @@ export interface MessageTemplate {
   clinicId: string;
   name: string;
   text: string;
+  eskizTemplateId?: number | null;
+  eskizStatus?: string | null; // Eskiz moderatsiya holati: moderation/confirmed/declined/error/not_found
+  eskizSubmittedAt?: string | null;
   createdAt?: string;
 }
 

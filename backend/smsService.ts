@@ -161,6 +161,82 @@ class SmsService {
     }
 
     /**
+     * Shablon matnini Eskiz moderatsiyasiga yuboradi (POST /api/user/template).
+     * Eskiz javobi shablonni tasdiqlamaydi/rad etmaydi — faqat qabul qilinganini bildiradi,
+     * haqiqiy holatni keyin getTemplates() orqali tekshirish kerak.
+     */
+    public async submitTemplate(clinicId: string, text: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const token = await this.getToken(clinicId);
+            if (!token) {
+                return { success: false, error: 'Eskiz token topilmadi' };
+            }
+
+            const formData = new URLSearchParams();
+            formData.append('template', text);
+
+            await axios.post(`${ESKIZ_BASE_URL}/user/template`, formData, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': `Bearer ${token}`
+                },
+                timeout: 15000
+            });
+
+            return { success: true };
+        } catch (err: any) {
+            const errorMsg = err.response?.data?.message || err.message || 'Shablonni yuborishda xatolik';
+            console.error(`[SMS] submitTemplate error for clinic ${clinicId}:`, errorMsg);
+            return { success: false, error: errorMsg };
+        }
+    }
+
+    /**
+     * Klinikaning Eskiz'ga yuborilgan barcha shablonlari va ularning moderatsiya holatini qaytaradi
+     * (GET /api/user/templates).
+     */
+    public async getTemplates(clinicId: string): Promise<{ templates: { id: number; template: string; original_text: string; status: string }[]; error?: string }> {
+        try {
+            const token = await this.getToken(clinicId);
+            if (!token) {
+                return { templates: [], error: 'Eskiz token topilmadi' };
+            }
+
+            const response = await axios.get(`${ESKIZ_BASE_URL}/user/templates`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+                timeout: 10000
+            });
+
+            const templates = response.data?.result;
+            return { templates: Array.isArray(templates) ? templates : [] };
+        } catch (err: any) {
+            const errorMsg = err.response?.data?.message || err.message || 'Shablonlarni olishda xatolik';
+            console.error(`[SMS] getTemplates error for clinic ${clinicId}:`, errorMsg);
+            return { templates: [], error: errorMsg };
+        }
+    }
+
+    /**
+     * Shablonni Eskiz'ga yuborib, so'ng ro'yxatdan (matn bo'yicha) topib, ID va holatini qaytaradi.
+     * Klinikada Eskiz ulanmagan bo'lsa jim o'tkazib yuboradi (null qaytaradi).
+     */
+    public async submitAndSyncTemplate(clinicId: string, text: string): Promise<{ eskizTemplateId: number | null; eskizStatus: string | null }> {
+        const submitResult = await this.submitTemplate(clinicId, text);
+        if (!submitResult.success) {
+            // Eskiz ulanmagan bo'lsa jim qoladi; ulangan-yu xato bo'lsa holatni belgilaymiz
+            return { eskizTemplateId: null, eskizStatus: submitResult.error === 'Eskiz token topilmadi' ? null : 'error' };
+        }
+
+        const { templates } = await this.getTemplates(clinicId);
+        const match = [...templates].reverse().find(t => t.original_text === text || t.template === text);
+        if (match) {
+            return { eskizTemplateId: match.id, eskizStatus: match.status };
+        }
+        // Yuborildi, lekin ro'yxatda hali topilmadi (masalan matn Eskiz tomonidan biroz o'zgartirilgan)
+        return { eskizTemplateId: null, eskizStatus: 'moderation' };
+    }
+
+    /**
      * Validate Eskiz credentials (used when clinic saves SMS settings).
      * Returns token on success, null on failure.
      */

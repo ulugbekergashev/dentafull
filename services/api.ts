@@ -924,6 +924,13 @@ export const api = {
             }
             return fetchJson<{ success: true }>(`/message-templates/${id}`, { method: 'DELETE' });
         },
+        syncEskizStatus: (id: string) => {
+            if (isDemoMode()) {
+                const tpl = DEMO_MESSAGE_TEMPLATES.find(t => t.id === id);
+                return Promise.resolve(tpl as MessageTemplate);
+            }
+            return fetchJson<MessageTemplate>(`/message-templates/${id}/sync-eskiz-status`, { method: 'POST' });
+        },
     },
     automationRules: {
         getAll: (clinicId: string) => {
