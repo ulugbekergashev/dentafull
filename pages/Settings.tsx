@@ -60,7 +60,7 @@ export const Settings: React.FC<SettingsProps> = ({
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
    const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
-   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '' });
+   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none' as 'none' | 'fixed' | 'fixed_kpi' | 'kpi', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '' });
 
    // Receptionist Modal State
    const [isReceptionistModalOpen, setIsReceptionistModalOpen] = useState(false);
@@ -418,13 +418,15 @@ export const Settings: React.FC<SettingsProps> = ({
             username: doctor.username || '',
             password: '',
             percentage: (doctor.percentage || 0).toString(),
+            salaryType: (doctor.salaryType || 'none') as 'none' | 'fixed' | 'fixed_kpi' | 'kpi',
+            fixedSalary: (doctor.fixedSalary || 0).toString(),
             color: doctor.color || DOCTOR_COLORS[0].value,
             startHour: doctor.startHour != null ? String(doctor.startHour) : '',
             endHour: doctor.endHour != null ? String(doctor.endHour) : '',
          });
       } else {
          setEditingDoctorId(null);
-         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '' });
+         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '' });
       }
       setIsDoctorModalOpen(true);
    };
@@ -435,6 +437,7 @@ export const Settings: React.FC<SettingsProps> = ({
          const updateData: any = { ...doctorForm };
          if (!updateData.password) delete updateData.password;
          updateData.percentage = Number(updateData.percentage) || 0;
+         updateData.fixedSalary = Number(updateData.fixedSalary) || 0;
          updateData.startHour = doctorForm.startHour !== '' ? Number(doctorForm.startHour) : null;
          updateData.endHour = doctorForm.endHour !== '' ? Number(doctorForm.endHour) : null;
          onUpdateDoctor(editingDoctorId, updateData);
@@ -442,6 +445,7 @@ export const Settings: React.FC<SettingsProps> = ({
          onAddDoctor({
             ...doctorForm,
             percentage: Number(doctorForm.percentage) || 0,
+            fixedSalary: Number(doctorForm.fixedSalary) || 0,
             startHour: doctorForm.startHour !== '' ? Number(doctorForm.startHour) : null,
             endHour: doctorForm.endHour !== '' ? Number(doctorForm.endHour) : null,
             status: 'Active'
@@ -1519,14 +1523,58 @@ export const Settings: React.FC<SettingsProps> = ({
                         required={!editingDoctorId}
                         placeholder={editingDoctorId ? "O'zgartirish uchun kiriting" : "********"}
                      />
-                     <Input
-                        label="Shifokor Ulushi (%)"
-                        type="number"
-                        value={doctorForm.percentage}
-                        onChange={e => setDoctorForm({ ...doctorForm, percentage: e.target.value })}
-                        placeholder="50"
-                        helperText="Sof foydadan shifokor olishi kerak bo'lgan foiz"
-                     />
+                  </div>
+
+                  <div className="mt-4">
+                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Maosh turi</label>
+                     <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+                        {([
+                           ['none', "Bo'sh"],
+                           ['fixed', 'Fix'],
+                           ['fixed_kpi', 'Fix+KPI'],
+                           ['kpi', 'KPI'],
+                        ] as const).map(([val, label]) => (
+                           <button
+                              key={val}
+                              type="button"
+                              onClick={() => setDoctorForm({ ...doctorForm, salaryType: val })}
+                              className={`px-2 py-2 rounded-lg text-xs font-bold transition-all ${doctorForm.salaryType === val
+                                 ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
+                                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                           >
+                              {label}
+                           </button>
+                        ))}
+                     </div>
+                     <p className="text-xs text-gray-500 mt-1.5">
+                        {doctorForm.salaryType === 'none' && "Maosh turi belgilanmagan — Xarajat bo'limida qo'lda kiritiladi."}
+                        {doctorForm.salaryType === 'fixed' && "Har oy belgilangan qat'iy summa to'lanadi."}
+                        {doctorForm.salaryType === 'fixed_kpi' && "Qat'iy summa + sof foydadan foiz — ikkalasi ham to'lanadi."}
+                        {doctorForm.salaryType === 'kpi' && "Faqat sof foydadan foiz (hisoblangan ulush) to'lanadi."}
+                     </p>
+
+                     {(doctorForm.salaryType === 'fixed' || doctorForm.salaryType === 'fixed_kpi') && (
+                        <Input
+                           label="Fix maosh (UZS)"
+                           type="number"
+                           value={doctorForm.fixedSalary}
+                           onChange={e => setDoctorForm({ ...doctorForm, fixedSalary: e.target.value })}
+                           placeholder="2000000"
+                           containerClassName="w-full mt-3"
+                        />
+                     )}
+
+                     {(doctorForm.salaryType === 'fixed_kpi' || doctorForm.salaryType === 'kpi') && (
+                        <Input
+                           label="Shifokor Ulushi (%)"
+                           type="number"
+                           value={doctorForm.percentage}
+                           onChange={e => setDoctorForm({ ...doctorForm, percentage: e.target.value })}
+                           placeholder="50"
+                           helperText="Sof foydadan shifokor olishi kerak bo'lgan foiz"
+                           containerClassName="w-full mt-3"
+                        />
+                     )}
                   </div>
 
                   <div className="pt-4 border-t border-gray-100 dark:border-gray-800">

@@ -35,6 +35,8 @@ export interface Doctor {
   username?: string;
   password?: string;
   percentage?: number; // Revenue share percentage
+  salaryType?: 'none' | 'fixed' | 'fixed_kpi' | 'kpi'; // Maosh turi
+  fixedSalary?: number; // Fix maosh summasi (salaryType 'fixed'/'fixed_kpi' uchun)
   secondaryPhone?: string;
   color?: string;
   startHour?: number | null;
@@ -128,7 +130,8 @@ export interface Expense {
   method?: 'Cash' | 'Card' | null;
   note?: string | null;
   clinicId: string;
-  doctorId?: string | null;      // 'DoctorShare' kategoriyasi uchun
+  doctorId?: string | null;      // 'DoctorShare' va shifokorga 'Salary' uchun
+  receptionistId?: string | null; // reception xodimiga 'Salary' uchun
   labOrderId?: string | null;    // avtomatik Laboratoriya xarajati bog'lami
   inventoryItemId?: string | null; // avtomatik Ombor xarajati bog'lami
   createdAt?: string;

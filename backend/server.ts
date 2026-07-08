@@ -1527,7 +1527,7 @@ app.post('/api/expenses', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'clinicId is required' });
         }
 
-        const { date, amount, category, title, method, note, doctorId } = req.body;
+        const { date, amount, category, title, method, note, doctorId, receptionistId } = req.body;
         if (!EXPENSE_CATEGORIES.includes(category)) {
             return res.status(400).json({ error: 'Noto\'g\'ri kategoriya' });
         }
@@ -1548,6 +1548,7 @@ app.post('/api/expenses', authenticateToken, async (req, res) => {
                 method: method || null,
                 note: note || null,
                 doctorId: doctorId || null,
+                receptionistId: receptionistId || null,
                 clinicId: clinicId as string,
             }
         });
@@ -1562,7 +1563,7 @@ app.put('/api/expenses/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'expense', req.params.id))) return;
 
-        const { date, amount, category, title, method, note, doctorId } = req.body;
+        const { date, amount, category, title, method, note, doctorId, receptionistId } = req.body;
         if (category && !EXPENSE_CATEGORIES.includes(category)) {
             return res.status(400).json({ error: 'Noto\'g\'ri kategoriya' });
         }
@@ -1577,6 +1578,7 @@ app.put('/api/expenses/:id', authenticateToken, async (req, res) => {
                 ...(method !== undefined && { method: method || null }),
                 ...(note !== undefined && { note: note || null }),
                 ...(doctorId !== undefined && { doctorId: doctorId || null }),
+                ...(receptionistId !== undefined && { receptionistId: receptionistId || null }),
             }
         });
         res.json(expense);
@@ -1770,7 +1772,7 @@ app.get('/api/doctors', authenticateToken, async (req, res) => {
 
 app.post('/api/doctors', authenticateToken, async (req, res) => {
     try {
-        const { firstName, lastName, specialty, phone, email, status, clinicId, username, password, percentage } = req.body;
+        const { firstName, lastName, specialty, phone, email, status, clinicId, username, password, percentage, salaryType, fixedSalary } = req.body;
 
         // Check subscription limit
         const clinic = await prisma.clinic.findUnique({
@@ -1812,7 +1814,9 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
         }
         const data: any = {
             firstName, lastName, specialty, phone, status, clinicId, username, password: passwordData,
-            percentage: percentage || 0
+            percentage: percentage || 0,
+            salaryType: salaryType || 'none',
+            fixedSalary: fixedSalary ? Number(fixedSalary) : 0
         };
         if (email) data.email = email;
 
@@ -1838,7 +1842,7 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
             }
         }
         // Sanitize body to only include valid Doctor fields
-        const { firstName, lastName, specialty, phone, email, status, password, percentage, secondaryPhone, color, clinicId, startHour, endHour } = req.body;
+        const { firstName, lastName, specialty, phone, email, status, password, percentage, salaryType, fixedSalary, secondaryPhone, color, clinicId, startHour, endHour } = req.body;
         const updateData: any = {};
         if (firstName !== undefined) updateData.firstName = firstName;
         if (lastName !== undefined) updateData.lastName = lastName;
@@ -1848,6 +1852,8 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
         if (status !== undefined) updateData.status = status;
         if (username !== undefined) updateData.username = username;
         if (percentage !== undefined) updateData.percentage = percentage;
+        if (salaryType !== undefined) updateData.salaryType = salaryType;
+        if (fixedSalary !== undefined) updateData.fixedSalary = Number(fixedSalary) || 0;
         if (secondaryPhone !== undefined) updateData.secondaryPhone = secondaryPhone;
         if (color !== undefined) updateData.color = color;
         if (clinicId !== undefined) updateData.clinicId = clinicId;

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
 import { StatCard } from '../components/StatCard';
-import { UserRole, Transaction, Expense, ExpenseCategory, EXPENSE_CATEGORY_LABELS, Appointment, Patient, Clinic, LabOrder } from '../types';
+import { UserRole, Transaction, Expense, ExpenseCategory, EXPENSE_CATEGORY_LABELS, Appointment, Patient, Clinic, LabOrder, Receptionist } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer, Plus, Banknote, Pencil, Trash2, HandCoins } from 'lucide-react';
 import { api } from '../services/api';
@@ -22,6 +22,7 @@ interface FinanceProps {
   onPatientClick: (id: string) => void;
   doctorId: string;
   doctors: Doctor[];
+  receptionists?: Receptionist[];
   currentClinic?: Clinic;
   labOrders?: LabOrder[];
   onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
@@ -44,7 +45,7 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   Other: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
 };
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, currentClinic, labOrders, onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, receptionists = [], currentClinic, labOrders, onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense }) => {
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
@@ -76,7 +77,11 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     category: 'Other' as ExpenseCategory,
     title: '',
     doctorId: '',
+    receptionistId: '',
+    staffType: 'doctor' as 'doctor' | 'receptionist',
     amount: '',
+    fixAmount: '',
+    kpiAmount: '',
     method: 'Cash' as 'Cash' | 'Card',
     date: today,
     note: '',
@@ -89,7 +94,11 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
       category: (expense?.category || preset?.category || 'Other') as ExpenseCategory,
       title: expense?.title || preset?.title || '',
       doctorId: expense?.doctorId || preset?.doctorId || '',
+      receptionistId: expense?.receptionistId || preset?.receptionistId || '',
+      staffType: (expense?.receptionistId || preset?.receptionistId) ? 'receptionist' : 'doctor',
       amount: expense ? String(expense.amount) : (preset?.amount || ''),
+      fixAmount: '',
+      kpiAmount: '',
       method: (expense?.method || 'Cash') as 'Cash' | 'Card',
       date: expense?.date ? expense.date.split('T')[0] : today,
       note: expense?.note || '',
@@ -97,23 +106,85 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     setIsExpenseModalOpen(true);
   };
 
+  // Shifokor "Oylik" uchun tanlanganda maosh turiga (fix/kpi/fix+kpi) qarab summani avtomatik hisoblaydi.
+  // Faqat yangi xarajat qo'shishda ishlaydi (tahrirlashda mavjud summa o'zgartirilmaydi).
+  const handleSalaryDoctorSelect = (selectedDoctorId: string) => {
+    const doc = doctors.find(d => d.id === selectedDoctorId);
+    if (editingExpense || expenseForm.category !== 'Salary' || !doc) {
+      setExpenseForm(f => ({ ...f, doctorId: selectedDoctorId }));
+      return;
+    }
+    const share = doctorShares.find(s => s.doctorId === selectedDoctorId);
+    const kpiBalance = share ? Math.max(0, Math.round(share.balance)) : 0;
+    const fixSalary = Math.round(doc.fixedSalary || 0);
+    if (doc.salaryType === 'fixed') {
+      setExpenseForm(f => ({ ...f, doctorId: selectedDoctorId, amount: String(fixSalary), fixAmount: '', kpiAmount: '' }));
+    } else if (doc.salaryType === 'kpi') {
+      setExpenseForm(f => ({ ...f, doctorId: selectedDoctorId, amount: String(kpiBalance), fixAmount: '', kpiAmount: '' }));
+    } else if (doc.salaryType === 'fixed_kpi') {
+      setExpenseForm(f => ({ ...f, doctorId: selectedDoctorId, amount: String(fixSalary + kpiBalance), fixAmount: String(fixSalary), kpiAmount: String(kpiBalance) }));
+    } else {
+      setExpenseForm(f => ({ ...f, doctorId: selectedDoctorId, amount: '', fixAmount: '', kpiAmount: '' }));
+    }
+  };
+
+  const selectedSalaryDoctor = expenseForm.category === 'Salary' && expenseForm.staffType === 'doctor'
+    ? doctors.find(d => d.id === expenseForm.doctorId) : undefined;
+  const isFixKpiSplit = !editingExpense && !!selectedSalaryDoctor && selectedSalaryDoctor.salaryType === 'fixed_kpi';
+
   const handleSaveExpense = async () => {
-    const amount = parseFloat(expenseForm.amount);
-    if (!amount || amount <= 0) return;
-    if (expenseForm.category === 'DoctorShare' && !expenseForm.doctorId) return;
     setExpenseLoading(true);
     try {
+      // Fix+KPI shifokor uchun: bitta summani ikkiga bo'lib, har birini to'g'ri kategoriyada saqlaydi —
+      // Fix qismi 'Salary' (sof foydani kamaytiradi), KPI qismi 'DoctorShare' (Shifokor Hisobida hisobga olinadi,
+      // ikki marta ayirilmasligi uchun sof foyda formulasida alohida chiqarib tashlanadi).
+      if (isFixKpiSplit && selectedSalaryDoctor) {
+        const fixAmt = parseFloat(expenseForm.fixAmount) || 0;
+        const kpiAmt = parseFloat(expenseForm.kpiAmount) || 0;
+        if (fixAmt <= 0 && kpiAmt <= 0) return;
+        const base = {
+          date: expenseForm.date || today,
+          method: expenseForm.method,
+          note: expenseForm.note || undefined,
+          doctorId: expenseForm.doctorId,
+          clinicId: patients[0]?.clinicId || '',
+        };
+        if (fixAmt > 0) {
+          await onAddExpense?.({ ...base, amount: fixAmt, category: 'Salary', title: `Oylik (Fix) — ${selectedSalaryDoctor.lastName} ${selectedSalaryDoctor.firstName}` } as Omit<Expense, 'id'>);
+        }
+        if (kpiAmt > 0) {
+          await onAddExpense?.({ ...base, amount: kpiAmt, category: 'DoctorShare', title: `Shifokor ulushi — ${selectedSalaryDoctor.lastName} ${selectedSalaryDoctor.firstName}` } as Omit<Expense, 'id'>);
+        }
+        setIsExpenseModalOpen(false);
+        setEditingExpense(null);
+        return;
+      }
+
+      const amount = parseFloat(expenseForm.amount);
+      if (!amount || amount <= 0) return;
+      if (expenseForm.category === 'DoctorShare' && !expenseForm.doctorId) return;
+
       const doctor = doctors.find(d => d.id === expenseForm.doctorId);
+      const receptionist = receptionists.find(r => r.id === expenseForm.receptionistId);
+      const isSalaryForDoctor = expenseForm.category === 'Salary' && expenseForm.staffType === 'doctor' && doctor;
+      const isSalaryForReceptionist = expenseForm.category === 'Salary' && expenseForm.staffType === 'receptionist' && receptionist;
+      // Sof KPI (foizli) shifokorga "Oylik" orqali to'lansa ham, hisob-kitob buzilmasligi uchun
+      // haqiqatda 'DoctorShare' kategoriyasida saqlanadi (Shifokor Hisobi shu yerdan oziqlanadi).
+      const effectiveCategory = (isSalaryForDoctor && doctor!.salaryType === 'kpi') ? 'DoctorShare' : expenseForm.category;
       const payload = {
         date: expenseForm.date || today,
         amount,
-        category: expenseForm.category,
-        title: expenseForm.title || (expenseForm.category === 'DoctorShare' && doctor
-          ? `Shifokor ulushi — ${doctor.lastName} ${doctor.firstName}`
-          : EXPENSE_CATEGORY_LABELS[expenseForm.category]),
+        category: effectiveCategory,
+        title: expenseForm.title || (
+          effectiveCategory === 'DoctorShare' && doctor ? `Shifokor ulushi — ${doctor.lastName} ${doctor.firstName}`
+          : isSalaryForDoctor ? `Oylik — ${doctor!.lastName} ${doctor!.firstName}`
+          : isSalaryForReceptionist ? `Oylik — ${receptionist!.lastName} ${receptionist!.firstName}`
+          : EXPENSE_CATEGORY_LABELS[expenseForm.category]
+        ),
         method: expenseForm.method,
         note: expenseForm.note || undefined,
-        doctorId: expenseForm.doctorId || undefined,
+        doctorId: (effectiveCategory === 'DoctorShare' || isSalaryForDoctor) ? expenseForm.doctorId : null,
+        receptionistId: isSalaryForReceptionist ? expenseForm.receptionistId : null,
         clinicId: patients[0]?.clinicId || '',
       };
       if (editingExpense) {
@@ -779,7 +850,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.date')}</th>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Kategoriya</th>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Nomi</th>
-                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.doctor')}</th>
+                    <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">Xodim</th>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.method')}</th>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase">{t('finance.table.amount')}</th>
                     <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase text-right">Amal</th>
@@ -788,6 +859,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 <tbody className="text-sm text-gray-700 dark:text-gray-300">
                   {filteredExpenses.map(e => {
                     const expenseDoctor = e.doctorId ? doctors.find(d => d.id === e.doctorId) : undefined;
+                    const expenseReceptionist = e.receptionistId ? receptionists.find(r => r.id === e.receptionistId) : undefined;
                     const isAutoLab = !!e.labOrderId;
                     return (
                       <tr key={e.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
@@ -798,7 +870,9 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                           </span>
                         </td>
                         <td className="px-6 py-4 font-medium">{e.title}</td>
-                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{expenseDoctor ? `${expenseDoctor.lastName} ${expenseDoctor.firstName}` : '-'}</td>
+                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">
+                          {expenseDoctor ? `${expenseDoctor.lastName} ${expenseDoctor.firstName}` : expenseReceptionist ? `${expenseReceptionist.lastName} ${expenseReceptionist.firstName} (reception)` : '-'}
+                        </td>
                         <td className="px-6 py-4">{e.method === 'Cash' ? 'Naqd' : e.method === 'Card' ? 'Karta' : '-'}</td>
                         <td className="px-6 py-4 font-bold text-red-600 dark:text-red-400">-{e.amount.toLocaleString()} UZS</td>
                         <td className="px-6 py-4 text-right">
@@ -1113,6 +1187,69 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             </div>
           )}
 
+          {expenseForm.category === 'Salary' && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Kimga oylik?</label>
+              <div className="flex gap-2">
+                <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setExpenseForm(f => ({ ...f, staffType: 'doctor', receptionistId: '' }))}
+                    className={`px-3 py-2 text-sm font-medium transition-colors ${expenseForm.staffType === 'doctor'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                  >
+                    Shifokor
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpenseForm(f => ({ ...f, staffType: 'receptionist', doctorId: '' }))}
+                    className={`px-3 py-2 text-sm font-medium transition-colors ${expenseForm.staffType === 'receptionist'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                  >
+                    Reception
+                  </button>
+                </div>
+                <div className="flex-1">
+                  {expenseForm.staffType === 'doctor' ? (
+                    <select
+                      value={expenseForm.doctorId}
+                      onChange={e => handleSalaryDoctorSelect(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
+                    >
+                      <option value="">Shifokorni tanlang...</option>
+                      {doctors.map(d => (
+                        <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={expenseForm.receptionistId}
+                      onChange={e => setExpenseForm(f => ({ ...f, receptionistId: e.target.value }))}
+                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
+                    >
+                      <option value="">Receptionni tanlang...</option>
+                      {receptionists.map(r => (
+                        <option key={r.id} value={r.id}>{r.lastName} {r.firstName}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+              {selectedSalaryDoctor && !editingExpense && (
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  {selectedSalaryDoctor.salaryType === 'none' && "Bu shifokor uchun maosh turi belgilanmagan — summani qo'lda kiriting."}
+                  {selectedSalaryDoctor.salaryType === 'fixed' && `Fix maosh: ${Math.round(selectedSalaryDoctor.fixedSalary || 0).toLocaleString()} UZS — summa avtomatik to'ldirildi.`}
+                  {selectedSalaryDoctor.salaryType === 'kpi' && "Faqat KPI (foiz) — summa hisoblangan qoldiqdan avtomatik to'ldirildi, saqlanganda Shifokor Ulushi sifatida yoziladi."}
+                  {selectedSalaryDoctor.salaryType === 'fixed_kpi' && "Fix + KPI — pastda ikkalasi alohida ko'rsatiladi, xohlasangiz o'zgartirishingiz mumkin."}
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nomi</label>
             <input
@@ -1124,28 +1261,69 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Summa (UZS) *</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={expenseForm.amount}
-                onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
-                onWheel={e => e.currentTarget.blur()}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
-              />
+          {isFixKpiSplit ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Fix qismi (UZS)</label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={expenseForm.fixAmount}
+                    onChange={e => setExpenseForm(f => ({ ...f, fixAmount: e.target.value }))}
+                    onWheel={e => e.currentTarget.blur()}
+                    className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">KPI qismi (UZS)</label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={expenseForm.kpiAmount}
+                    onChange={e => setExpenseForm(f => ({ ...f, kpiAmount: e.target.value }))}
+                    onWheel={e => e.currentTarget.blur()}
+                    className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 -mt-2">
+                Jami: <span className="font-bold text-gray-600 dark:text-gray-300">{((parseFloat(expenseForm.fixAmount) || 0) + (parseFloat(expenseForm.kpiAmount) || 0)).toLocaleString()} UZS</span> — ikkalasini ham xohlaganingizcha o'zgartirishingiz mumkin.
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Sana</label>
+                <input
+                  type="date"
+                  value={expenseForm.date}
+                  onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
+                  className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Summa (UZS) *</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={expenseForm.amount}
+                  onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
+                  onWheel={e => e.currentTarget.blur()}
+                  className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Sana</label>
+                <input
+                  type="date"
+                  value={expenseForm.date}
+                  onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
+                  className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Sana</label>
-              <input
-                type="date"
-                value={expenseForm.date}
-                onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
-              />
-            </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
@@ -1185,7 +1363,9 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               Bekor
             </Button>
             <button
-              disabled={expenseLoading || !expenseForm.amount || (expenseForm.category === 'DoctorShare' && !expenseForm.doctorId)}
+              disabled={expenseLoading || (expenseForm.category === 'DoctorShare' && !expenseForm.doctorId) || (isFixKpiSplit
+                ? ((parseFloat(expenseForm.fixAmount) || 0) <= 0 && (parseFloat(expenseForm.kpiAmount) || 0) <= 0)
+                : !expenseForm.amount)}
               onClick={handleSaveExpense}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white transition-all bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed"
             >

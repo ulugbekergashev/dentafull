@@ -1391,6 +1391,7 @@ const AppContent: React.FC = () => {
                     onPatientClick={handlePatientClick}
                     doctorId={doctorId}
                     doctors={doctors}
+                    receptionists={receptionists}
                     currentClinic={currentClinic}
                     labOrders={labOrders}
                     onAddTransaction={addTransaction}

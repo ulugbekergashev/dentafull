@@ -20,6 +20,8 @@ model Doctor {
   clinicId         String
   telegramChatId   String?
   percentage       Float             @default(0)
+  salaryType       String            @default("none") // 'none' | 'fixed' | 'fixed_kpi' | 'kpi'
+  fixedSalary      Float             @default(0)
   color            String?
   secondaryPhone   String?
   startHour        Int?
@@ -34,15 +36,16 @@ model Doctor {
 }
 
 model Receptionist {
-  id        String @id @default(uuid())
+  id        String    @id @default(uuid())
   firstName String
   lastName  String
   phone     String
-  username  String @unique
+  username  String    @unique
   password  String
   status    String
   clinicId  String
-  clinic    Clinic @relation(fields: [clinicId], references: [id])
+  clinic    Clinic    @relation(fields: [clinicId], references: [id])
+  expenses  Expense[]
 }
 
 model Patient {
@@ -196,7 +199,7 @@ model Transaction {
 }
 
 model Expense {
-  id              String    @id @default(uuid())
+  id              String        @id @default(uuid())
   date            String
   amount          Float
   category        String
@@ -205,15 +208,18 @@ model Expense {
   note            String?
   clinicId        String
   doctorId        String?
-  labOrderId      String?   @unique
+  receptionistId  String?
+  labOrderId      String?       @unique
   inventoryItemId String?
-  createdAt       DateTime  @default(now())
-  clinic          Clinic    @relation(fields: [clinicId], references: [id])
-  doctor          Doctor?   @relation(fields: [doctorId], references: [id])
-  labOrder        LabOrder? @relation(fields: [labOrderId], references: [id])
+  createdAt       DateTime      @default(now())
+  clinic          Clinic        @relation(fields: [clinicId], references: [id])
+  doctor          Doctor?       @relation(fields: [doctorId], references: [id])
+  receptionist    Receptionist? @relation(fields: [receptionistId], references: [id])
+  labOrder        LabOrder?     @relation(fields: [labOrderId], references: [id])
 
   @@index([clinicId])
   @@index([doctorId])
+  @@index([receptionistId])
 }
 
 model Service {
