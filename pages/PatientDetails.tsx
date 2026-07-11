@@ -11,6 +11,7 @@ import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDobDDMMYYYY, calcAge } from '../utils/dateUtils';
+import { calculateAppointmentTotal } from '../utils/financialCalculations';
 
 import { ReceiptModal } from '../components/ReceiptModal';
 
@@ -386,64 +387,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       } catch (e) {
          console.error('Failed to save tooth data', e);
          alert(t('patients.details.alerts.error'));
-      }
-   };
-
-   // Helper: Calculate total amount from appointment procedures and generate breakdown
-   const calculateAppointmentTotal = (appointmentNotes: string): { total: number; breakdown: string } => {
-      if (!appointmentNotes) return { total: 0, breakdown: '' };
-
-      try {
-         const sortedServices = [...(services || [])].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
-         let total = 0;
-         const procedures: string[] = [];
-         const lines = appointmentNotes.split('\n');
-
-         lines.forEach(line => {
-            const trimmedLine = line.trim();
-            if (!trimmedLine || trimmedLine.includes('Bajarilgan ishlar:') || trimmedLine.includes("Qo'shimcha")) {
-               return;
-            }
-
-            // 1. Try to parse price from brackets [100 000 UZS]
-            const priceMatch = trimmedLine.match(/\[([\d\s]+)\s*UZS\]/i);
-            if (priceMatch) {
-               const priceStr = priceMatch[1].replace(/\s/g, '');
-               const price = parseFloat(priceStr);
-               if (!isNaN(price)) {
-                  total += price;
-                  // Extract clean name before the brackets
-                  const nameMatch = trimmedLine.match(/^-\s*(.*?)\s*\[/);
-                  const name = nameMatch ? nameMatch[1].trim() : trimmedLine;
-                  procedures.push(`${name}|${price.toLocaleString().replace(/,/g, ' ')}`);
-                  return; // Skip to next line
-               }
-            }
-
-            // 2. Fallback: Try fuzzy matching with service list (for old format)
-            const cleanLine = trimmedLine.toLowerCase();
-
-            let matched = false;
-            for (const service of sortedServices) {
-               const serviceNameLower = service.name.toLowerCase();
-               if (cleanLine.includes(serviceNameLower) || serviceNameLower.includes(cleanLine)) {
-                  total += service.price;
-                  procedures.push(`${service.name}|${service.price.toLocaleString().replace(/,/g, ' ')}`);
-                  matched = true;
-                  break;
-               }
-            }
-
-            if (!matched && trimmedLine.startsWith('- ')) {
-               procedures.push(`${trimmedLine.substring(2)}|0`);
-            }
-         });
-
-         const breakdown = procedures.join('||') + (procedures.length > 0 ? `||TOTAL|${total.toLocaleString().replace(/,/g, ' ')}` : '');
-         return { total, breakdown };
-      } catch (e) {
-         console.error("Error calculating total", e);
-         return { total: 0, breakdown: '' };
       }
    };
 
@@ -1329,7 +1272,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           <td className="p-4"><Badge status="Pending" /></td>
                                           <td className="p-4 flex gap-2 flex-wrap">
                                              <Button size="sm" onClick={() => {
-                                                const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                                const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
                                                 setDiscountType('percent');
                                                 setPaymentData({
                                                    amount: total.toString(),
@@ -1345,13 +1288,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                 setIsPaymentModalOpen(true);
                                              }}>To'lov</Button>
                                              <Button size="sm" variant="secondary" className="bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800" onClick={() => {
-                                                const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                                const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
                                                 setInstallmentQuickOpen({ service: breakdown || app.type, amount: total, doctorId: app.doctorId });
                                                 setActiveTab('installments');
                                              }}>Bo'lib to'lash</Button>
                                              {(patient.balance || 0) > 0 && (
                                                 <Button size="sm" variant="secondary" className="bg-primary-50 text-primary-700 border-primary-100" onClick={async () => {
-                                                   const { total, breakdown } = calculateAppointmentTotal(app.notes || '');
+                                                   const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
                                                    if (confirm(`Ushbu qabul uchun ${total.toLocaleString()} UZS miqdorini bemor avansidan yechishga ruxsatingiz bormi?`)) {
                                                       const doctor = doctors.find(d => d.id === app.doctorId);
                                                       await onAddTransaction({

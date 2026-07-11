@@ -12,6 +12,9 @@ interface QuickPaymentModalProps {
     clinicId: string;
     onAddTransaction: (tx: Omit<Transaction, 'id'>) => Promise<any>;
     presetPatientId?: string;
+    presetDoctorId?: string;
+    presetService?: string;
+    presetAmount?: number;
 }
 
 const emptyForm = {
@@ -24,14 +27,22 @@ const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider
 
 // Tez to'lov modali (Finance + Dashboard). status har doim 'Paid', bitta tranzaksiya.
 export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
-    isOpen, onClose, patients, doctors, services, clinicId, onAddTransaction, presetPatientId,
+    isOpen, onClose, patients, doctors, services, clinicId, onAddTransaction,
+    presetPatientId, presetDoctorId, presetService, presetAmount,
 }) => {
-    const [form, setForm] = useState({ ...emptyForm, patientId: presetPatientId || '' });
+    const buildPresetForm = () => ({
+        ...emptyForm,
+        patientId: presetPatientId || '',
+        doctorId: presetDoctorId || '',
+        service: presetService || '',
+        amount: presetAmount ? String(presetAmount) : '',
+    });
+    const [form, setForm] = useState(buildPresetForm);
     const [saving, setSaving] = useState(false);
 
     React.useEffect(() => {
-        if (isOpen) setForm({ ...emptyForm, patientId: presetPatientId || '' });
-    }, [isOpen, presetPatientId]);
+        if (isOpen) setForm(buildPresetForm());
+    }, [isOpen, presetPatientId, presetDoctorId, presetService, presetAmount]);
 
     const handleSave = async () => {
         if (!form.amount || !form.patientId) return;

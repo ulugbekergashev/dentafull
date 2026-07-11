@@ -34,7 +34,7 @@ import { Language } from './i18n/translations';
 
 // Navigation config for Clinic Admin and Doctors
 const CLINIC_NAVIGATION = [
-  { id: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR] },
+  { id: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: 'leads', labelKey: 'nav.leads', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'patients', labelKey: 'nav.patients', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
@@ -1282,8 +1282,6 @@ const AppContent: React.FC = () => {
                     />
                   } />
                 </>
-              ) : userRole === UserRole.RECEPTIONIST ? (
-                <Route path="/" element={<Navigate to="/patients" replace />} />
               ) : (
                 <Route path="/" element={
                   <Dashboard

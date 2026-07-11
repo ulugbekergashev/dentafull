@@ -1,4 +1,4 @@
-import { Transaction, Expense, Doctor } from '../types';
+import { Transaction, Expense, Doctor, Service } from '../types';
 
 // Yangi moliya modeli (kassa usuli + shifokor ulushi hisobi):
 // - Kirim = status 'Paid' bo'lgan to'lovlar (Transaction).
@@ -160,4 +160,83 @@ export function calculateDoctorShare(
 ): DoctorShareSummary {
     const [summary] = calculateDoctorShares(transactions, expenses, [doctor]);
     return summary;
+}
+
+/**
+ * Qabul notes matnidan (bajarilgan protseduralar ro'yxati) summani hisoblaydi.
+ * PatientDetails (to'lov modali) va Dashboard (to'lanmagan qabullar paneli) shu bitta manbadan foydalanadi.
+ */
+export function calculateAppointmentTotal(
+    appointmentNotes: string,
+    services: Service[]
+): { total: number; breakdown: string } {
+    if (!appointmentNotes) return { total: 0, breakdown: '' };
+
+    try {
+        const sortedServices = [...(services || [])].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
+        let total = 0;
+        const procedures: string[] = [];
+        const lines = appointmentNotes.split('\n');
+
+        lines.forEach(line => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || trimmedLine.includes('Bajarilgan ishlar:') || trimmedLine.includes("Qo'shimcha")) {
+                return;
+            }
+
+            // 1. Try to parse price from brackets [100 000 UZS]
+            const priceMatch = trimmedLine.match(/\[([\d\s]+)\s*UZS\]/i);
+            if (priceMatch) {
+                const priceStr = priceMatch[1].replace(/\s/g, '');
+                const price = parseFloat(priceStr);
+                if (!isNaN(price)) {
+                    total += price;
+                    // Extract clean name before the brackets
+                    const nameMatch = trimmedLine.match(/^-\s*(.*?)\s*\[/);
+                    const name = nameMatch ? nameMatch[1].trim() : trimmedLine;
+                    procedures.push(`${name}|${price.toLocaleString().replace(/,/g, ' ')}`);
+                    return; // Skip to next line
+                }
+            }
+
+            // 2. Fallback: Try fuzzy matching with service list (for old format)
+            const cleanLine = trimmedLine.toLowerCase();
+
+            let matched = false;
+            for (const service of sortedServices) {
+                const serviceNameLower = service.name.toLowerCase();
+                if (cleanLine.includes(serviceNameLower) || serviceNameLower.includes(cleanLine)) {
+                    total += service.price;
+                    procedures.push(`${service.name}|${service.price.toLocaleString().replace(/,/g, ' ')}`);
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched && trimmedLine.startsWith('- ')) {
+                procedures.push(`${trimmedLine.substring(2)}|0`);
+            }
+        });
+
+        const breakdown = procedures.join('||') + (procedures.length > 0 ? `||TOTAL|${total.toLocaleString().replace(/,/g, ' ')}` : '');
+        return { total, breakdown };
+    } catch (e) {
+        console.error("Error calculating total", e);
+        return { total: 0, breakdown: '' };
+    }
+}
+
+/**
+ * Qabul to'langanmi — sana + bemor (id ustuvor, aks holda ism) bo'yicha moslashtiradi.
+ * Reception ish oqimi: shifokor "Completed" qiladi → to'lov shu qabul sanasiga yozilmaguncha "kutilmoqda" hisoblanadi.
+ */
+export function isAppointmentPaid(
+    appointment: { date: string; patientId?: string; patientName: string },
+    transactions: Transaction[]
+): boolean {
+    return transactions.some(t => {
+        if (!t || t.date !== appointment.date || t.status !== 'Paid') return false;
+        if (appointment.patientId && t.patientId) return t.patientId === appointment.patientId;
+        return t.patientName === appointment.patientName;
+    });
 }
