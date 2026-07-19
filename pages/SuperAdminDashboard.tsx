@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan } from '../types';
-import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2 } from 'lucide-react';
+import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 
@@ -33,6 +33,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const [demoRequests, setDemoRequests] = useState<any[]>([]);
    const [demoLoading, setDemoLoading] = useState(false);
 
+   // Platform Facebook State
+   const [fbStatus, setFbStatus] = useState<{ connected: boolean; pageName: string | null } | null>(null);
+   const [fbPages, setFbPages] = useState<any[]>([]);
+   const [isFBPageModalOpen, setIsFBPageModalOpen] = useState(false);
+   const [isFBLoading, setIsFBLoading] = useState(false);
+
    useEffect(() => {
       if (activeTab === 'leads') {
          setDemoLoading(true);
@@ -40,8 +46,77 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             .then(setDemoRequests)
             .catch(err => console.error('Demo so\'rovlarni yuklashda xatolik:', err))
             .finally(() => setDemoLoading(false));
+         if (!salesAgentMode) {
+            api.adminFacebook.status().then(setFbStatus).catch(() => {});
+         }
       }
    }, [activeTab]);
+
+   // Facebook OAuth popup'dan kelgan xabarni tinglash
+   useEffect(() => {
+      if (salesAgentMode) return;
+      const handleMessage = (event: MessageEvent) => {
+         if (event.data?.type === 'FB_CONNECTED') {
+            handleFetchFBPages();
+         }
+      };
+      window.addEventListener('message', handleMessage);
+      return () => window.removeEventListener('message', handleMessage);
+   }, [salesAgentMode]);
+
+   const handleConnectFB = async () => {
+      try {
+         const { url } = await api.adminFacebook.getAuthUrl();
+         const width = 600, height = 700;
+         const left = window.screenX + (window.outerWidth - width) / 2;
+         const top = window.screenY + (window.outerHeight - height) / 2;
+         window.open(url, 'FacebookLogin', `width=${width},height=${height},left=${left},top=${top}`);
+      } catch (error: any) {
+         console.error('Failed to get FB auth URL:', error);
+         alert('Facebook-ga bog\'lanishda xatolik: ' + (error.message || ''));
+      }
+   };
+
+   const handleFetchFBPages = async () => {
+      setIsFBLoading(true);
+      try {
+         const pages = await api.adminFacebook.getPages();
+         setFbPages(pages);
+         setIsFBPageModalOpen(true);
+      } catch (error: any) {
+         console.error('Failed to fetch FB pages:', error);
+         alert('Facebook sahifalarini yuklashda xatolik yuz berdi');
+      } finally {
+         setIsFBLoading(false);
+      }
+   };
+
+   const handleSelectFBPage = async (page: any) => {
+      try {
+         await api.adminFacebook.selectPage({
+            pageId: page.id,
+            pageAccessToken: page.access_token,
+            pageName: page.name
+         });
+         setIsFBPageModalOpen(false);
+         setFbStatus({ connected: true, pageName: page.name });
+         alert(`"${page.name}" sahifasi muvaffaqiyatli ulandi! Endi undan kelgan lidlar shu yerga tushadi.`);
+      } catch (error: any) {
+         console.error('Failed to select FB page:', error);
+         alert('Sahifani ulashda xatolik yuz berdi');
+      }
+   };
+
+   const handleDisconnectFB = async () => {
+      if (!window.confirm('Facebook-ni uzmoqchimisiz?')) return;
+      try {
+         await api.adminFacebook.disconnect();
+         setFbStatus({ connected: false, pageName: null });
+      } catch (error: any) {
+         console.error('Failed to disconnect FB:', error);
+         alert('Uzishda xatolik yuz berdi');
+      }
+   };
 
    const DEMO_STAGES = ['New', 'Contacted', 'Thinking', 'Booked', 'Cancelled'];
    const DEMO_STAGE_LABELS: Record<string, string> = {
@@ -878,19 +953,44 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          {/* LEADS (DEMO REQUESTS) TAB */}
          {activeTab === 'leads' && (
             <div className="space-y-4">
-               <div className="flex items-center justify-between">
+               <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                      <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Inbox className="w-5 h-5 text-emerald-500" /> Demo So'rovlari (Lidlar)
+                        <Inbox className="w-5 h-5 text-emerald-500" /> Lidlar
                      </h3>
-                     <p className="text-sm text-gray-500">Landing page orqali kelgan demo so'rovlar</p>
+                     <p className="text-sm text-gray-500">Landing sahifa va Facebook orqali kelgan lidlar</p>
                   </div>
-                  <button
-                     onClick={() => { setDemoLoading(true); api.demoRequests.getAll().then(setDemoRequests).finally(() => setDemoLoading(false)); }}
-                     className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                  >
-                     Yangilash
-                  </button>
+                  <div className="flex items-center gap-2">
+                     {!salesAgentMode && (
+                        fbStatus?.connected ? (
+                           <div className="flex items-center gap-2">
+                              <span className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg font-medium">
+                                 <Facebook className="w-4 h-4" /> {fbStatus.pageName}
+                              </span>
+                              <button
+                                 onClick={handleDisconnectFB}
+                                 className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                              >
+                                 Uzish
+                              </button>
+                           </div>
+                        ) : (
+                           <button
+                              onClick={handleConnectFB}
+                              disabled={isFBLoading}
+                              className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                           >
+                              <Facebook className="w-4 h-4" /> Facebook ulash
+                           </button>
+                        )
+                     )}
+                     <button
+                        onClick={() => { setDemoLoading(true); api.demoRequests.getAll().then(setDemoRequests).finally(() => setDemoLoading(false)); }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                     >
+                        Yangilash
+                     </button>
+                  </div>
                </div>
                {demoLoading ? (
                   <Card className="p-10 text-center text-gray-400">Yuklanmoqda...</Card>
@@ -910,7 +1010,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     {req.name ? req.name[0].toUpperCase() : '?'}
                                  </div>
                                  <div>
-                                    <p className="font-bold text-gray-900 dark:text-white text-sm">{req.name}</p>
+                                    <p className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-1.5">
+                                       {req.name}
+                                       {req.source === 'Facebook' && <Facebook className="w-3.5 h-3.5 text-blue-500" />}
+                                    </p>
                                     <p className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleDateString('uz-UZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
                                  </div>
                               </div>
@@ -937,6 +1040,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     <MapPin className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
                                     <span>{req.city}{req.doctorsCount ? ` · ${req.doctorsCount} ta shifokor` : ''}</span>
                                  </div>
+                              )}
+                              {req.notes && req.source === 'Facebook' && (
+                                 <p className="text-xs text-gray-400 whitespace-pre-line max-h-20 overflow-y-auto border-t border-gray-100 dark:border-gray-700 pt-1.5 mt-1.5" title={req.notes}>{req.notes}</p>
                               )}
                            </div>
                            <div className="flex items-center justify-between">
@@ -1474,6 +1580,39 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                </div>
                <div className="pt-2">
                   <Button onClick={() => setCreatedSalesCreds(null)} className="w-full">Yopish</Button>
+               </div>
+            </div>
+         </Modal>
+
+         {/* Platform Facebook Page Selection Modal */}
+         <Modal isOpen={isFBPageModalOpen} onClose={() => setIsFBPageModalOpen(false)} title="Facebook Sahifasini Tanlang">
+            <div className="space-y-3">
+               <p className="text-sm text-gray-500">Lidlar qabul qilinadigan sahifani tanlang — undan kelgan Lead Ads murojaatlari shu paneldagi Lidlar bo'limiga tushadi.</p>
+               <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {fbPages.map(page => (
+                     <button
+                        key={page.id}
+                        onClick={() => handleSelectFBPage(page)}
+                        className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left"
+                     >
+                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-300 flex-shrink-0">
+                           <Facebook className="w-5 h-5" />
+                        </div>
+                        <div>
+                           <p className="font-medium text-gray-900 dark:text-white text-sm">{page.name}</p>
+                           <p className="text-xs text-gray-400">ID: {page.id}</p>
+                        </div>
+                     </button>
+                  ))}
+                  {fbPages.length === 0 && (
+                     <div className="text-center py-8">
+                        <Facebook className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">Sahifalar topilmadi. Facebook akkauntingizda sahifa administratori ekanligingizni tekshiring.</p>
+                     </div>
+                  )}
+               </div>
+               <div className="flex justify-end pt-2">
+                  <Button variant="secondary" onClick={() => setIsFBPageModalOpen(false)}>Yopish</Button>
                </div>
             </div>
          </Modal>

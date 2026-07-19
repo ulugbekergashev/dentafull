@@ -346,6 +346,12 @@ model DemoRequest {
   @@index([createdAt])
 }
 
+model PlatformSetting {
+  key       String   @id
+  value     String?
+  updatedAt DateTime @default(now())
+}
+
 model ICD10Code {
   code        String             @id
   name        String

@@ -837,6 +837,23 @@ export const api = {
         remove: (id: string) =>
             fetchJson<any>(`/admin/demo-requests/${id}`, { method: 'DELETE' }),
     },
+    // Platforma (SuperAdmin) Facebook integratsiyasi — lidlar DemoRequest'ga tushadi
+    adminFacebook: {
+        status: () =>
+            fetchJson<{ connected: boolean; pageName: string | null; hasUserToken: boolean }>('/admin/facebook/status'),
+        getAuthUrl: () =>
+            fetchJson<{ url: string }>('/admin/facebook/auth-url'),
+        getPages: () =>
+            fetchJson<any[]>('/admin/facebook/pages'),
+        selectPage: (data: { pageId: string; pageAccessToken: string; pageName: string }) =>
+            fetchJson<{ success: true }>('/admin/facebook/select-page', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            }),
+        disconnect: () =>
+            fetchJson<{ success: true }>('/admin/facebook/disconnect', { method: 'POST' }),
+    },
     diagnoses: {
         searchCodes: (query: string) => fetchJson<ICD10Code[]>(`/icd10?query=${query}`),
         add: (data: Omit<PatientDiagnosis, 'id' | 'icd10'>) => fetchJson<PatientDiagnosis>('/diagnoses', {

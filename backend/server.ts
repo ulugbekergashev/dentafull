@@ -3146,10 +3146,15 @@ app.get('/api/facebook/callback', async (req, res) => {
         console.log('✅ FB Token Exchange Success. Token starts with:', userAccessToken.substring(0, 10));
 
         // 2. Save user token temporarily (or update clinic)
-        await prisma.clinic.update({
-            where: { id: clinicId as string },
-            data: { facebookUserAccessToken: userAccessToken }
-        });
+        // state='platform' — SuperAdmin (platforma) ulanishi, aks holda klinika ID
+        if (clinicId === 'platform') {
+            await setPlatformSetting('fb_user_token', userAccessToken);
+        } else {
+            await prisma.clinic.update({
+                where: { id: clinicId as string },
+                data: { facebookUserAccessToken: userAccessToken }
+            });
+        }
 
         // 3. Return script to notify opener and close popup
         res.send(`
@@ -3267,6 +3272,114 @@ app.post('/api/facebook/disconnect', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Platforma (SuperAdmin) Facebook integratsiyasi ---
+// SuperAdmin o'z FB sahifasini ulaydi; undan kelgan lidlar DemoRequest jadvaliga
+// tushadi (landing lidlari bilan bir joyda ko'rinadi).
+const getPlatformSetting = async (key: string): Promise<string | null> => {
+    try {
+        const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "value" FROM "PlatformSetting" WHERE "key"=$1`, key);
+        return rows.length ? rows[0].value : null;
+    } catch {
+        return null;
+    }
+};
+
+const setPlatformSetting = async (key: string, value: string | null) => {
+    if (value === null || value === undefined) {
+        await prisma.$executeRawUnsafe(`DELETE FROM "PlatformSetting" WHERE "key"=$1`, key);
+    } else {
+        await prisma.$executeRawUnsafe(
+            `INSERT INTO "PlatformSetting" ("key","value","updatedAt") VALUES ($1,$2,CURRENT_TIMESTAMP)
+             ON CONFLICT ("key") DO UPDATE SET "value"=EXCLUDED."value","updatedAt"=CURRENT_TIMESTAMP`,
+            key, value
+        );
+    }
+};
+
+app.get('/api/admin/facebook/status', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const pageName = await getPlatformSetting('fb_page_name');
+        const userToken = await getPlatformSetting('fb_user_token');
+        res.json({ connected: !!pageName, pageName, hasUserToken: !!userToken });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to get Facebook status' });
+    }
+});
+
+app.get('/api/admin/facebook/auth-url', authenticateToken, requireRole('SUPER_ADMIN'), (req, res) => {
+    const appId = process.env.FACEBOOK_APP_ID;
+    const redirectUri = process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3001/api/facebook/callback';
+
+    if (!appId) {
+        return res.status(500).json({ error: 'Facebook App ID topilmadi. Iltimos, .env faylida FACEBOOK_APP_ID ni kiriting.' });
+    }
+
+    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata', 'public_profile'];
+    const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes.join(',')}&state=platform`;
+
+    res.json({ url });
+});
+
+app.get('/api/admin/facebook/pages', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const userToken = await getPlatformSetting('fb_user_token');
+        if (!userToken) return res.status(404).json({ error: 'Facebook not connected' });
+
+        const pagesRes = await axios.get(`https://graph.facebook.com/v18.0/me/accounts`, {
+            params: { access_token: userToken }
+        });
+        res.json(pagesRes.data.data || []);
+    } catch (error: any) {
+        console.error('Platform FB pages error:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Failed to fetch Facebook pages' });
+    }
+});
+
+app.post('/api/admin/facebook/select-page', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    const { pageId, pageAccessToken, pageName } = req.body;
+    if (!pageId || !pageAccessToken) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+        await setPlatformSetting('fb_page_id', pageId);
+        await setPlatformSetting('fb_page_token', pageAccessToken);
+        await setPlatformSetting('fb_page_name', pageName || '');
+
+        // App'ni sahifaning leadgen hodisalariga avtomatik obuna qilish
+        try {
+            console.log(`🔗 Subscribing App to platform FB Page ${pageId}...`);
+            await axios.post(`https://graph.facebook.com/v18.0/${pageId}/subscribed_apps`, null, {
+                params: {
+                    access_token: pageAccessToken,
+                    subscribed_fields: 'leadgen'
+                }
+            });
+            console.log(`✅ App subscribed to platform Page ${pageId}`);
+        } catch (subError: any) {
+            console.error('⚠️ Platform FB Page Subscription warning:', subError.response?.data || subError.message);
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Platform select FB Page error:', error);
+        res.status(500).json({ error: 'Failed to save selected page' });
+    }
+});
+
+app.post('/api/admin/facebook/disconnect', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        await setPlatformSetting('fb_user_token', null);
+        await setPlatformSetting('fb_page_id', null);
+        await setPlatformSetting('fb_page_token', null);
+        await setPlatformSetting('fb_page_name', null);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Platform FB disconnect error:', error);
+        res.status(500).json({ error: 'Failed to disconnect Facebook' });
+    }
+});
+
 // --- Facebook Leads Webhook ---
 const FB_WEBHOOK_VERIFY_TOKEN = process.env.FB_WEBHOOK_VERIFY_TOKEN || 'denta_leads_secret';
 
@@ -3302,6 +3415,40 @@ app.post('/api/facebook/webhook', async (req, res) => {
                         });
 
                         if (!clinic || !clinic.facebookPageAccessToken) {
+                            // Klinika topilmadi — platforma (SuperAdmin) sahifasi bo'lishi mumkin
+                            const platformPageId = await getPlatformSetting('fb_page_id');
+                            const platformPageToken = await getPlatformSetting('fb_page_token');
+
+                            if (platformPageId === page_id && platformPageToken) {
+                                const leadRes = await axios.get(`https://graph.facebook.com/v18.0/${leadgen_id}`, {
+                                    params: { access_token: platformPageToken }
+                                });
+                                const pFieldData: any = {};
+                                const pQAs: string[] = [];
+                                (leadRes.data.field_data || []).forEach((f: any) => {
+                                    const value = f.values && f.values.length > 0 ? f.values[0] : '';
+                                    pFieldData[f.name] = value;
+                                    if (f.name !== 'full_name' && f.name !== 'phone_number') {
+                                        const readable = f.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+                                        pQAs.push(`${readable}: ${value}`);
+                                    }
+                                });
+                                let pNotes = `FB Lead ID: ${leadgen_id}`;
+                                if (pQAs.length > 0) pNotes += `\n\nSavollar va Javoblar:\n` + pQAs.join('\n');
+
+                                await prisma.$executeRawUnsafe(
+                                    `INSERT INTO "DemoRequest" ("id","name","phone","source","status","notes","createdAt","updatedAt")
+                                     VALUES ($1,$2,$3,$4,'New',$5,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+                                    require('crypto').randomUUID(),
+                                    pFieldData.full_name || 'Facebook User',
+                                    pFieldData.phone_number || 'N/A',
+                                    'Facebook',
+                                    pNotes
+                                );
+                                console.log(`✅ Platform FB Lead saved to DemoRequest: ${pFieldData.full_name}`);
+                                return;
+                            }
+
                             console.error(`❌ Clinic not found for FB Page ${page_id}`);
                             return;
                         }
@@ -4381,6 +4528,13 @@ async function runStartupMigrations() {
                     ALTER TABLE "LabTechnician" ADD CONSTRAINT "LabTechnician_username_key" UNIQUE ("username");
                 END IF;
             END $$
+        `);
+        await prisma.$executeRawUnsafe(`
+            CREATE TABLE IF NOT EXISTS "PlatformSetting" (
+                "key"       TEXT NOT NULL PRIMARY KEY,
+                "value"     TEXT,
+                "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
         `);
         await prisma.$executeRawUnsafe(`
             CREATE TABLE IF NOT EXISTS "DemoRequest" (
