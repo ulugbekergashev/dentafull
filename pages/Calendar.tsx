@@ -105,6 +105,8 @@ export const Calendar: React.FC<CalendarProps> = ({
     setFormData({
       patientId: patients.length > 0 ? patients[0].id : '',
       doctorId: initialDoctorId || (doctors.length > 0 ? doctors[0].id : ''), // Use provided doctorId or auto-select first
+      type: '',
+      categoryId: '',
       date: initialDate || new Date().toISOString().split('T')[0],
       time: initialTime || '09:00',
       duration: 60,
@@ -812,9 +814,12 @@ export const Calendar: React.FC<CalendarProps> = ({
           <div className="grid grid-cols-2 gap-4">
             <Select
               label={t('calendar.serviceType')}
-              options={services
-                .filter(s => !formData.categoryId || (s as any).categoryId === formData.categoryId)
-                .map(s => ({ value: s.name, label: s.name }))}
+              options={[
+                { value: '', label: t('common.select') },
+                ...services
+                  .filter(s => !formData.categoryId || (s as any).categoryId === formData.categoryId)
+                  .map(s => ({ value: s.name, label: s.name }))
+              ]}
               value={formData.type}
               onChange={e => {
                 const service = services.find(s => s.name === e.target.value);

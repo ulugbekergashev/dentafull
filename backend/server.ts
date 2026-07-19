@@ -2669,6 +2669,33 @@ app.post('/api/visits/:id/dmed-sync', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Umumiy sozlamalar (klinika admini o'z klinikasini yangilaydi) ---
+// PUT /api/clinics/:id faqat SUPER_ADMIN/SALES_AGENT uchun, shuning uchun
+// klinika admini uchun xavfsiz maydonlargina ruxsat etilgan alohida endpoint.
+app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
+    try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        const { name, address, phone, email, ownerPhone, startHour, endHour, enableReceipts } = req.body;
+        const clinic = await prisma.clinic.update({
+            where: { id: req.params.id },
+            data: {
+                name: name !== undefined ? name : undefined,
+                address: address !== undefined ? (address || null) : undefined,
+                phone: phone !== undefined ? phone : undefined,
+                email: email !== undefined ? (email || null) : undefined,
+                ownerPhone: ownerPhone !== undefined ? (ownerPhone || null) : undefined,
+                startHour: startHour !== undefined ? Number(startHour) : undefined,
+                endHour: endHour !== undefined ? Number(endHour) : undefined,
+                enableReceipts: enableReceipts !== undefined ? !!enableReceipts : undefined
+            }
+        });
+        res.json(clinic);
+    } catch (error: any) {
+        console.error('General settings update error:', error);
+        res.status(500).json({ error: 'Umumiy sozlamalarni saqlashda xatolik' });
+    }
+});
+
 // --- Bot Settings ---
 app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
     try {

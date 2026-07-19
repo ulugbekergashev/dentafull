@@ -620,7 +620,7 @@ export const Settings: React.FC<SettingsProps> = ({
       if (!currentClinic?.id) return;
 
       try {
-         const response = await api.clinics.update(currentClinic.id, {
+         const response = await api.clinics.updateGeneral(currentClinic.id, {
             name: generalForm.clinicName,
             address: generalForm.address,
             phone: generalForm.phone,

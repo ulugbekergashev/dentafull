@@ -682,6 +682,27 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+        // Klinika admini o'z klinikasining umumiy sozlamalarini yangilashi uchun
+        // (PUT /clinics/:id SUPER_ADMIN talab qiladi, bu endpoint CLINIC_ADMIN uchun ochiq)
+        updateGeneral: (id: string, data: Partial<Clinic>) => {
+            if (isDemoMode()) {
+                const index = DEMO_CLINICS.findIndex(c => c.id === id);
+                if (index !== -1) {
+                    DEMO_CLINICS[index] = { ...DEMO_CLINICS[index], ...data };
+                    if (id === DEMO_CLINIC.id) {
+                        Object.assign(DEMO_CLINIC, DEMO_CLINICS[index]);
+                    }
+                    saveDemoData();
+                    return Promise.resolve(DEMO_CLINICS[index]);
+                }
+                throw new Error('Clinic not found');
+            }
+            return fetchJson<Clinic>(`/clinics/${id}/general`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
         delete: (id: string) => {
             if (isDemoMode()) {
                 const index = DEMO_CLINICS.findIndex(c => c.id === id);
