@@ -215,8 +215,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       }
    }, [selectedClinic]);
 
+   // Faqat real to'lovchilar: Active + Paid (Trial emas) + muddati tugamagan
    const totalRevenue = clinics
-      .filter(c => c.status === 'Active') // Only active clinics contribute to revenue
+      .filter(c => c.status === 'Active' && c.subscriptionType !== 'Trial' && getDaysRemaining(c.expiryDate) > 0)
       .reduce((acc, c) => {
          const plan = plans.find(p => p.id === c.planId);
          const price = (c.customPrice !== undefined && c.customPrice !== null) ? c.customPrice : (plan?.price || 0);
