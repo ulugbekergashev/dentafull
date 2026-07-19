@@ -215,14 +215,22 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       }
    }, [selectedClinic]);
 
+   // Klinikaning oylik narxi: maxsus narx bo'lsa o'sha, bo'lmasa tarif narxi
+   const clinicPrice = (c: Clinic) => {
+      const plan = plans.find(p => p.id === c.planId);
+      return (c.customPrice !== undefined && c.customPrice !== null) ? c.customPrice : (plan?.price || 0);
+   };
+
+   // Tushum tahlili (faol klinikalar bo'yicha)
+   const activePaidClinics = clinics.filter(c => c.status === 'Active' && c.subscriptionType !== 'Trial');
+   const payingClinics = activePaidClinics.filter(c => getDaysRemaining(c.expiryDate) > 0);
+   const expiredActiveClinics = activePaidClinics.filter(c => getDaysRemaining(c.expiryDate) <= 0);
+   const expiredActiveSum = expiredActiveClinics.reduce((acc, c) => acc + clinicPrice(c), 0);
+   const trialActiveCount = clinics.filter(c => c.status === 'Active' && c.subscriptionType === 'Trial').length;
+   const freePriceClinics = clinics.filter(c => c.status === 'Active' && c.customPrice === 0);
+
    // Faqat real to'lovchilar: Active + Paid (Trial emas) + muddati tugamagan
-   const totalRevenue = clinics
-      .filter(c => c.status === 'Active' && c.subscriptionType !== 'Trial' && getDaysRemaining(c.expiryDate) > 0)
-      .reduce((acc, c) => {
-         const plan = plans.find(p => p.id === c.planId);
-         const price = (c.customPrice !== undefined && c.customPrice !== null) ? c.customPrice : (plan?.price || 0);
-         return acc + price;
-      }, 0);
+   const totalRevenue = payingClinics.reduce((acc, c) => acc + clinicPrice(c), 0);
 
    const activeClinics = clinics.filter(c => c.status === 'Active').length;
    const totalClinics = clinics.filter(c => c.status !== 'Blocked').length; // "Total" clinics are now only non-blocked ones
@@ -488,7 +496,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <div>
                         <p className="text-indigo-100 font-medium">{t('superAdmin.stats.revenue')}</p>
                         <h3 className="text-3xl font-bold mt-2">{totalRevenue.toLocaleString()} UZS</h3>
-                        <p className="text-xs text-indigo-200 mt-2">+12% o'tgan oyga nisbatan</p>
+                        <div className="text-xs text-indigo-200 mt-2 space-y-0.5">
+                           <p>{payingClinics.length} ta to'lovchi klinika</p>
+                           {expiredActiveClinics.length > 0 && (
+                              <p>Muddati o'tgan: {expiredActiveClinics.length} ta (+{expiredActiveSum.toLocaleString()} UZS kutilmoqda)</p>
+                           )}
+                           {(trialActiveCount > 0 || freePriceClinics.length > 0) && (
+                              <p>Sinovda: {trialActiveCount} ta · Bepul (0 narx): {freePriceClinics.length} ta</p>
+                           )}
+                        </div>
                      </div>
                      <div className="p-3 bg-white/10 rounded-full backdrop-blur-sm">
                         <CreditCard className="w-6 h-6 text-white" />
@@ -557,6 +573,24 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </div>
                      <div className="p-3 bg-primary-50 dark:bg-primary-900/30 rounded-full">
                         <Users className="w-6 h-6 text-primary-600" />
+                     </div>
+                  </div>
+               </Card>
+
+               <Card className="p-6">
+                  <div className="flex justify-between items-start">
+                     <div>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">Muddati O'tgan (Faol)</p>
+                        <h3 className="text-3xl font-bold mt-2 text-red-600">{expiredActiveClinics.length}</h3>
+                        <p className="text-xs text-gray-500 mt-2">
+                           Yangilansa oyiga +{expiredActiveSum.toLocaleString()} UZS
+                        </p>
+                        {freePriceClinics.length > 0 && (
+                           <p className="text-xs text-gray-400 mt-1">Bepul (maxsus narx 0): {freePriceClinics.length} ta</p>
+                        )}
+                     </div>
+                     <div className="p-3 bg-red-50 dark:bg-red-900/30 rounded-full">
+                        <Ban className="w-6 h-6 text-red-600" />
                      </div>
                   </div>
                </Card>
