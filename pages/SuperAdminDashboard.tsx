@@ -35,7 +35,7 @@ const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
    const total = days.reduce((a, d) => a + d.count, 0);
 
    // SVG geometriyasi
-   const W = 1000, H = 200, padL = 30, padR = 8, padT = 12, padB = 22;
+   const W = 1000, H = 214, padL = 30, padR = 8, padT = 12, padB = 36;
    const plotW = W - padL - padR;
    const plotH = H - padT - padB;
    const barW = plotW / days.length;
@@ -44,10 +44,21 @@ const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
    const yTicks: number[] = [];
    for (let v = 0; v <= maxCount; v += yStep) yTicks.push(v);
 
-   const monthTicks = days
-      .map((d, i) => ({ d, i }))
-      .filter(({ d }) => d.date.getDate() === 1)
-      .map(({ d, i }) => ({ x: padL + i * barW, label: UZ_MONTHS_SHORT[d.date.getMonth()] }));
+   // Oy segmentlari: nomi, jami soni va markazi (label shu yerga tushadi)
+   const monthSegments: { label: string; total: number; center: number }[] = [];
+   days.forEach((d, i) => {
+      const key = `${d.date.getFullYear()}-${d.date.getMonth()}`;
+      const last = monthSegments[monthSegments.length - 1] as any;
+      if (!last || last.key !== key) {
+         monthSegments.push({ key, label: UZ_MONTHS_SHORT[d.date.getMonth()], total: d.count, startI: i, endI: i, center: 0 } as any);
+      } else {
+         last.total += d.count;
+         last.endI = i;
+      }
+   });
+   monthSegments.forEach((m: any) => {
+      m.center = padL + ((m.startI + m.endI + 1) / 2) * barW;
+   });
 
    const yFor = (count: number) => padT + plotH - (count / maxCount) * plotH;
 
@@ -72,9 +83,24 @@ const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
                      <text x={padL - 6} y={yFor(v) + 3} textAnchor="end" className="fill-gray-400 dark:fill-gray-500" fontSize={10}>{v}</text>
                   </g>
                ))}
-               {/* Oy belgilari */}
-               {monthTicks.map((mt, idx) => (
-                  <text key={idx} x={mt.x} y={H - 6} className="fill-gray-400 dark:fill-gray-500" fontSize={10}>{mt.label}</text>
+               {/* Oy belgilari va o'sha oydagi jami */}
+               {monthSegments.map((m: any, idx) => (
+                  <g key={idx}>
+                     {idx > 0 && (
+                        <line
+                           x1={padL + m.startI * barW} x2={padL + m.startI * barW}
+                           y1={padT} y2={padT + plotH + 4}
+                           className="text-gray-200 dark:text-gray-700" stroke="currentColor" strokeWidth={1}
+                        />
+                     )}
+                     <text x={m.center} y={H - 20} textAnchor="middle" className="fill-gray-400 dark:fill-gray-500" fontSize={10}>{m.label}</text>
+                     <text
+                        x={m.center} y={H - 6} textAnchor="middle" fontSize={11} fontWeight={700}
+                        className={m.total > 0 ? 'fill-indigo-600 dark:fill-indigo-400' : 'fill-gray-300 dark:fill-gray-600'}
+                     >
+                        {m.total}
+                     </text>
+                  </g>
                ))}
                {/* Kunlik ustunlar */}
                {days.map((d, i) => {
