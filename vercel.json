@@ -35,6 +35,10 @@
             "dest": "/logo-icon.png"
         },
         {
+            "src": "/privacy(\\.html)?",
+            "dest": "/privacy.html"
+        },
+        {
             "src": "/(.*)",
             "dest": "/index.html"
         }
