@@ -6,6 +6,126 @@ import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban,
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 
+// Kunlik yangi klinikalar diagrammasi (oxirgi 12 oy)
+const UZ_MONTHS_SHORT = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
+
+const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
+   const [hover, setHover] = useState<{ i: number; xPct: number; count: number; label: string } | null>(null);
+
+   // Kunlik hisoblash: klinika qo'shilgan sana bo'yicha
+   const countsByDay: Record<string, number> = {};
+   clinics.forEach(c => {
+      if (!c.subscriptionStartDate) return;
+      const d = new Date(c.subscriptionStartDate);
+      if (isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      countsByDay[key] = (countsByDay[key] || 0) + 1;
+   });
+
+   const today = new Date();
+   const days: { date: Date; count: number }[] = [];
+   for (let i = 364; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      days.push({ date: d, count: countsByDay[key] || 0 });
+   }
+
+   const maxCount = Math.max(1, ...days.map(d => d.count));
+   const total = days.reduce((a, d) => a + d.count, 0);
+
+   // SVG geometriyasi
+   const W = 1000, H = 200, padL = 30, padR = 8, padT = 12, padB = 22;
+   const plotW = W - padL - padR;
+   const plotH = H - padT - padB;
+   const barW = plotW / days.length;
+
+   const yStep = Math.max(1, Math.ceil(maxCount / 4));
+   const yTicks: number[] = [];
+   for (let v = 0; v <= maxCount; v += yStep) yTicks.push(v);
+
+   const monthTicks = days
+      .map((d, i) => ({ d, i }))
+      .filter(({ d }) => d.date.getDate() === 1)
+      .map(({ d, i }) => ({ x: padL + i * barW, label: UZ_MONTHS_SHORT[d.date.getMonth()] }));
+
+   const yFor = (count: number) => padT + plotH - (count / maxCount) * plotH;
+
+   return (
+      <Card className="p-6 md:col-span-3">
+         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div>
+               <p className="text-gray-500 dark:text-gray-400 font-medium">Yangi klinikalar (kunlik)</p>
+               <p className="text-xs text-gray-400 mt-0.5">Oxirgi 12 oy · jami {total} ta</p>
+            </div>
+         </div>
+         <div className="relative">
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minHeight: 160 }} onMouseLeave={() => setHover(null)}>
+               {/* Gorizontal gridlar va Y belgilar */}
+               {yTicks.map(v => (
+                  <g key={v}>
+                     <line
+                        x1={padL} x2={W - padR} y1={yFor(v)} y2={yFor(v)}
+                        className="text-gray-200 dark:text-gray-700" stroke="currentColor" strokeWidth={1}
+                        strokeDasharray={v === 0 ? undefined : '3 4'}
+                     />
+                     <text x={padL - 6} y={yFor(v) + 3} textAnchor="end" className="fill-gray-400 dark:fill-gray-500" fontSize={10}>{v}</text>
+                  </g>
+               ))}
+               {/* Oy belgilari */}
+               {monthTicks.map((mt, idx) => (
+                  <text key={idx} x={mt.x} y={H - 6} className="fill-gray-400 dark:fill-gray-500" fontSize={10}>{mt.label}</text>
+               ))}
+               {/* Kunlik ustunlar */}
+               {days.map((d, i) => {
+                  const x = padL + i * barW;
+                  const isHovered = hover?.i === i;
+                  return (
+                     <g key={i}>
+                        {d.count > 0 && (
+                           <rect
+                              x={x + 0.5} width={Math.max(1, barW - 1)}
+                              y={yFor(d.count)} height={padT + plotH - yFor(d.count)}
+                              rx={1}
+                              fill={isHovered ? '#4338CA' : '#6366F1'}
+                           />
+                        )}
+                        {/* Hover uchun butun ustun balandligidagi ko'rinmas zona */}
+                        <rect
+                           x={x} width={barW} y={padT} height={plotH}
+                           fill="transparent"
+                           onMouseEnter={() => setHover({
+                              i,
+                              xPct: ((x + barW / 2) / W) * 100,
+                              count: d.count,
+                              label: `${d.date.getDate()}-${UZ_MONTHS_SHORT[d.date.getMonth()].toLowerCase()} ${d.date.getFullYear()}`
+                           })}
+                        />
+                     </g>
+                  );
+               })}
+               {/* Hover krosshayr */}
+               {hover && (
+                  <line
+                     x1={padL + hover.i * barW + barW / 2} x2={padL + hover.i * barW + barW / 2}
+                     y1={padT} y2={padT + plotH}
+                     className="text-gray-300 dark:text-gray-600" stroke="currentColor" strokeWidth={1}
+                  />
+               )}
+            </svg>
+            {hover && (
+               <div
+                  className="absolute -top-1 pointer-events-none px-2.5 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-700 text-white text-xs shadow-lg whitespace-nowrap"
+                  style={{ left: `${Math.min(92, Math.max(8, hover.xPct))}%`, transform: 'translateX(-50%)' }}
+               >
+                  <span className="font-bold">{hover.count} ta</span> · {hover.label}
+               </div>
+            )}
+         </div>
+      </Card>
+   );
+};
+
 interface SuperAdminDashboardProps {
    clinics: Clinic[];
    plans: SubscriptionPlan[];
@@ -594,6 +714,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </div>
                   </div>
                </Card>
+
+               <DailySignupsChart clinics={clinics} />
             </div>
          )}
 
