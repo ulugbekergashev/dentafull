@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, Badge, Input } from '../components/Common';
+import { Card, Badge, Input, Modal, Button } from '../components/Common';
 import { StatCard } from '../components/StatCard';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
@@ -47,6 +47,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
   const [isQuickPaymentOpen, setIsQuickPaymentOpen] = useState(false);
   const [payingAppointment, setPayingAppointment] = useState<Appointment | null>(null);
+  const [payingDebt, setPayingDebt] = useState<Transaction | null>(null);
+  const [debtPayAmount, setDebtPayAmount] = useState('');
+  const [debtPayMethod, setDebtPayMethod] = useState<'Cash' | 'Card'>('Cash');
+  const [debtSaving, setDebtSaving] = useState(false);
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
@@ -245,10 +249,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     pendingDebts.reduce((acc, t) => acc + t.amount, 0)
     , [pendingDebts]);
 
-  const closeDebt = async (tx: Transaction) => {
-    if (!onUpdateTransaction) return;
-    // PatientDetails'dagi to'liq qarz yopish mantig'i bilan bir xil: status Paid, sana bugungi
-    await onUpdateTransaction(tx.id, { status: 'Paid', date: today });
+  const openDebtPayment = (tx: Transaction) => {
+    setPayingDebt(tx);
+    setDebtPayAmount(String(tx.amount));
+    setDebtPayMethod('Cash');
+  };
+
+  // PatientDetails'dagi qarz yopish mantig'i bilan bir xil:
+  // qisman — yangi Paid tranzaksiya + qoldiq Pending'da qoladi; to'liq — Paid, sana bugungi
+  const handleDebtPayment = async () => {
+    if (!payingDebt || !onUpdateTransaction) return;
+    const paid = Math.min(Number(debtPayAmount) || 0, payingDebt.amount);
+    if (paid <= 0) return;
+    setDebtSaving(true);
+    try {
+      if (paid < payingDebt.amount) {
+        if (!onAddTransaction) return;
+        await onAddTransaction({
+          patientName: payingDebt.patientName,
+          patientId: payingDebt.patientId,
+          doctorId: payingDebt.doctorId,
+          doctorName: payingDebt.doctorName,
+          clinicId: payingDebt.clinicId,
+          amount: paid,
+          status: 'Paid',
+          type: debtPayMethod,
+          service: `${payingDebt.service} (Qarzdorlik yopildi)`,
+          date: today,
+        });
+        await onUpdateTransaction(payingDebt.id, { amount: payingDebt.amount - paid });
+      } else {
+        await onUpdateTransaction(payingDebt.id, { status: 'Paid', type: debtPayMethod, date: today });
+      }
+      setPayingDebt(null);
+    } finally {
+      setDebtSaving(false);
+    }
   };
 
   const openPaymentForAppointment = (app: Appointment) => {
@@ -549,10 +585,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <td className="py-3.5">
                         {onUpdateTransaction && (
                           <button
-                            onClick={() => closeDebt(tx)}
+                            onClick={() => openDebtPayment(tx)}
                             className="flex items-center gap-1 px-3 py-1.5 bg-success hover:bg-success-700 text-white text-xs font-bold rounded-lg transition-colors"
                           >
-                            <CheckCircle className="w-3.5 h-3.5" /> To'landi
+                            <CreditCard className="w-3.5 h-3.5" /> To'lov
                           </button>
                         )}
                       </td>
@@ -990,6 +1026,92 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </div>
         </Card>
       </>)}
+
+      {/* Qarz to'lash modali — qisman yoki to'liq */}
+      {payingDebt && (() => {
+        const debtTotal = payingDebt.amount;
+        const entered = Math.min(Number(debtPayAmount) || 0, debtTotal);
+        const remaining = debtTotal - entered;
+        const serviceLabel = payingDebt.service?.includes('|') ? payingDebt.service.split('||')[0].split('|')[0] : (payingDebt.service || '—');
+        return (
+          <Modal isOpen={true} onClose={() => setPayingDebt(null)} title="💳 Qarzni to'lash" className="max-w-md">
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-700">
+                <p className="text-sm font-bold text-gray-900 dark:text-white">{payingDebt.patientName}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{serviceLabel} · {payingDebt.date}</p>
+                <p className="text-lg font-black text-red-500 mt-2 tabular-nums">{debtTotal.toLocaleString()} UZS</p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">To'lanayotgan summa (UZS)</label>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setDebtPayAmount(String(Math.round(debtTotal / 2)))}
+                      className="px-2 py-0.5 text-[10px] font-bold text-primary-600 bg-primary-50 dark:bg-primary-900/20 rounded-md hover:bg-primary-100"
+                    >Yarmi</button>
+                    <button
+                      type="button"
+                      onClick={() => setDebtPayAmount(String(debtTotal))}
+                      className="px-2 py-0.5 text-[10px] font-bold text-primary-600 bg-primary-50 dark:bg-primary-900/20 rounded-md hover:bg-primary-100"
+                    >Hammasi</button>
+                  </div>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  max={debtTotal}
+                  value={debtPayAmount}
+                  onChange={e => setDebtPayAmount(e.target.value)}
+                  onWheel={e => e.currentTarget.blur()}
+                  className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500/30 dark:text-white tabular-nums"
+                />
+                {entered > 0 && remaining > 0 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1.5">
+                    Qoldiq qarz: {remaining.toLocaleString()} UZS (qarzdorlarda qoladi)
+                  </p>
+                )}
+                {entered > 0 && remaining === 0 && (
+                  <p className="text-xs text-success-600 dark:text-success font-medium mt-1.5">
+                    Qarz to'liq yopiladi
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
+                <div className="flex gap-2">
+                  {(['Cash', 'Card'] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setDebtPayMethod(m)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${debtPayMethod === m
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
+                    >
+                      {m === 'Cash' ? 'Naqd' : 'Karta'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setPayingDebt(null)}>Bekor</Button>
+                <button
+                  disabled={debtSaving || entered <= 0}
+                  onClick={handleDebtPayment}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-success hover:bg-success-700 disabled:bg-success/50 disabled:cursor-not-allowed transition-all"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  {debtSaving ? 'Saqlanmoqda...' : "To'lovni qabul qilish"}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* Tezkor amal modallari */}
       {onAddPatient && (
