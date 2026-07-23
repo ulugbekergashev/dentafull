@@ -716,6 +716,19 @@ export const api = {
                 method: 'DELETE',
             });
         },
+        // Ruxsatlar (Sozlamalar → Ruxsatlar): rol bo'yicha modul/ma'lumot ko'rish huquqlari
+        updateAccessControl: (id: string, accessControl: any) => {
+            if (isDemoMode()) {
+                (DEMO_CLINIC as any).accessControl = JSON.stringify(accessControl);
+                saveDemoData();
+                return Promise.resolve({ success: true as const, clinic: DEMO_CLINIC });
+            }
+            return fetchJson<{ success: true; clinic: Clinic }>(`/clinics/${id}/access-control`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accessControl }),
+            });
+        },
         updateSettings: (id: string, data: { botToken?: string, ownerPhone?: string }) => {
             if (isDemoMode()) {
                 if (data.botToken !== undefined) DEMO_CLINIC.botToken = data.botToken;

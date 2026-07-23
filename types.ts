@@ -292,6 +292,20 @@ export interface Clinic {
   prepaymentCardNumber?: string;
   prepaymentAmount?: number;
   salesAgentId?: string | null; // Biriktirilgan sotuvchi (reseller)
+  accessControl?: string | AccessControl | null; // DB'da JSON string, frontendda parse qilinadi
+}
+
+// Rol bo'yicha modul/ma'lumot ko'rish huquqlari (Sozlamalar → Ruxsatlar).
+// Maydon yo'q bo'lsa — hozirgi (hammasi ochiq) xatti-harakat saqlanadi.
+export interface RoleAccess {
+  hiddenModules?: string[];   // yashirilgan modul id lari (nav id: 'finance', 'leads', ...)
+  showFinance?: boolean;      // pul ko'rsatkichlari (dashboard KPI, tushum grafigi); default true
+  showPatientPhone?: boolean; // bemor telefon raqamlari; default true
+}
+
+export interface AccessControl {
+  doctor?: RoleAccess;
+  receptionist?: RoleAccess;
 }
 
 export interface ICD10Code {

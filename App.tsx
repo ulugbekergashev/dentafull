@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useEffect, useMemo } from 'react';
 import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
@@ -28,6 +28,7 @@ import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
 import { api } from './services/api';
+import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone } from './utils/accessControl';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { Language } from './i18n/translations';
@@ -89,7 +90,7 @@ const AppContent: React.FC = () => {
   const [technicianId, setTechnicianId] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Dark mode holatini saqlash: localStorage → tizim sozlamasi
+    // Dark mode holatini saqlash: localStorage в†’ tizim sozlamasi
     try {
       const stored = localStorage.getItem('dentalflow_theme');
       if (stored) return stored === 'dark';
@@ -795,7 +796,7 @@ const AppContent: React.FC = () => {
       const updated = await api.inventory.updateStock(id, data);
       setInventoryItems(prev => prev.map(item => item.id === id ? updated : item));
 
-      // Kirim narxi bo'lsa backend Ombor xarajatini yaratadi — ro'yxatni yangilaymiz
+      // Kirim narxi bo'lsa backend Ombor xarajatini yaratadi вЂ” ro'yxatni yangilaymiz
       if (data.type === 'IN' && data.cost && data.cost > 0) refreshExpenses();
 
       addToast('success', 'Miqdor yangilandi.');
@@ -869,6 +870,14 @@ const AppContent: React.FC = () => {
   const CURRENT_NAVIGATION = userRole === UserRole.SUPER_ADMIN ? SUPER_ADMIN_NAVIGATION
     : userRole === UserRole.SALES_AGENT ? SALES_NAVIGATION
       : CLINIC_NAVIGATION;
+
+  // Ruxsatlar (Sozlamalar в†’ Ruxsatlar): rol bo'yicha modul/moliya/telefon ko'rinishi
+  const accessControl = parseAccessControl(currentClinic);
+  const visibleNavigation = CURRENT_NAVIGATION.filter(nav =>
+    nav.roles.includes(userRole) && !isModuleHidden(accessControl, userRole, nav.id)
+  );
+  const showFinanceForRole = canSeeFinance(accessControl, userRole);
+  const showPatientPhoneForRole = canSeePatientPhone(accessControl, userRole);
 
   // --- Main Render ---
   if (!isAuthenticated) {
@@ -969,7 +978,7 @@ const AppContent: React.FC = () => {
           </div>
 
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {CURRENT_NAVIGATION.filter(nav => nav.roles.includes(userRole)).map((item) => {
+            {visibleNavigation.map((item) => {
               const to = item.id === 'dashboard' ? '/' : `/${item.id}`;
               return (
                 <NavLink
@@ -1050,7 +1059,7 @@ const AppContent: React.FC = () => {
 
               {clinicId === 'demo-clinic-1' && (
                 <span className="px-2 py-1 text-xs font-bold bg-primary-100 dark:bg-primary-900/40 text-primary dark:text-primary-400 rounded-full border border-primary-200 dark:border-primary-800">
-                  🧪 DEMO MODE
+                  рџ§Є DEMO MODE
                 </span>
               )}
 
@@ -1212,7 +1221,7 @@ const AppContent: React.FC = () => {
         <div className="border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/80">
           <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14">
             <div className="h-12 flex items-center gap-2 overflow-x-auto no-scrollbar">
-              {CURRENT_NAVIGATION.filter(nav => nav.roles.includes(userRole)).map((item) => {
+              {visibleNavigation.map((item) => {
                 const to = item.id === 'dashboard' ? '/' : `/${item.id}`;
                 return (
                   <NavLink
@@ -1297,6 +1306,7 @@ const AppContent: React.FC = () => {
                     services={services}
                     currentClinic={currentClinic}
                     clinicId={clinicId}
+                    showFinance={showFinanceForRole}
                     onPatientClick={handlePatientClick}
                     onUpdateAppointment={updateAppointment}
                     onUpdateTransaction={updateTransaction}
@@ -1315,6 +1325,7 @@ const AppContent: React.FC = () => {
                   doctors={doctors}
                   appointments={appointments}
                   transactions={transactions}
+                  showPatientPhone={showPatientPhoneForRole}
                   onPatientClick={handlePatientClick}
                   onAddPatient={addPatient}
                   onDeletePatient={deletePatient}
@@ -1351,6 +1362,7 @@ const AppContent: React.FC = () => {
                   plans={plans}
                   userRole={userRole}
                   doctorId={doctorId}
+                  showPatientPhone={showPatientPhoneForRole}
                   onBack={() => navigate('/patients')}
                   onUpdatePatient={updatePatient}
                   onAddTransaction={addTransaction}
@@ -1518,6 +1530,7 @@ const AppContent: React.FC = () => {
         userRole={userRole}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
+        accessControl={accessControl}
       />
 
       {isSidebarOpen && (

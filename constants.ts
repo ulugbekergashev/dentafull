@@ -1,6 +1,20 @@
 
 import { Appointment, Doctor, Patient, Transaction, Clinic, SubscriptionPlan } from './types';
 
+// Sozlamalar → Ruxsatlar bo'limida rol bo'yicha yashirish mumkin bo'lgan modullar.
+// id lari App.tsx dagi CLINIC_NAVIGATION id lari bilan bir xil. Dashboard ataylab yo'q — bosh sahifa har doim ochiq.
+export const ACCESS_MODULES: { id: string; label: string; roles: ('DOCTOR' | 'RECEPTIONIST')[] }[] = [
+  { id: 'leads', label: 'Lidlar', roles: ['RECEPTIONIST'] },
+  { id: 'patients', label: 'Bemorlar', roles: ['DOCTOR', 'RECEPTIONIST'] },
+  { id: 'calendar', label: 'Kalendar', roles: ['DOCTOR', 'RECEPTIONIST'] },
+  { id: 'doctors', label: 'Shifokorlar', roles: ['RECEPTIONIST'] },
+  { id: 'inventory', label: 'Ombor', roles: ['RECEPTIONIST'] },
+  { id: 'queue', label: 'Onlayn navbat', roles: ['DOCTOR', 'RECEPTIONIST'] },
+  { id: 'lab', label: 'Laboratoriya', roles: ['DOCTOR', 'RECEPTIONIST'] },
+  { id: 'messages', label: 'Xabarlar', roles: ['RECEPTIONIST'] },
+  { id: 'settings', label: 'Sozlamalar', roles: ['RECEPTIONIST'] },
+];
+
 // Helper to get dates relative to today
 const getRelativeDate = (daysOffset: number) => {
   const date = new Date();

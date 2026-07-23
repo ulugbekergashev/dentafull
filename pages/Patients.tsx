@@ -6,6 +6,7 @@ import { Patient, Doctor, Appointment, Transaction, Clinic } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { calcAge } from '../utils/dateUtils';
+import { maskPhone } from '../utils/accessControl';
 
 interface PatientsProps {
   userRole: string;
@@ -18,6 +19,7 @@ interface PatientsProps {
   onDeletePatient: (id: string) => void;
   onUpdatePatient: (id: string, data: Partial<Patient>) => Promise<void>;
   currentClinic?: Clinic;
+  showPatientPhone?: boolean; // Ruxsatlar: bemor telefon raqamini ko'rsatish
 }
 
 export const Patients: React.FC<PatientsProps> = ({
@@ -31,6 +33,7 @@ export const Patients: React.FC<PatientsProps> = ({
   onDeletePatient,
   onUpdatePatient,
   currentClinic,
+  showPatientPhone = true,
 }) => {
   const { t } = useLanguage();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -168,7 +171,7 @@ export const Patients: React.FC<PatientsProps> = ({
       p.id,
       p.lastName,
       p.firstName,
-      p.phone,
+      showPatientPhone ? p.phone : maskPhone(p.phone),
       p.dob,
       p.gender === 'Male' ? 'Erkak' : 'Ayol',
       p.status === 'Active' ? 'Faol' : 'Arxiv',
@@ -496,7 +499,7 @@ export const Patients: React.FC<PatientsProps> = ({
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{patient.phone}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{showPatientPhone ? patient.phone : maskPhone(patient.phone)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {calcAge(patient.dob) ?? 'N/A'} / {patient.gender === 'Male' ? 'Erkak' : 'Ayol'}
                   </td>
@@ -583,7 +586,7 @@ export const Patients: React.FC<PatientsProps> = ({
               </div>
               <div>
                 <p className="font-semibold text-gray-900 dark:text-white">{selectedPatient.lastName} {selectedPatient.firstName}</p>
-                <p className="text-sm text-gray-500">{selectedPatient.phone}</p>
+                <p className="text-sm text-gray-500">{showPatientPhone ? selectedPatient.phone : maskPhone(selectedPatient.phone)}</p>
               </div>
             </div>
 

@@ -2696,6 +2696,22 @@ app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Access Control (rol bo'yicha modul/ma'lumot ko'rish huquqlari, faqat klinika admini) ---
+app.put('/api/clinics/:id/access-control', authenticateToken, requireRole('CLINIC_ADMIN'), async (req, res) => {
+    try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        const { accessControl } = req.body;
+        const clinic = await prisma.clinic.update({
+            where: { id: req.params.id },
+            data: { accessControl: accessControl ? JSON.stringify(accessControl) : null } as any
+        });
+        res.json({ success: true, clinic });
+    } catch (error: any) {
+        console.error('Access control update error:', error);
+        res.status(500).json({ error: 'Ruxsat sozlamalarini saqlashda xatolik' });
+    }
+});
+
 // --- Bot Settings ---
 app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
     try {

@@ -32,6 +32,7 @@ interface DashboardProps {
   services?: Service[];
   currentClinic?: Clinic;
   clinicId?: string;
+  showFinance?: boolean; // Ruxsatlar: pul ko'rsatkichlari (KPI, tushum grafigi, qarzdorlar)
   onPatientClick?: (id: string) => void;
   onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
   onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
@@ -41,7 +42,7 @@ interface DashboardProps {
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -377,18 +378,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           label={t('dashboard.newLeads')} value={newLeadsCount} icon={Star} color="warning"
           subtitle={t('dashboard.fromAds')}
         />
-        <StatCard
-          label={t('dashboard.avgCheck')} value={avgCheck.toLocaleString()} unit="UZS" icon={TrendingUp} color="success"
-          subtitle={t('dashboard.perPatient')}
-        />
-        <StatCard
-          label={t('dashboard.pending')} value={pendingRevenue.toLocaleString()} unit="UZS" icon={Clock} color="warning"
-          subtitle={t('dashboard.unpaid')}
-        />
-        <StatCard
-          label={t('dashboard.todayRevenue')} value={totalRevenue.toLocaleString()} unit="UZS" icon={DollarSign} color="success" variant="gradient"
-          subtitle={t('dashboard.selectedPeriod')}
-        />
+        {showFinance && (<>
+          <StatCard
+            label={t('dashboard.avgCheck')} value={avgCheck.toLocaleString()} unit="UZS" icon={TrendingUp} color="success"
+            subtitle={t('dashboard.perPatient')}
+          />
+          <StatCard
+            label={t('dashboard.pending')} value={pendingRevenue.toLocaleString()} unit="UZS" icon={Clock} color="warning"
+            subtitle={t('dashboard.unpaid')}
+          />
+          <StatCard
+            label={t('dashboard.todayRevenue')} value={totalRevenue.toLocaleString()} unit="UZS" icon={DollarSign} color="success" variant="gradient"
+            subtitle={t('dashboard.selectedPeriod')}
+          />
+        </>)}
       </div>
 
       {/* Bugungi Qabullar */}
@@ -524,7 +527,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       </Card>
 
       {/* Kutilayotgan to'lovlar (qarzdorlar) — Pending tranzaksiyalar */}
-      {pendingDebts.length > 0 && (
+      {showFinance && pendingDebts.length > 0 && (
         <Card className="p-6 rounded-[2rem] border border-red-200 dark:border-red-800/50">
           <div className="flex items-center justify-between mb-5">
             <div>
@@ -690,7 +693,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       {!isReceptionist && (<>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Revenue Chart */}
-          <Card className="p-8 lg:col-span-2 rounded-[2rem]">
+          {showFinance && <Card className="p-8 lg:col-span-2 rounded-[2rem]">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-xl font-black text-gray-900 dark:text-white">
                 {t('dashboard.financialFlow')}
@@ -760,7 +763,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 </div>
               )}
             </div>
-          </Card>
+          </Card>}
 
           {/* Service Distribution */}
           <Card className="p-8 rounded-[2rem]">
@@ -870,8 +873,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   });
                 });
 
-                // Recent transactions (last 5)
-                filteredTransactions.slice(-5).reverse().forEach(tx => {
+                // Recent transactions (last 5) — moliya yashirilgan rolga ko'rsatilmaydi
+                if (showFinance) filteredTransactions.slice(-5).reverse().forEach(tx => {
                   const txDate = new Date(tx.date);
                   activities.push({
                     type: 'transaction',

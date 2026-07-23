@@ -12,6 +12,7 @@ import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDobDDMMYYYY, calcAge } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
+import { maskPhone } from '../utils/accessControl';
 
 import { ReceiptModal } from '../components/ReceiptModal';
 
@@ -27,6 +28,7 @@ interface PatientDetailsProps {
    plans?: SubscriptionPlan[];
    userRole?: UserRole;
    doctorId?: string; // Kirgan shifokor (DOCTOR roli) — shifokor tanlovlarida defolt
+   showPatientPhone?: boolean; // Ruxsatlar: bemor telefon raqamini ko'rsatish
    onBack: () => void;
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
    onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<Transaction | void>;
@@ -47,6 +49,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    plans = [], 
    userRole,
    doctorId: loggedDoctorId,
+   showPatientPhone = true,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment, onUpdateAppointment
 }) => {
    const { patientId: patientIdParam } = useParams<{ patientId: string }>();
@@ -957,11 +960,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                      <div className="space-y-3 text-sm">
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                           <Phone className="w-4 h-4" /> {patient.phone}
+                           <Phone className="w-4 h-4" /> {showPatientPhone ? patient.phone : maskPhone(patient.phone)}
                         </div>
                         {patient.secondaryPhone && (
                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                              <Phone className="w-4 h-4 text-gray-400" /> {patient.secondaryPhone} (Qo'shimcha)
+                              <Phone className="w-4 h-4 text-gray-400" /> {showPatientPhone ? patient.secondaryPhone : maskPhone(patient.secondaryPhone)} (Qo'shimcha)
                            </div>
                         )}
                         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
@@ -2093,7 +2096,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                <div>
                   <h2 className="text-xs font-bold uppercase text-gray-500 mb-1">Bemor</h2>
                   <p className="text-xl font-bold">{patient.lastName} {patient.firstName}</p>
-                  <p className="text-sm">{patient.phone}</p>
+                  <p className="text-sm">{showPatientPhone ? patient.phone : maskPhone(patient.phone)}</p>
                   <p className="text-sm">{formatDobDDMMYYYY(patient.dob)} ({calcAge(patient.dob) ?? ''} yosh)</p>
                </div>
                <div className="text-right">

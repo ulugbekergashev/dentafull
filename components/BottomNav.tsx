@@ -1,15 +1,17 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Users, Calendar, DollarSign, Activity, Package, Settings, MoreHorizontal, MessageSquare } from 'lucide-react';
-import { UserRole } from '../types';
+import { UserRole, AccessControl } from '../types';
+import { isModuleHidden } from '../utils/accessControl';
 
 interface BottomNavProps {
     userRole: UserRole;
     isSidebarOpen: boolean;
     setIsSidebarOpen: (open: boolean) => void;
+    accessControl?: AccessControl;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, setIsSidebarOpen }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, setIsSidebarOpen, accessControl = {} }) => {
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -27,8 +29,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
         { id: 'settings', path: '/settings', label: 'Sozlamalar', icon: Settings, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
     ];
 
-    // Filter items based on role
-    const allowedItems = allItems.filter(item => item.roles.includes(userRole));
+    // Filter items based on role + ruxsatlar (Sozlamalar → Ruxsatlar)
+    const allowedItems = allItems.filter(item =>
+        item.roles.includes(userRole) && !isModuleHidden(accessControl, userRole, item.id)
+    );
 
     // If items <= 5, show all. If > 5, show first 4 and a "More" button.
     const showMore = allowedItems.length > 5;
