@@ -3118,7 +3118,7 @@ app.get('/api/facebook/auth-url', authenticateToken, (req, res) => {
     }
 
     // Updated scopes to include business management and profile for better visibility
-    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata', 'public_profile', 'business_management'];
+    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata', 'public_profile'];
     const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes.join(',')}&state=${clinicId}`;
 
     res.json({ url });
