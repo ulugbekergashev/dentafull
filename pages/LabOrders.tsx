@@ -22,6 +22,7 @@ interface Props {
   doctors: any[];
   patients?: Patient[];
   onExpensesChanged?: () => void;
+  defaultDoctorName?: string; // DOCTOR roli — yangi buyurtmada o'zi defolt tanlanadi
 }
 
 const emptyForm = {
@@ -30,7 +31,7 @@ const emptyForm = {
   clinicianNotes: '', notes: '', status: 'Pending',
 };
 
-export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [], onExpensesChanged }) => {
+export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [], onExpensesChanged, defaultDoctorName }) => {
   const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterTech, setFilterTech]   = useState<string>('all');
@@ -78,7 +79,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
     overdue:    labOrders.filter(o => ['Pending','In-Progress'].includes(o.status) && o.deadline < new Date().toISOString().split('T')[0]).length,
   };
 
-  const openAdd = () => { setEditingOrder(null); setForm({ ...emptyForm }); setPatientSearch(''); setShowPatientDropdown(false); setError(''); setShowModal(true); };
+  const openAdd = () => { setEditingOrder(null); setForm({ ...emptyForm, doctorName: defaultDoctorName || '' }); setPatientSearch(''); setShowPatientDropdown(false); setError(''); setShowModal(true); };
   const openEdit = (o: LabOrder) => {
     setEditingOrder(o);
     setForm({ patientName: o.patientName, doctorName: o.doctorName, technicianId: o.technicianId, orderType: o.orderType, material: o.material||'', toothNumbers: o.toothNumbers||'', deadline: o.deadline, price: String(o.price||0), priority: o.priority, clinicianNotes: o.clinicianNotes||'', notes: o.notes||'', status: o.status });

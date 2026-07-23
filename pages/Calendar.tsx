@@ -104,7 +104,8 @@ export const Calendar: React.FC<CalendarProps> = ({
 
     setFormData({
       patientId: patients.length > 0 ? patients[0].id : '',
-      doctorId: initialDoctorId || (doctors.length > 0 ? doctors[0].id : ''), // Use provided doctorId or auto-select first
+      // Defolt shifokor: berilgan → kirgan shifokor (DOCTOR roli) → birinchi shifokor
+      doctorId: initialDoctorId || (userRole === UserRole.DOCTOR && doctorId ? doctorId : '') || (doctors.length > 0 ? doctors[0].id : ''),
       type: '',
       categoryId: '',
       date: initialDate || new Date().toISOString().split('T')[0],

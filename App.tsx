@@ -1299,6 +1299,7 @@ const AppContent: React.FC = () => {
                     clinicId={clinicId}
                     onPatientClick={handlePatientClick}
                     onUpdateAppointment={updateAppointment}
+                    onUpdateTransaction={updateTransaction}
                     onAddPatient={addPatient}
                     onAddTransaction={addTransaction}
                     onAddAppointment={addAppointment}
@@ -1349,6 +1350,7 @@ const AppContent: React.FC = () => {
                   currentClinic={currentClinic}
                   plans={plans}
                   userRole={userRole}
+                  doctorId={doctorId}
                   onBack={() => navigate('/patients')}
                   onUpdatePatient={updatePatient}
                   onAddTransaction={addTransaction}
@@ -1420,6 +1422,11 @@ const AppContent: React.FC = () => {
                   doctors={doctors}
                   patients={patients}
                   onExpensesChanged={refreshExpenses}
+                  defaultDoctorName={(() => {
+                    if (userRole !== UserRole.DOCTOR) return undefined;
+                    const d = doctors.find(x => x.id === doctorId);
+                    return d ? `Dr. ${d.lastName} ${d.firstName}` : undefined;
+                  })()}
                 />
               } />
 

@@ -49,6 +49,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
+  // DOCTOR roli bilan kirilganda to'lov formasida o'zi defolt tanlanadi
+  const defaultDoctorId = userRole === UserRole.DOCTOR && doctorId ? doctorId : '';
   const today = new Date().toISOString().split('T')[0];
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDebtorModalOpen, setIsDebtorModalOpen] = useState(false);
@@ -62,7 +64,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     patientId: '',
-    doctorId: '',
+    doctorId: defaultDoctorId,
     service: '',
     amount: '',
     type: 'Cash' as 'Cash' | 'Card' | 'Insurance' | 'Balance',
@@ -224,7 +226,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
         doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : undefined,
       });
       setIsAddPaymentOpen(false);
-      setPaymentForm({ patientId: '', doctorId: '', service: '', amount: '', type: 'Cash', notes: '' });
+      setPaymentForm({ patientId: '', doctorId: defaultDoctorId, service: '', amount: '', type: 'Cash', notes: '' });
     } finally {
       setPaymentLoading(false);
     }
@@ -379,11 +381,16 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [receiptTransaction, setReceiptTransaction] = useState<Transaction | null>(null);
 
+  // Har bir usul bo'yicha to'lovlar soni va jami summasi (faqat Paid — kassa modeli bilan izchil)
   const PAYMENT_METHOD_DATA = [
-    { name: 'Naqd', value: dateFilteredTransactions.filter(t => t.type === 'Cash').length, color: '#10B981' },
-    { name: 'Karta', value: dateFilteredTransactions.filter(t => t.type === 'Card').length, color: '#3B82F6' },
-    { name: 'Sug\'urta', value: dateFilteredTransactions.filter(t => t.type === 'Insurance').length, color: '#8B5CF6' },
-  ];
+    { key: 'Cash', name: 'Naqd', color: '#10B981' },
+    { key: 'Card', name: 'Karta', color: '#3B82F6' },
+    { key: 'Insurance', name: 'Sug\'urta', color: '#8B5CF6' },
+    { key: 'Balance', name: 'Avans', color: '#F59E0B' },
+  ].map(m => {
+    const txs = dateFilteredTransactions.filter(t => t.type === m.key && t.status === 'Paid');
+    return { ...m, value: txs.length, amount: txs.reduce((sum, t) => sum + t.amount, 0) };
+  });
 
   // --- Financial Breakdown Logic ---
   // Yagona manba: kirim (Paid), xarajatlar, shifokor ulushi, sof foyda
@@ -698,7 +705,22 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                   <XAxis type="number" hide />
                   <YAxis dataKey="name" type="category" width={80} tick={{ fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                  <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '8px' }} />
+                  <Tooltip
+                    cursor={{ fill: 'transparent' }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const d: any = payload[0].payload;
+                      return (
+                        <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg shadow-lg px-3.5 py-2.5">
+                          <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">{d.name}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{d.value} ta to'lov</p>
+                          <p className="text-sm font-bold tabular-nums" style={{ color: d.color }}>
+                            {d.amount.toLocaleString()} UZS
+                          </p>
+                        </div>
+                      );
+                    }}
+                  />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={30}>
                     {PAYMENT_METHOD_DATA.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />

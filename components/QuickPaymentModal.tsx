@@ -15,6 +15,7 @@ interface QuickPaymentModalProps {
     presetDoctorId?: string;
     presetService?: string;
     presetAmount?: number;
+    presetDate?: string; // Qabul sanasi — isAppointmentPaid shu sana bo'yicha moslashtiradi
 }
 
 const emptyForm = {
@@ -28,7 +29,7 @@ const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider
 // Tez to'lov modali (Finance + Dashboard). status har doim 'Paid', bitta tranzaksiya.
 export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
     isOpen, onClose, patients, doctors, services, clinicId, onAddTransaction,
-    presetPatientId, presetDoctorId, presetService, presetAmount,
+    presetPatientId, presetDoctorId, presetService, presetAmount, presetDate,
 }) => {
     const buildPresetForm = () => ({
         ...emptyForm,
@@ -53,7 +54,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
             const today = new Date().toISOString().split('T')[0];
             await onAddTransaction({
                 patientName: patient ? `${patient.lastName} ${patient.firstName}` : '',
-                date: today,
+                date: presetDate || today,
                 amount: parseFloat(form.amount),
                 type: form.type,
                 service: form.service || 'To\'lov',

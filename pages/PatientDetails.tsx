@@ -26,6 +26,7 @@ interface PatientDetailsProps {
    currentClinic?: Clinic;
    plans?: SubscriptionPlan[];
    userRole?: UserRole;
+   doctorId?: string; // Kirgan shifokor (DOCTOR roli) — shifokor tanlovlarida defolt
    onBack: () => void;
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
    onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<Transaction | void>;
@@ -45,6 +46,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    currentClinic, 
    plans = [], 
    userRole,
+   doctorId: loggedDoctorId,
    onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment, onUpdateAppointment
 }) => {
    const { patientId: patientIdParam } = useParams<{ patientId: string }>();
@@ -58,10 +60,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    const patient = patients.find(p => String(p.id).trim() === String(patientId).trim());
 
+   // DOCTOR roli bilan kirilgan bo'lsa — shifokor tanlovlarida o'zi defolt tanlanadi
+   const myDoctor = userRole === UserRole.DOCTOR && loggedDoctorId ? doctors.find(d => d.id === loggedDoctorId) : undefined;
+   const defaultDoctorId = myDoctor?.id || '';
+
    // Edit Form State
    const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
    // Payment Form State
-   const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
+   const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: defaultDoctorId, appointmentDate: '', discountPercent: '' });
    const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent'); // Chegirma turi: foiz yoki summa
 
    // Chegirmadan keyingi jami summa (asl narx ma'lum bo'lganda)
@@ -95,7 +101,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // New Appointment Modal State
    const [isApptModalOpen, setIsApptModalOpen] = useState(false);
    const [apptData, setApptData] = useState({
-      doctorId: '',
+      doctorId: defaultDoctorId,
       date: new Date().toISOString().split('T')[0],
       time: '09:00',
       type: 'Konsultatsiya',
@@ -509,12 +515,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       // Check if current plan is individual
       const isIndividualPlan = currentClinic?.planId === 'individual';
 
-      // Auto-select first doctor for individual plans
-      if (isIndividualPlan && doctors.length > 0) {
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: doctors[0].id, appointmentDate: '', discountPercent: '' });
-      } else {
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
-      }
+      // Defolt shifokor: kirgan shifokor → bemorga biriktirilgan → individual planda birinchi → bo'sh
+      const assignedDoctorId = patient?.doctorId && doctors.some(d => d.id === patient.doctorId) ? patient.doctorId : '';
+      const autoDoctorId = defaultDoctorId || assignedDoctorId || (isIndividualPlan && doctors.length > 0 ? doctors[0].id : '');
+      setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: autoDoctorId, appointmentDate: '', discountPercent: '' });
 
       setDiscountType('percent');
       setManualPaymentCategoryId('');
@@ -656,7 +660,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
          // Cleanup only on SUCCESS
          setIsPaymentModalOpen(false);
-         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: '', appointmentDate: '', discountPercent: '' });
+         setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: defaultDoctorId, appointmentDate: '', discountPercent: '' });
          setVisitKey(prev => prev + 1);
       } catch (error: any) {
          console.error('Payment processing failed', error);
@@ -741,13 +745,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          categoryId: apptData.categoryId || null // Add categoryId
       });
       setIsApptModalOpen(false);
-      setApptData({ doctorId: '', date: new Date().toISOString().split('T')[0], time: '09:00', type: 'Konsultatsiya', categoryId: '', duration: 60, notes: '' });
+      setApptData({ doctorId: defaultDoctorId, date: new Date().toISOString().split('T')[0], time: '09:00', type: 'Konsultatsiya', categoryId: '', duration: 60, notes: '' });
    };
 
    const openApptModal = () => {
+      const assignedDoctorId = patient?.doctorId && doctors.some(d => d.id === patient.doctorId) ? patient.doctorId : '';
       setApptData(prev => ({
          ...prev,
-         doctorId: doctors.length > 0 ? doctors[0].id : '',
+         doctorId: defaultDoctorId || assignedDoctorId || (doctors.length > 0 ? doctors[0].id : ''),
          categoryId: categories.length > 0 ? categories[0].id : '', // Set default category
       }));
       setIsApptModalOpen(true);
@@ -771,8 +776,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          a.status !== 'Cancelled'
       );
 
-      let finalDoctorId = doctors.length > 0 ? doctors[0].id : '';
-      let finalDoctorName = doctors.length > 0 ? `Dr. ${doctors[0].lastName}` : 'Doctor';
+      // Shifokor ustuvorligi: qabulga biriktirilgan → kirgan shifokor → bemorga biriktirilgan → birinchi.
+      // Aks holda admin yakunlaganda to'lov har doim ro'yxatdagi birinchi shifokorga yozilib qolardi.
+      const apptDoctor = existingAppt ? doctors.find(d => d.id === existingAppt.doctorId) : undefined;
+      const patientDoctor = patient.doctorId ? doctors.find(d => d.id === patient.doctorId) : undefined;
+      const chosenDoctor = apptDoctor || myDoctor || patientDoctor;
+      let finalDoctorId = chosenDoctor?.id || (doctors.length > 0 ? doctors[0].id : '');
+      let finalDoctorName = chosenDoctor ? `Dr. ${chosenDoctor.lastName}` : (doctors.length > 0 ? `Dr. ${doctors[0].lastName}` : 'Doctor');
 
       // Create a text summary of procedures for the appointment notes with explicit prices
       const proceduresText = procedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'}) [${p.price.toLocaleString().replace(/,/g, ' ')} UZS]`).join('\n');

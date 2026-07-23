@@ -34,13 +34,14 @@ interface DashboardProps {
   clinicId?: string;
   onPatientClick?: (id: string) => void;
   onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
+  onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
   onAddPatient?: (data: Omit<Patient, 'id' | 'clinicId'>) => Promise<Patient | void>;
   onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
   onAddAppointment?: (appt: Omit<Appointment, 'id'>) => Promise<any>;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', onPatientClick, onUpdateAppointment, onAddPatient, onAddTransaction, onAddAppointment }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -224,12 +225,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     );
   }, [labOrders, today]);
 
-  // Bugun yakunlangan, lekin hali to'lanmagan qabullar — ресепшн шу ердан бирдан ёпиши учун
-  const unpaidCompletedToday = useMemo(() => {
-    return todayAppointments.filter(app =>
-      (app.status === 'Completed' || app.status === 'Checked-In') && !isAppointmentPaid(app, transactions)
-    );
-  }, [todayAppointments, transactions]);
+  // Tanlangan davrda yakunlangan, lekin hali to'lanmagan qabullar — ресепшн шу ердан бирдан ёпиши учун
+  const unpaidCompleted = useMemo(() => {
+    return filteredAppointments
+      .filter(app =>
+        (app.status === 'Completed' || app.status === 'Checked-In') && !isAppointmentPaid(app, transactions)
+      )
+      .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  }, [filteredAppointments, transactions]);
+
+  // Kutilayotgan to'lovlar (qarzdorlar) — Pending/Overdue tranzaksiyalar, davr filtridan qat'i nazar
+  const pendingDebts = useMemo(() => {
+    return filteredTransactionsByDoctor
+      .filter(t => t.status === 'Pending' || t.status === 'Overdue')
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [filteredTransactionsByDoctor]);
+
+  const pendingDebtsTotal = useMemo(() =>
+    pendingDebts.reduce((acc, t) => acc + t.amount, 0)
+    , [pendingDebts]);
+
+  const closeDebt = async (tx: Transaction) => {
+    if (!onUpdateTransaction) return;
+    // PatientDetails'dagi to'liq qarz yopish mantig'i bilan bir xil: status Paid, sana bugungi
+    await onUpdateTransaction(tx.id, { status: 'Paid', date: today });
+  };
 
   const openPaymentForAppointment = (app: Appointment) => {
     setPayingAppointment(app);
@@ -467,8 +487,86 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         )}
       </Card>
 
+      {/* Kutilayotgan to'lovlar (qarzdorlar) — Pending tranzaksiyalar */}
+      {pendingDebts.length > 0 && (
+        <Card className="p-6 rounded-[2rem] border border-red-200 dark:border-red-800/50">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">
+                Kutilayotgan <span className="text-red-500">To'lovlar</span> (Qarzdorlar)
+              </h3>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
+                Qarzga yozilgan, hali yopilmagan to'lovlar
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-black rounded-full">
+                {pendingDebtsTotal.toLocaleString()} UZS
+              </span>
+              <span className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs font-black rounded-full">
+                {pendingDebts.length} ta
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-800">
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Sana</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Bemor</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Xizmat</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Summa</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Amal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingDebts.map(tx => {
+                  const patient = patients.find(p => p.id === tx.patientId)
+                    || patients.find(p => `${p.lastName} ${p.firstName}` === tx.patientName);
+                  const serviceLabel = tx.service?.includes('|') ? tx.service.split('||')[0].split('|')[0] : (tx.service || '—');
+                  return (
+                    <tr key={tx.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0 hover:bg-red-50/40 dark:hover:bg-red-900/10 transition-colors">
+                      <td className="py-3.5 pr-4">
+                        <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">{tx.date}</span>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <button
+                          onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
+                          className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                        >
+                          {tx.patientName}
+                        </button>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">{serviceLabel}</span>
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <span className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">
+                          {tx.amount.toLocaleString()} UZS
+                        </span>
+                      </td>
+                      <td className="py-3.5">
+                        {onUpdateTransaction && (
+                          <button
+                            onClick={() => closeDebt(tx)}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-success hover:bg-success-700 text-white text-xs font-bold rounded-lg transition-colors"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" /> To'landi
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {/* To'lovni kutayotgan qabullar — shifokor yakunlagan, lekin hali to'lanmagan */}
-      {unpaidCompletedToday.length > 0 && (
+      {unpaidCompleted.length > 0 && (
         <Card className="p-6 rounded-[2rem] border border-amber-200 dark:border-amber-800/50">
           <div className="flex items-center justify-between mb-5">
             <div>
@@ -480,7 +578,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               </p>
             </div>
             <span className="px-3 py-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-black rounded-full">
-              {unpaidCompletedToday.length} ta
+              {unpaidCompleted.length} ta
             </span>
           </div>
 
@@ -488,6 +586,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Sana</th>
                   <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Vaqt</th>
                   <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Bemor</th>
                   <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Shifokor</th>
@@ -497,13 +596,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 </tr>
               </thead>
               <tbody>
-                {unpaidCompletedToday.map(app => {
+                {unpaidCompleted.map(app => {
                   const patient = patients.find(p => p.id === app.patientId);
                   const doctorColor = doctors.find(d => d.id === app.doctorId)?.color || '#3B82F6';
                   const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
                   const serviceLabel = breakdown ? breakdown.split('||')[0].split('|')[0] : app.type;
                   return (
                     <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0 hover:bg-amber-50/40 dark:hover:bg-amber-900/10 transition-colors">
+                      <td className="py-3.5 pr-4">
+                        <span className="text-sm font-bold text-gray-500 dark:text-gray-400 tabular-nums">{app.date}</span>
+                      </td>
                       <td className="py-3.5 pr-4">
                         <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">{app.time}</span>
                       </td>
@@ -916,9 +1018,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             clinicId={clinicId}
             onAddTransaction={onAddTransaction}
             presetPatientId={payingAppointment?.patientId}
-            presetDoctorId={payingAppointment?.doctorId}
+            presetDoctorId={payingAppointment?.doctorId || (userRole === UserRole.DOCTOR ? doctorId : undefined)}
             presetService={payingAppointment?.type}
             presetAmount={presetAmount || undefined}
+            presetDate={payingAppointment?.date}
           />
         );
       })()}
