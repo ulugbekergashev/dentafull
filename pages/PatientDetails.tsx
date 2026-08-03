@@ -13,6 +13,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { formatDobDDMMYYYY, calcAge } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
 import { maskPhone } from '../utils/accessControl';
+import { printPatientCard } from '../utils/printPatientCard';
 
 import { ReceiptModal } from '../components/ReceiptModal';
 
@@ -906,6 +907,21 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <ArrowLeft className="w-5 h-5" />
                </Button>
                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('patients.details.title')}</h1>
+               <div className="ml-auto">
+                  <Button
+                     variant="secondary"
+                     onClick={() => printPatientCard({
+                        patient,
+                        clinic: currentClinic,
+                        doctor: doctors.find(d => d.id === patient.doctorId) || myDoctor || doctors[0],
+                        teeth: teethData,
+                        diagnoses,
+                        procedures: allProceduresHistory,
+                     })}
+                  >
+                     <Printer className="w-4 h-4 mr-2" /> Karta (vipiska)
+                  </Button>
+               </div>
             </div>
 
             {/* Header Card */}
