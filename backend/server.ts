@@ -2536,9 +2536,16 @@ app.put('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN', 'SALES
             updateData = { status, expiryDate, planId, subscriptionType, customPrice };
         }
 
-        if (updateData.password) {
-            const salt = await bcrypt.genSalt(10);
-            updateData.password = await bcrypt.hash(updateData.password, salt);
+        if (updateData.password !== undefined) {
+            // Login paytida parol trim qilinadi, shuning uchun saqlashda ham trim qilamiz
+            const cleanPassword = String(updateData.password).trim();
+            if (cleanPassword) {
+                const salt = await bcrypt.genSalt(10);
+                updateData.password = await bcrypt.hash(cleanPassword, salt);
+            } else {
+                // Bo'sh parol yuborilsa — mavjud parolni o'chirib yubormaymiz
+                delete updateData.password;
+            }
         }
         if (updateData.customPrice !== undefined) {
             updateData.customPrice = updateData.customPrice !== null ? Number(updateData.customPrice) : null;
@@ -2548,8 +2555,9 @@ app.put('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN', 'SALES
             data: updateData
         });
         res.json(clinic);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to update clinic' });
+    } catch (error: any) {
+        console.error('Clinic update error:', error);
+        res.status(500).json({ error: error.message || 'Failed to update clinic' });
     }
 });
 
