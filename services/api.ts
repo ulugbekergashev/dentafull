@@ -84,8 +84,34 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
         headers,
     });
 
-    if (response.status === 401) {
-        // Token expired or invalid
+    // Backend tokenni yangilagan bo'lsa (muddati yaqinlashgan), uni jimgina saqlaymiz.
+    // Foydalanuvchi faol ekan, sessiyasi hech qachon tugamaydi.
+    const refreshedToken = response.headers.get('X-Refreshed-Token');
+    if (refreshedToken) {
+        try {
+            // Sessiya qaysi omborda saqlangan bo'lsa, o'shanisini yangilaymiz
+            const store = sessionStorage.getItem('dentalflow_auth') ? sessionStorage : localStorage;
+            const raw = store.getItem('dentalflow_auth');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                parsed.token = refreshedToken;
+                store.setItem('dentalflow_auth', JSON.stringify(parsed));
+            }
+        } catch (e) {
+            // Saqlab bo'lmasa ham muammo yo'q — eski token muddati tugaguncha ishlaydi
+        }
+    }
+
+    // 401 — token yo'q/yaroqsiz. 403 esa ikki xil bo'lishi mumkin: rol yetarli emas
+    // (sessiya joyida) yoki eski backend token uchun 403 qaytargan. Ikkinchisida ham
+    // sessiyani tugatish kerak, aks holda "Qayta yuklash" o'lik token bilan aylanaveradi.
+    let isSessionExpired = response.status === 401;
+    if (response.status === 403) {
+        const data = await response.clone().json().catch(() => ({} as any));
+        isSessionExpired = typeof data?.error === 'string' && data.error.includes('Token yaroqsiz');
+    }
+
+    if (isSessionExpired) {
         localStorage.removeItem('dentalflow_auth');
         sessionStorage.removeItem('dentalflow_auth');
         window.dispatchEvent(new Event('auth:unauthorized'));

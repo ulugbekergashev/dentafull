@@ -100,6 +100,13 @@ if (!JWT_SECRET) {
     process.exit(1);
 }
 
+// Token amal qilish muddati va "sirpanuvchi" yangilanish chegarasi.
+// Faol foydalanuvchining tokeni muddati yaqinlashganda jimgina yangilanadi,
+// shuning uchun har kuni ishlaydigan xodim hech qachon tizimdan chiqib qolmaydi.
+// 30 kun tegilmagan sessiya esa o'z-o'zidan kuchini yo'qotadi.
+const TOKEN_TTL = '30d';
+const TOKEN_RENEW_THRESHOLD_SEC = 7 * 24 * 60 * 60; // 7 kun
+
 
 // Standard CORS Middleware
 const corsOptions = {
@@ -128,6 +135,8 @@ const corsOptions = {
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    // Brauzer yangilangan tokenni o'qiy olishi uchun sarlavha ochiq bo'lishi shart
+    exposedHeaders: ['X-Refreshed-Token'],
     credentials: true,
     optionsSuccessStatus: 200
 };
@@ -162,6 +171,21 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
             return res.status(401).json({ error: 'Token yaroqsiz yoki muddati tugagan' });
         }
         (req as any).user = user;
+
+        // Sirpanuvchi yangilanish: muddati tugashiga TOKEN_RENEW_THRESHOLD_SEC dan kam
+        // qolgan bo'lsa, yangi token generatsiya qilib javob sarlavhasida qaytaramiz.
+        // Frontend uni saqlab qo'yadi; foydalanuvchi hech narsani sezmaydi.
+        // Xatolik bo'lsa ham so'rov normal davom etadi — bu qo'shimcha, majburiy emas.
+        try {
+            const secondsLeft = (user?.exp ?? 0) - Math.floor(Date.now() / 1000);
+            if (secondsLeft > 0 && secondsLeft < TOKEN_RENEW_THRESHOLD_SEC) {
+                const { iat, exp, nbf, ...payload } = user;
+                res.setHeader('X-Refreshed-Token', jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_TTL }));
+            }
+        } catch (renewError) {
+            console.warn('Token yangilashda xatolik (so\'rov davom etadi):', renewError);
+        }
+
         // Multi-tenant himoya: oddiy rol uchun body'dagi clinicId majburan o'z klinikasiga tenglashtiriladi.
         // Bu boshqa klinika nomidan yozuv yaratish/o'zgartirishni bloklaydi. SUPER_ADMIN bundan mustasno.
         if (user?.role !== 'SUPER_ADMIN' && user?.clinicId && req.body && typeof req.body === 'object' && 'clinicId' in req.body) {
@@ -957,7 +981,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         if (userPayload && responseData) {
-            const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: '30d' });
+            const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: TOKEN_TTL });
             return res.json({ ...responseData, token });
         }
 
