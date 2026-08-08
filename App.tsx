@@ -334,6 +334,14 @@ const AppContent: React.FC = () => {
   };
 
   const retryLoadData = async () => {
+    // Sessiya allaqachon tozalangan bo'lsa qayta urinish befoyda — tokensiz so'rov
+    // yana 401 beradi va foydalanuvchi xato ekranida qamalib qoladi. To'g'ridan-to'g'ri
+    // login sahifasiga chiqaramiz.
+    const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+    if (!storedAuth) {
+      handleLogout();
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {

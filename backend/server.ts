@@ -156,7 +156,10 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
     jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
         if (err) {
             if (isDev) console.log('❌ Token verification failed:', err.message);
-            return res.status(403).json({ error: 'Token yaroqsiz (Forbidden)' });
+            // 401 (403 emas): token muddati tugagan yoki yaroqsiz — bu autentifikatsiya
+            // muammosi, ruxsat muammosi emas. Frontend 401'da sessiyani tozalab,
+            // login sahifasiga qaytaradi. 403 faqat rol tekshiruvi uchun qoladi.
+            return res.status(401).json({ error: 'Token yaroqsiz yoki muddati tugagan' });
         }
         (req as any).user = user;
         // Multi-tenant himoya: oddiy rol uchun body'dagi clinicId majburan o'z klinikasiga tenglashtiriladi.
