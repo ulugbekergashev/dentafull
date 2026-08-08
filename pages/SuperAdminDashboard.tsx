@@ -2,12 +2,20 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan } from '../types';
-import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook } from 'lucide-react';
+import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 
 // Kunlik yangi klinikalar diagrammasi (oxirgi 12 oy)
 const UZ_MONTHS_SHORT = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
+
+// Telefon raqamini Telegram havolasiga aylantiradi.
+// Masalan "+998 97 772-85-45" -> "https://t.me/+998977728545"
+// Telegram raqam bo'yicha profilni o'zi topadi; topolmasa qidiruv oynasini ochadi.
+const telegramLinkFor = (phone?: string | null): string | null => {
+   const digits = (phone || '').replace(/\D/g, '');
+   return digits.length >= 9 ? `https://t.me/+${digits}` : null;
+};
 
 const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
    const [hover, setHover] = useState<{ i: number; xPct: number; count: number; label: string } | null>(null);
@@ -327,6 +335,18 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // Delete Confirmation Modal
    const [deleteConfirmClinic, setDeleteConfirmClinic] = useState<Clinic | null>(null);
 
+   // Nusxa olingan qiymat uchun qisqa vaqtli belgi (qaysi tugma bosilganini bildiradi)
+   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+   const handleCopy = async (text: string, key: string) => {
+      try {
+         await navigator.clipboard.writeText(text);
+         setCopiedKey(key);
+         setTimeout(() => setCopiedKey(null), 1500);
+      } catch (e) {
+         // Clipboard API yopiq bo'lsa (http yoki eski brauzer) — jimgina o'tkazib yuboramiz
+      }
+   };
+
    // Password Change Modal
    const [passwordChangeClinic, setPasswordChangeClinic] = useState<Clinic | null>(null);
    const [newPassword, setNewPassword] = useState('');
@@ -406,6 +426,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       const matchesSearch =
          clinic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
          clinic.adminName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+         (clinic.username || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
          clinic.phone.includes(searchQuery);
 
       const daysLeft = getDaysRemaining(clinic.expiryDate);
@@ -783,6 +804,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thName')}</th>
+                           <th className="p-4 font-medium text-gray-500">Login / Telefon</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thPlan')}</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thExpiry')}</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thStatus')}</th>
@@ -793,7 +815,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {paginatedClinics.length === 0 ? (
                            <tr>
-                              <td colSpan={salesAgentMode ? 5 : 6} className="p-8 text-center text-gray-500">
+                              <td colSpan={salesAgentMode ? 6 : 7} className="p-8 text-center text-gray-500">
                                  {t('common.noData')}
                               </td>
                            </tr>
@@ -812,6 +834,43 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     <td className="p-4">
                                        <div className="font-medium text-gray-900 dark:text-white group-hover:text-primary-600 transition-colors">{clinic.name}</div>
                                        <div className="text-xs text-gray-500">{clinic.adminName}</div>
+                                    </td>
+                                    {/* Login va telefon. Qator bosilganda modal ochilgani uchun
+                                        bu katakdagi bosishlarni yuqoriga o'tkazmaymiz. */}
+                                    <td className="p-4" onClick={e => e.stopPropagation()}>
+                                       <div className="flex items-center gap-1.5">
+                                          <span className="font-mono text-xs text-gray-900 dark:text-gray-200">
+                                             {clinic.username || '—'}
+                                          </span>
+                                          {clinic.username && (
+                                             <button
+                                                type="button"
+                                                onClick={() => handleCopy(clinic.username, `login-${clinic.id}`)}
+                                                title="Login'dan nusxa olish"
+                                                className="p-1 rounded text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                             >
+                                                {copiedKey === `login-${clinic.id}`
+                                                   ? <Check className="w-3.5 h-3.5 text-green-600" />
+                                                   : <Copy className="w-3.5 h-3.5" />}
+                                             </button>
+                                          )}
+                                       </div>
+                                       {clinic.phone && (
+                                          telegramLinkFor(clinic.phone) ? (
+                                             <a
+                                                href={telegramLinkFor(clinic.phone)!}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                title="Telegramda ochish"
+                                                className="mt-0.5 inline-flex items-center gap-1 text-xs text-sky-600 dark:text-sky-400 hover:underline"
+                                             >
+                                                <Send className="w-3 h-3" />
+                                                {clinic.phone}
+                                             </a>
+                                          ) : (
+                                             <div className="mt-0.5 text-xs text-gray-500">{clinic.phone}</div>
+                                          )
+                                       )}
                                     </td>
                                     <td className="p-4">
                                        <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase
