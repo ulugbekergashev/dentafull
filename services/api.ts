@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, CashRegisterDay } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, CashRegisterDay } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -1307,6 +1307,37 @@ export const api = {
                 return Promise.resolve({ success: true as const });
             }
             return fetchJson<{ success: true }>(`/leads/${id}`, {
+                method: 'DELETE',
+            });
+        },
+        // Tashqi lid manbalari (yuboraman.uz va h.k.) uchun API kalit
+        getApiKey: (clinicId: string) => {
+            if (isDemoMode()) {
+                return Promise.resolve({
+                    apiKey: 'dk_live_demo0000000000000000000000000000',
+                    createdAt: new Date().toISOString(),
+                    endpoint: 'https://demo.dentacrm.uz/api/public/leads'
+                } as LeadApiKeyInfo);
+            }
+            return fetchJson<LeadApiKeyInfo>(`/leads/api-key?clinicId=${clinicId}`);
+        },
+        generateApiKey: (clinicId: string) => {
+            if (isDemoMode()) {
+                return Promise.resolve({
+                    apiKey: `dk_live_demo${Date.now()}`,
+                    createdAt: new Date().toISOString(),
+                    endpoint: 'https://demo.dentacrm.uz/api/public/leads'
+                } as LeadApiKeyInfo);
+            }
+            return fetchJson<LeadApiKeyInfo>('/leads/api-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId }),
+            });
+        },
+        revokeApiKey: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve({ success: true as const });
+            return fetchJson<{ success: true }>(`/leads/api-key?clinicId=${clinicId}`, {
                 method: 'DELETE',
             });
         }

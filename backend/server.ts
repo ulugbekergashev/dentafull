@@ -107,6 +107,10 @@ if (!JWT_SECRET) {
 const TOKEN_TTL = '30d';
 const TOKEN_RENEW_THRESHOLD_SEC = 7 * 24 * 60 * 60; // 7 kun
 
+// Tashqi hamkorlarga (yuboraman va h.k.) beriladigan endpoint manzilini yasash uchun.
+// Railway'da PUBLIC_API_BASE_URL ni o'rnatib qo'yish kerak.
+const PUBLIC_API_BASE_URL = (process.env.PUBLIC_API_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
+
 
 // Standard CORS Middleware
 const corsOptions = {
@@ -145,6 +149,9 @@ app.use(cors(corsOptions));
 // Pre-flight handling is integrated into app.use(cors())
 
 app.use(express.json());
+// Tashqi lid manbalari ko'pincha oddiy forma (x-www-form-urlencoded) yuboradi —
+// JSON'dan tashqari uni ham qabul qilamiz.
+app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
 
 app.get('/', (req, res) => {
@@ -2525,10 +2532,103 @@ app.get('/api/leads', authenticateToken, async (req, res) => {
     }
 });
 
+// --- Lid integratsiyasi uchun API kalit ---
+// DIQQAT: bu marshrutlar '/api/leads/:id' dan OLDIN turishi shart, aks holda
+// DELETE '/api/leads/api-key' so'rovi ':id' bilan mos tushib ketadi.
+
+const leadCrypto = require('crypto');
+const generateLeadApiKey = () => `dk_live_${leadCrypto.randomBytes(24).toString('hex')}`;
+
+// Kalitni ko'rish/yaratish faqat klinika egasiga (va SUPER_ADMIN'ga) ochiq:
+// kalit qo'lga tushsa, istalgan odam klinikaga lid yoza oladi.
+const leadApiKeyGuard = [authenticateToken, requireRole('CLINIC_ADMIN', 'SUPER_ADMIN')];
+
+app.get('/api/leads/api-key', ...leadApiKeyGuard, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+        const clinic = await prisma.clinic.findUnique({
+            where: { id: clinicId as string },
+            select: { leadApiKey: true, leadApiKeyCreatedAt: true }
+        });
+        if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+
+        res.json({
+            apiKey: clinic.leadApiKey || null,
+            createdAt: clinic.leadApiKeyCreatedAt || null,
+            endpoint: `${PUBLIC_API_BASE_URL}/api/public/leads`
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch lead API key' });
+    }
+});
+
+// Yangi kalit yaratadi. Kalit allaqachon bo'lsa — almashtiriladi (eskisi darhol ishlamay qoladi).
+app.post('/api/leads/api-key', ...leadApiKeyGuard, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+        const apiKey = generateLeadApiKey();
+        const clinic = await prisma.clinic.update({
+            where: { id: clinicId as string },
+            data: { leadApiKey: apiKey, leadApiKeyCreatedAt: new Date() },
+            select: { leadApiKey: true, leadApiKeyCreatedAt: true }
+        });
+
+        res.json({
+            apiKey: clinic.leadApiKey,
+            createdAt: clinic.leadApiKeyCreatedAt,
+            endpoint: `${PUBLIC_API_BASE_URL}/api/public/leads`
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create lead API key' });
+    }
+});
+
+app.delete('/api/leads/api-key', ...leadApiKeyGuard, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+        await prisma.clinic.update({
+            where: { id: clinicId as string },
+            data: { leadApiKey: null, leadApiKeyCreatedAt: null }
+        });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to revoke lead API key' });
+    }
+});
+
+// Lid yozuviga yozishga ruxsat etilgan maydonlar. Oq ro'yxat qo'llaniladi, chunki
+// req.body ni to'g'ridan-to'g'ri uzatish mijozga clinicId ni almashtirib, begona
+// klinikaga lid yozish imkonini berardi.
+const pickLeadFields = (body: any) => {
+    const src = body && typeof body === 'object' ? body : {};
+    const out: any = {};
+    for (const key of ['name', 'phone', 'service', 'source', 'notes', 'address', 'dob', 'status']) {
+        if (src[key] !== undefined) out[key] = src[key];
+    }
+    return out;
+};
+
 app.post('/api/leads', authenticateToken, async (req, res) => {
     try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) {
+            return res.status(400).json({ error: 'clinicId is required' });
+        }
+
+        const data = pickLeadFields(req.body);
+        if (!data.name || !data.phone) {
+            return res.status(400).json({ error: 'name va phone majburiy' });
+        }
+
+        // clinicId har doim tokendan olinadi (SUPER_ADMIN uchun so'rovdan) — body'dan emas.
         const lead = await prisma.lead.create({
-            data: req.body
+            data: { ...data, status: data.status || 'New', clinicId }
         });
         res.json(lead);
     } catch (error) {
@@ -2539,9 +2639,10 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
 app.put('/api/leads/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'lead', req.params.id))) return;
+        // clinicId yangilanmaydi: aks holda lidni begona klinikaga ko'chirib yuborish mumkin edi.
         const lead = await prisma.lead.update({
             where: { id: req.params.id },
-            data: req.body
+            data: pickLeadFields(req.body)
         });
         res.json(lead);
     } catch (error) {
@@ -2558,6 +2659,194 @@ app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: 'Failed to delete lead' });
+    }
+});
+
+// ===================================================================
+// Tashqi manbalardan lid qabul qilish (yuboraman.uz va shu kabilar)
+// ===================================================================
+
+// Kelgan kalitni solishtirish uchun yagona ko'rinishga keltiradi:
+// "To'liq ism", "full_name", "FULL NAME" — hammasi bir xil taqqoslanadi.
+const canonLeadKey = (key: string): string =>
+    String(key || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[`’‘]/g, "'")
+        .replace(/[\s_\-]+/g, ' ')
+        .trim();
+
+// Tanish maydonlar. Ro'yxatda yo'q kalitlar YO'QOLMAYDI — ular notes ichiga
+// "Savol: Javob" bo'lib tushadi va Leads sahifasida alohida karta bo'lib chiqadi.
+// Shu sababli target formasi o'zgarsa ham bu kodga tegish shart emas.
+const LEAD_FIELD_ALIASES: Record<string, string> = {
+    'name': 'name', 'ism': 'name', 'fio': 'name', 'full name': 'name', 'fullname': 'name',
+    "to'liq ism": 'name', 'ism familiya': 'name', 'client name': 'name', 'имя': 'name', 'фио': 'name',
+
+    'phone': 'phone', 'phone number': 'phone', 'telefon': 'phone', 'tel': 'phone',
+    'raqam': 'phone', 'telefon raqami': 'phone', 'number': 'phone', 'телефон': 'phone', 'номер': 'phone',
+
+    'service': 'service', 'xizmat': 'service', 'xizmat turi': 'service', 'услуга': 'service',
+
+    'source': 'source', 'manba': 'source', 'utm source': 'source', 'источник': 'source',
+
+    'address': 'address', 'manzil': 'address', 'adres': 'address',
+    'yashash manzili': 'address', 'turar manzili': 'address', 'адрес': 'address',
+
+    'dob': 'dob', 'birth date': 'dob', 'birthdate': 'dob', "tug'ilgan sana": 'dob',
+    'tugilgan sana': 'dob', 'дата рождения': 'dob',
+
+    'notes': 'notes', 'note': 'notes', 'izoh': 'notes', 'comment': 'notes',
+    'message': 'notes', 'xabar': 'notes', 'комментарий': 'notes',
+};
+
+const MAX_EXTRA_LEAD_FIELDS = 40;
+
+// O'zbek raqamlarini yagona formatga keltiradi, aks holda dublikat tekshiruvi ishlamaydi
+// ("+998 90 123-45-67" va "901234567" bir xil raqam).
+const normalizeLeadPhone = (value: string): string => {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.length === 9) return `+998${digits}`;
+    if (digits.length === 12 && digits.startsWith('998')) return `+${digits}`;
+    if (digits.length === 13 && digits.startsWith('0998')) return `+${digits.slice(1)}`;
+    return `+${digits}`;
+};
+
+// Ixtiyoriy shakldagi payload'ni Lead maydonlariga ajratadi.
+const buildLeadFromPayload = (payload: any): { fields: any; notes: string | null } => {
+    const fields: any = {};
+    const extras: string[] = [];
+
+    for (const [rawKey, rawValue] of Object.entries(payload || {})) {
+        if (rawValue === null || rawValue === undefined) continue;
+
+        const value = (typeof rawValue === 'object' ? JSON.stringify(rawValue) : String(rawValue)).trim();
+        if (!value) continue;
+
+        const target = LEAD_FIELD_ALIASES[canonLeadKey(rawKey)];
+        if (target) {
+            if (!fields[target]) fields[target] = value;
+            continue;
+        }
+
+        if (extras.length >= MAX_EXTRA_LEAD_FIELDS) continue;
+
+        // Noma'lum maydon bir qatorga siqiladi, chunki Leads sahifasi notes'ni
+        // qatorma-qator "Savol: Javob" qilib o'qiydi. Asl qiymat raw ustunida qoladi.
+        const label = String(rawKey).replace(/[_\-]+/g, ' ').trim().replace(/^./, (c: string) => c.toUpperCase());
+        extras.push(`${label}: ${value.replace(/\s*\n\s*/g, ' ')}`);
+    }
+
+    const sections: string[] = [];
+    if (fields.notes) sections.push(fields.notes);
+    if (extras.length) sections.push(`Savollar va Javoblar:\n${extras.join('\n')}`);
+
+    return { fields, notes: sections.length ? sections.join('\n\n') : null };
+};
+
+// Oddiy xotiradagi rate-limit. Bitta instansiya uchun mo'ljallangan; agar server
+// bir nechta nusxada ishlasa, chegara har nusxada alohida hisoblanadi.
+const publicLeadHits = new Map<string, number[]>();
+const PUBLIC_LEAD_WINDOW_MS = 60 * 1000;
+const PUBLIC_LEAD_MAX_PER_WINDOW = 60;
+const PUBLIC_LEAD_DEDUP_MINUTES = 15;
+
+const publicLeadRateLimitOk = (key: string): boolean => {
+    const now = Date.now();
+    const hits = (publicLeadHits.get(key) || []).filter(t => now - t < PUBLIC_LEAD_WINDOW_MS);
+    hits.push(now);
+    publicLeadHits.set(key, hits);
+
+    if (publicLeadHits.size > 500) {
+        for (const [k, v] of publicLeadHits) {
+            if (!v.some(t => now - t < PUBLIC_LEAD_WINDOW_MS)) publicLeadHits.delete(k);
+        }
+    }
+    return hits.length <= PUBLIC_LEAD_MAX_PER_WINDOW;
+};
+
+// Lid tushishi bilan klinikaga Telegramda xabar beradi — lid-genda javob tezligi hal qiluvchi.
+const notifyNewLead = async (clinic: any, lead: any) => {
+    try {
+        if (!clinic.botToken || !clinic.telegramChatId) return;
+
+        const lines = ['🆕 Yangi lid', '', `👤 ${lead.name}`, `📞 ${lead.phone}`];
+        if (lead.service) lines.push(`🦷 ${lead.service}`);
+        if (lead.address) lines.push(`📍 ${lead.address}`);
+        if (lead.source) lines.push(`🔗 Manba: ${lead.source}`);
+
+        await botManager.notifyClinicUser(clinic.id, clinic.telegramChatId, lines.join('\n'), undefined, 'NewLead', undefined, { source: 'lead_webhook' });
+    } catch (err: any) {
+        console.error('❌ Yangi lid bildirishnomasi yuborilmadi:', err?.message || err);
+    }
+};
+
+app.post('/api/public/leads', async (req, res) => {
+    const apiKey = String(req.headers['x-api-key'] || (req.query as any)?.api_key || '').trim();
+    if (!apiKey) {
+        return res.status(401).json({ error: 'X-API-Key sarlavhasi talab qilinadi' });
+    }
+
+    if (!publicLeadRateLimitOk(apiKey)) {
+        return res.status(429).json({ error: 'Juda ko\'p so\'rov yuborildi. Bir daqiqadan so\'ng qayta urinib ko\'ring.' });
+    }
+
+    try {
+        const clinic = await prisma.clinic.findUnique({
+            where: { leadApiKey: apiKey },
+            select: { id: true, name: true, status: true, botToken: true, telegramChatId: true }
+        });
+        if (!clinic) {
+            return res.status(401).json({ error: 'API kalit yaroqsiz' });
+        }
+        if (clinic.status === 'Deleted' || clinic.status === 'Blocked') {
+            return res.status(403).json({ error: 'Klinika faol emas' });
+        }
+
+        const payload = req.body && typeof req.body === 'object' ? req.body : {};
+        const { fields, notes } = buildLeadFromPayload(payload);
+
+        const phone = normalizeLeadPhone(fields.phone || '');
+        if (!phone) {
+            return res.status(400).json({ error: 'phone (telefon raqami) majburiy' });
+        }
+
+        // Bir xil raqamdan qisqa vaqt ichida takror kelgan lidni ikkilantirmaymiz —
+        // ko'p manbalar muvaffaqiyatsiz deb hisoblab qayta yuboradi.
+        const since = new Date(Date.now() - PUBLIC_LEAD_DEDUP_MINUTES * 60 * 1000);
+        const duplicate = await prisma.lead.findFirst({
+            where: { clinicId: clinic.id, phone, createdAt: { gte: since } },
+            select: { id: true }
+        });
+        if (duplicate) {
+            return res.status(200).json({ success: true, duplicate: true, id: duplicate.id });
+        }
+
+        const lead = await prisma.lead.create({
+            data: {
+                name: fields.name || 'Noma\'lum',
+                phone,
+                service: fields.service || null,
+                source: fields.source || 'yuboraman',
+                address: fields.address || null,
+                dob: fields.dob || null,
+                notes,
+                raw: JSON.stringify(payload).slice(0, 8000),
+                status: 'New',
+                clinicId: clinic.id
+            }
+        });
+
+        // Avval javob qaytaramiz — tashqi servis Telegram yuborilishini kutib turmasin.
+        res.status(201).json({ success: true, id: lead.id });
+
+        notifyNewLead(clinic, lead);
+    } catch (error: any) {
+        console.error('❌ Public lead qabul qilishda xatolik:', error?.message || error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Lidni saqlab bo\'lmadi' });
+        }
     }
 });
 
@@ -3262,7 +3551,7 @@ app.get('/api/facebook/auth-url', authenticateToken, (req, res) => {
     }
 
     // Updated scopes to include business management and profile for better visibility
-    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata', 'public_profile'];
+    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata', 'public_profile', 'business_management'];
     const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes.join(',')}&state=${clinicId}`;
 
     res.json({ url });
@@ -3458,7 +3747,7 @@ app.get('/api/admin/facebook/auth-url', authenticateToken, requireRole('SUPER_AD
         return res.status(500).json({ error: 'Facebook App ID topilmadi. Iltimos, .env faylida FACEBOOK_APP_ID ni kiriting.' });
     }
 
-    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata', 'public_profile'];
+    const scopes = ['pages_show_list', 'leads_retrieval', 'pages_read_engagement', 'pages_manage_metadata', 'public_profile', 'business_management'];
     const url = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes.join(',')}&state=platform`;
 
     res.json({ url });
@@ -4697,6 +4986,16 @@ async function runStartupMigrations() {
     // interfeysda "—" ko'rinadi), keyin faqat yangi yozuvlar uchun DEFAULT beramiz.
     await migrationStep('Transaction.createdAt', `ALTER TABLE "Transaction" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3)`);
     await migrationStep('Transaction.createdAt default', `ALTER TABLE "Transaction" ALTER COLUMN "createdAt" SET DEFAULT CURRENT_TIMESTAMP`);
+
+    // Tashqi lid manbalari (yuboraman.uz va h.k.) uchun maydonlar.
+    // Prisma sxemasida bor ekan, bazada ham bo'lishi SHART — aks holda har bir
+    // Clinic/Lead so'rovi 500 beradi va tizim ishlamay qoladi.
+    await migrationStep('Clinic.leadApiKey', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "leadApiKey" TEXT`);
+    await migrationStep('Clinic.leadApiKeyCreatedAt', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "leadApiKeyCreatedAt" TIMESTAMP(3)`);
+    await migrationStep('Clinic.leadApiKey unique', `CREATE UNIQUE INDEX IF NOT EXISTS "Clinic_leadApiKey_key" ON "Clinic" ("leadApiKey")`);
+    await migrationStep('Lead.raw', `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "raw" TEXT`);
+    await migrationStep('Lead.address', `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "address" TEXT`);
+    await migrationStep('Lead.dob', `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "dob" TEXT`);
 
     await migrationStep('LabTechnician.username', `ALTER TABLE "LabTechnician" ADD COLUMN IF NOT EXISTS "username" TEXT`);
     await migrationStep('LabTechnician.password', `ALTER TABLE "LabTechnician" ADD COLUMN IF NOT EXISTS "password" TEXT`);

@@ -315,6 +315,8 @@ export interface Clinic {
   prepaymentAmount?: number;
   salesAgentId?: string | null; // Biriktirilgan sotuvchi (reseller)
   accessControl?: string | AccessControl | null; // DB'da JSON string, frontendda parse qilinadi
+  leadApiKey?: string | null;        // tashqi lid manbalari uchun kalit
+  leadApiKeyCreatedAt?: string | null;
 }
 
 // Rol bo'yicha modul/ma'lumot ko'rish huquqlari (Sozlamalar → Ruxsatlar).
@@ -447,10 +449,20 @@ export interface Lead {
   service?: string;
   source?: string;
   notes?: string;
+  address?: string;        // tashqi manbadan kelsa, bemorga aylantirishda ko'chiriladi
+  dob?: string;            // tug'ilgan sana (kelgan bo'lsa)
+  raw?: string;            // tashqi payload'ning asl nusxasi (JSON matn)
   status: 'New' | 'Contacted' | 'Thinking' | 'Booked' | 'Cancelled';
   createdAt: string;
   updatedAt: string;
   clinicId: string;
+}
+
+// Tashqi lid manbalari (yuboraman.uz va h.k.) uchun integratsiya ma'lumotlari.
+export interface LeadApiKeyInfo {
+  apiKey: string | null;
+  createdAt: string | null;
+  endpoint: string;
 }
 
 export interface SalesAgent {

@@ -666,11 +666,14 @@ const AppContent: React.FC = () => {
       const firstName = nameParts[0] || '';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
 
+      // Tashqi manbadan kelgan lidda manzil va tug'ilgan sana bo'lishi mumkin —
+      // ular bemor kartasidagi o'z maydoniga tushadi, izohlar ichida qolib ketmaydi.
       const newPatient = await api.patients.create({
         firstName,
         lastName,
         phone: lead.phone,
-        dob: '',
+        dob: lead.dob || '',
+        address: lead.address || undefined,
         gender: 'Male',
         status: 'Active',
         lastVisit: 'Never',
