@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Button } from './Common';
-import { Patient, Doctor, Transaction } from '../types';
+import { Patient, Doctor, Transaction, PaymentMethod } from '../types';
+import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { Plus, Loader2 } from 'lucide-react';
 
 interface QuickPaymentModalProps {
@@ -20,7 +21,7 @@ interface QuickPaymentModalProps {
 
 const emptyForm = {
     patientId: '', doctorId: '', service: '', amount: '',
-    type: 'Cash' as 'Cash' | 'Card' | 'Insurance' | 'Balance',
+    type: 'Cash' as PaymentMethod,
 };
 
 const inputCls = "w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500/30 dark:text-white";
@@ -112,7 +113,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                 <div>
                     <label className={labelCls}>To'lov usuli</label>
                     <div className="flex gap-2 flex-wrap">
-                        {(['Cash', 'Card', 'Insurance', 'Balance'] as const).map(type => (
+                        {[...INCOMING_PAYMENT_METHODS, 'Balance' as PaymentMethod].map(type => (
                             <button
                                 key={type}
                                 onClick={() => setForm(f => ({ ...f, type }))}
@@ -120,7 +121,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                                     ? 'bg-primary text-white border-primary'
                                     : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                             >
-                                {type === 'Cash' ? 'Naqd' : type === 'Card' ? 'Karta' : type === 'Insurance' ? 'Sug\'urta' : 'Balans'}
+                                {getPaymentMethodLabel(type)}
                             </button>
                         ))}
                     </div>

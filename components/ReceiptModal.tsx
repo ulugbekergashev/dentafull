@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Transaction, Clinic } from '../types';
 import { Modal, Button } from './Common';
+import { getPaymentMethodLabel } from '../utils/paymentMethods';
 import { Printer } from 'lucide-react';
 
 interface ReceiptModalProps {
@@ -112,7 +113,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, tra
                      </div>
                      <div className="flex justify-between mt-1 text-xs">
                         <span>To'lov usuli:</span>
-                        <span>{transaction.type === 'Cash' ? 'Naqd' : transaction.type === 'Card' ? 'Karta' : 'Sug\'urta'}</span>
+                        <span>{getPaymentMethodLabel(transaction.type)}</span>
                      </div>
                   </div>
 

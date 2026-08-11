@@ -52,7 +52,7 @@ export function transactionBelongsToDoctor(tx: Transaction, doctor: Doctor): boo
 }
 
 // Tranzaksiyani shifokorga biriktirish: doctorId → aniq ism → yagona shifokor fallback
-function findDoctorForTransaction(tx: Transaction, doctors: Doctor[]): Doctor | undefined {
+export function findDoctorForTransaction(tx: Transaction, doctors: Doctor[]): Doctor | undefined {
     let doctor = doctors.find(d => transactionBelongsToDoctor(tx, d));
 
     // Yagona shifokorli klinikada barcha kirim o'sha shifokorga tegishli

@@ -10,7 +10,8 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
-import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service } from '../types';
+import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod } from '../types';
+import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { transactionBelongsToDoctor, calculateAppointmentTotal, isAppointmentPaid } from '../utils/financialCalculations';
 import { useLanguage } from '../context/LanguageContext';
@@ -50,7 +51,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const [payingAppointment, setPayingAppointment] = useState<Appointment | null>(null);
   const [payingDebt, setPayingDebt] = useState<Transaction | null>(null);
   const [debtPayAmount, setDebtPayAmount] = useState('');
-  const [debtPayMethod, setDebtPayMethod] = useState<'Cash' | 'Card'>('Cash');
+  const [debtPayMethod, setDebtPayMethod] = useState<PaymentMethod>('Cash');
   const [debtSaving, setDebtSaving] = useState(false);
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
@@ -1084,8 +1085,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
-                <div className="flex gap-2">
-                  {(['Cash', 'Card'] as const).map(m => (
+                <div className="flex gap-2 flex-wrap">
+                  {INCOMING_PAYMENT_METHODS.map(m => (
                     <button
                       key={m}
                       type="button"
@@ -1094,7 +1095,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                         ? 'bg-primary text-white border-primary'
                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                     >
-                      {m === 'Cash' ? 'Naqd' : 'Karta'}
+                      {getPaymentMethodLabel(m)}
                     </button>
                   ))}
                 </div>

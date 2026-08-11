@@ -1,3 +1,6 @@
+import type { PaymentMethod } from './utils/paymentMethods';
+
+export type { PaymentMethod };
 
 export enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
@@ -98,13 +101,14 @@ export interface Transaction {
   patientName: string;
   date: string;
   amount: number;
-  type: 'Cash' | 'Card' | 'Insurance' | 'Balance';
+  type: PaymentMethod;
   service: string;
   status: 'Paid' | 'Pending' | 'Overdue';
   clinicId: string;
   doctorId?: string;      // Optional - for backward compatibility
   doctorName?: string;    // Optional - for backward compatibility
   patientId?: string;     // Optional - for backward compatibility
+  createdAt?: string | null; // to'lov qabul qilingan aniq vaqt (eski yozuvlarda yo'q)
   discountPercent?: number; // Chegirma foizi (0-100)
   discountAmount?: number;  // Chegirma summasi
 }
@@ -127,7 +131,7 @@ export interface Expense {
   amount: number;
   category: ExpenseCategory;
   title: string;
-  method?: 'Cash' | 'Card' | null;
+  method?: PaymentMethod | null;
   note?: string | null;
   clinicId: string;
   doctorId?: string | null;      // 'DoctorShare' va shifokorga 'Salary' uchun
@@ -135,6 +139,24 @@ export interface Expense {
   labOrderId?: string | null;    // avtomatik Laboratoriya xarajati bog'lami
   inventoryItemId?: string | null; // avtomatik Ombor xarajati bog'lami
   createdAt?: string;
+}
+
+/**
+ * Kassa kunini yopish yozuvi. Kun bo'yicha bitta bo'ladi (qayta yopilsa yangilanadi).
+ * Yopish kunni qulflamaydi — kechroq kelgan to'lov baribir yoziladi, faqat Kassa
+ * sahifasida "yopilgandan keyin o'zgardi" belgisi chiqadi.
+ */
+export interface CashRegisterDay {
+  id: string;
+  clinicId: string;
+  date: string;
+  countedCash: number;   // kassir sanagan naqd
+  expectedCash: number;  // yopilgan daqiqadagi hisob bo'yicha naqd
+  difference: number;    // countedCash − expectedCash
+  note?: string | null;
+  closedByName?: string | null;
+  closedByRole?: string | null;
+  closedAt: string;
 }
 
 // ─── Xabarlar (yagona xabarlar tizimi) ───

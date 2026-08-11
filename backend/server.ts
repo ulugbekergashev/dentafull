@@ -1465,9 +1465,17 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
         const oldTx = await prisma.transaction.findUnique({ where: { id: req.params.id } });
         if (!oldTx) return res.status(404).json({ error: 'Transaction not found' });
 
+        // createdAt — to'lov qabul qilingan daqiqa, tashqaridan o'zgartirilmaydi.
+        const { createdAt: _ignored, ...updateData } = req.body || {};
+        // Sana ko'chirilsa (masalan, qarz bugun to'landi) vaqt ham yangilanadi —
+        // aks holda kassa kitobida bugungi kunda eski vaqt turib qolardi.
+        if (updateData.date && updateData.date !== oldTx.date) {
+            updateData.createdAt = new Date();
+        }
+
         const transaction = await prisma.transaction.update({
             where: { id: req.params.id },
-            data: req.body
+            data: updateData
         });
 
         // Update patient balance if patientId is linked
@@ -1623,6 +1631,91 @@ app.delete('/api/expenses/:id', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Expense delete error:', error);
         res.status(500).json({ error: 'Failed to delete expense' });
+    }
+});
+
+// --- Kassa kunini yopish (Kassa kitobi) ---
+// Yopish kunni QULFLAMAYDI: kechroq kelgan to'lov baribir yoziladi, faqat kassa sahifasida
+// "yopilgandan keyin o'zgardi" belgisi chiqadi. Qattiq blok ish oqimini to'xtatib qo'yardi.
+
+app.get('/api/cash-register', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+        const { from, to } = req.query as { from?: string; to?: string };
+        const where: any = { clinicId };
+        if (from || to) {
+            where.date = {};
+            if (from) where.date.gte = from;
+            if (to) where.date.lte = to;
+        }
+
+        const days = await prisma.cashRegisterDay.findMany({
+            where,
+            orderBy: { date: 'desc' },
+        });
+        res.json(days);
+    } catch (error: any) {
+        console.error('Cash register fetch error:', error);
+        res.status(500).json({ error: 'Kassa yopilishlarini yuklashda xatolik' });
+    }
+});
+
+app.post('/api/cash-register/close', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+        const user = (req as any).user;
+        const { date, countedCash, expectedCash, note } = req.body || {};
+
+        if (!date || typeof date !== 'string') {
+            return res.status(400).json({ error: 'Sana ko\'rsatilmagan' });
+        }
+        const counted = Number(countedCash);
+        const expected = Number(expectedCash);
+        if (!isFinite(counted) || !isFinite(expected)) {
+            return res.status(400).json({ error: 'Summa noto\'g\'ri' });
+        }
+
+        const data = {
+            countedCash: counted,
+            expectedCash: expected,
+            difference: counted - expected,
+            note: note ? String(note) : null,
+            closedByName: user?.name || null,
+            closedByRole: user?.role || null,
+            closedAt: new Date(),
+        };
+
+        // Qayta yopish — mavjud yozuv yangilanadi (kun bo'yicha yagona yozuv)
+        const closure = await prisma.cashRegisterDay.upsert({
+            where: { clinicId_date: { clinicId, date } },
+            update: data,
+            create: { clinicId, date, ...data },
+        });
+
+        res.json(closure);
+    } catch (error: any) {
+        console.error('Cash register close error:', error);
+        res.status(500).json({ error: 'Kunni yopishda xatolik: ' + error.message });
+    }
+});
+
+// Qayta ochish — faqat klinika admini (registrator o'z xatosini yashira olmasin)
+app.delete('/api/cash-register/:date', authenticateToken, requireRole('CLINIC_ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+        await prisma.cashRegisterDay.deleteMany({
+            where: { clinicId, date: req.params.date },
+        });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Cash register reopen error:', error);
+        res.status(500).json({ error: 'Kunni qayta ochishda xatolik' });
     }
 });
 
@@ -4562,55 +4655,151 @@ app.get('/api/superadmin/sales', authenticateToken, async (req, res) => {
 // START SERVER
 // ============================================
 
-async function runStartupMigrations() {
+// Migratsiyalar faqat QO'SHADI: ADD COLUMN / CREATE TABLE / CREATE INDEX.
+// Hech qanday DROP, UPDATE yoki mavjud ustunni o'zgartirish yo'q — eski ma'lumot tegilmaydi.
+//
+// Har bir qadam alohida try/catch: ilgari hammasi bitta blokda edi va birinchi xatodan keyin
+// qolganlari jimgina bajarilmay qolardi.
+const migrationStep = async (label: string, sql: string): Promise<boolean> => {
     try {
-        await prisma.$executeRawUnsafe(`ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentEnabled" BOOLEAN NOT NULL DEFAULT false`);
-        await prisma.$executeRawUnsafe(`ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentCardNumber" TEXT`);
-        await prisma.$executeRawUnsafe(`ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentAmount" DOUBLE PRECISION`);
-        await prisma.$executeRawUnsafe(`ALTER TABLE "Doctor" ADD COLUMN IF NOT EXISTS "startHour" INTEGER`);
-        await prisma.$executeRawUnsafe(`ALTER TABLE "Doctor" ADD COLUMN IF NOT EXISTS "endHour" INTEGER`);
-        await prisma.$executeRawUnsafe(`ALTER TABLE "LabTechnician" ADD COLUMN IF NOT EXISTS "username" TEXT`);
-        await prisma.$executeRawUnsafe(`ALTER TABLE "LabTechnician" ADD COLUMN IF NOT EXISTS "password" TEXT`);
-        await prisma.$executeRawUnsafe(`
-            DO $$ BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'LabTechnician_username_key'
-                ) THEN
-                    ALTER TABLE "LabTechnician" ADD CONSTRAINT "LabTechnician_username_key" UNIQUE ("username");
-                END IF;
-            END $$
-        `);
-        await prisma.$executeRawUnsafe(`
-            CREATE TABLE IF NOT EXISTS "PlatformSetting" (
-                "key"       TEXT NOT NULL PRIMARY KEY,
-                "value"     TEXT,
-                "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-        await prisma.$executeRawUnsafe(`
-            CREATE TABLE IF NOT EXISTS "DemoRequest" (
-                "id"           TEXT NOT NULL PRIMARY KEY,
-                "name"         TEXT NOT NULL,
-                "clinicName"   TEXT,
-                "phone"        TEXT NOT NULL,
-                "city"         TEXT,
-                "doctorsCount" INTEGER,
-                "source"       TEXT,
-                "status"       TEXT NOT NULL DEFAULT 'New',
-                "notes"        TEXT,
-                "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-        console.log('✅ Startup migrations applied successfully');
+        await prisma.$executeRawUnsafe(sql);
+        return true;
     } catch (err: any) {
-        console.error('⚠️ Startup migration warning:', err.message);
+        console.error(`⚠️ Migratsiya qadami bajarilmadi [${label}]:`, err.message);
+        return false;
     }
+};
+
+const columnExists = async (table: string, column: string): Promise<boolean> => {
+    try {
+        const rows: any = await prisma.$queryRawUnsafe(
+            `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2 LIMIT 1`,
+            table, column
+        );
+        return Array.isArray(rows) && rows.length > 0;
+    } catch (err: any) {
+        console.error(`⚠️ Ustunni tekshirib bo'lmadi [${table}.${column}]:`, err.message);
+        return false;
+    }
+};
+
+async function runStartupMigrations() {
+    await migrationStep('Clinic.prepaymentEnabled', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentEnabled" BOOLEAN NOT NULL DEFAULT false`);
+    await migrationStep('Clinic.prepaymentCardNumber', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentCardNumber" TEXT`);
+    await migrationStep('Clinic.prepaymentAmount', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "prepaymentAmount" DOUBLE PRECISION`);
+    await migrationStep('Doctor.startHour', `ALTER TABLE "Doctor" ADD COLUMN IF NOT EXISTS "startHour" INTEGER`);
+    await migrationStep('Doctor.endHour', `ALTER TABLE "Doctor" ADD COLUMN IF NOT EXISTS "endHour" INTEGER`);
+
+    // Kassa kitobi uchun to'lov vaqti.
+    // DEFAULT bilan qo'shilsa Postgres MAVJUD qatorlarni ham shu qiymat bilan to'ldiradi —
+    // shunda barcha eski to'lovlar deploy vaqtini "to'lov vaqti" deb ko'rsatardi.
+    // Shuning uchun avval DEFAULTsiz qo'shamiz (eski qatorlar NULL bo'lib qoladi,
+    // interfeysda "—" ko'rinadi), keyin faqat yangi yozuvlar uchun DEFAULT beramiz.
+    await migrationStep('Transaction.createdAt', `ALTER TABLE "Transaction" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3)`);
+    await migrationStep('Transaction.createdAt default', `ALTER TABLE "Transaction" ALTER COLUMN "createdAt" SET DEFAULT CURRENT_TIMESTAMP`);
+
+    await migrationStep('LabTechnician.username', `ALTER TABLE "LabTechnician" ADD COLUMN IF NOT EXISTS "username" TEXT`);
+    await migrationStep('LabTechnician.password', `ALTER TABLE "LabTechnician" ADD COLUMN IF NOT EXISTS "password" TEXT`);
+    await migrationStep('LabTechnician.username unique', `
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'LabTechnician_username_key'
+            ) THEN
+                ALTER TABLE "LabTechnician" ADD CONSTRAINT "LabTechnician_username_key" UNIQUE ("username");
+            END IF;
+        END $$
+    `);
+
+    await migrationStep('CashRegisterDay table', `
+        CREATE TABLE IF NOT EXISTS "CashRegisterDay" (
+            "id"           TEXT NOT NULL PRIMARY KEY,
+            "clinicId"     TEXT NOT NULL,
+            "date"         TEXT NOT NULL,
+            "countedCash"  DOUBLE PRECISION NOT NULL,
+            "expectedCash" DOUBLE PRECISION NOT NULL,
+            "difference"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+            "note"         TEXT,
+            "closedByName" TEXT,
+            "closedByRole" TEXT,
+            "closedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('CashRegisterDay unique index', `
+        CREATE UNIQUE INDEX IF NOT EXISTS "CashRegisterDay_clinicId_date_key"
+        ON "CashRegisterDay" ("clinicId", "date")
+    `);
+    await migrationStep('CashRegisterDay index', `
+        CREATE INDEX IF NOT EXISTS "CashRegisterDay_clinicId_idx"
+        ON "CashRegisterDay" ("clinicId")
+    `);
+    await migrationStep('CashRegisterDay fkey', `
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'CashRegisterDay_clinicId_fkey'
+            ) THEN
+                ALTER TABLE "CashRegisterDay"
+                ADD CONSTRAINT "CashRegisterDay_clinicId_fkey"
+                FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id");
+            END IF;
+        END $$
+    `);
+
+    await migrationStep('PlatformSetting table', `
+        CREATE TABLE IF NOT EXISTS "PlatformSetting" (
+            "key"       TEXT NOT NULL PRIMARY KEY,
+            "value"     TEXT,
+            "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('DemoRequest table', `
+        CREATE TABLE IF NOT EXISTS "DemoRequest" (
+            "id"           TEXT NOT NULL PRIMARY KEY,
+            "name"         TEXT NOT NULL,
+            "clinicName"   TEXT,
+            "phone"        TEXT NOT NULL,
+            "city"         TEXT,
+            "doctorsCount" INTEGER,
+            "source"       TEXT,
+            "status"       TEXT NOT NULL DEFAULT 'New',
+            "notes"        TEXT,
+            "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    console.log('✅ Startup migrations applied');
+}
+
+/**
+ * Prisma modeli Transaction.createdAt ni SELECT qiladi — ustun bo'lmasa BARCHA to'lov
+ * so'rovlari xato beradi, ya'ni klinikalar uchun tizim ishlamay qoladi.
+ * Shuning uchun serverni ishga tushirishdan oldin majburiy tekshiramiz.
+ */
+async function verifyCriticalSchema(): Promise<boolean> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        if (await columnExists('Transaction', 'createdAt')) return true;
+        console.error(`⚠️ "Transaction"."createdAt" topilmadi (urinish ${attempt}/3), qayta urinilmoqda...`);
+        await migrationStep('Transaction.createdAt (retry)', `ALTER TABLE "Transaction" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3)`);
+        await new Promise(r => setTimeout(r, 2000));
+    }
+    return columnExists('Transaction', 'createdAt');
 }
 
 console.log('🚀 Server is initializing...');
-runStartupMigrations().then(() => {
-    app.listen(PORT, () => {
-        console.log(`✅ Server successfully started on port ${PORT}`);
+runStartupMigrations()
+    .then(verifyCriticalSchema)
+    .then((ok) => {
+        if (!ok) {
+            // Ataylab ishga tushmaymiz: buzuq versiya trafik olgandan ko'ra,
+            // deploy muvaffaqiyatsiz bo'lib eski versiya ishlab turgani xavfsizroq.
+            console.error('❌ KRITIK: "Transaction"."createdAt" ustunini qo\'shib bo\'lmadi. Server ishga tushirilmaydi.');
+            process.exit(1);
+        }
+        app.listen(PORT, () => {
+            console.log(`✅ Server successfully started on port ${PORT}`);
+        });
+    })
+    .catch((err: any) => {
+        console.error('❌ Ishga tushirishda kutilmagan xatolik:', err);
+        process.exit(1);
     });
-});

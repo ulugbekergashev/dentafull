@@ -1,13 +1,7 @@
 import * as XLSX from 'xlsx';
 import { Transaction, Expense, Doctor, EXPENSE_CATEGORY_LABELS } from '../types';
 import { TotalFinancials, DoctorShareSummary } from './financialCalculations';
-
-const METHOD_LABELS: Record<string, string> = {
-    Cash: 'Naqd',
-    Card: 'Karta',
-    Insurance: "Sug'urta",
-    Balance: 'Balans (Avans)',
-};
+import { PAYMENT_METHODS, getPaymentMethodLabel } from './paymentMethods';
 
 const STATUS_LABELS: Record<string, string> = {
     Paid: "To'langan",
@@ -42,10 +36,10 @@ export function exportFinanceToExcel(data: FinanceExportData) {
         ['Jami kirim (to\'langan)', financials.totalRevenue],
     ];
 
-    (['Cash', 'Card', 'Insurance', 'Balance'] as const).forEach(method => {
-        const txs = transactions.filter(t => t.type === method && t.status === 'Paid');
+    PAYMENT_METHODS.forEach(({ key, label }) => {
+        const txs = transactions.filter(t => t.type === key && t.status === 'Paid');
         if (txs.length > 0) {
-            summaryRows.push([`  ${METHOD_LABELS[method]}`, txs.reduce((s, t) => s + t.amount, 0)]);
+            summaryRows.push([`  ${label}`, txs.reduce((s, t) => s + t.amount, 0)]);
         }
     });
 
@@ -81,7 +75,7 @@ export function exportFinanceToExcel(data: FinanceExportData) {
         'Bemor': t.patientName,
         'Shifokor': t.doctorName || '-',
         'Xizmat': t.service,
-        'Usul': METHOD_LABELS[t.type] || t.type,
+        'Usul': getPaymentMethodLabel(t.type),
         'Summa (UZS)': t.amount,
         'Holat': STATUS_LABELS[t.status] || t.status,
     }));
@@ -97,7 +91,7 @@ export function exportFinanceToExcel(data: FinanceExportData) {
             'Kategoriya': EXPENSE_CATEGORY_LABELS[e.category] || e.category,
             'Nomi': e.title,
             'Shifokor': doctor ? `${doctor.lastName} ${doctor.firstName}` : '-',
-            'Usul': e.method ? (METHOD_LABELS[e.method] || e.method) : '-',
+            'Usul': getPaymentMethodLabel(e.method),
             'Summa (UZS)': e.amount,
             'Izoh': e.note || '',
         };

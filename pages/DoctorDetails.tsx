@@ -4,6 +4,7 @@ import { Doctor, Appointment, Transaction, Patient, Service } from '../types';
 import { Card, Button, Badge } from '../components/Common';
 import { ArrowLeft, Phone, Mail, Award, Calendar, DollarSign, Users, Star } from 'lucide-react';
 import { calculateDoctorShare, transactionBelongsToDoctor } from '../utils/financialCalculations';
+import { getPaymentMethodLabel, getPaymentMethodColor } from '../utils/paymentMethods';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -344,11 +345,11 @@ export const DoctorDetails: React.FC<DoctorDetailsProps> = ({
                                             {tx.amount.toLocaleString()} UZS
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${tx.type === 'Cash' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                                                tx.type === 'Card' ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-400' :
-                                                    'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
-                                                }`}>
-                                                {tx.type === 'Cash' ? t('doctors.details.valCash') : tx.type === 'Card' ? t('doctors.details.valCard') : t('doctors.details.valInsurance')}
+                                            <span
+                                                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700/50 dark:text-gray-200"
+                                            >
+                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getPaymentMethodColor(tx.type) }} />
+                                                {getPaymentMethodLabel(tx.type)}
                                             </span>
                                         </td>
                                     </tr>

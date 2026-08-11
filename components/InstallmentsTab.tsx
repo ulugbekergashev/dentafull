@@ -3,6 +3,7 @@ import { Plus, Check, Calendar, CreditCard, X, Clock } from 'lucide-react';
 import { Button, Card, Modal, Input, Select, Badge } from './Common';
 import { api } from '../services/api';
 import { InstallmentPlan, Doctor, Service, InstallmentItem } from '../types';
+import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { useLanguage } from '../context/LanguageContext';
 
 interface InstallmentsTabProps {
@@ -337,11 +338,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
                   <Select
                      value={paymentMethod}
                      onChange={(e) => setPaymentMethod(e.target.value)}
-                     options={[
-                        { value: 'Cash', label: 'Naqd pul' },
-                        { value: 'Card', label: 'Plastik karta' },
-                        { value: 'Transfer', label: 'Pul o\'tkazish' }
-                     ]}
+                     options={INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: getPaymentMethodLabel(m) }))}
                   />
                </div>
 

@@ -1,8 +1,8 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Calendar, DollarSign, Activity, Package, Settings, MoreHorizontal, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, DollarSign, Activity, Package, Settings, MoreHorizontal, MessageSquare, Wallet } from 'lucide-react';
 import { UserRole, AccessControl } from '../types';
-import { isModuleHidden } from '../utils/accessControl';
+import { isModuleHidden, canSeeFinance } from '../utils/accessControl';
 
 interface BottomNavProps {
     userRole: UserRole;
@@ -22,6 +22,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
         { id: 'dashboard', path: '/', label: 'Bosh Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
         { id: 'patients', path: '/patients', label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
         { id: 'calendar', path: '/calendar', label: 'Kalendar', icon: Calendar, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
+        { id: 'cashbook', path: '/cashbook', label: 'Kassa', icon: Wallet, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
         { id: 'finance', path: '/finance', label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
         { id: 'doctors', path: '/doctors', label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN] },
         { id: 'inventory', path: '/inventory', label: 'Ombor', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
@@ -31,7 +32,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
 
     // Filter items based on role + ruxsatlar (Sozlamalar → Ruxsatlar)
     const allowedItems = allItems.filter(item =>
-        item.roles.includes(userRole) && !isModuleHidden(accessControl, userRole, item.id)
+        item.roles.includes(userRole)
+        && !isModuleHidden(accessControl, userRole, item.id)
+        && (item.id !== 'cashbook' || canSeeFinance(accessControl, userRole))
     );
 
     // If items <= 5, show all. If > 5, show first 4 and a "More" button.

@@ -1,4 +1,7 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, CashRegisterDay } from '../types';
+
+// Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
+const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
 import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
@@ -476,6 +479,44 @@ export const api = {
                 return Promise.resolve({ success: true });
             }
             return fetchJson<{ success: true }>(`/expenses/${id}`, { method: 'DELETE' });
+        },
+    },
+    cashRegister: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([...DEMO_CASH_REGISTER]);
+            return fetchJson<CashRegisterDay[]>(`/cash-register?clinicId=${clinicId}`);
+        },
+        close: (data: { date: string; countedCash: number; expectedCash: number; note?: string; clinicId: string }) => {
+            if (isDemoMode()) {
+                const closure: CashRegisterDay = {
+                    id: `demo-close-${data.date}`,
+                    clinicId: data.clinicId,
+                    date: data.date,
+                    countedCash: data.countedCash,
+                    expectedCash: data.expectedCash,
+                    difference: data.countedCash - data.expectedCash,
+                    note: data.note || null,
+                    closedByName: 'Demo',
+                    closedByRole: 'CLINIC_ADMIN',
+                    closedAt: new Date().toISOString(),
+                };
+                const i = DEMO_CASH_REGISTER.findIndex(c => c.date === data.date);
+                if (i !== -1) DEMO_CASH_REGISTER[i] = closure; else DEMO_CASH_REGISTER.push(closure);
+                return Promise.resolve(closure);
+            }
+            return fetchJson<CashRegisterDay>('/cash-register/close', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        reopen: (date: string) => {
+            if (isDemoMode()) {
+                const i = DEMO_CASH_REGISTER.findIndex(c => c.date === date);
+                if (i !== -1) DEMO_CASH_REGISTER.splice(i, 1);
+                return Promise.resolve({ success: true as const });
+            }
+            return fetchJson<{ success: true }>(`/cash-register/${date}`, { method: 'DELETE' });
         },
     },
     doctors: {

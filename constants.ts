@@ -7,6 +7,7 @@ export const ACCESS_MODULES: { id: string; label: string; roles: ('DOCTOR' | 'RE
   { id: 'leads', label: 'Lidlar', roles: ['RECEPTIONIST'] },
   { id: 'patients', label: 'Bemorlar', roles: ['DOCTOR', 'RECEPTIONIST'] },
   { id: 'calendar', label: 'Kalendar', roles: ['DOCTOR', 'RECEPTIONIST'] },
+  { id: 'cashbook', label: 'Kassa', roles: ['RECEPTIONIST'] },
   { id: 'doctors', label: 'Shifokorlar', roles: ['RECEPTIONIST'] },
   { id: 'inventory', label: 'Ombor', roles: ['RECEPTIONIST'] },
   { id: 'queue', label: 'Onlayn navbat', roles: ['DOCTOR', 'RECEPTIONIST'] },
@@ -14,6 +15,15 @@ export const ACCESS_MODULES: { id: string; label: string; roles: ('DOCTOR' | 'RE
   { id: 'messages', label: 'Xabarlar', roles: ['RECEPTIONIST'] },
   { id: 'settings', label: 'Sozlamalar', roles: ['RECEPTIONIST'] },
 ];
+
+// "Sodda ko'rinish" preseti — kundalik ishga kerak bo'lmagan modullarni bir bosishda yashiradi.
+// Menyu qancha qisqa bo'lsa, yangi xodim shuncha tez o'rganadi.
+export const SIMPLE_VIEW_HIDDEN_MODULES: Record<'DOCTOR' | 'RECEPTIONIST', string[]> = {
+  // Registratorga kerak: bemor, kalendar, kassa, navbat. Qolganlari direktor ishi.
+  RECEPTIONIST: ['doctors', 'inventory', 'lab', 'messages', 'settings', 'leads'],
+  // Shifokorga kerak: bemor, kalendar, navbat.
+  DOCTOR: ['lab'],
+};
 
 // Helper to get dates relative to today
 const getRelativeDate = (daysOffset: number) => {

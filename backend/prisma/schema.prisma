@@ -193,6 +193,7 @@ model Transaction {
   visitId         String?
   discountAmount  Float?   @default(0)
   discountPercent Float?   @default(0)
+  createdAt       DateTime? @default(now())
   clinic          Clinic   @relation(fields: [clinicId], references: [id])
   patient         Patient? @relation(fields: [patientId], references: [id])
   visit           Visit?   @relation(fields: [visitId], references: [id])
@@ -288,6 +289,10 @@ model Clinic {
   prepaymentCardNumber    String?
   prepaymentAmount        Float?
   accessControl           String?
+  /// Tashqi lid manbalari (yuboraman va h.k.) uchun kirish kaliti.
+  /// POST /api/public/leads da X-API-Key sarlavhasi orqali klinika shu kalit bo'yicha topiladi.
+  leadApiKey              String?            @unique
+  leadApiKeyCreatedAt     DateTime?
   appointments            Appointment[]
   plan                    SubscriptionPlan   @relation(fields: [planId], references: [id])
   doctors                 Doctor[]
@@ -309,8 +314,30 @@ model Clinic {
   expenses                Expense[]
   messageTemplates        MessageTemplate[]
   automationRules         AutomationRule[]
+  cashRegisterDays        CashRegisterDay[]
 
   @@index([botToken])
+}
+
+/// Kassa kunini yopish: kassir sanagan naqd va hisob bo'yicha kutilgan naqd solishtiriladi.
+model CashRegisterDay {
+  id           String    @id @default(uuid())
+  clinicId     String
+  date         String
+  /// Kassir haqiqatda sanagan naqd
+  countedCash  Float
+  /// Yopilgan daqiqadagi hisob bo'yicha naqd qoldiq (snapshot)
+  expectedCash Float
+  /// countedCash − expectedCash (kam/ortiq)
+  difference   Float     @default(0)
+  note         String?
+  closedByName String?
+  closedByRole String?
+  closedAt     DateTime  @default(now())
+  clinic       Clinic    @relation(fields: [clinicId], references: [id])
+
+  @@unique([clinicId, date])
+  @@index([clinicId])
 }
 
 model Lead {
@@ -320,6 +347,12 @@ model Lead {
   service   String?
   source    String?
   notes     String?
+  /// Tashqi manbadan (yuboraman va h.k.) kelgan payload'ning asl nusxasi, JSON matn ko'rinishida.
+  /// notes matnga aylantirilganda ma'lumot yo'qolishi mumkin — bu ustun zaxira sifatida saqlanadi.
+  raw       String?
+  /// Manzil va tug'ilgan sana lid bemorga aylantirilganda Patient'ga ko'chiriladi.
+  address   String?
+  dob       String?
   status    String   @default("New")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -328,6 +361,7 @@ model Lead {
 
   @@index([clinicId])
   @@index([status])
+  @@index([clinicId, phone, createdAt])
 }
 
 model DemoRequest {

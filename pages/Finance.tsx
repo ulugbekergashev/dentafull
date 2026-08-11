@@ -9,6 +9,10 @@ import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { calculateTotalFinancials, calculateDoctorShares, transactionBelongsToDoctor } from '../utils/financialCalculations';
 import { exportFinanceToExcel } from '../utils/excelExport';
+import {
+  PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, getPaymentMethodLabel,
+} from '../utils/paymentMethods';
+import type { PaymentMethod } from '../types';
 
 import { ReceiptModal } from '../components/ReceiptModal';
 
@@ -67,7 +71,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     doctorId: defaultDoctorId,
     service: '',
     amount: '',
-    type: 'Cash' as 'Cash' | 'Card' | 'Insurance' | 'Balance',
+    type: 'Cash' as PaymentMethod,
     notes: '',
   });
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -84,7 +88,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     amount: '',
     fixAmount: '',
     kpiAmount: '',
-    method: 'Cash' as 'Cash' | 'Card',
+    method: 'Cash' as PaymentMethod,
     date: today,
     note: '',
   });
@@ -101,7 +105,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
       amount: expense ? String(expense.amount) : (preset?.amount || ''),
       fixAmount: '',
       kpiAmount: '',
-      method: (expense?.method || 'Cash') as 'Cash' | 'Card',
+      method: (expense?.method || 'Cash') as PaymentMethod,
       date: expense?.date ? expense.date.split('T')[0] : today,
       note: expense?.note || '',
     });
@@ -382,15 +386,19 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const [receiptTransaction, setReceiptTransaction] = useState<Transaction | null>(null);
 
   // Har bir usul bo'yicha to'lovlar soni va jami summasi (faqat Paid — kassa modeli bilan izchil)
-  const PAYMENT_METHOD_DATA = [
-    { key: 'Cash', name: 'Naqd', color: '#10B981' },
-    { key: 'Card', name: 'Karta', color: '#3B82F6' },
-    { key: 'Insurance', name: 'Sug\'urta', color: '#8B5CF6' },
-    { key: 'Balance', name: 'Avans', color: '#F59E0B' },
-  ].map(m => {
+  const ALL_PAYMENT_METHOD_DATA = PAYMENT_METHODS.map(m => {
     const txs = dateFilteredTransactions.filter(t => t.type === m.key && t.status === 'Paid');
-    return { ...m, value: txs.length, amount: txs.reduce((sum, t) => sum + t.amount, 0) };
+    return {
+      key: m.key,
+      name: m.short,
+      color: m.color,
+      value: txs.length,
+      amount: txs.reduce((sum, t) => sum + t.amount, 0),
+    };
   });
+  // Ishlatilmagan usullar diagrammani to'ldirib yubormasin; hech biri bo'lmasa — hammasi ko'rsatiladi
+  const usedMethodData = ALL_PAYMENT_METHOD_DATA.filter(m => m.value > 0);
+  const PAYMENT_METHOD_DATA = usedMethodData.length > 0 ? usedMethodData : ALL_PAYMENT_METHOD_DATA;
 
   // --- Financial Breakdown Logic ---
   // Yagona manba: kirim (Paid), xarajatlar, shifokor ulushi, sof foyda
@@ -848,7 +856,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                       <td className="px-6 py-4 font-medium">{t.patientName}</td>
                       <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{t.doctorName || '-'}</td>
                       <td className="px-6 py-4">{t.service}</td>
-                      <td className="px-6 py-4">{t.type === 'Cash' ? 'Naqd' : t.type === 'Card' ? 'Karta' : t.type === 'Insurance' ? 'Sug\'urta' : 'Balans'}</td>
+                      <td className="px-6 py-4">{getPaymentMethodLabel(t.type)}</td>
                       <td className="px-6 py-4 font-medium">{t.amount.toLocaleString()} UZS</td>
                       <td className="px-6 py-4"><Badge status={t.status} /></td>
                       <td className="px-6 py-4 text-right">
@@ -895,7 +903,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                         <td className="px-6 py-4 text-gray-600 dark:text-gray-400">
                           {expenseDoctor ? `${expenseDoctor.lastName} ${expenseDoctor.firstName}` : expenseReceptionist ? `${expenseReceptionist.lastName} ${expenseReceptionist.firstName} (reception)` : '-'}
                         </td>
-                        <td className="px-6 py-4">{e.method === 'Cash' ? 'Naqd' : e.method === 'Card' ? 'Karta' : '-'}</td>
+                        <td className="px-6 py-4">{getPaymentMethodLabel(e.method)}</td>
                         <td className="px-6 py-4 font-bold text-red-600 dark:text-red-400">-{e.amount.toLocaleString()} UZS</td>
                         <td className="px-6 py-4 text-right">
                           {isAutoLab ? (
@@ -1126,7 +1134,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
             <div className="flex gap-2 flex-wrap">
-              {(['Cash', 'Card', 'Insurance', 'Balance'] as const).map(type => (
+              {[...INCOMING_PAYMENT_METHODS, 'Balance' as PaymentMethod].map(type => (
                 <button
                   key={type}
                   onClick={() => setPaymentForm(f => ({ ...f, type }))}
@@ -1135,7 +1143,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'
                     }`}
                 >
-                  {type === 'Cash' ? 'Naqd' : type === 'Card' ? 'Karta' : type === 'Insurance' ? 'Sug\'urta' : 'Balans'}
+                  {getPaymentMethodLabel(type)}
                 </button>
               ))}
             </div>
@@ -1349,8 +1357,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
 
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
-            <div className="flex gap-2">
-              {(['Cash', 'Card'] as const).map(method => (
+            <div className="flex gap-2 flex-wrap">
+              {EXPENSE_PAYMENT_METHODS.map(method => (
                 <button
                   key={method}
                   onClick={() => setExpenseForm(f => ({ ...f, method }))}
@@ -1359,7 +1367,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-red-400'
                     }`}
                 >
-                  {method === 'Cash' ? 'Naqd' : 'Karta'}
+                  {getPaymentMethodLabel(method)}
                 </button>
               ))}
             </div>

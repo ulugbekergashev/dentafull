@@ -4,13 +4,14 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
 import { Calendar } from './pages/Calendar';
 import { Finance } from './pages/Finance';
+import { CashBook } from './pages/CashBook';
 import { Leads } from './pages/Leads';
 import { Settings } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
@@ -23,7 +24,7 @@ import { Inventory } from './pages/Inventory';
 import { OnlineQueue } from './pages/OnlineQueue';
 import { LabOrders } from './pages/LabOrders';
 import { MessagesManagement } from './pages/MessagesManagement';
-import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder } from './types';
+import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder, CashRegisterDay } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
@@ -39,6 +40,7 @@ const CLINIC_NAVIGATION = [
   { id: 'leads', labelKey: 'nav.leads', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'patients', labelKey: 'nav.patients', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
+  { id: 'cashbook', labelKey: 'nav.cashbook', icon: Wallet, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'finance', labelKey: 'nav.finance', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
   { id: 'doctors', labelKey: 'nav.doctors', icon: Activity, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'inventory', labelKey: 'inventory.title', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
@@ -63,6 +65,7 @@ const getPageLabelKey = (pathname: string): any => {
   if (pathname.startsWith('/patients/')) return 'nav.patients'; // Will translate as "Patients", detail page handles own title
   if (pathname === '/patients') return 'nav.patients';
   if (pathname === '/calendar') return 'nav.calendar';
+  if (pathname === '/cashbook') return 'nav.cashbook';
   if (pathname === '/finance') return 'nav.finance';
   if (pathname === '/doctors') return 'nav.doctors';
   if (pathname === '/inventory') return 'inventory.title';
@@ -105,6 +108,7 @@ const AppContent: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cashClosures, setCashClosures] = useState<CashRegisterDay[]>([]);
   const [currentClinic, setCurrentClinic] = useState<Clinic | undefined>();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -237,7 +241,7 @@ const AppContent: React.FC = () => {
           setPlans(plns);
           setClinics(clns);
         } else if (clinicId) {
-          const [pts, appts, txs, exps, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds] = await Promise.all([
+          const [pts, appts, txs, exps, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds, closures] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
@@ -252,7 +256,9 @@ const AppContent: React.FC = () => {
             api.leads.getAll(clinicId),
             api.clinics.getById(clinicId),
             api.labTechnicians.getAll(clinicId),
-            api.labOrders.getAll(clinicId)
+            api.labOrders.getAll(clinicId),
+            // Kassa yopilishlari — yuklanmasa sahifa baribir ishlashi kerak
+            api.cashRegister.getAll(clinicId).catch(() => [])
           ]);
           setCurrentClinic(clinicData);
           setPatients(pts);
@@ -270,6 +276,7 @@ const AppContent: React.FC = () => {
           setLeads(leadsData || []);
           setLabTechnicians(labTechs || []);
           setLabOrders(labOrds || []);
+          setCashClosures(closures || []);
         }
       } catch (error: any) {
         console.error('Failed to load data:', error);
@@ -522,6 +529,35 @@ const AppContent: React.FC = () => {
     } catch (e: any) {
       console.error('Add transaction error:', e);
       addToast('error', e.message || 'To\'lovni saqlashda xatolik yuz berdi');
+      throw e;
+    }
+  };
+
+  // Kassa kunini yopish / qayta ochish
+  const closeCashDay = async (payload: { date: string; countedCash: number; expectedCash: number; note?: string }) => {
+    try {
+      const closure = await api.cashRegister.close({ ...payload, clinicId });
+      setCashClosures(prev => {
+        const rest = prev.filter(c => c.date !== closure.date);
+        return [closure, ...rest];
+      });
+      addToast('success', 'Kun yopildi.');
+      return closure;
+    } catch (e: any) {
+      console.error('Close cash day error:', e);
+      addToast('error', e.message || 'Kunni yopishda xatolik');
+      throw e;
+    }
+  };
+
+  const reopenCashDay = async (date: string) => {
+    try {
+      await api.cashRegister.reopen(date);
+      setCashClosures(prev => prev.filter(c => c.date !== date));
+      addToast('success', 'Kun qayta ochildi.');
+    } catch (e: any) {
+      console.error('Reopen cash day error:', e);
+      addToast('error', e.message || 'Kunni qayta ochishda xatolik');
       throw e;
     }
   };
@@ -881,10 +917,13 @@ const AppContent: React.FC = () => {
 
   // Ruxsatlar (Sozlamalar в†’ Ruxsatlar): rol bo'yicha modul/moliya/telefon ko'rinishi
   const accessControl = parseAccessControl(currentClinic);
-  const visibleNavigation = CURRENT_NAVIGATION.filter(nav =>
-    nav.roles.includes(userRole) && !isModuleHidden(accessControl, userRole, nav.id)
-  );
   const showFinanceForRole = canSeeFinance(accessControl, userRole);
+  const visibleNavigation = CURRENT_NAVIGATION.filter(nav =>
+    nav.roles.includes(userRole)
+    && !isModuleHidden(accessControl, userRole, nav.id)
+    // Kassa — pul ma'lumoti; "Moliyani ko'rsatish" o'chirilgan rol uni ko'rmasligi kerak
+    && (nav.id !== 'cashbook' || showFinanceForRole)
+  );
   const showPatientPhoneForRole = canSeePatientPhone(accessControl, userRole);
 
   // --- Main Render ---
@@ -1398,6 +1437,22 @@ const AppContent: React.FC = () => {
                   onPatientClick={handlePatientClick}
                 />
               } />
+
+              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && showFinanceForRole && (
+                <Route path="/cashbook" element={
+                  <CashBook
+                    transactions={transactions}
+                    expenses={expenses}
+                    doctors={doctors}
+                    currentClinic={currentClinic}
+                    onPatientClick={handlePatientClick}
+                    closures={cashClosures}
+                    canReopen={userRole === UserRole.CLINIC_ADMIN}
+                    onCloseDay={closeCashDay}
+                    onReopenDay={reopenCashDay}
+                  />
+                } />
+              )}
 
               {userRole === UserRole.CLINIC_ADMIN && (
                 <Route path="/finance" element={

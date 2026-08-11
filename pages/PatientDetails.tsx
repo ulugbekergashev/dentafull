@@ -12,6 +12,7 @@ import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDobDDMMYYYY, calcAge } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
+import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { maskPhone } from '../utils/accessControl';
 import { printPatientCard } from '../utils/printPatientCard';
 
@@ -1825,16 +1826,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         label="To'lov Usuli"
                         value={paymentData.type}
                         onChange={e => setPaymentData({ ...paymentData, type: e.target.value })}
-                        options={paymentData.service === 'Avans' 
-                           ? [
-                              { value: 'Cash', label: 'Naqd' },
-                              { value: 'Card', label: 'Karta' }
-                           ]
+                        options={paymentData.service === 'Avans'
+                           // Avans — bu kassaga pul kiritish; sug'urta ham, hisobdan yechish ham bu yerda ma'nosiz
+                           ? INCOMING_PAYMENT_METHODS
+                              .filter(m => m !== 'Insurance')
+                              .map(m => ({ value: m, label: getPaymentMethodLabel(m) }))
                            : [
-                              { value: 'Cash', label: 'Naqd' },
-                              { value: 'Card', label: 'Karta' },
-                              { value: 'Insurance', label: 'Sug\'urta' },
-                              ...(paymentData.service !== 'Avans' ? [{ value: 'Balance', label: 'Hisobdan (Avans)', disabled: (patient?.balance || 0) <= 0 }] : [])
+                              ...INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: getPaymentMethodLabel(m) })),
+                              { value: 'Balance', label: getPaymentMethodLabel('Balance'), disabled: (patient?.balance || 0) <= 0 }
                            ]
                         }
                      />
@@ -1880,11 +1879,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      label="To'lov Usuli"
                      value={editPaymentMethod}
                      onChange={e => setEditPaymentMethod(e.target.value)}
-                     options={[
-                        { value: 'Cash', label: 'Naqd' },
-                        { value: 'Card', label: 'Karta' },
-                        { value: 'Insurance', label: 'Sug\'urta' }
-                     ]}
+                     options={INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: getPaymentMethodLabel(m) }))}
                   />
                   <div className="flex justify-end gap-2 pt-4">
                      <Button type="button" variant="secondary" onClick={() => setIsPaymentEditModalOpen(false)}>Bekor qilish</Button>

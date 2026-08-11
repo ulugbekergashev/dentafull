@@ -6,7 +6,7 @@ import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, M
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { parseAccessControl } from '../utils/accessControl';
-import { ACCESS_MODULES } from '../constants';
+import { ACCESS_MODULES, SIMPLE_VIEW_HIDDEN_MODULES } from '../constants';
 
 const DOCTOR_COLORS = [
    { name: 'Ko\'k', value: '#3B82F6' },
@@ -64,6 +64,21 @@ export const Settings: React.FC<SettingsProps> = ({
       const hidden = accessForm[roleKey]?.hiddenModules || [];
       const next = hidden.includes(moduleId) ? hidden.filter(m => m !== moduleId) : [...hidden, moduleId];
       updateRoleAccess(roleKey, { hiddenModules: next });
+   };
+
+   // Tayyor presetlar: "Sodda" — faqat kundalik ish uchun kerak modullar, "Hammasi" — cheklovsiz
+   const applyPreset = (roleKey: 'doctor' | 'receptionist', preset: 'simple' | 'all') => {
+      const roleId = roleKey === 'doctor' ? 'DOCTOR' : 'RECEPTIONIST';
+      updateRoleAccess(roleKey, {
+         hiddenModules: preset === 'simple' ? [...SIMPLE_VIEW_HIDDEN_MODULES[roleId]] : [],
+      });
+   };
+
+   const isSimplePreset = (roleKey: 'doctor' | 'receptionist') => {
+      const roleId = roleKey === 'doctor' ? 'DOCTOR' : 'RECEPTIONIST';
+      const hidden = [...(accessForm[roleKey]?.hiddenModules || [])].sort();
+      const target = [...SIMPLE_VIEW_HIDDEN_MODULES[roleId]].sort();
+      return hidden.length === target.length && hidden.every((m, i) => m === target[i]);
    };
 
    // Klinika ma'lumoti keyin yuklansa, formani sinxronlash
@@ -1042,10 +1057,36 @@ export const Settings: React.FC<SettingsProps> = ({
                         const modules = ACCESS_MODULES.filter(m => m.roles.includes(roleId));
                         return (
                            <Card key={roleKey} className="p-6">
-                              <div className="mb-5">
-                                 <h4 className="text-base font-bold text-gray-900 dark:text-white">{title}</h4>
-                                 <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
+                              <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                                 <div>
+                                    <h4 className="text-base font-bold text-gray-900 dark:text-white">{title}</h4>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
+                                 </div>
+                                 <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+                                    {([
+                                       { key: 'simple' as const, label: 'Sodda', active: isSimplePreset(roleKey) },
+                                       { key: 'all' as const, label: 'Hammasi', active: (accessForm[roleKey]?.hiddenModules || []).length === 0 },
+                                    ]).map(p => (
+                                       <button
+                                          key={p.key}
+                                          type="button"
+                                          onClick={() => applyPreset(roleKey, p.key)}
+                                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${p.active
+                                             ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-white shadow-sm'
+                                             : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                                       >
+                                          {p.label}
+                                       </button>
+                                    ))}
+                                 </div>
                               </div>
+
+                              {roleKey === 'receptionist' && (
+                                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 -mt-2">
+                                    <b>Sodda</b> — faqat kundalik ish uchun kerak bo'lgan bo'limlar qoladi
+                                    (Bemorlar, Kalendar, Kassa, Navbat). Menyu qisqarsa, yangi xodim tezroq o'rganadi.
+                                 </p>
+                              )}
 
                               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Ko'rinadigan modullar</p>
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-6">
