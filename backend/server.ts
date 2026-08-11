@@ -2505,6 +2505,44 @@ app.put('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_AD
     }
 });
 
+// --- Platforma (SuperAdmin) uchun lid qabul qilish kaliti ---
+// Bu kalit bilan kelgan lidlar klinikaning doskasiga emas, DentaCRM sotuv
+// voronkasiga (DemoRequest -> SuperAdmin > Lidlar) tushadi.
+// Klinika kalitlaridan ajratish uchun boshqa prefiks ishlatiladi: dk_plat_
+app.get('/api/admin/lead-api-key', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        res.json({
+            apiKey: await getPlatformSetting('lead_api_key'),
+            createdAt: await getPlatformSetting('lead_api_key_created_at'),
+            endpoint: `${PUBLIC_API_BASE_URL}/api/public/leads`
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch platform lead API key' });
+    }
+});
+
+app.post('/api/admin/lead-api-key', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const apiKey = `dk_plat_${require('crypto').randomBytes(24).toString('hex')}`;
+        const createdAt = new Date().toISOString();
+        await setPlatformSetting('lead_api_key', apiKey);
+        await setPlatformSetting('lead_api_key_created_at', createdAt);
+        res.json({ apiKey, createdAt, endpoint: `${PUBLIC_API_BASE_URL}/api/public/leads` });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create platform lead API key' });
+    }
+});
+
+app.delete('/api/admin/lead-api-key', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        await setPlatformSetting('lead_api_key', null);
+        await setPlatformSetting('lead_api_key_created_at', null);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to revoke platform lead API key' });
+    }
+});
+
 app.delete('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
     try {
         await prisma.$executeRawUnsafe(`DELETE FROM "DemoRequest" WHERE "id"=$1`, req.params.id);
@@ -2702,6 +2740,25 @@ const LEAD_FIELD_ALIASES: Record<string, string> = {
 
 const MAX_EXTRA_LEAD_FIELDS = 40;
 
+// Platforma (SuperAdmin) lidlari DemoRequest jadvaliga tushadi — u yerda boshqa
+// ustunlar bor: klinika nomi, shahar, shifokorlar soni. Lead'ga xos maydonlar
+// (xizmat, manzil, tug'ilgan sana) bu yerda ustunga ega emas, shuning uchun ularni
+// ataylab tanimaymiz — ular notes ichida "Savol: Javob" bo'lib saqlanadi.
+const PLATFORM_LEAD_FIELD_ALIASES: Record<string, string> = {
+    ...Object.fromEntries(
+        Object.entries(LEAD_FIELD_ALIASES).filter(([, target]) => ['name', 'phone', 'source', 'notes'].includes(target))
+    ),
+
+    'clinic name': 'clinicName', 'clinicname': 'clinicName', 'klinika': 'clinicName',
+    'klinika nomi': 'clinicName', 'клиника': 'clinicName', 'название клиники': 'clinicName',
+
+    'city': 'city', 'shahar': 'city', 'viloyat': 'city', 'город': 'city',
+
+    'doctors count': 'doctorsCount', 'doctorscount': 'doctorsCount',
+    'shifokorlar soni': 'doctorsCount', 'vrachlar soni': 'doctorsCount',
+    'количество врачей': 'doctorsCount',
+};
+
 // O'zbek raqamlarini yagona formatga keltiradi, aks holda dublikat tekshiruvi ishlamaydi
 // ("+998 90 123-45-67" va "901234567" bir xil raqam).
 const normalizeLeadPhone = (value: string): string => {
@@ -2713,8 +2770,13 @@ const normalizeLeadPhone = (value: string): string => {
     return `+${digits}`;
 };
 
-// Ixtiyoriy shakldagi payload'ni Lead maydonlariga ajratadi.
-const buildLeadFromPayload = (payload: any): { fields: any; notes: string | null } => {
+// Ixtiyoriy shakldagi payload'ni ustunlarga ajratadi.
+// aliases — qaysi kalit qaysi ustunga tushishini belgilaydi; ro'yxatda yo'q
+// maydonlar yo'qolmaydi, notes ichiga "Savol: Javob" bo'lib yig'iladi.
+const buildLeadFromPayload = (
+    payload: any,
+    aliases: Record<string, string> = LEAD_FIELD_ALIASES
+): { fields: any; notes: string | null } => {
     const fields: any = {};
     const extras: string[] = [];
 
@@ -2724,7 +2786,7 @@ const buildLeadFromPayload = (payload: any): { fields: any; notes: string | null
         const value = (typeof rawValue === 'object' ? JSON.stringify(rawValue) : String(rawValue)).trim();
         if (!value) continue;
 
-        const target = LEAD_FIELD_ALIASES[canonLeadKey(rawKey)];
+        const target = aliases[canonLeadKey(rawKey)];
         if (target) {
             if (!fields[target]) fields[target] = value;
             continue;
@@ -2782,6 +2844,45 @@ const notifyNewLead = async (clinic: any, lead: any) => {
     }
 };
 
+// Platforma kaliti bilan kelgan lid: bu DentaCRM sotib olmoqchi bo'lgan klinika,
+// oddiy bemor emas. Shuning uchun u Lead emas, DemoRequest bo'lib saqlanadi va
+// SuperAdmin > Lidlar ro'yxatida ko'rinadi.
+const handlePlatformLead = async (req: any, res: any) => {
+    const payload = req.body && typeof req.body === 'object' ? req.body : {};
+    const { fields, notes } = buildLeadFromPayload(payload, PLATFORM_LEAD_FIELD_ALIASES);
+
+    const phone = normalizeLeadPhone(fields.phone || '');
+    if (!phone) {
+        return res.status(400).json({ error: 'phone (telefon raqami) majburiy' });
+    }
+
+    const since = new Date(Date.now() - PUBLIC_LEAD_DEDUP_MINUTES * 60 * 1000);
+    const duplicate = await prisma.demoRequest.findFirst({
+        where: { phone, createdAt: { gte: since } },
+        select: { id: true }
+    });
+    if (duplicate) {
+        return res.status(200).json({ success: true, duplicate: true, id: duplicate.id });
+    }
+
+    const parsedDoctors = parseInt(String(fields.doctorsCount || ''), 10);
+
+    const created = await prisma.demoRequest.create({
+        data: {
+            name: fields.name || 'Noma\'lum',
+            phone,
+            clinicName: fields.clinicName || null,
+            city: fields.city || null,
+            doctorsCount: Number.isFinite(parsedDoctors) ? parsedDoctors : null,
+            source: fields.source || 'yuboraman',
+            notes,
+            status: 'New'
+        }
+    });
+
+    return res.status(201).json({ success: true, id: created.id });
+};
+
 app.post('/api/public/leads', async (req, res) => {
     const apiKey = String(req.headers['x-api-key'] || (req.query as any)?.api_key || '').trim();
     if (!apiKey) {
@@ -2798,6 +2899,11 @@ app.post('/api/public/leads', async (req, res) => {
             select: { id: true, name: true, status: true, botToken: true, telegramChatId: true }
         });
         if (!clinic) {
+            // Klinika kaliti mos kelmadi — bu platformaning o'z kaliti bo'lishi mumkin.
+            const platformKey = await getPlatformSetting('lead_api_key');
+            if (platformKey && platformKey === apiKey) {
+                return await handlePlatformLead(req, res);
+            }
             return res.status(401).json({ error: 'API kalit yaroqsiz' });
         }
         if (clinic.status === 'Deleted' || clinic.status === 'Blocked') {

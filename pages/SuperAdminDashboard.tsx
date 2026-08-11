@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
-import { Clinic, SubscriptionPlan } from '../types';
-import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send } from 'lucide-react';
+import { Clinic, SubscriptionPlan, LeadApiKeyInfo } from '../types';
+import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 
@@ -193,6 +193,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const [isFBPageModalOpen, setIsFBPageModalOpen] = useState(false);
    const [isFBLoading, setIsFBLoading] = useState(false);
 
+   // Tashqi lid manbasi (yuboraman.uz va h.k.) uchun platforma kaliti
+   const [leadApiInfo, setLeadApiInfo] = useState<LeadApiKeyInfo | null>(null);
+   const [leadApiLoading, setLeadApiLoading] = useState(false);
+   const [leadKeyVisible, setLeadKeyVisible] = useState(false);
+   const [leadCopied, setLeadCopied] = useState<string | null>(null);
+
    useEffect(() => {
       if (activeTab === 'leads') {
          setDemoLoading(true);
@@ -202,9 +208,46 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             .finally(() => setDemoLoading(false));
          if (!salesAgentMode) {
             api.adminFacebook.status().then(setFbStatus).catch(() => {});
+            api.adminLeads.getApiKey().then(setLeadApiInfo).catch(() => {});
          }
       }
    }, [activeTab]);
+
+   const copyLeadValue = async (value: string, marker: string) => {
+      try {
+         await navigator.clipboard.writeText(value);
+         setLeadCopied(marker);
+         setTimeout(() => setLeadCopied(null), 1800);
+      } catch {
+         alert('Nusxalab bo\'lmadi. Qo\'lda belgilab oling.');
+      }
+   };
+
+   const handleGeneratePlatformKey = async () => {
+      if (leadApiInfo?.apiKey && !window.confirm('Yangi kalit yaratilsa, eski kalit darhol ishlamay qoladi. Davom etasizmi?')) return;
+      setLeadApiLoading(true);
+      try {
+         setLeadApiInfo(await api.adminLeads.generateApiKey());
+         setLeadKeyVisible(true);
+      } catch (err: any) {
+         alert(err?.message || 'Kalit yaratishda xatolik');
+      } finally {
+         setLeadApiLoading(false);
+      }
+   };
+
+   const handleRevokePlatformKey = async () => {
+      if (!window.confirm('Kalit o\'chirilsa, tashqi manbadan lid tushishi to\'xtaydi. Davom etasizmi?')) return;
+      setLeadApiLoading(true);
+      try {
+         await api.adminLeads.revokeApiKey();
+         setLeadApiInfo(prev => prev ? { ...prev, apiKey: null, createdAt: null } : prev);
+      } catch (err: any) {
+         alert(err?.message || 'Kalitni o\'chirishda xatolik');
+      } finally {
+         setLeadApiLoading(false);
+      }
+   };
 
    // Facebook OAuth popup'dan kelgan xabarni tinglash
    useEffect(() => {
@@ -1200,7 +1243,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <Inbox className="w-5 h-5 text-emerald-500" /> Lidlar
                      </h3>
-                     <p className="text-sm text-gray-500">Landing sahifa va Facebook orqali kelgan lidlar</p>
+                     <p className="text-sm text-gray-500">Landing sahifa, Facebook va tashqi manbalar (yuboraman.uz) orqali kelgan lidlar</p>
                   </div>
                   <div className="flex items-center gap-2">
                      {!salesAgentMode && (
@@ -1234,6 +1277,74 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </button>
                   </div>
                </div>
+               {/* Tashqi lid manbasi uchun platforma kaliti.
+                   Klinika kalitlaridan farqi: bu kalit bilan kelgan lid klinikaning
+                   doskasiga emas, shu ro'yxatga (DemoRequest) tushadi. */}
+               {!salesAgentMode && (
+                  <Card className="p-5">
+                     <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-2">
+                           <Link2 className="w-5 h-5 text-primary-500" />
+                           <div>
+                              <h4 className="font-bold text-gray-900 dark:text-white">Tashqi lid manbasi (yuboraman.uz)</h4>
+                              <p className="text-xs text-gray-500">Bu kalit orqali kelgan lidlar shu ro'yxatga tushadi</p>
+                           </div>
+                        </div>
+                        {leadApiInfo?.apiKey ? (
+                           <div className="flex flex-wrap gap-2">
+                              <Button variant="secondary" onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
+                                 <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} /> Yangilash
+                              </Button>
+                              <Button variant="danger" onClick={handleRevokePlatformKey} disabled={leadApiLoading}>
+                                 <Trash2 className="w-4 h-4 mr-2" /> O'chirish
+                              </Button>
+                           </div>
+                        ) : (
+                           <Button onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
+                              <KeyRound className="w-4 h-4 mr-2" /> Kalit yaratish
+                           </Button>
+                        )}
+                     </div>
+
+                     <label className="block text-xs font-medium text-gray-500 mb-1">So'rov manzili</label>
+                     <div className="flex gap-2 mb-3">
+                        <code className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-900 dark:text-gray-100 break-all">
+                           POST {leadApiInfo?.endpoint || '—'}
+                        </code>
+                        <Button variant="secondary" onClick={() => leadApiInfo?.endpoint && copyLeadValue(leadApiInfo.endpoint, 'endpoint')} disabled={!leadApiInfo?.endpoint}>
+                           {leadCopied === 'endpoint' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </Button>
+                     </div>
+
+                     <label className="block text-xs font-medium text-gray-500 mb-1">API kalit (X-API-Key)</label>
+                     {leadApiInfo?.apiKey ? (
+                        <>
+                           <div className="flex gap-2">
+                              <code className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-900 dark:text-gray-100 break-all">
+                                 {leadKeyVisible
+                                    ? leadApiInfo.apiKey
+                                    : `${leadApiInfo.apiKey.slice(0, 8)}${'•'.repeat(24)}${leadApiInfo.apiKey.slice(-4)}`}
+                              </code>
+                              <Button variant="secondary" onClick={() => setLeadKeyVisible(v => !v)}>
+                                 {leadKeyVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </Button>
+                              <Button variant="secondary" onClick={() => copyLeadValue(leadApiInfo.apiKey as string, 'key')}>
+                                 {leadCopied === 'key' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                              </Button>
+                           </div>
+                           <p className="text-xs text-gray-400 mt-2">
+                              Tanib olinadigan maydonlar: ism, telefon, klinika nomi, shahar, shifokorlar soni.
+                              Boshqa har qanday maydon lid izohida saqlanadi.
+                           </p>
+                        </>
+                     ) : (
+                        <p className="text-sm text-gray-500 px-3 py-2 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
+                           Kalit yaratilmagan — tashqi manbadan lid qabul qilinmaydi.
+                        </p>
+                     )}
+                  </Card>
+               )}
+
                {demoLoading ? (
                   <Card className="p-10 text-center text-gray-400">Yuklanmoqda...</Card>
                ) : demoRequests.length === 0 ? (

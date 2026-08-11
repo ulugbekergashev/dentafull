@@ -917,6 +917,26 @@ export const api = {
         remove: (id: string) =>
             fetchJson<any>(`/admin/demo-requests/${id}`, { method: 'DELETE' }),
     },
+    // Platforma (SuperAdmin) uchun tashqi lid manbasi kaliti (yuboraman.uz va h.k.).
+    // Bu kalit bilan kelgan lidlar klinikaga emas, DemoRequest ro'yxatiga tushadi.
+    adminLeads: {
+        getApiKey: () => {
+            if (isDemoMode()) {
+                return Promise.resolve({ apiKey: null, createdAt: null, endpoint: 'https://demo.dentacrm.uz/api/public/leads' } as LeadApiKeyInfo);
+            }
+            return fetchJson<LeadApiKeyInfo>('/admin/lead-api-key');
+        },
+        generateApiKey: () => {
+            if (isDemoMode()) {
+                return Promise.resolve({ apiKey: `dk_plat_demo${Date.now()}`, createdAt: new Date().toISOString(), endpoint: 'https://demo.dentacrm.uz/api/public/leads' } as LeadApiKeyInfo);
+            }
+            return fetchJson<LeadApiKeyInfo>('/admin/lead-api-key', { method: 'POST' });
+        },
+        revokeApiKey: () => {
+            if (isDemoMode()) return Promise.resolve({ success: true as const });
+            return fetchJson<{ success: true }>('/admin/lead-api-key', { method: 'DELETE' });
+        },
+    },
     // Platforma (SuperAdmin) Facebook integratsiyasi — lidlar DemoRequest'ga tushadi
     adminFacebook: {
         status: () =>
