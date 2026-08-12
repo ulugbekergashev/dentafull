@@ -110,6 +110,7 @@ export function exportFinanceToExcel(data: FinanceExportData) {
     wsDebtors['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, wsDebtors, 'Qarzdorlar');
 
-    const fileName = `moliya_${new Date().toISOString().split('T')[0]}.xlsx`;
+    // Kassa eksporti (kassa_*.xlsx) bilan aralashmasligi uchun alohida nom
+    const fileName = `moliya_hisobot_${new Date().toISOString().split('T')[0]}.xlsx`;
     XLSX.writeFile(wb, fileName);
 }

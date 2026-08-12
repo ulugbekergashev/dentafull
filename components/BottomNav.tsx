@@ -22,8 +22,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
         { id: 'dashboard', path: '/', label: 'Bosh Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
         { id: 'patients', path: '/patients', label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
         { id: 'calendar', path: '/calendar', label: 'Kalendar', icon: Calendar, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
-        { id: 'cashbook', path: '/cashbook', label: 'Kassa', icon: Wallet, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-        { id: 'finance', path: '/finance', label: 'Moliya', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
+        { id: 'finance', path: '/finance', label: 'Moliya', icon: Wallet, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
         { id: 'doctors', path: '/doctors', label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN] },
         { id: 'inventory', path: '/inventory', label: 'Ombor', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
         { id: 'messages', path: '/messages', label: 'Xabarlar', icon: MessageSquare, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
@@ -34,7 +33,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
     const allowedItems = allItems.filter(item =>
         item.roles.includes(userRole)
         && !isModuleHidden(accessControl, userRole, item.id)
-        && (item.id !== 'cashbook' || canSeeFinance(accessControl, userRole))
+        && (item.id !== 'finance' || canSeeFinance(accessControl, userRole))
     );
 
     // If items <= 5, show all. If > 5, show first 4 and a "More" button.

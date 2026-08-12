@@ -10,8 +10,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
 import { Calendar } from './pages/Calendar';
-import { Finance } from './pages/Finance';
-import { CashBook } from './pages/CashBook';
+import { FinanceHub } from './pages/FinanceHub';
 import { Leads } from './pages/Leads';
 import { Settings } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
@@ -40,8 +39,7 @@ const CLINIC_NAVIGATION = [
   { id: 'leads', labelKey: 'nav.leads', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'patients', labelKey: 'nav.patients', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
-  { id: 'cashbook', labelKey: 'nav.cashbook', icon: Wallet, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-  { id: 'finance', labelKey: 'nav.finance', icon: DollarSign, roles: [UserRole.CLINIC_ADMIN] },
+  { id: 'finance', labelKey: 'nav.finance', icon: Wallet, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'doctors', labelKey: 'nav.doctors', icon: Activity, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'inventory', labelKey: 'inventory.title', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'queue', labelKey: 'nav.queue', icon: ListOrdered, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST, UserRole.DOCTOR] },
@@ -65,7 +63,6 @@ const getPageLabelKey = (pathname: string): any => {
   if (pathname.startsWith('/patients/')) return 'nav.patients'; // Will translate as "Patients", detail page handles own title
   if (pathname === '/patients') return 'nav.patients';
   if (pathname === '/calendar') return 'nav.calendar';
-  if (pathname === '/cashbook') return 'nav.cashbook';
   if (pathname === '/finance') return 'nav.finance';
   if (pathname === '/doctors') return 'nav.doctors';
   if (pathname === '/inventory') return 'inventory.title';
@@ -924,8 +921,8 @@ const AppContent: React.FC = () => {
   const visibleNavigation = CURRENT_NAVIGATION.filter(nav =>
     nav.roles.includes(userRole)
     && !isModuleHidden(accessControl, userRole, nav.id)
-    // Kassa — pul ma'lumoti; "Moliyani ko'rsatish" o'chirilgan rol uni ko'rmasligi kerak
-    && (nav.id !== 'cashbook' || showFinanceForRole)
+    // Moliya — pul ma'lumoti; "Moliyani ko'rsatish" o'chirilgan rol uni ko'rmasligi kerak
+    && (nav.id !== 'finance' || showFinanceForRole)
   );
   const showPatientPhoneForRole = canSeePatientPhone(accessControl, userRole);
 
@@ -1441,25 +1438,12 @@ const AppContent: React.FC = () => {
                 />
               } />
 
-              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && showFinanceForRole && (
-                <Route path="/cashbook" element={
-                  <CashBook
-                    transactions={transactions}
-                    expenses={expenses}
-                    doctors={doctors}
-                    currentClinic={currentClinic}
-                    onPatientClick={handlePatientClick}
-                    closures={cashClosures}
-                    canReopen={userRole === UserRole.CLINIC_ADMIN}
-                    onCloseDay={closeCashDay}
-                    onReopenDay={reopenCashDay}
-                  />
-                } />
-              )}
+              {/* Eski manzil — zakladkalar buzilmasligi uchun yo'naltiriladi */}
+              <Route path="/cashbook" element={<Navigate to="/finance" replace />} />
 
-              {userRole === UserRole.CLINIC_ADMIN && (
+              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && showFinanceForRole && (
                 <Route path="/finance" element={
-                  <Finance
+                  <FinanceHub
                     userRole={userRole}
                     transactions={transactions}
                     expenses={expenses}
@@ -1468,6 +1452,7 @@ const AppContent: React.FC = () => {
                     patients={patients}
                     onPatientClick={handlePatientClick}
                     doctorId={doctorId}
+                    clinicId={clinicId}
                     doctors={doctors}
                     receptionists={receptionists}
                     currentClinic={currentClinic}
@@ -1476,6 +1461,9 @@ const AppContent: React.FC = () => {
                     onAddExpense={addExpense}
                     onUpdateExpense={updateExpense}
                     onDeleteExpense={deleteExpense}
+                    closures={cashClosures}
+                    onCloseDay={closeCashDay}
+                    onReopenDay={reopenCashDay}
                   />
                 } />
               )}

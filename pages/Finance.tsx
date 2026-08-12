@@ -33,6 +33,8 @@ interface FinanceProps {
   onAddExpense?: (expense: Omit<Expense, 'id'>) => Promise<any>;
   onUpdateExpense?: (id: string, data: Partial<Expense>) => Promise<void>;
   onDeleteExpense?: (id: string) => Promise<void>;
+  /** Moliya bo'limi ichida tab sifatida ochilganda — o'z sarlavhasini ko'rsatmaydi */
+  embedded?: boolean;
 }
 
 import { Doctor, InstallmentPlan } from '../types';
@@ -49,7 +51,7 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   Other: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
 };
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, receptionists = [], currentClinic, labOrders, onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, receptionists = [], currentClinic, labOrders, onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense, embedded = false }) => {
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
@@ -400,6 +402,12 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const usedMethodData = ALL_PAYMENT_METHOD_DATA.filter(m => m.value > 0);
   const PAYMENT_METHOD_DATA = usedMethodData.length > 0 ? usedMethodData : ALL_PAYMENT_METHOD_DATA;
 
+  // Kassa tabidagi "Jami tushum" bilan farqni ochiq ko'rsatish uchun:
+  // avansdan yechilgan to'lovlar daromadga kiradi, lekin kassaga bugun pul kirmaydi.
+  const balanceDrawdown = dateFilteredTransactions
+    .filter(t => t.status === 'Paid' && t.type === 'Balance')
+    .reduce((sum, t) => sum + t.amount, 0);
+
   // --- Financial Breakdown Logic ---
   // Yagona manba: kirim (Paid), xarajatlar, shifokor ulushi, sof foyda
   const financials = calculateTotalFinancials(dateFilteredTransactions, filteredExpenses, doctors);
@@ -407,6 +415,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     .filter(s => s.percentage > 0 || s.accrued > 0 || s.paid > 0);
 
   const totalRevenue = financials.totalRevenue;
+  const cashRegisterTotal = totalRevenue - balanceDrawdown;
   const netProfit = financials.netProfit;
   const paidTransactionCount = dateFilteredTransactions.filter(t => t.status === 'Paid').length;
 
@@ -453,18 +462,23 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('finance.title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {isReceptionist ? t('finance.todayIncome') : t('finance.subtitle')}
-          </p>
-        </div>
+      <div className={`flex flex-col lg:flex-row items-start lg:items-center gap-4 ${embedded ? 'lg:justify-end' : 'justify-between'}`}>
+        {!embedded && (
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('finance.title')}</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {isReceptionist ? t('finance.todayIncome') : t('finance.subtitle')}
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Quick payment/expense buttons */}
+          {/* Quick payment/expense buttons.
+              Tab sifatida ochilganda to'lov tugmasi ko'rsatilmaydi — u Kassa tabida,
+              kundalik pul harakati o'sha yerda yuritiladi. Bu yerda faqat oylik/ulush
+              kabi murakkab xarajatlar uchun to'liq forma qoladi. */}
           <div className="flex items-center gap-2">
-            {onAddTransaction && (
+            {onAddTransaction && !embedded && (
               <button
                 onClick={() => setIsAddPaymentOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
@@ -479,7 +493,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
                 <Banknote className="w-3.5 h-3.5" />
-                Xarajat
+                {embedded ? "Xarajat / Oylik" : 'Xarajat'}
               </button>
             )}
           </div>
@@ -527,6 +541,38 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
           <StatCard label={t('finance.avgCheck')} value={paidTransactionCount ? Math.round(totalRevenue / paidTransactionCount).toLocaleString() : 0} unit="UZS" icon={CreditCard} color="primary" variant="gradient" subtitle={`${paidTransactionCount} ta to'lov`} />
         )}
       </div>
+
+      {/* Kassa bilan moslashtirish — "nega raqamlar to'g'ri kelmayapti?" savolini yopadi */}
+      {!isReceptionist && balanceDrawdown > 0 && (
+        <Card className="p-5">
+          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <span className="w-6 h-0.5 bg-gray-300 dark:bg-gray-600 rounded" />
+            Kassa bilan moslashtirish
+          </h3>
+          <div className="max-w-md space-y-2 text-sm">
+            <div className="flex justify-between text-gray-600 dark:text-gray-300">
+              <span>Jami daromad (hisoblangan)</span>
+              <span className="font-semibold tabular-nums">{totalRevenue.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-gray-600 dark:text-gray-300">
+              <span>− Avansdan yechilgan</span>
+              <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                −{balanceDrawdown.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-600 text-base">
+              <span className="font-bold text-gray-900 dark:text-white">= Kassaga tushgan</span>
+              <span className="font-black tabular-nums text-emerald-600 dark:text-emerald-400">
+                {cashRegisterTotal.toLocaleString()}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-400 pt-2">
+              Avansdan yechilgan pul kassaga ilgari tushgan, shuning uchun Kassa tabida
+              qayta sanalmaydi. Kassa tabidagi "Jami tushum" aynan shu raqamni ko'rsatadi.
+            </p>
+          </div>
+        </Card>
+      )}
 
       {/* Financial Breakdown, Loss Analysis, Charts, Transactions, Debtors - hidden for receptionist */}
       {!isReceptionist && (<>

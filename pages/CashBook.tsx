@@ -2,9 +2,14 @@ import React, { useMemo, useState } from 'react';
 import {
     ChevronLeft, ChevronRight, Download, Wallet, Banknote, CreditCard,
     TrendingDown, Users, CalendarDays, AlertCircle, Coins, Lock, LockOpen, Check,
+    Plus, Loader2,
 } from 'lucide-react';
-import { Card, Button, Modal, Input } from '../components/Common';
-import { Transaction, Expense, Doctor, Clinic, CashRegisterDay, EXPENSE_CATEGORY_LABELS } from '../types';
+import { Card, Button, Modal, Input, Select } from '../components/Common';
+import { QuickPaymentModal } from '../components/QuickPaymentModal';
+import {
+    Transaction, Expense, ExpenseCategory, Doctor, Clinic, Patient,
+    CashRegisterDay, PaymentMethod, EXPENSE_CATEGORY_LABELS,
+} from '../types';
 import {
     buildCashBookDay,
     buildCashBookMonth,
@@ -16,8 +21,12 @@ import {
     CashBookTotals,
 } from '../utils/cashbook';
 import { exportCashBookDay, exportCashBookMonth } from '../utils/cashbookExport';
-import { PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
+import { PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { formatDateToISO } from '../utils/dateUtils';
+
+// Kassada kundalik chiqimlar yoziladi. Oylik va shifokor ulushi ataylab yo'q —
+// ular oyda bir marta, murakkab hisob-kitob bilan Hisobot tabida rasmiylashtiriladi.
+const KASSA_EXPENSE_CATEGORIES: ExpenseCategory[] = ['Other', 'Inventory', 'Lab', 'Rent', 'Utilities'];
 
 interface CashBookProps {
     transactions: Transaction[];
@@ -30,6 +39,14 @@ interface CashBookProps {
     canReopen?: boolean;
     onCloseDay?: (payload: { date: string; countedCash: number; expectedCash: number; note?: string }) => Promise<any>;
     onReopenDay?: (date: string) => Promise<void>;
+    /** Moliya bo'limi ichida tab sifatida ochilganda — o'z sarlavhasini ko'rsatmaydi */
+    embedded?: boolean;
+    // Kassaga pul kiritish / chiqarish
+    patients?: Patient[];
+    services?: { name: string; price: number; duration?: number }[];
+    clinicId?: string;
+    onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
+    onAddExpense?: (expense: Omit<Expense, 'id'>) => Promise<any>;
 }
 
 const num = (v: number) => Math.round(v).toLocaleString('uz-UZ').replace(/,/g, ' ');
@@ -213,7 +230,8 @@ const ClosureBanner: React.FC<{
 
 export const CashBook: React.FC<CashBookProps> = ({
     transactions, expenses, doctors, currentClinic, onPatientClick,
-    closures = [], canReopen = false, onCloseDay, onReopenDay,
+    closures = [], canReopen = false, onCloseDay, onReopenDay, embedded = false,
+    patients = [], services = [], clinicId = '', onAddTransaction, onAddExpense,
 }) => {
     const today = formatDateToISO(new Date());
     const [view, setView] = useState<'day' | 'month'>('day');
@@ -223,6 +241,18 @@ export const CashBook: React.FC<CashBookProps> = ({
     const [countedInput, setCountedInput] = useState('');
     const [closeNote, setCloseNote] = useState('');
     const [closeSaving, setCloseSaving] = useState(false);
+
+    // Kassaga to'lov qabul qilish / xarajat yozish
+    const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+    const [isExpenseOpen, setIsExpenseOpen] = useState(false);
+    const [expenseSaving, setExpenseSaving] = useState(false);
+    const [expenseForm, setExpenseForm] = useState({
+        category: 'Other' as ExpenseCategory,
+        title: '',
+        amount: '',
+        method: 'Cash' as PaymentMethod,
+        note: '',
+    });
 
     const day = useMemo(
         () => buildCashBookDay(date, transactions, expenses, doctors),
@@ -299,21 +329,77 @@ export const CashBook: React.FC<CashBookProps> = ({
         await onReopenDay(date).catch(() => { });
     };
 
+    const openExpenseModal = () => {
+        setExpenseForm({ category: 'Other', title: '', amount: '', method: 'Cash', note: '' });
+        setIsExpenseOpen(true);
+    };
+
+    const expenseAmount = Number(expenseForm.amount);
+    const canSaveExpense = expenseForm.title.trim() !== '' && isFinite(expenseAmount) && expenseAmount > 0;
+
+    const handleSaveExpense = async () => {
+        if (!onAddExpense || !canSaveExpense) return;
+        setExpenseSaving(true);
+        try {
+            await onAddExpense({
+                // Xarajat ko'rilayotgan kunga yoziladi — kechagi kunni yopayotganda ham to'g'ri joyga tushadi
+                date,
+                amount: expenseAmount,
+                category: expenseForm.category,
+                title: expenseForm.title.trim(),
+                method: expenseForm.method,
+                note: expenseForm.note.trim() || undefined,
+                clinicId,
+            } as Omit<Expense, 'id'>);
+            setIsExpenseOpen(false);
+        } catch {
+            // xatolik toast orqali ko'rsatiladi
+        } finally {
+            setExpenseSaving(false);
+        }
+    };
+
     const doctorCols = view === 'day' ? day.doctorColumns : monthData.doctorColumns;
     const totals = view === 'day' ? day.totals : monthData.totals;
 
     return (
         <div className="space-y-5 animate-fade-in">
             {/* Header */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kassa</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Kassaga tushgan va kassadan chiqqan haqiqiy pul
-                    </p>
-                </div>
+            <div className={`flex flex-col lg:flex-row items-start lg:items-center gap-4 ${embedded ? 'lg:justify-end' : 'justify-between'}`}>
+                {!embedded && (
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kassa</h1>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Kassaga tushgan va kassadan chiqqan haqiqiy pul
+                        </p>
+                    </div>
+                )}
 
                 <div className="flex flex-wrap items-center gap-3">
+                    {/* Kassaga pul kirishi va chiqishi — kundalik amallar */}
+                    {view === 'day' && (onAddTransaction || onAddExpense) && (
+                        <div className="flex items-center gap-2">
+                            {onAddTransaction && (
+                                <button
+                                    onClick={() => setIsPaymentOpen(true)}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    To'lov
+                                </button>
+                            )}
+                            {onAddExpense && (
+                                <button
+                                    onClick={openExpenseModal}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+                                >
+                                    <Banknote className="w-3.5 h-3.5" />
+                                    Xarajat
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Kun / Oy */}
                     <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
                         {(['day', 'month'] as const).map(v => (
@@ -528,9 +614,17 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </span>
                         </div>
                         {day.expenses.length === 0 ? (
-                            <p className="px-5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                                Bu kunda xarajat yo'q
-                            </p>
+                            <div className="px-5 py-8 text-center">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Bu kunda xarajat yo'q</p>
+                                {onAddExpense && (
+                                    <button
+                                        onClick={openExpenseModal}
+                                        className="mt-2 text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline"
+                                    >
+                                        Xarajat qo'shish →
+                                    </button>
+                                )}
+                            </div>
                         ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {day.expenses.map(e => (
@@ -692,6 +786,106 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
                 </Card>
             )}
+
+            {/* ── To'lov qabul qilish ── */}
+            {onAddTransaction && (
+                <QuickPaymentModal
+                    isOpen={isPaymentOpen}
+                    onClose={() => setIsPaymentOpen(false)}
+                    patients={patients}
+                    doctors={doctors}
+                    services={services}
+                    clinicId={clinicId}
+                    onAddTransaction={onAddTransaction}
+                    // Ko'rilayotgan kunga yoziladi, bugungi kunga emas
+                    presetDate={date}
+                />
+            )}
+
+            {/* ── Xarajat yozish ── */}
+            <Modal
+                isOpen={isExpenseOpen}
+                onClose={() => setIsExpenseOpen(false)}
+                title={`Xarajat — ${formatDateLabel(date)}`}
+                className="max-w-md"
+            >
+                <div className="space-y-4">
+                    <Select
+                        label="Kategoriya"
+                        value={expenseForm.category}
+                        onChange={e => setExpenseForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))}
+                        options={KASSA_EXPENSE_CATEGORIES.map(c => ({ value: c, label: EXPENSE_CATEGORY_LABELS[c] }))}
+                    />
+
+                    <Input
+                        label="Nomi *"
+                        value={expenseForm.title}
+                        onChange={e => setExpenseForm(f => ({ ...f, title: e.target.value }))}
+                        placeholder="Masalan: non, pamidor / taksi / suv"
+                        autoFocus
+                    />
+
+                    <Input
+                        label="Summa (UZS) *"
+                        type="number"
+                        value={expenseForm.amount}
+                        onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
+                        onWheel={e => e.currentTarget.blur()}
+                        placeholder="0"
+                    />
+
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Qayerdan to'landi
+                        </label>
+                        <div className="flex gap-2 flex-wrap">
+                            {EXPENSE_PAYMENT_METHODS.map(m => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => setExpenseForm(f => ({ ...f, method: m }))}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${expenseForm.method === m
+                                        ? 'bg-red-500 text-white border-red-500'
+                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-red-400'}`}
+                                >
+                                    {getPaymentMethodLabel(m)}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1.5">
+                            Naqd tanlansa kassadagi pul kamayadi. Boshqasi hisob raqamdan chiqadi.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Izoh (ixtiyoriy)
+                        </label>
+                        <textarea
+                            value={expenseForm.note}
+                            onChange={e => setExpenseForm(f => ({ ...f, note: e.target.value }))}
+                            rows={2}
+                            className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
+                        />
+                    </div>
+
+                    <p className="text-[11px] text-gray-400">
+                        Oylik va shifokor ulushi bu yerda yo'q — ular Hisobot tabida rasmiylashtiriladi.
+                    </p>
+
+                    <div className="flex gap-2">
+                        <Button variant="secondary" className="flex-1" onClick={() => setIsExpenseOpen(false)}>Bekor</Button>
+                        <button
+                            onClick={handleSaveExpense}
+                            disabled={expenseSaving || !canSaveExpense}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 disabled:cursor-not-allowed transition-all"
+                        >
+                            {expenseSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {expenseSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
 
             {/* ── Kunni yopish modali ── */}
             <Modal

@@ -7,7 +7,7 @@ export const ACCESS_MODULES: { id: string; label: string; roles: ('DOCTOR' | 'RE
   { id: 'leads', label: 'Lidlar', roles: ['RECEPTIONIST'] },
   { id: 'patients', label: 'Bemorlar', roles: ['DOCTOR', 'RECEPTIONIST'] },
   { id: 'calendar', label: 'Kalendar', roles: ['DOCTOR', 'RECEPTIONIST'] },
-  { id: 'cashbook', label: 'Kassa', roles: ['RECEPTIONIST'] },
+  { id: 'finance', label: 'Moliya (Kassa)', roles: ['RECEPTIONIST'] },
   { id: 'doctors', label: 'Shifokorlar', roles: ['RECEPTIONIST'] },
   { id: 'inventory', label: 'Ombor', roles: ['RECEPTIONIST'] },
   { id: 'queue', label: 'Onlayn navbat', roles: ['DOCTOR', 'RECEPTIONIST'] },
