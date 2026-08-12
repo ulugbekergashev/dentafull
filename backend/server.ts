@@ -2738,7 +2738,10 @@ const LEAD_FIELD_ALIASES: Record<string, string> = {
     'message': 'notes', 'xabar': 'notes', 'комментарий': 'notes',
 };
 
-const MAX_EXTRA_LEAD_FIELDS = 40;
+// Amalda cheklov emas — hech bir formada bunchalik savol bo'lmaydi.
+// Faqat nosoz/zararli payload ulkan izoh yaratib qo'ymasligi uchun turadi;
+// so'rov hajmi baribir express.json() chegarasi bilan cheklangan.
+const MAX_EXTRA_LEAD_FIELDS = 200;
 
 // Platforma (SuperAdmin) lidlari DemoRequest jadvaliga tushadi — u yerda boshqa
 // ustunlar bor: klinika nomi, shahar, shifokorlar soni. Lead'ga xos maydonlar
