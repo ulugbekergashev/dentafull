@@ -2847,11 +2847,37 @@ const notifyNewLead = async (clinic: any, lead: any) => {
     }
 };
 
+// Kalit uchun ishlatiladigan nomlar. Ba'zi tashqi tizimlar maxsus sarlavha
+// yubora olmaydi, shuning uchun kalitni body ichida ham qabul qilamiz.
+const LEAD_AUTH_KEYS = new Set(['api key', 'apikey', 'x api key']);
+
+// Kalitni sarlavha, URL yoki body'dan oladi va uni payload'dan ajratib tashlaydi.
+// Ajratish shart: aks holda kalit "noma'lum maydon" sifatida lid izohiga
+// karta bo'lib tushib, ochiq ko'rinib qolardi.
+const extractLeadApiKey = (req: any): { apiKey: string; payload: any } => {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const payload: any = {};
+    let fromBody = '';
+
+    for (const [key, value] of Object.entries(body)) {
+        if (LEAD_AUTH_KEYS.has(canonLeadKey(key))) {
+            if (!fromBody && value) fromBody = String(value).trim();
+            continue;
+        }
+        payload[key] = value;
+    }
+
+    const apiKey = String(
+        req.headers['x-api-key'] || (req.query as any)?.api_key || fromBody || ''
+    ).trim();
+
+    return { apiKey, payload };
+};
+
 // Platforma kaliti bilan kelgan lid: bu DentaCRM sotib olmoqchi bo'lgan klinika,
 // oddiy bemor emas. Shuning uchun u Lead emas, DemoRequest bo'lib saqlanadi va
 // SuperAdmin > Lidlar ro'yxatida ko'rinadi.
-const handlePlatformLead = async (req: any, res: any) => {
-    const payload = req.body && typeof req.body === 'object' ? req.body : {};
+const handlePlatformLead = async (payload: any, res: any) => {
     const { fields, notes } = buildLeadFromPayload(payload, PLATFORM_LEAD_FIELD_ALIASES);
 
     const phone = normalizeLeadPhone(fields.phone || '');
@@ -2887,9 +2913,11 @@ const handlePlatformLead = async (req: any, res: any) => {
 };
 
 app.post('/api/public/leads', async (req, res) => {
-    const apiKey = String(req.headers['x-api-key'] || (req.query as any)?.api_key || '').trim();
+    // Kalit uch joydan qabul qilinadi: X-API-Key sarlavhasi (tavsiya etiladi),
+    // ?api_key= parametri yoki body ichidagi "api_key" maydoni.
+    const { apiKey, payload } = extractLeadApiKey(req);
     if (!apiKey) {
-        return res.status(401).json({ error: 'X-API-Key sarlavhasi talab qilinadi' });
+        return res.status(401).json({ error: 'API kalit talab qilinadi (X-API-Key sarlavhasi, ?api_key= yoki body ichida "api_key")' });
     }
 
     if (!publicLeadRateLimitOk(apiKey)) {
@@ -2905,7 +2933,7 @@ app.post('/api/public/leads', async (req, res) => {
             // Klinika kaliti mos kelmadi — bu platformaning o'z kaliti bo'lishi mumkin.
             const platformKey = await getPlatformSetting('lead_api_key');
             if (platformKey && platformKey === apiKey) {
-                return await handlePlatformLead(req, res);
+                return await handlePlatformLead(payload, res);
             }
             return res.status(401).json({ error: 'API kalit yaroqsiz' });
         }
@@ -2913,7 +2941,6 @@ app.post('/api/public/leads', async (req, res) => {
             return res.status(403).json({ error: 'Klinika faol emas' });
         }
 
-        const payload = req.body && typeof req.body === 'object' ? req.body : {};
         const { fields, notes } = buildLeadFromPayload(payload);
 
         const phone = normalizeLeadPhone(fields.phone || '');
