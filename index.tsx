@@ -2,6 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { setupPwaAutoUpdate } from './utils/pwaUpdate';
+
+// Yangi versiya chiqqanda foydalanuvchi eski keshda qolib ketmasligi uchun
+setupPwaAutoUpdate();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
