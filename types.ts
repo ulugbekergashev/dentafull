@@ -109,6 +109,8 @@ export interface Transaction {
   doctorName?: string;    // Optional - for backward compatibility
   patientId?: string;     // Optional - for backward compatibility
   createdAt?: string | null; // to'lov qabul qilingan aniq vaqt (eski yozuvlarda yo'q)
+  receivedById?: string | null;   // pulni kim qabul qildi (server yozadi)
+  receivedByName?: string | null;
   discountPercent?: number; // Chegirma foizi (0-100)
   discountAmount?: number;  // Chegirma summasi
 }
@@ -150,13 +152,63 @@ export interface CashRegisterDay {
   id: string;
   clinicId: string;
   date: string;
-  countedCash: number;   // kassir sanagan naqd
-  expectedCash: number;  // yopilgan daqiqadagi hisob bo'yicha naqd
-  difference: number;    // countedCash − expectedCash
+  shift: number;           // bitta smenali klinikada har doim 1
+  shiftStart?: string | null;
+  shiftEnd?: string | null;
+  openingCash: number;     // smena boshidagi naqd qoldiq
+  countedCash: number;     // kassir sanagan naqd
+  expectedCash: number;    // yopilgan daqiqadagi hisob bo'yicha naqd
+  difference: number;      // countedCash − expectedCash
+  countedCard?: number | null;   // terminal Z-hisoboti (kiritilmasa solishtirilmaydi)
+  expectedCard?: number | null;
+  countedClick?: number | null;  // Click/Payme kabineti
+  expectedClick?: number | null;
   note?: string | null;
   closedByName?: string | null;
   closedByRole?: string | null;
   closedAt: string;
+}
+
+/**
+ * Kassaga xizmat to'lovidan tashqari kirgan/chiqqan pul.
+ * Xarajat emas — inkassatsiya va qaytarish klinikaning xarajati emas,
+ * shuning uchun sof foydadan ayirilmaydi.
+ */
+export type CashMovementType = 'Encashment' | 'Refund' | 'CashIn';
+
+export const CASH_MOVEMENT_LABELS: Record<CashMovementType, string> = {
+  Encashment: 'Inkassatsiya (kassadan olindi)',
+  Refund: 'Bemorga qaytarildi',
+  CashIn: 'Kassaga solindi',
+};
+
+export interface CashMovement {
+  id: string;
+  clinicId: string;
+  date: string;
+  type: CashMovementType;
+  amount: number;
+  method: PaymentMethod;
+  note?: string | null;
+  patientId?: string | null;
+  transactionId?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+}
+
+/** Kassa yozuvlariga qilingan o'zgarishlar izi */
+export interface CashAuditLog {
+  id: string;
+  clinicId: string;
+  date: string;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  summary: string;
+  afterClose: boolean;
+  byName?: string | null;
+  byRole?: string | null;
+  createdAt: string;
 }
 
 // ─── Xabarlar (yagona xabarlar tizimi) ───
@@ -315,6 +367,7 @@ export interface Clinic {
   prepaymentAmount?: number;
   salesAgentId?: string | null; // Biriktirilgan sotuvchi (reseller)
   accessControl?: string | AccessControl | null; // DB'da JSON string, frontendda parse qilinadi
+  cashShiftsPerDay?: number; // kuniga nechta kassa smenasi (1 yoki 2)
   leadApiKey?: string | null;        // tashqi lid manbalari uchun kalit
   leadApiKeyCreatedAt?: string | null;
 }

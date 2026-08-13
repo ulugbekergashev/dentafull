@@ -109,6 +109,9 @@ export const Settings: React.FC<SettingsProps> = ({
    // Ruxsatlar (access control) formasi — klinika sozlamalaridan boshlang'ich qiymat
    const [accessForm, setAccessForm] = useState<AccessControl>(() => parseAccessControl(currentClinic));
    const [accessSaving, setAccessSaving] = useState(false);
+   // Kassa smenalari (Ruxsatlar bo'limining oxirida)
+   const [cashShifts, setCashShifts] = useState<number>(currentClinic?.cashShiftsPerDay || 1);
+   const [cashShiftsSaving, setCashShiftsSaving] = useState(false);
    const [accessSaved, setAccessSaved] = useState(false);
 
    const updateRoleAccess = (roleKey: 'doctor' | 'receptionist', patch: Partial<RoleAccess>) => {
@@ -139,7 +142,23 @@ export const Settings: React.FC<SettingsProps> = ({
    // Klinika ma'lumoti keyin yuklansa, formani sinxronlash
    React.useEffect(() => {
       setAccessForm(parseAccessControl(currentClinic));
-   }, [currentClinic?.id, currentClinic?.accessControl]);
+      setCashShifts(currentClinic?.cashShiftsPerDay || 1);
+   }, [currentClinic?.id, currentClinic?.accessControl, currentClinic?.cashShiftsPerDay]);
+
+   const saveCashShifts = async (value: number) => {
+      if (!currentClinic?.id) return;
+      setCashShifts(value);
+      setCashShiftsSaving(true);
+      try {
+         await api.clinics.updateCashSettings(currentClinic.id, value);
+      } catch (error: any) {
+         console.error('Cash settings save failed:', error);
+         setCashShifts(currentClinic?.cashShiftsPerDay || 1);
+         alert(error?.message || 'Kassa sozlamasini saqlashda xatolik');
+      } finally {
+         setCashShiftsSaving(false);
+      }
+   };
 
    const handleAccessSave = async () => {
       if (!currentClinic?.id) return;
@@ -1318,6 +1337,37 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                            </Card>
                         );
                      })}
+
+                     <Card className="p-6">
+                        <div className="mb-4">
+                           <h4 className="text-base font-bold text-gray-900 dark:text-white">Kassa smenalari</h4>
+                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              Smena kassir "Kunni yopish" bosgan daqiqada tugaydi — soat bo'yicha emas.
+                              Undan keyingi to'lovlar keyingi smenaga o'tadi.
+                           </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                           {[1, 2].map(n => (
+                              <button
+                                 key={n}
+                                 type="button"
+                                 disabled={cashShiftsSaving}
+                                 onClick={() => saveCashShifts(n)}
+                                 className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all disabled:opacity-50 ${cashShifts === n
+                                    ? 'bg-primary-600 text-white border-primary-600'
+                                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
+                              >
+                                 {n === 1 ? 'Kuniga 1 smena' : 'Kuniga 2 smena'}
+                              </button>
+                           ))}
+                           {cashShiftsSaving && <span className="text-xs text-gray-400">Saqlanmoqda...</span>}
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-3">
+                           {cashShifts === 1
+                              ? 'Kassa sahifasida kun butunligicha ko\'rinadi.'
+                              : 'Kassa sahifasida "1-smena / 2-smena" tanlagichi chiqadi. 2-smena 1-smena topshirgan naqddan boshlanadi.'}
+                        </p>
+                     </Card>
 
                      <div className="flex items-center gap-3">
                         <Button onClick={handleAccessSave} disabled={accessSaving}>

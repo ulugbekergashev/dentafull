@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Expense, Doctor, CashRegisterDay, EXPENSE_CATEGORY_LABELS } from '../types';
+import { Expense, Doctor, CashRegisterDay, CashMovement, EXPENSE_CATEGORY_LABELS, CASH_MOVEMENT_LABELS } from '../types';
 import {
     CashBookDay,
     CashBookMonth,
@@ -57,13 +57,18 @@ function summaryBlock(totals: CashBookTotals): Sheet {
         ['  Naqdsiz (karta/hisob)', totals.nonCashExpense],
         [],
         ['NAQD YASHIK'],
-        ['Naqd tushum', totals.cashIn],
-        ['Naqd xarajat', -totals.cashExpense],
-        ['KASSADA QOLDI', totals.drawer],
-        [],
-        ['NAQDSIZ'],
-        ['Karta / Click / O\'tkazma / Sug\'urta', totals.nonCashIn],
+        ['Kun boshida qoldiq', totals.openingCash],
+        ['+ Naqd tushum', totals.cashIn],
+        ['− Naqd xarajat', -totals.cashExpense],
     ];
+
+    if (totals.cashInManual) rows.push(['+ Kassaga solindi', totals.cashInManual]);
+    if (totals.refundCash) rows.push(['− Bemorga qaytarildi', -totals.refundCash]);
+    if (totals.encashment) rows.push(['− Inkassatsiya', -totals.encashment]);
+    rows.push(['= YASHIKDA BO\'LISHI KERAK', totals.drawer]);
+    rows.push([]);
+    rows.push(['NAQDSIZ']);
+    rows.push(['Karta / Click / O\'tkazma / Sug\'urta', totals.nonCashIn]);
 
     if (totals.fromBalance > 0) {
         rows.push([], ['MA\'LUMOT UCHUN'], ['Avansdan yechilgan (kassaga kirmagan)', totals.fromBalance]);
@@ -85,18 +90,46 @@ function closureBlock(status?: CashClosureStatus): Sheet {
     const rows: Sheet = [
         [],
         ['KUN YOPILDI'],
+        ['Smena', c.shift || 1],
+        ['Smena boshidagi qoldiq', c.openingCash || 0],
         ['Kassir sanagan naqd', c.countedCash],
         ['Hisob bo\'yicha naqd', c.expectedCash],
-        ['Farq', c.difference],
-        ['Yopgan xodim', c.closedByName || '-'],
-        ['Yopilgan vaqt', new Date(c.closedAt).toLocaleString('uz-UZ')],
+        ['Naqd farqi', c.difference],
     ];
+    if (c.countedCard != null) {
+        rows.push(['Terminal — sanalgan', c.countedCard]);
+        rows.push(['Terminal — tizimda', c.expectedCard ?? 0]);
+        rows.push(['Terminal farqi', c.countedCard - (c.expectedCard ?? 0)]);
+    }
+    if (c.countedClick != null) {
+        rows.push(['Click — sanalgan', c.countedClick]);
+        rows.push(['Click — tizimda', c.expectedClick ?? 0]);
+        rows.push(['Click farqi', c.countedClick - (c.expectedClick ?? 0)]);
+    }
+    rows.push(['Yopgan xodim', c.closedByName || '-']);
+    rows.push(['Yopilgan vaqt', new Date(c.closedAt).toLocaleString('uz-UZ')]);
     if (c.note) rows.push(['Izoh', c.note]);
     if (status.changedAfterClose) {
         rows.push(['DIQQAT', 'Yopilgandan keyin bu kunga yangi yozuv qo\'shilgan']);
         rows.push(['Hozirgi hisob bo\'yicha farq', status.currentDifference]);
     }
     return rows;
+}
+
+/** Inkassatsiya / qaytarish / kassaga solish varag'i */
+function movementSheet(movements: CashMovement[]): { rows: Sheet; widths: number[] } {
+    const rows: Sheet = [['Sana', 'Turi', 'Usul', 'Summa (UZS)', 'Kim', 'Izoh']];
+    movements.forEach(m => {
+        rows.push([
+            formatDateLabel((m.date || '').split('T')[0]),
+            CASH_MOVEMENT_LABELS[m.type] || m.type,
+            getPaymentMethodLabel(m.method),
+            m.amount || 0,
+            m.createdByName || '',
+            m.note || '',
+        ]);
+    });
+    return { rows, widths: [12, 30, 16, 16, 22, 30] };
 }
 
 function expenseSheet(expenses: Expense[], doctors: Doctor[]): { rows: Sheet; widths: number[] } {
@@ -198,6 +231,12 @@ export function exportCashBookDay(
     // --- 3. Xarajatlar ---
     const { rows: expRows, widths: expWidths } = expenseSheet(day.expenses, doctors);
     XLSX.utils.book_append_sheet(wb, sheetFrom(expRows, expWidths), 'Xarajatlar');
+
+    // --- 4. Kassa harakatlari (inkassatsiya / qaytarish) ---
+    if (day.movements.length > 0) {
+        const { rows: mvRows, widths: mvWidths } = movementSheet(day.movements);
+        XLSX.utils.book_append_sheet(wb, sheetFrom(mvRows, mvWidths), 'Kassa harakatlari');
+    }
 
     XLSX.writeFile(wb, `kassa_${day.date}.xlsx`);
 }
@@ -329,7 +368,7 @@ export function exportCashBookMonth(
 
     // --- 4. To'lovlar (batafsil) ---
     const payments: Sheet = [
-        ['Sana', 'Vaqt', 'Bemor', 'Shifokor', 'Xizmat', 'Usul', 'Summa (UZS)', 'Kassaga kirdi'],
+        ['Sana', 'Vaqt', 'Bemor', 'Shifokor', 'Xizmat', 'Usul', 'Summa (UZS)', 'Kassaga kirdi', 'Qabul qildi'],
     ];
     allDays.forEach(day => {
         day.rows.forEach(row => {
@@ -342,19 +381,20 @@ export function exportCashBookMonth(
                 getPaymentMethodLabel(row.method),
                 row.amount,
                 row.isMoneyIn ? 'Ha' : "Yo'q (avansdan)",
+                row.receivedByName || '',
             ]);
         });
     });
     const paymentCount = payments.length - 1;
     if (paymentCount > 0) {
         payments.push([]);
-        payments.push(['JAMI', '', '', '', '', '', month.totals.gross + month.totals.fromBalance, '']);
+        payments.push(['JAMI', '', '', '', '', '', month.totals.gross + month.totals.fromBalance, '', '']);
     }
     XLSX.utils.book_append_sheet(
         wb,
-        sheetFrom(payments, [12, 8, 28, 24, 28, 18, 16, 18], {
+        sheetFrom(payments, [12, 8, 28, 24, 28, 18, 16, 18, 20], {
             skipMoneyCols: [0, 1],
-            autoFilterRef: paymentCount > 0 ? `A1:H${paymentCount + 1}` : undefined,
+            autoFilterRef: paymentCount > 0 ? `A1:I${paymentCount + 1}` : undefined,
         }),
         "To'lovlar"
     );
@@ -363,6 +403,13 @@ export function exportCashBookMonth(
     const monthExpenses = allDays.flatMap(d => d.expenses);
     const { rows: expRows, widths: expWidths } = expenseSheet(monthExpenses, doctors);
     XLSX.utils.book_append_sheet(wb, sheetFrom(expRows, expWidths), 'Xarajatlar');
+
+    // --- 6. Kassa harakatlari ---
+    const monthMovements = allDays.flatMap(d => d.movements);
+    if (monthMovements.length > 0) {
+        const { rows: mvRows, widths: mvWidths } = movementSheet(monthMovements);
+        XLSX.utils.book_append_sheet(wb, sheetFrom(mvRows, mvWidths), 'Kassa harakatlari');
+    }
 
     XLSX.writeFile(wb, `kassa_${month.month}.xlsx`);
 }

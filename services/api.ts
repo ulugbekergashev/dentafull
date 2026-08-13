@@ -1,7 +1,24 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, CashRegisterDay } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
+const DEMO_CASH_MOVEMENTS: CashMovement[] = [];
+
+export interface CashCloseInput {
+    clinicId: string;
+    date: string;
+    shift?: number;
+    shiftStart?: string;
+    shiftEnd?: string;
+    openingCash?: number;
+    countedCash: number;
+    expectedCash: number;
+    countedCard?: number | null;
+    expectedCard?: number | null;
+    countedClick?: number | null;
+    expectedClick?: number | null;
+    note?: string;
+}
 import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
@@ -434,6 +451,17 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const index = DEMO_TRANSACTIONS.findIndex(t => t.id === id);
+                if (index !== -1) {
+                    DEMO_TRANSACTIONS.splice(index, 1);
+                    saveDemoData();
+                }
+                return Promise.resolve({ success: true as const });
+            }
+            return fetchJson<{ success: true }>(`/transactions/${id}`, { method: 'DELETE' });
+        },
     },
     expenses: {
         getAll: (clinicId: string) => {
@@ -486,21 +514,30 @@ export const api = {
             if (isDemoMode()) return Promise.resolve([...DEMO_CASH_REGISTER]);
             return fetchJson<CashRegisterDay[]>(`/cash-register?clinicId=${clinicId}`);
         },
-        close: (data: { date: string; countedCash: number; expectedCash: number; note?: string; clinicId: string }) => {
+        close: (data: CashCloseInput) => {
             if (isDemoMode()) {
+                const shift = data.shift || 1;
                 const closure: CashRegisterDay = {
-                    id: `demo-close-${data.date}`,
+                    id: `demo-close-${data.date}-${shift}`,
                     clinicId: data.clinicId,
                     date: data.date,
+                    shift,
+                    shiftStart: data.shiftStart || null,
+                    shiftEnd: data.shiftEnd || null,
+                    openingCash: data.openingCash || 0,
                     countedCash: data.countedCash,
                     expectedCash: data.expectedCash,
                     difference: data.countedCash - data.expectedCash,
+                    countedCard: data.countedCard ?? null,
+                    expectedCard: data.expectedCard ?? null,
+                    countedClick: data.countedClick ?? null,
+                    expectedClick: data.expectedClick ?? null,
                     note: data.note || null,
                     closedByName: 'Demo',
                     closedByRole: 'CLINIC_ADMIN',
                     closedAt: new Date().toISOString(),
                 };
-                const i = DEMO_CASH_REGISTER.findIndex(c => c.date === data.date);
+                const i = DEMO_CASH_REGISTER.findIndex(c => c.date === data.date && c.shift === shift);
                 if (i !== -1) DEMO_CASH_REGISTER[i] = closure; else DEMO_CASH_REGISTER.push(closure);
                 return Promise.resolve(closure);
             }
@@ -510,13 +547,47 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
-        reopen: (date: string) => {
+        reopen: (date: string, shift?: number) => {
             if (isDemoMode()) {
-                const i = DEMO_CASH_REGISTER.findIndex(c => c.date === date);
+                const i = DEMO_CASH_REGISTER.findIndex(c => c.date === date && (!shift || c.shift === shift));
                 if (i !== -1) DEMO_CASH_REGISTER.splice(i, 1);
                 return Promise.resolve({ success: true as const });
             }
-            return fetchJson<{ success: true }>(`/cash-register/${date}`, { method: 'DELETE' });
+            const q = shift ? `?shift=${shift}` : '';
+            return fetchJson<{ success: true }>(`/cash-register/${date}${q}`, { method: 'DELETE' });
+        },
+    },
+    cashMovements: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([...DEMO_CASH_MOVEMENTS]);
+            return fetchJson<CashMovement[]>(`/cash-movements?clinicId=${clinicId}`);
+        },
+        create: (data: Omit<CashMovement, 'id' | 'createdAt' | 'createdByName'>) => {
+            if (isDemoMode()) {
+                const m = { ...data, id: `demo-mv-${Date.now()}`, createdAt: new Date().toISOString(), createdByName: 'Demo' } as CashMovement;
+                DEMO_CASH_MOVEMENTS.push(m);
+                return Promise.resolve(m);
+            }
+            return fetchJson<CashMovement>('/cash-movements', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) {
+                const i = DEMO_CASH_MOVEMENTS.findIndex(m => m.id === id);
+                if (i !== -1) DEMO_CASH_MOVEMENTS.splice(i, 1);
+                return Promise.resolve({ success: true as const });
+            }
+            return fetchJson<{ success: true }>(`/cash-movements/${id}`, { method: 'DELETE' });
+        },
+    },
+    cashAudit: {
+        getAll: (clinicId: string, date?: string) => {
+            if (isDemoMode()) return Promise.resolve([] as CashAuditLog[]);
+            const q = date ? `&date=${date}` : '';
+            return fetchJson<CashAuditLog[]>(`/cash-audit?clinicId=${clinicId}${q}`);
         },
     },
     doctors: {
@@ -794,6 +865,19 @@ export const api = {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ accessControl }),
+            });
+        },
+        // Kassa sozlamalari (kuniga nechta smena)
+        updateCashSettings: (id: string, cashShiftsPerDay: number) => {
+            if (isDemoMode()) {
+                (DEMO_CLINIC as any).cashShiftsPerDay = cashShiftsPerDay;
+                saveDemoData();
+                return Promise.resolve({ success: true as const, clinic: DEMO_CLINIC });
+            }
+            return fetchJson<{ success: true; clinic: Clinic }>(`/clinics/${id}/cash-settings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cashShiftsPerDay }),
             });
         },
         updateSettings: (id: string, data: { botToken?: string, ownerPhone?: string }) => {

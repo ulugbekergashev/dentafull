@@ -1434,8 +1434,14 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
 
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     try {
+        const actor = (req as any).user;
         const transaction = await prisma.transaction.create({
-            data: req.body
+            // Pulni kim qabul qilgani serverdan yoziladi — mijoz o'zgartira olmaydi
+            data: {
+                ...req.body,
+                receivedById: actor?.clinicId ? (actor?.id || actor?.receptionistId || null) : null,
+                receivedByName: actor?.name || null,
+            }
         });
 
         // Only Avans deposits and Balance-type payments affect the advance balance
@@ -1472,8 +1478,8 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
         const oldTx = await prisma.transaction.findUnique({ where: { id: req.params.id } });
         if (!oldTx) return res.status(404).json({ error: 'Transaction not found' });
 
-        // createdAt — to'lov qabul qilingan daqiqa, tashqaridan o'zgartirilmaydi.
-        const { createdAt: _ignored, ...updateData } = req.body || {};
+        // createdAt va "kim qabul qildi" — tashqaridan o'zgartirilmaydi.
+        const { createdAt: _ignored, receivedById: _rid, receivedByName: _rn, ...updateData } = req.body || {};
         // Sana ko'chirilsa (masalan, qarz bugun to'landi) vaqt ham yangilanadi —
         // aks holda kassa kitobida bugungi kunda eski vaqt turib qolardi.
         if (updateData.date && updateData.date !== oldTx.date) {
@@ -1506,6 +1512,23 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
             }
         }
 
+        // Summa/usul/holat/sana o'zgarsa kassa raqami o'zgaradi — iz qoldiramiz
+        const watched = ['amount', 'type', 'status', 'date'];
+        const changes = watched
+            .filter(k => updateData[k] !== undefined && String(updateData[k]) !== String((oldTx as any)[k]))
+            .map(k => `${k}: ${(oldTx as any)[k]} → ${(transaction as any)[k]}`);
+        if (changes.length) {
+            await writeCashAudit({
+                clinicId: transaction.clinicId,
+                date: transaction.date,
+                action: 'Update',
+                entityType: 'Transaction',
+                entityId: transaction.id,
+                summary: `${transaction.patientName}: ${changes.join(', ')}`,
+                user: (req as any).user,
+            });
+        }
+
         res.json(transaction);
     } catch (error) {
         console.error('Transaction update error:', error);
@@ -1535,6 +1558,18 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
         }
 
         await prisma.transaction.delete({ where: { id: req.params.id } });
+
+        // O'chirilgan to'lov kassadan yo'qoladi — nima o'chirilgani izda qolishi shart
+        await writeCashAudit({
+            clinicId: transaction.clinicId,
+            date: transaction.date,
+            action: 'Delete',
+            entityType: 'Transaction',
+            entityId: transaction.id,
+            summary: `${transaction.patientName} — ${Math.round(transaction.amount)} (${transaction.type}, ${transaction.service}) o'chirildi`,
+            user: (req as any).user,
+        });
+
         res.json({ success: true });
     } catch (error) {
         console.error('Transaction delete error:', error);
@@ -1641,6 +1676,40 @@ app.delete('/api/expenses/:id', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * Kassa o'zgarishini izga yozadi. Hech qachon asosiy amalni to'xtatmaydi —
+ * iz yozilmasa ham to'lov saqlanishi kerak, shuning uchun xatolik yutiladi.
+ */
+const writeCashAudit = async (input: {
+    clinicId: string; date: string; action: string; entityType: string;
+    entityId?: string | null; summary: string; afterClose?: boolean; user?: any;
+}) => {
+    try {
+        let afterClose = input.afterClose;
+        if (afterClose === undefined) {
+            const closure = await prisma.cashRegisterDay.findFirst({
+                where: { clinicId: input.clinicId, date: input.date },
+            });
+            afterClose = !!closure;
+        }
+        await prisma.cashAuditLog.create({
+            data: {
+                clinicId: input.clinicId,
+                date: input.date,
+                action: input.action,
+                entityType: input.entityType,
+                entityId: input.entityId || null,
+                summary: input.summary,
+                afterClose,
+                byName: input.user?.name || null,
+                byRole: input.user?.role || null,
+            },
+        });
+    } catch (err: any) {
+        console.error('Cash audit write failed:', err.message);
+    }
+};
+
 // --- Kassa kunini yopish (Kassa kitobi) ---
 // Yopish kunni QULFLAMAYDI: kechroq kelgan to'lov baribir yoziladi, faqat kassa sahifasida
 // "yopilgandan keyin o'zgardi" belgisi chiqadi. Qattiq blok ish oqimini to'xtatib qo'yardi.
@@ -1669,13 +1738,25 @@ app.get('/api/cash-register', authenticateToken, async (req, res) => {
     }
 });
 
+// Ixtiyoriy raqam: kiritilmagan bo'lsa null (solishtirilmaydi), kiritilgan bo'lsa son
+const optionalAmount = (v: any): number | null => {
+    if (v === undefined || v === null || v === '') return null;
+    const n = Number(v);
+    return isFinite(n) ? n : null;
+};
+
 app.post('/api/cash-register/close', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
         const user = (req as any).user;
-        const { date, countedCash, expectedCash, note } = req.body || {};
+        const {
+            date, shift, shiftStart, shiftEnd, openingCash,
+            countedCash, expectedCash,
+            countedCard, expectedCard, countedClick, expectedClick,
+            note,
+        } = req.body || {};
 
         if (!date || typeof date !== 'string') {
             return res.status(400).json({ error: 'Sana ko\'rsatilmagan' });
@@ -1685,22 +1766,30 @@ app.post('/api/cash-register/close', authenticateToken, async (req, res) => {
         if (!isFinite(counted) || !isFinite(expected)) {
             return res.status(400).json({ error: 'Summa noto\'g\'ri' });
         }
+        const shiftNo = Number(shift) > 0 ? Math.floor(Number(shift)) : 1;
 
         const data = {
+            shiftStart: shiftStart ? String(shiftStart) : null,
+            shiftEnd: shiftEnd ? String(shiftEnd) : null,
+            openingCash: Number(openingCash) || 0,
             countedCash: counted,
             expectedCash: expected,
             difference: counted - expected,
+            countedCard: optionalAmount(countedCard),
+            expectedCard: optionalAmount(expectedCard),
+            countedClick: optionalAmount(countedClick),
+            expectedClick: optionalAmount(expectedClick),
             note: note ? String(note) : null,
             closedByName: user?.name || null,
             closedByRole: user?.role || null,
             closedAt: new Date(),
         };
 
-        // Qayta yopish — mavjud yozuv yangilanadi (kun bo'yicha yagona yozuv)
+        // Qayta yopish — o'sha smenaning yozuvi yangilanadi
         const closure = await prisma.cashRegisterDay.upsert({
-            where: { clinicId_date: { clinicId, date } },
+            where: { clinicId_date_shift: { clinicId, date, shift: shiftNo } },
             update: data,
-            create: { clinicId, date, ...data },
+            create: { clinicId, date, shift: shiftNo, ...data },
         });
 
         res.json(closure);
@@ -1716,13 +1805,124 @@ app.delete('/api/cash-register/:date', authenticateToken, requireRole('CLINIC_AD
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
-        await prisma.cashRegisterDay.deleteMany({
-            where: { clinicId, date: req.params.date },
-        });
+        const user = (req as any).user;
+        const shiftRaw = (req.query?.shift as string) || '';
+        const where: any = { clinicId, date: req.params.date };
+        if (shiftRaw) where.shift = Number(shiftRaw) || 1;
+
+        const removed = await prisma.cashRegisterDay.findMany({ where });
+        await prisma.cashRegisterDay.deleteMany({ where });
+
+        for (const c of removed) {
+            await writeCashAudit({
+                clinicId, date: c.date, action: 'Reopen', entityType: 'CashRegisterDay', entityId: c.id,
+                summary: `Smena ${c.shift} qayta ochildi (sanalgan ${Math.round(c.countedCash)}, farq ${Math.round(c.difference)})`,
+                afterClose: true, user,
+            });
+        }
         res.json({ success: true });
     } catch (error: any) {
         console.error('Cash register reopen error:', error);
         res.status(500).json({ error: 'Kunni qayta ochishda xatolik' });
+    }
+});
+
+// --- Kassa harakatlari: inkassatsiya, qaytarish, kassaga pul solish ---
+const CASH_MOVEMENT_TYPES = ['Encashment', 'Refund', 'CashIn'];
+
+app.get('/api/cash-movements', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const movements = await prisma.cashMovement.findMany({
+            where: { clinicId },
+            orderBy: { date: 'desc' },
+        });
+        res.json(movements);
+    } catch (error: any) {
+        console.error('Cash movements fetch error:', error);
+        res.status(500).json({ error: 'Kassa harakatlarini yuklashda xatolik' });
+    }
+});
+
+app.post('/api/cash-movements', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const user = (req as any).user;
+        const { date, type, amount, method, note, patientId, transactionId } = req.body || {};
+
+        if (!date || !CASH_MOVEMENT_TYPES.includes(type)) {
+            return res.status(400).json({ error: 'Harakat turi noto\'g\'ri' });
+        }
+        const amt = Number(amount);
+        if (!isFinite(amt) || amt <= 0) {
+            return res.status(400).json({ error: 'Summa noto\'g\'ri' });
+        }
+
+        const movement = await prisma.cashMovement.create({
+            data: {
+                clinicId,
+                date: String(date),
+                type,
+                amount: amt,
+                method: method ? String(method) : 'Cash',
+                note: note ? String(note) : null,
+                patientId: patientId || null,
+                transactionId: transactionId || null,
+                createdByName: user?.name || null,
+            },
+        });
+
+        await writeCashAudit({
+            clinicId, date: movement.date, action: 'Create', entityType: 'CashMovement', entityId: movement.id,
+            summary: `${type} — ${Math.round(amt)} (${movement.method})${note ? ': ' + note : ''}`,
+            user,
+        });
+
+        res.json(movement);
+    } catch (error: any) {
+        console.error('Cash movement create error:', error);
+        res.status(500).json({ error: 'Kassa harakatini saqlashda xatolik: ' + error.message });
+    }
+});
+
+app.delete('/api/cash-movements/:id', authenticateToken, async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'cashMovement', req.params.id))) return;
+        const user = (req as any).user;
+        const movement = await prisma.cashMovement.findUnique({ where: { id: req.params.id } });
+        if (!movement) return res.status(404).json({ error: 'Topilmadi' });
+
+        await prisma.cashMovement.delete({ where: { id: req.params.id } });
+        await writeCashAudit({
+            clinicId: movement.clinicId, date: movement.date, action: 'Delete',
+            entityType: 'CashMovement', entityId: movement.id,
+            summary: `${movement.type} o'chirildi — ${Math.round(movement.amount)}`,
+            user,
+        });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Cash movement delete error:', error);
+        res.status(500).json({ error: 'O\'chirishda xatolik' });
+    }
+});
+
+// --- Kassa o'zgarishlar izi ---
+app.get('/api/cash-audit', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { date } = req.query as { date?: string };
+        const logs = await prisma.cashAuditLog.findMany({
+            where: date ? { clinicId, date } : { clinicId },
+            orderBy: { createdAt: 'desc' },
+            take: 500,
+        });
+        res.json(logs);
+    } catch (error: any) {
+        console.error('Cash audit fetch error:', error);
+        res.status(500).json({ error: 'O\'zgarishlar izini yuklashda xatolik' });
     }
 });
 
@@ -3250,6 +3450,24 @@ app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
 });
 
 // --- Access Control (rol bo'yicha modul/ma'lumot ko'rish huquqlari, faqat klinika admini) ---
+// Kassa sozlamalari (hozircha: kuniga nechta smena)
+app.put('/api/clinics/:id/cash-settings', authenticateToken, requireRole('CLINIC_ADMIN'), async (req, res) => {
+    try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        const raw = Number(req.body?.cashShiftsPerDay);
+        // Faqat 1 yoki 2 — boshqa qiymat kassa oynalarini chalkashtirib yuboradi
+        const shifts = raw === 2 ? 2 : 1;
+        const clinic = await prisma.clinic.update({
+            where: { id: req.params.id },
+            data: { cashShiftsPerDay: shifts } as any,
+        });
+        res.json({ success: true, clinic });
+    } catch (error: any) {
+        console.error('Cash settings update error:', error);
+        res.status(500).json({ error: 'Kassa sozlamalarini saqlashda xatolik' });
+    }
+});
+
 app.put('/api/clinics/:id/access-control', authenticateToken, requireRole('CLINIC_ADMIN'), async (req, res) => {
     try {
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
@@ -5178,6 +5396,70 @@ async function runStartupMigrations() {
             END IF;
         END $$
     `);
+
+    // --- Kassa: smena, ochilish qoldig'i, terminal/Click solishtirish ---
+    await migrationStep('Transaction.receivedById', `ALTER TABLE "Transaction" ADD COLUMN IF NOT EXISTS "receivedById" TEXT`);
+    await migrationStep('Transaction.receivedByName', `ALTER TABLE "Transaction" ADD COLUMN IF NOT EXISTS "receivedByName" TEXT`);
+    await migrationStep('Clinic.cashShiftsPerDay', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "cashShiftsPerDay" INTEGER NOT NULL DEFAULT 1`);
+
+    for (const [col, type] of [
+        ['shift', 'INTEGER NOT NULL DEFAULT 1'],
+        ['shiftStart', 'TEXT'],
+        ['shiftEnd', 'TEXT'],
+        ['openingCash', 'DOUBLE PRECISION NOT NULL DEFAULT 0'],
+        ['countedCard', 'DOUBLE PRECISION'],
+        ['expectedCard', 'DOUBLE PRECISION'],
+        ['countedClick', 'DOUBLE PRECISION'],
+        ['expectedClick', 'DOUBLE PRECISION'],
+    ] as [string, string][]) {
+        await migrationStep(`CashRegisterDay.${col}`, `ALTER TABLE "CashRegisterDay" ADD COLUMN IF NOT EXISTS "${col}" ${type}`);
+    }
+
+    // Yagonalik endi smenani ham hisobga oladi. Avval yangisini yaratamiz, keyin eskisini
+    // olib tashlaymiz — shu tartibda hech qachon indekssiz qolmaydi.
+    await migrationStep('CashRegisterDay shift unique', `
+        CREATE UNIQUE INDEX IF NOT EXISTS "CashRegisterDay_clinicId_date_shift_key"
+        ON "CashRegisterDay" ("clinicId", "date", "shift")
+    `);
+    await migrationStep('CashRegisterDay eski unique olib tashlash', `
+        DROP INDEX IF EXISTS "CashRegisterDay_clinicId_date_key"
+    `);
+
+    await migrationStep('CashMovement table', `
+        CREATE TABLE IF NOT EXISTS "CashMovement" (
+            "id"            TEXT NOT NULL PRIMARY KEY,
+            "clinicId"      TEXT NOT NULL,
+            "date"          TEXT NOT NULL,
+            "type"          TEXT NOT NULL,
+            "amount"        DOUBLE PRECISION NOT NULL,
+            "method"        TEXT NOT NULL DEFAULT 'Cash',
+            "note"          TEXT,
+            "patientId"     TEXT,
+            "transactionId" TEXT,
+            "createdByName" TEXT,
+            "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('CashMovement clinic index', `CREATE INDEX IF NOT EXISTS "CashMovement_clinicId_idx" ON "CashMovement" ("clinicId")`);
+    await migrationStep('CashMovement date index', `CREATE INDEX IF NOT EXISTS "CashMovement_date_idx" ON "CashMovement" ("date")`);
+
+    await migrationStep('CashAuditLog table', `
+        CREATE TABLE IF NOT EXISTS "CashAuditLog" (
+            "id"         TEXT NOT NULL PRIMARY KEY,
+            "clinicId"   TEXT NOT NULL,
+            "date"       TEXT NOT NULL,
+            "action"     TEXT NOT NULL,
+            "entityType" TEXT NOT NULL,
+            "entityId"   TEXT,
+            "summary"    TEXT NOT NULL,
+            "afterClose" BOOLEAN NOT NULL DEFAULT false,
+            "byName"     TEXT,
+            "byRole"     TEXT,
+            "createdAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('CashAuditLog clinic index', `CREATE INDEX IF NOT EXISTS "CashAuditLog_clinicId_idx" ON "CashAuditLog" ("clinicId")`);
+    await migrationStep('CashAuditLog date index', `CREATE INDEX IF NOT EXISTS "CashAuditLog_date_idx" ON "CashAuditLog" ("date")`);
 
     await migrationStep('PlatformSetting table', `
         CREATE TABLE IF NOT EXISTS "PlatformSetting" (

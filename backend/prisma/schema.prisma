@@ -194,6 +194,10 @@ model Transaction {
   discountAmount  Float?   @default(0)
   discountPercent Float?   @default(0)
   createdAt       DateTime? @default(now())
+  /// Pulni kim qabul qildi. Rollar har xil jadvalda (Receptionist/Doctor/Clinic admin)
+  /// bo'lgani uchun FK emas — id va ism nusxasi saqlanadi.
+  receivedById    String?
+  receivedByName  String?
   clinic          Clinic   @relation(fields: [clinicId], references: [id])
   patient         Patient? @relation(fields: [patientId], references: [id])
   visit           Visit?   @relation(fields: [visitId], references: [id])
@@ -315,29 +319,94 @@ model Clinic {
   messageTemplates        MessageTemplate[]
   automationRules         AutomationRule[]
   cashRegisterDays        CashRegisterDay[]
+  cashMovements           CashMovement[]
+  cashAuditLogs           CashAuditLog[]
+  /// Kuniga nechta kassa smenasi (1 yoki 2). Klinikaga qarab sozlanadi.
+  cashShiftsPerDay        Int                @default(1)
 
   @@index([botToken])
 }
 
-/// Kassa kunini yopish: kassir sanagan naqd va hisob bo'yicha kutilgan naqd solishtiriladi.
+/// Kassa smenasini yopish: sanalgan naqd/terminal/Click hisob bilan solishtiriladi.
+/// Bir kunda bir nechta smena bo'lishi mumkin (klinika sozlamasiga qarab).
 model CashRegisterDay {
-  id           String    @id @default(uuid())
-  clinicId     String
-  date         String
+  id            String    @id @default(uuid())
+  clinicId      String
+  date          String
+  /// Smena raqami. Bitta smenali klinikada har doim 1.
+  shift         Int       @default(1)
+  shiftStart    String?
+  shiftEnd      String?
+  /// Smena boshidagi naqd qoldiq (oldingi yopilishdan ko'chib keladi)
+  openingCash   Float     @default(0)
   /// Kassir haqiqatda sanagan naqd
-  countedCash  Float
+  countedCash   Float
   /// Yopilgan daqiqadagi hisob bo'yicha naqd qoldiq (snapshot)
-  expectedCash Float
+  expectedCash  Float
   /// countedCash − expectedCash (kam/ortiq)
-  difference   Float     @default(0)
-  note         String?
-  closedByName String?
-  closedByRole String?
-  closedAt     DateTime  @default(now())
-  clinic       Clinic    @relation(fields: [clinicId], references: [id])
+  difference    Float     @default(0)
+  /// Terminal Z-hisoboti bo'yicha summa (kiritilmasa null — solishtirilmaydi)
+  countedCard   Float?
+  expectedCard  Float?
+  /// Click/Payme kabineti bo'yicha summa
+  countedClick  Float?
+  expectedClick Float?
+  note          String?
+  closedByName  String?
+  closedByRole  String?
+  closedAt      DateTime  @default(now())
+  clinic        Clinic    @relation(fields: [clinicId], references: [id])
 
-  @@unique([clinicId, date])
+  @@unique([clinicId, date, shift])
   @@index([clinicId])
+}
+
+/// Kassaga xizmat to'lovidan tashqari kirgan/chiqqan pul.
+/// Xarajatdan (Expense) ataylab ajratilgan: inkassatsiya va qaytarish klinikaning
+/// xarajati emas, shuning uchun sof foydadan ayirilmasligi kerak.
+model CashMovement {
+  id            String   @id @default(uuid())
+  clinicId      String
+  date          String
+  /// 'Encashment' — kassadan olib ketildi (inkassatsiya)
+  /// 'Refund'     — bemorga pul qaytarildi
+  /// 'CashIn'     — kassaga pul solindi (masalan, qaytim uchun mayda pul)
+  type          String
+  amount        Float
+  /// Qaysi usulda: naqd yashikka faqat 'Cash' ta'sir qiladi
+  method        String   @default("Cash")
+  note          String?
+  patientId     String?
+  transactionId String?
+  createdByName String?
+  createdAt     DateTime @default(now())
+  clinic        Clinic   @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([date])
+}
+
+/// Kassa yozuvlariga qilingan o'zgarishlar izi.
+/// Ayniqsa kun yopilgandan keyin to'lov o'chirilishi/o'zgartirilishi qayd etiladi —
+/// bu kassa dasturidagi eng klassik teshik.
+model CashAuditLog {
+  id         String   @id @default(uuid())
+  clinicId   String
+  /// Yozuv qaysi kassa kuniga tegishli
+  date       String
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  /// Kun o'sha paytda yopilgan bo'lganmi
+  afterClose Boolean  @default(false)
+  byName     String?
+  byRole     String?
+  createdAt  DateTime @default(now())
+  clinic     Clinic   @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([date])
 }
 
 model Lead {

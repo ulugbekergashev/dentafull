@@ -23,11 +23,12 @@ import { Inventory } from './pages/Inventory';
 import { OnlineQueue } from './pages/OnlineQueue';
 import { LabOrders } from './pages/LabOrders';
 import { MessagesManagement } from './pages/MessagesManagement';
-import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder, CashRegisterDay } from './types';
+import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder, CashRegisterDay, CashMovement } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
 import { api } from './services/api';
+import type { CashCloseInput } from './services/api';
 import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone } from './utils/accessControl';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
@@ -106,6 +107,7 @@ const AppContent: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cashClosures, setCashClosures] = useState<CashRegisterDay[]>([]);
+  const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
   const [currentClinic, setCurrentClinic] = useState<Clinic | undefined>();
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -238,7 +240,7 @@ const AppContent: React.FC = () => {
           setPlans(plns);
           setClinics(clns);
         } else if (clinicId) {
-          const [pts, appts, txs, exps, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds, closures] = await Promise.all([
+          const [pts, appts, txs, exps, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds, closures, movements] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
@@ -254,8 +256,9 @@ const AppContent: React.FC = () => {
             api.clinics.getById(clinicId),
             api.labTechnicians.getAll(clinicId),
             api.labOrders.getAll(clinicId),
-            // Kassa yopilishlari — yuklanmasa sahifa baribir ishlashi kerak
-            api.cashRegister.getAll(clinicId).catch(() => [])
+            // Kassa ma'lumotlari — yuklanmasa sahifa baribir ishlashi kerak
+            api.cashRegister.getAll(clinicId).catch(() => []),
+            api.cashMovements.getAll(clinicId).catch(() => [])
           ]);
           setCurrentClinic(clinicData);
           setPatients(pts);
@@ -274,6 +277,7 @@ const AppContent: React.FC = () => {
           setLabTechnicians(labTechs || []);
           setLabOrders(labOrds || []);
           setCashClosures(closures || []);
+          setCashMovements(movements || []);
         }
       } catch (error: any) {
         console.error('Failed to load data:', error);
@@ -531,11 +535,11 @@ const AppContent: React.FC = () => {
   };
 
   // Kassa kunini yopish / qayta ochish
-  const closeCashDay = async (payload: { date: string; countedCash: number; expectedCash: number; note?: string }) => {
+  const closeCashDay = async (payload: Omit<CashCloseInput, 'clinicId'>) => {
     try {
       const closure = await api.cashRegister.close({ ...payload, clinicId });
       setCashClosures(prev => {
-        const rest = prev.filter(c => c.date !== closure.date);
+        const rest = prev.filter(c => !(c.date === closure.date && c.shift === closure.shift));
         return [closure, ...rest];
       });
       addToast('success', 'Kun yopildi.');
@@ -547,14 +551,59 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const reopenCashDay = async (date: string) => {
+  const reopenCashDay = async (date: string, shift?: number) => {
     try {
-      await api.cashRegister.reopen(date);
-      setCashClosures(prev => prev.filter(c => c.date !== date));
+      await api.cashRegister.reopen(date, shift);
+      setCashClosures(prev => prev.filter(c => !(c.date === date && (!shift || c.shift === shift))));
       addToast('success', 'Kun qayta ochildi.');
     } catch (e: any) {
       console.error('Reopen cash day error:', e);
       addToast('error', e.message || 'Kunni qayta ochishda xatolik');
+      throw e;
+    }
+  };
+
+  const deleteTransaction = async (id: string) => {
+    try {
+      const tx = transactions.find(t => t.id === id);
+      await api.transactions.delete(id);
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      // Avans/balans to'lovi o'chirilsa bemor hisobini yangilab olamiz
+      if (tx?.patientId) {
+        api.patients.getById(tx.patientId).then(p => {
+          setPatients(prev => prev.map(x => x.id === tx.patientId ? p : x));
+        }).catch(() => { });
+      }
+      addToast('success', "To'lov o'chirildi.");
+    } catch (e: any) {
+      console.error('Delete transaction error:', e);
+      addToast('error', e.message || "To'lovni o'chirishda xatolik");
+      throw e;
+    }
+  };
+
+  // Kassa harakati: inkassatsiya, bemorga qaytarish, kassaga pul solish
+  const addCashMovement = async (data: Omit<CashMovement, 'id' | 'clinicId' | 'createdAt' | 'createdByName'>) => {
+    try {
+      const movement = await api.cashMovements.create({ ...data, clinicId } as any);
+      setCashMovements(prev => [movement, ...prev]);
+      addToast('success', 'Kassa harakati saqlandi.');
+      return movement;
+    } catch (e: any) {
+      console.error('Cash movement error:', e);
+      addToast('error', e.message || 'Saqlashda xatolik');
+      throw e;
+    }
+  };
+
+  const deleteCashMovement = async (id: string) => {
+    try {
+      await api.cashMovements.delete(id);
+      setCashMovements(prev => prev.filter(m => m.id !== id));
+      addToast('success', "Kassa harakati o'chirildi.");
+    } catch (e: any) {
+      console.error('Cash movement delete error:', e);
+      addToast('error', e.message || "O'chirishda xatolik");
       throw e;
     }
   };
@@ -1462,8 +1511,13 @@ const AppContent: React.FC = () => {
                     onUpdateExpense={updateExpense}
                     onDeleteExpense={deleteExpense}
                     closures={cashClosures}
+                    movements={cashMovements}
                     onCloseDay={closeCashDay}
                     onReopenDay={reopenCashDay}
+                    onAddCashMovement={addCashMovement}
+                    onDeleteCashMovement={deleteCashMovement}
+                    onUpdateTransaction={updateTransaction}
+                    onDeleteTransaction={deleteTransaction}
                   />
                 } />
               )}

@@ -5,8 +5,9 @@ import { CashBook } from './CashBook';
 import { Finance } from './Finance';
 import {
     UserRole, Transaction, Expense, Doctor, Clinic, Appointment, Patient,
-    LabOrder, Receptionist, CashRegisterDay,
+    LabOrder, Receptionist, CashRegisterDay, CashMovement,
 } from '../types';
+import type { CashCloseArgs } from './CashBook';
 
 // Moliya bo'limi — bitta menyu punkti, ikkita tab:
 //   Kassa   — kassaga qancha pul kirdi va qancha qoldi (faktik pul harakati)
@@ -50,8 +51,13 @@ interface FinanceHubProps {
     onUpdateExpense?: (id: string, data: Partial<Expense>) => Promise<void>;
     onDeleteExpense?: (id: string) => Promise<void>;
     closures?: CashRegisterDay[];
-    onCloseDay?: (payload: { date: string; countedCash: number; expectedCash: number; note?: string }) => Promise<any>;
-    onReopenDay?: (date: string) => Promise<void>;
+    movements?: CashMovement[];
+    onCloseDay?: (payload: CashCloseArgs) => Promise<any>;
+    onReopenDay?: (date: string, shift?: number) => Promise<void>;
+    onAddCashMovement?: (data: Omit<CashMovement, 'id' | 'clinicId' | 'createdAt' | 'createdByName'>) => Promise<any>;
+    onDeleteCashMovement?: (id: string) => Promise<void>;
+    onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
+    onDeleteTransaction?: (id: string) => Promise<void>;
 }
 
 export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
@@ -118,10 +124,16 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
                     onCloseDay={props.onCloseDay}
                     onReopenDay={props.onReopenDay}
                     patients={props.patients}
+                    appointments={props.appointments}
                     services={props.services}
                     clinicId={props.clinicId || currentClinic?.id || ''}
                     onAddTransaction={props.onAddTransaction}
                     onAddExpense={props.onAddExpense}
+                    movements={props.movements}
+                    onAddCashMovement={props.onAddCashMovement}
+                    onDeleteCashMovement={props.onDeleteCashMovement}
+                    onUpdateTransaction={props.onUpdateTransaction}
+                    onDeleteTransaction={props.onDeleteTransaction}
                 />
             ) : (
                 <Finance
