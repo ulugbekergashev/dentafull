@@ -312,18 +312,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* Sahifa nomi — bitta so'z, har ikkala bo'limda ham ko'rinadi.
-          Tavsif olib tashlandi: u bo'lim tanlanmasdan oldin nima bo'lishini
-          aytardi, holbuki tanlov pastda turibdi. */}
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-        Dashboard
-      </h1>
+      {/* Nom va bo'lim tanlovi bitta qatorda: chapda nom, o'ng tomonida
+          switch'lar. Minimalistik — ramka yo'q, faqat pastki chiziq va
+          faol bo'lim ostidagi indikator. */}
+      <div className="flex items-center gap-8 border-b border-gray-200 dark:border-gray-700/60">
+        <h1 className="text-[22px] font-bold text-gray-900 dark:text-white tracking-tight pb-3.5">
+          Dashboard
+        </h1>
 
-      {/* Bo'lim navigatsiyasi — minimalistik: ramka yo'q, faqat pastki chiziq.
-          AI modalka emas, shu yerda, ilova navigatsiyasi joyida turganda ochiladi. */}
-      <div className={`flex items-center gap-6 border-b border-gray-200 dark:border-gray-700/60 ${
-        activeTab === 'ai' ? 'mt-0' : '-mt-2'
-      }`}>
         {([
           { id: 'overview' as const, label: 'Hisobot' },
           { id: 'ai' as const, label: 'DentaAI' },
@@ -331,14 +327,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`relative pb-3 text-[14px] font-semibold transition-colors ${
+            className={`relative pb-3.5 text-[15.5px] font-semibold transition-colors ${
               activeTab === tab.id
                 ? 'text-gray-900 dark:text-white'
                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
             }`}
           >
-            <span className="flex items-center gap-1.5">
-              {tab.id === 'ai' && <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
+            <span className="flex items-center gap-2">
+              {tab.id === 'ai' && <Sparkles className="w-4 h-4 text-violet-500" />}
               {tab.label}
             </span>
             {activeTab === tab.id && (
