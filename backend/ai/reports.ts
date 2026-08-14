@@ -40,7 +40,18 @@ export interface Report {
     table?: ReportTable;
     narrative: string;
     sources: string[];
+    /** Ma'lumot umuman yo'q. UI nol devori o'rniga bo'sh holat ko'rsatadi. */
+    empty?: boolean;
+    emptyText?: string;
 }
+
+/**
+ * Rangni QIYMATGA bog'laydi. Ilgari tone statik edi va "0 so'm tushum"
+ * yashil chiqardi — go'yo yaxshi xabar. Nol hech qachon yutuq emas.
+ */
+const good = (v: number): Metric['tone'] => (v > 0 ? 'good' : 'neutral');
+const bad = (v: number): Metric['tone'] => (v > 0 ? 'bad' : 'neutral');
+const warn = (v: number): Metric['tone'] => (v > 0 ? 'warn' : 'neutral');
 
 export interface ReportContext {
     clinicId: string;
@@ -93,19 +104,22 @@ const BUILDERS: Record<ReportType, Builder> = {
         const st = appts.status_kesimida || {};
         const kelmagan = st['No-Show'] || 0;
 
+        const jami = appts.jami ?? 0;
         const metrics: Metric[] = [
-            { label: 'Jami qabul', value: appts.jami ?? 0, unit: 'ta' },
-            { label: 'Tasdiqlangan', value: st['Confirmed'] || 0, unit: 'ta', tone: 'good' },
-            { label: 'Yakunlangan', value: st['Completed'] || 0, unit: 'ta', tone: 'good' },
-            { label: 'Kelmagan', value: kelmagan, unit: 'ta', tone: kelmagan > 0 ? 'warn' : 'neutral' },
+            { label: 'Jami qabul', value: jami, unit: 'ta' },
+            { label: 'Tasdiqlangan', value: st['Confirmed'] || 0, unit: 'ta', tone: good(st['Confirmed'] || 0) },
+            { label: 'Yakunlangan', value: st['Completed'] || 0, unit: 'ta', tone: good(st['Completed'] || 0) },
+            { label: 'Kelmagan', value: kelmagan, unit: 'ta', tone: warn(kelmagan) },
         ];
         const sources = ['get_appointments'];
+        let tushum = 0;
 
         // Moliya faqat ruxsati borlar uchun.
         if (['SUPER_ADMIN', 'CLINIC_ADMIN'].includes(ctx.role)) {
             const rev = await runTool('get_revenue', { dateFrom: today, dateTo: today }, ctx);
             if (!rev.xato) {
-                metrics.push({ label: 'Bugungi tushum', ...som(rev.kassaga_kirgan || 0), tone: 'good' });
+                tushum = rev.kassaga_kirgan || 0;
+                metrics.push({ label: 'Bugungi tushum', ...som(tushum), tone: good(tushum) });
                 sources.push('get_revenue');
             }
         }
@@ -113,6 +127,8 @@ const BUILDERS: Record<ReportType, Builder> = {
         return {
             title: 'Bugungi hisobot',
             period: today,
+            empty: jami === 0 && tushum === 0,
+            emptyText: 'Bugunga qabul ham, to\'lov ham yozilmagan. Jadval bo\'sh.',
             metrics,
             table: appts.qabullar?.length
                 ? {
@@ -135,11 +151,13 @@ const BUILDERS: Record<ReportType, Builder> = {
         return {
             title: 'Samaradorlik hisoboti',
             period: `${r.dateFrom} — ${r.dateTo}`,
+            empty: docs.length === 0 || jamiTushum === 0,
+            emptyText: "Bu davrda shifokorlar bo'yicha yozuv yo'q.",
             metrics: [
                 { label: 'Shifokorlar', value: docs.length, unit: 'ta' },
-                { label: 'Jami tushum', ...som(jamiTushum), tone: 'good' },
+                { label: 'Jami tushum', ...som(jamiTushum), tone: good(jamiTushum) },
                 { label: 'Yetakchi', value: top?.shifokor || '—', hint: top ? `${Math.round(top.tushum).toLocaleString('ru-RU')} so'm` : undefined },
-                { label: 'Kelmaganlar', value: jamiKelmagan, unit: 'ta', tone: jamiKelmagan > 0 ? 'warn' : 'neutral' },
+                { label: 'Kelmaganlar', value: jamiKelmagan, unit: 'ta', tone: warn(jamiKelmagan) },
             ],
             table: docs.length
                 ? {
@@ -159,9 +177,11 @@ const BUILDERS: Record<ReportType, Builder> = {
         return {
             title: 'Moliya holati',
             period: `${r.dateFrom} — ${r.dateTo}`,
+            empty: !(f.kassaga_kirgan || f.xarajat || f.tolovlar_soni),
+            emptyText: "Bu oyda hali to'lov ham, xarajat ham yozilmagan.",
             metrics: [
-                { label: 'Kassaga kirgan', ...som(f.kassaga_kirgan || 0), tone: 'good' },
-                { label: 'Xarajat', ...som(f.xarajat || 0), tone: 'bad' },
+                { label: 'Kassaga kirgan', ...som(f.kassaga_kirgan || 0), tone: good(f.kassaga_kirgan || 0) },
+                { label: 'Xarajat', ...som(f.xarajat || 0), tone: bad(f.xarajat || 0) },
                 { label: 'Sof', ...som(f.sof || 0), tone: (f.sof || 0) >= 0 ? 'good' : 'bad' },
                 { label: 'To\'lovlar', value: f.tolovlar_soni || 0, unit: 'ta' },
             ],
@@ -184,9 +204,11 @@ const BUILDERS: Record<ReportType, Builder> = {
         return {
             title: 'Qarzdorlar',
             period: 'Hozirgi holat',
+            empty: list.length === 0,
+            emptyText: "Qarzdor bemor yo'q — hammasi to'langan.",
             metrics: [
-                { label: 'Qarzdorlar', value: d.topildi ?? list.length, unit: 'ta', tone: 'warn' },
-                { label: 'Jami qarz', ...som(d.jami_qarz || 0), tone: 'bad' },
+                { label: 'Qarzdorlar', value: d.topildi ?? list.length, unit: 'ta', tone: warn(d.topildi ?? list.length) },
+                { label: 'Jami qarz', ...som(d.jami_qarz || 0), tone: bad(d.jami_qarz || 0) },
                 { label: 'Eng katta', value: list[0]?.bemor || '—', hint: list[0] ? `${Math.round(list[0].qarz).toLocaleString('ru-RU')} so'm` : undefined },
             ],
             table: list.length
@@ -206,6 +228,8 @@ const BUILDERS: Record<ReportType, Builder> = {
         return {
             title: 'Ombor holati',
             period: 'Hozirgi holat',
+            empty: (s.jami_pozitsiya ?? 0) === 0,
+            emptyText: "Omborda hali material qo'shilmagan.",
             metrics: [
                 { label: 'Jami pozitsiya', value: s.jami_pozitsiya ?? 0, unit: 'ta' },
                 { label: 'Tugayotgan', value: s.tugayotgan ?? 0, unit: 'ta', tone: (s.tugayotgan ?? 0) > 0 ? 'warn' : 'good' },
@@ -230,10 +254,12 @@ const BUILDERS: Record<ReportType, Builder> = {
         return {
             title: 'Lidlar',
             period: 'Oxirgi 30 kun',
+            empty: jami === 0,
+            emptyText: 'Oxirgi 30 kunda lid kelmagan.',
             metrics: [
                 { label: 'Jami lid', value: jami, unit: 'ta' },
-                { label: 'Bemorga aylandi', value: booked, unit: 'ta', tone: 'good', hint: jami ? `${Math.round((booked / jami) * 100)}% konversiya` : undefined },
-                { label: 'Javobsiz', value: l.javobsiz_eski_lidlar || 0, unit: 'ta', tone: (l.javobsiz_eski_lidlar || 0) > 0 ? 'warn' : 'neutral' },
+                { label: 'Bemorga aylandi', value: booked, unit: 'ta', tone: good(booked), hint: jami ? `${Math.round((booked / jami) * 100)}% konversiya` : undefined },
+                { label: 'Javobsiz', value: l.javobsiz_eski_lidlar || 0, unit: 'ta', tone: warn(l.javobsiz_eski_lidlar || 0) },
             ],
             table: Object.keys(manba).length
                 ? {

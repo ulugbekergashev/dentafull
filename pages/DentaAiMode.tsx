@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, ArrowUp, X, Loader2, AlertTriangle, Database,
-  CalendarCheck, TrendingUp, Wallet, Users, Package, Sparkles, RotateCcw,
+  CalendarCheck, TrendingUp, Wallet, Users, Package, Sparkles, RotateCcw, Inbox,
 } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { UserRole } from '../types';
@@ -30,6 +30,8 @@ interface Report {
   table?: ReportTable;
   narrative: string;
   sources: string[];
+  empty?: boolean;
+  emptyText?: string;
 }
 
 interface ReportOption {
@@ -183,6 +185,8 @@ export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
   const [busyLabel, setBusyLabel] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [reports, setReports] = useState<ReportOption[]>([]);
+  // Qaysi hisobot ochiq — chip'da belgilanadi. Erkin savolda null.
+  const [activeReport, setActiveReport] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const hasResult = result !== null || busy;
@@ -200,7 +204,7 @@ export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (result) { setResult(null); setQuery(''); }
+      if (result) { setResult(null); setActiveReport(null); setQuery(''); }
       else onExit();
     };
     window.addEventListener('keydown', onKey);
@@ -210,6 +214,7 @@ export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
   const runReport = useCallback(async (type: string, title: string) => {
     setBusy(true);
     setBusyLabel(title);
+    setActiveReport(type);
     setResult(null);
     try {
       const d = await api<{ report: Report }>('/ai/report', { type });
@@ -226,6 +231,7 @@ export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
     if (!q || busy) return;
     setBusy(true);
     setBusyLabel('Ma\'lumot izlanmoqda');
+    setActiveReport(null);
     setResult(null);
     try {
       const d = await api<{ reply: string; sources?: string[] }>('/ai/ask', {
@@ -239,7 +245,12 @@ export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
     }
   }, [query, busy]);
 
-  const reset = () => { setResult(null); setQuery(''); inputRef.current?.focus(); };
+  const reset = () => {
+    setResult(null);
+    setActiveReport(null);
+    setQuery('');
+    inputRef.current?.focus();
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-[#0A0C10] text-slate-100 overflow-y-auto">
@@ -335,7 +346,36 @@ export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
           </div>
         </motion.div>
 
-        {/* Tayyor hisobotlar — faqat bosh ekranda */}
+        {/* Natija ochiq bo'lganda hisobotlar chip qatoriga aylanadi va JOYIDA
+            qoladi. Ilgari ular yo'qolib ketardi va boshqa hisobotni ko'rish uchun
+            "Yangi so'rov" bosish kerak edi — bu ortiqcha qadam. */}
+        {hasResult && reports.length > 0 && (
+          <div className="mt-5 -mx-1 px-1 flex items-center gap-2 overflow-x-auto pb-1
+                          [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {reports.map(r => {
+              const Icon = ICONS[r.type] || Sparkles;
+              const on = activeReport === r.type;
+              return (
+                <button
+                  key={r.type}
+                  onClick={() => runReport(r.type, r.title)}
+                  disabled={busy}
+                  className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px]
+                              transition-colors disabled:opacity-40 ${
+                    on
+                      ? 'bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/40'
+                      : 'bg-white/[0.04] text-slate-400 ring-1 ring-white/[0.06] hover:bg-white/[0.07] hover:text-slate-200'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {r.title}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Tayyor hisobotlar — bosh ekranda kengaytirilgan kartalar */}
         <AnimatePresence>
           {!hasResult && reports.length > 0 && (
             <motion.div
@@ -428,17 +468,33 @@ export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
                     <span className="text-[12px] text-slate-500 tabular-nums">{result.report.period}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-                    {result.report.metrics.map((m, i) => <MetricCard key={m.label} m={m} i={i} />)}
-                  </div>
+                  {/* Ma'lumot umuman bo'lmasa nol devorini ko'rsatish ma'nosiz —
+                      u xato bo'lib tuyuladi. O'rniga holatni ochiq aytamiz. */}
+                  {result.report.empty ? (
+                    <div className="rounded-2xl ring-1 ring-white/[0.06] bg-white/[0.02] px-6 py-10 text-center">
+                      <div className="w-10 h-10 rounded-xl bg-white/[0.04] grid place-items-center mx-auto mb-3.5">
+                        <Inbox className="w-5 h-5 text-slate-600" />
+                      </div>
+                      <div className="text-[15px] text-slate-300 mb-1">Ma'lumot yo'q</div>
+                      <div className="text-[13px] text-slate-500 max-w-sm mx-auto">
+                        {result.report.emptyText || 'Bu davr uchun yozuv topilmadi.'}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                        {result.report.metrics.map((m, i) => <MetricCard key={m.label} m={m} i={i} />)}
+                      </div>
 
-                  {result.report.narrative && (
-                    <p className="text-[15px] leading-relaxed text-slate-300 max-w-2xl whitespace-pre-wrap">
-                      {result.report.narrative}
-                    </p>
+                      {result.report.narrative && (
+                        <p className="text-[15px] leading-relaxed text-slate-300 max-w-2xl whitespace-pre-wrap">
+                          {result.report.narrative}
+                        </p>
+                      )}
+
+                      {result.report.table && <DataTable t={result.report.table} />}
+                    </>
                   )}
-
-                  {result.report.table && <DataTable t={result.report.table} />}
                   <SourcePills sources={result.report.sources} />
                 </>
               )}
