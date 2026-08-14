@@ -61,7 +61,7 @@ const providers = (): ProviderConfig[] => [
         // Tezligi ham bir xil (~1.6s). qwen3.6-27b ni ishlatmang — u ichki
         // fikrlashini ingliz tilida javobga chiqarib yuboradi.
         models: {
-            chat: process.env.GROQ_MODEL_CHAT || 'openai/gpt-oss-120b',
+            chat: process.env.GROQ_MODEL_CHAT || 'llama-3.3-70b-versatile',
             cheap: process.env.GROQ_MODEL_CHEAP || 'llama-3.1-8b-instant',
         },
     },

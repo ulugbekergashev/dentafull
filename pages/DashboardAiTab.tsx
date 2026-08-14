@@ -444,9 +444,10 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
           ) : (
             <div className="space-y-4 pb-4">
               {insights.map((insight, i) => {
-                const colonIdx = insight.indexOf(':');
-                const header = colonIdx > -1 ? insight.slice(0, colonIdx).trim() : insight;
-                const body = colonIdx > -1 ? insight.slice(colonIdx + 1).trim() : '';
+                const cleanInsight = insight.replace(/^#+\s*/, '').replace(/\*\*/g, '').trim();
+                const colonIdx = cleanInsight.indexOf(':');
+                const header = colonIdx > -1 ? cleanInsight.slice(0, colonIdx).trim() : cleanInsight;
+                const body = colonIdx > -1 ? cleanInsight.slice(colonIdx + 1).trim() : '';
                 return (
                   <motion.div
                     key={i}
