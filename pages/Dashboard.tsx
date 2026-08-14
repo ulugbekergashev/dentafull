@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { DashboardAiTab } from './DashboardAiTab';
+import { DentaAiMode } from './DentaAiMode';
 import { Card, Badge, Input, Modal, Button } from '../components/Common';
 import { StatCard } from '../components/StatCard';
 import {
@@ -55,7 +55,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const [debtPayMethod, setDebtPayMethod] = useState<PaymentMethod>('Cash');
   const [debtSaving, setDebtSaving] = useState(false);
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
-  const [activeTab, setActiveTab] = useState<'overview' | 'ai'>('overview');
+  const [activeTab] = useState<'overview'>('overview');
+  const [aiMode, setAiMode] = useState(false);
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -324,6 +325,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* DentaAI rejimi — boshqa tugmalardan ajralib turishi kerak, chunki bu
+              bir amal emas, butun ekranni almashtiradigan alohida ish usuli. */}
+          <button
+            onClick={() => setAiMode(true)}
+            className="group flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-xl text-xs font-bold
+                       text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/10
+                       ring-1 ring-violet-200 dark:ring-violet-400/20
+                       hover:bg-violet-100 dark:hover:bg-violet-500/15 transition-all active:scale-95"
+          >
+            <Sparkles className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform" />
+            DentaAI
+            <kbd className="hidden sm:inline text-[9px] font-mono font-normal px-1.5 py-0.5 rounded
+                            bg-white/70 dark:bg-black/30 text-violet-500 dark:text-violet-400">
+              AI
+            </kbd>
+          </button>
+
           {/* Quick Actions — dashboarddan turib bajariladi */}
           <div className="flex items-center gap-2">
             <button
@@ -380,41 +398,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </div>
       </div>
 
-      {/* Tab navigatsiya */}
-      <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl w-fit">
-        <button
-          id="tab-overview"
-          onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-            activeTab === 'overview'
-              ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          Umumiy
-        </button>
-        <button
-          id="tab-ai"
-          onClick={() => setActiveTab('ai')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-            activeTab === 'ai'
-              ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          <Bot className="w-3.5 h-3.5" />
-          DentaAI
-          <span className="text-[9px] font-black px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-full uppercase tracking-wider">Yangi</span>
-        </button>
-      </div>
-
-      {/* AI TAB */}
-      {activeTab === 'ai' && (
-        <DashboardAiTab userRole={userRole} stats={aiStats} />
+      {/* DentaAI — tab emas, REJIM. Bosilganda butun ekran AI ga o'tadi.
+          Sabab: AI dashboard ichidagi bir bo'lim emas, alohida ish usuli —
+          savol berasan yoki tayyor hisobot olasan, qolgan hamma narsa yo'qoladi. */}
+      {aiMode && (
+        <DentaAiMode userRole={userRole} onExit={() => setAiMode(false)} />
       )}
 
-      {/* UMUMIY TAB — qolgan hamma narsa */}
+      {/* UMUMIY */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">

@@ -17,7 +17,8 @@
         "dmedService.ts",
         "aiService.ts",
         "ai/tools.ts",
-        "ai/prompts.ts"
+        "ai/prompts.ts",
+        "ai/reports.ts"
     ],
     "exclude": [
         "node_modules",

@@ -916,122 +916,6 @@ app.post('/api/ai/dental-advisor', async (req: any, res: any) => {
     }
 });
 
-// Tizim ichidagi chat. Faqat tizimga kirgan foydalanuvchilar uchun.
-app.post('/api/ai/chat', authenticateToken, async (req: any, res: any) => {
-    try {
-        const user = (req as any).user;
-
-        if (!aiRateLimit(`chat:${user?.id || user?.username}`, 30, 60 * 60 * 1000)) {
-            return res.status(429).json({
-                error: 'Soatlik so\'rovlar chegarasiga yetdingiz. Biroz kutib turing.',
-            });
-        }
-
-        const { messages } = req.body || {};
-        if (!Array.isArray(messages) || messages.length === 0) {
-            return res.status(400).json({ error: 'messages massivi kerak' });
-        }
-
-        // Mijoz yuborgan system prompt'ga ishonmaymiz — uni faqat server belgilaydi.
-        const history = messages
-            .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
-            .slice(-12)
-            .map((m: any) => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
-
-        if (history.length === 0) {
-            return res.status(400).json({ error: 'Xabar matni bo\'sh' });
-        }
-
-        if (!aiService.isAiConfigured()) {
-            return res.status(503).json({ error: 'AI xizmati sozlanmagan' });
-        }
-
-        const reply = await aiService.chat(
-            [{ role: 'system', content: aiPrompts.chatSystemPrompt() }, ...history],
-            { task: 'chat', maxTokens: 1024, label: `chat:${user?.role}` }
-        );
-
-        res.json({ reply });
-    } catch (error: any) {
-        console.error('[AI] chat xatolik:', error.message);
-        res.status(502).json({ error: 'AI javob bera olmadi. Qayta urinib ko\'ring.' });
-    }
-});
-
-// ─── AI (2-bosqich: klinika ma'lumotini o'qiydigan chat) ─────────────────────
-// /api/ai/chat dan farqi: bu yerda AI tool'lar orqali bazani O'QIY oladi.
-// Yozish, o'zgartirish yoki o'chirish imkoniyati yo'q — faqat SELECT.
-const aiTools = require('./ai/tools');
-
-// Klinikalar O'zbekistonda — sana UTC+5 bo'yicha hisoblanadi, aks holda
-// kechqurun "bugun" so'ralganda model ertangi/kechagi sanani oladi.
-const clinicToday = (): string =>
-    new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
-    try {
-        const user = (req as any).user;
-        const clinicId = getScopedClinicId(req);
-
-        if (!clinicId) {
-            return res.status(400).json({
-                error: 'Klinika aniqlanmadi. SUPER_ADMIN uchun clinicId yuborilishi kerak.',
-            });
-        }
-
-        if (!aiRateLimit(`ask:${user?.id || user?.username || user?.name}`, 40, 60 * 60 * 1000)) {
-            return res.status(429).json({ error: 'Soatlik so\'rovlar chegarasiga yetdingiz.' });
-        }
-
-        const { messages } = req.body || {};
-        if (!Array.isArray(messages) || messages.length === 0) {
-            return res.status(400).json({ error: 'messages massivi kerak' });
-        }
-
-        // Faqat user/assistant qabul qilinadi — system prompt'ni server belgilaydi,
-        // aks holda foydalanuvchi cheklovlarni o'chirib tashlay olardi.
-        const history = messages
-            .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
-            .slice(-10)
-            .map((m: any) => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
-
-        if (history.length === 0) {
-            return res.status(400).json({ error: 'Xabar matni bo\'sh' });
-        }
-
-        if (!aiService.isAiConfigured()) {
-            return res.status(503).json({ error: 'AI xizmati sozlanmagan' });
-        }
-
-        const ctx = {
-            clinicId,
-            role: user?.role,
-            doctorId: user?.doctorId,
-        };
-
-        const tools = aiTools.toolsForRole(user?.role);
-
-        const { reply, toolCalls } = await aiService.chatWithTools(
-            [{ role: 'system', content: aiPrompts.askSystemPrompt(clinicToday()) }, ...history],
-            tools,
-            (name: string, args: any) => aiTools.runTool(name, args, ctx),
-            { task: 'chat', maxTokens: 1200, maxRounds: 5, label: `ask:${user?.role}` }
-        );
-
-        // toolCalls — shaffoflik uchun: foydalanuvchi javob qaysi ma'lumotga
-        // tayanganini ko'ra oladi.
-        res.json({ reply, sources: toolCalls.map((t: any) => t.name) });
-    } catch (error: any) {
-        console.error('[AI] ask xatolik:', error.message);
-        res.status(502).json({ error: 'AI javob bera olmadi. Qayta urinib ko\'ring.' });
-    }
-});
-
-// Diagnostika: qaysi provayderlar sozlangan. Kalitlar hech qachon qaytarilmaydi.
-app.get('/api/ai/status', authenticateToken, requireRole('SUPER_ADMIN'), (_req: any, res: any) => {
-    res.json({ ...aiService.aiStatus(), sana: clinicToday() });
-});
-
 // --- Authentication ---
 app.post('/api/auth/login', async (req, res) => {
     try {
@@ -5519,6 +5403,12 @@ const { chat: aiChat, chatWithTools, isAiConfigured } = require('./aiService');
 const { toolsForRole, runTool } = require('./ai/tools');
 const { askSystemPrompt, chatSystemPrompt } = require('./ai/prompts');
 
+// Klinikalar O'zbekistonda — sana UTC+5 bo'yicha hisoblanadi. Server UTC'da
+// ishlaydi, shuning uchun oddiy toISOString() kechqurun soat 19:00 dan keyin
+// ertangi sanani beradi va "bugun nechta qabul bor?" savoli noto'g'ri javob oladi.
+const clinicToday = (): string =>
+    new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
 // AI holati — konfiguratsiya tekshiruvi
 app.get('/api/ai/status', authenticateToken, (req: any, res: any) => {
     const { aiStatus } = require('./aiService');
@@ -5541,28 +5431,40 @@ app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
             return res.status(400).json({ success: false, message: 'clinicId aniqlanmadi.' });
         }
 
+        if (!aiRateLimit(`ask:${user?.id || user?.username || user?.name}`, 40, 60 * 60 * 1000)) {
+            return res.status(429).json({ success: false, message: 'Soatlik so\'rovlar chegarasiga yetdingiz. Biroz kutib turing.' });
+        }
+
         const { messages } = req.body as { messages?: { role: string; content: string }[] };
         if (!Array.isArray(messages) || messages.length === 0) {
             return res.status(400).json({ success: false, message: '`messages` massivi kerak.' });
         }
 
-        const today = new Date().toISOString().split('T')[0];
+        // Faqat user/assistant qabul qilinadi. Mijoz yuborgan `system` roliga
+        // ishonib bo'lmaydi: u orqali rol cheklovi va maxfiylik qoidalarini
+        // chetlab o'tish mumkin edi. System prompt'ni faqat server belgilaydi.
+        const history = messages
+            .filter(m => m?.role === 'user' || m?.role === 'assistant')
+            .slice(-10)
+            .map(m => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
+
+        if (history.length === 0) {
+            return res.status(400).json({ success: false, message: 'Xabar matni bo\'sh.' });
+        }
+
         const ctx = { clinicId: clinicId || '', role: user?.role || 'CLINIC_ADMIN', doctorId: user?.doctorId };
-
         const tools = toolsForRole(user?.role || 'CLINIC_ADMIN');
-        const history = [
-            { role: 'system', content: askSystemPrompt(today) },
-            ...messages,
-        ];
 
-        const { reply } = await chatWithTools(
-            history,
+        const { reply, toolCalls } = await chatWithTools(
+            [{ role: 'system', content: askSystemPrompt(clinicToday()) }, ...history],
             tools,
             (name: string, args: any) => runTool(name, args, ctx),
-            { label: 'ask', maxRounds: 5 }
+            { label: `ask:${user?.role}`, maxRounds: 5, maxTokens: 1200 }
         );
 
-        res.json({ success: true, reply });
+        // sources — shaffoflik uchun: javob qaysi ma'lumotga tayanganini
+        // foydalanuvchi ko'rsin.
+        res.json({ success: true, reply, sources: toolCalls.map((t: any) => t.name) });
     } catch (e: any) {
         console.error('[AI/ask]', e.message);
         res.status(500).json({ success: false, message: e.message || 'AI so\'rovida xatolik.' });
@@ -5601,6 +5503,45 @@ app.post('/api/ai/chat', authenticateToken, async (req: any, res: any) => {
  * Frontenddan klinika statistikasini qabul qilib, 3-5 ta tavsiya qaytaradi.
  * Faqat CLINIC_ADMIN va SUPER_ADMIN uchun.
  */
+// ─── Tayyor hisobotlar ───────────────────────────────────────────────────────
+const { buildReport, reportsForRole } = require('./ai/reports');
+
+// Rolga ko'ra mavjud hisobotlar ro'yxati — UI tugmalarni shu asosda chizadi.
+app.get('/api/ai/reports', authenticateToken, (req: any, res: any) => {
+    res.json({ success: true, reports: reportsForRole(req.user?.role || '') });
+});
+
+app.post('/api/ai/report', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (!isAiConfigured()) {
+            return res.status(503).json({ success: false, message: 'AI sozlanmagan: server .env da API kalit yo\'q.' });
+        }
+        const user = req.user;
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) {
+            return res.status(400).json({ success: false, message: 'Klinika aniqlanmadi.' });
+        }
+        if (!aiRateLimit(`report:${user?.id || user?.username || user?.name}`, 30, 60 * 60 * 1000)) {
+            return res.status(429).json({ success: false, message: 'Soatlik chegaraga yetdingiz. Biroz kutib turing.' });
+        }
+
+        const { type } = req.body || {};
+        if (!type) return res.status(400).json({ success: false, message: 'Hisobot turi ko\'rsatilmagan.' });
+
+        const report = await buildReport(
+            type,
+            { clinicId, role: user?.role, doctorId: user?.doctorId },
+            clinicToday()
+        );
+        res.json({ success: true, report });
+    } catch (e: any) {
+        console.error('[AI/report]', e.message);
+        // Ruxsat xatosi 403, qolgani 500 — UI ularni boshqacha ko'rsatadi.
+        const denied = /ruxsat/i.test(e.message || '');
+        res.status(denied ? 403 : 500).json({ success: false, message: e.message || 'Hisobot tayyorlanmadi.' });
+    }
+});
+
 app.post('/api/ai/insights', authenticateToken, async (req: any, res: any) => {
     try {
         if (!isAiConfigured()) {
