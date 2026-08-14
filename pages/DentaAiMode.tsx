@@ -1,11 +1,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Search, ArrowUp, X, Loader2, AlertTriangle, Database,
-  CalendarCheck, TrendingUp, Wallet, Users, Package, Sparkles, RotateCcw, Inbox,
+  Search, ArrowUp, Loader2, AlertTriangle, Database, Inbox,
+  CalendarCheck, TrendingUp, Wallet, Users, Package, Sparkles, RotateCcw,
 } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { UserRole } from '../types';
+
+// ─── DentaAI ─────────────────────────────────────────────────────────────────
+// Bu modal EMAS. Sahifa ichida, ilova navigatsiyasi joyida turgan holda
+// ochiladi — foydalanuvchi qayerdaligini yo'qotmaydi. Ilgari `fixed inset-0`
+// overlay edi va ilovaning yuqori paneli ostida kesilib qolardi.
+//
+// Chetlar ataylab bo'sh: karta ichida karta yo'q, bo'limlar faqat bo'sh joy
+// bilan ajratiladi. Yagona ko'zga tashlanadigan element — qidiruv maydoni.
 
 // ─── Tiplar ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +79,7 @@ async function api<T>(path: string, body?: object): Promise<T> {
   return data as T;
 }
 
-// ─── Ko'rinish yordamchilari ─────────────────────────────────────────────────
+// ─── Ko'rinish ───────────────────────────────────────────────────────────────
 
 const ICONS: Record<string, React.ElementType> = {
   today: CalendarCheck,
@@ -82,19 +90,21 @@ const ICONS: Record<string, React.ElementType> = {
   leads: Sparkles,
 };
 
+// Rang ilovaning yorug'/qorong'i rejimiga moslashadi.
 const TONE: Record<string, string> = {
-  neutral: 'text-slate-100',
-  good: 'text-emerald-300',
-  warn: 'text-amber-300',
-  bad: 'text-rose-300',
+  neutral: 'text-gray-900 dark:text-white',
+  good: 'text-emerald-600 dark:text-emerald-400',
+  warn: 'text-amber-600 dark:text-amber-400',
+  bad: 'text-rose-600 dark:text-rose-400',
 };
 
-/** Uzun raqamni ajratib ko'rsatadi; matn bo'lsa tegmaydi. */
+const CARD = 'bg-white dark:bg-gray-800/40 ring-1 ring-gray-200/80 dark:ring-white/[0.06]';
+
 const fmtValue = (v: number | string): string =>
   typeof v === 'number' ? v.toLocaleString('ru-RU') : v;
 
-// Tool nomlarini foydalanuvchi tiliga o'giradi — "get_revenue" hech kimga
-// hech narsa demaydi, "moliya" esa javob qayerdan kelganini tushuntiradi.
+// "get_revenue" hech kimga hech narsa demaydi — "moliya" javob qayerdan
+// kelganini tushuntiradi.
 const SOURCE_LABEL: Record<string, string> = {
   get_appointments: 'qabullar',
   get_revenue: 'moliya',
@@ -105,33 +115,38 @@ const SOURCE_LABEL: Record<string, string> = {
   get_leads: 'lidlar',
 };
 
-// ─── Kichik komponentlar ─────────────────────────────────────────────────────
-
 const MetricCard: React.FC<{ m: Metric; i: number }> = ({ m, i }) => (
   <motion.div
-    initial={{ opacity: 0, y: 12 }}
+    initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: i * 0.05, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-    className="rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06] px-5 py-4"
+    transition={{ delay: i * 0.04, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+    className={`rounded-2xl px-5 py-4 ${CARD}`}
   >
-    <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500 mb-2">{m.label}</div>
+    <div className="text-[11px] uppercase tracking-[0.12em] text-gray-400 dark:text-gray-500 mb-2">
+      {m.label}
+    </div>
     <div className={`text-[26px] leading-none font-semibold tabular-nums ${TONE[m.tone || 'neutral']}`}>
       {fmtValue(m.value)}
-      {m.unit && <span className="text-[13px] font-normal text-slate-500 ml-1.5">{m.unit}</span>}
+      {m.unit && (
+        <span className="text-[13px] font-normal text-gray-400 dark:text-gray-500 ml-1.5">{m.unit}</span>
+      )}
     </div>
-    {m.hint && <div className="text-[12px] text-slate-500 mt-2">{m.hint}</div>}
+    {m.hint && <div className="text-[12px] text-gray-400 dark:text-gray-500 mt-2">{m.hint}</div>}
   </motion.div>
 );
 
 const DataTable: React.FC<{ t: ReportTable }> = ({ t }) => (
-  <div className="rounded-2xl ring-1 ring-white/[0.06] overflow-hidden">
+  <div className={`rounded-2xl overflow-hidden ${CARD}`}>
     <div className="overflow-x-auto">
       <table className="w-full text-[13px] min-w-[480px]">
         <thead>
-          <tr className="bg-white/[0.03]">
+          <tr className="bg-gray-50/80 dark:bg-white/[0.03]">
             {t.columns.map(c => (
-              <th key={c} className="text-left font-medium text-slate-500 px-4 py-2.5 whitespace-nowrap
-                                     text-[11px] uppercase tracking-[0.1em]">
+              <th
+                key={c}
+                className="text-left font-medium px-4 py-2.5 whitespace-nowrap text-[11px]
+                           uppercase tracking-[0.1em] text-gray-400 dark:text-gray-500"
+              >
                 {c}
               </th>
             ))}
@@ -139,11 +154,16 @@ const DataTable: React.FC<{ t: ReportTable }> = ({ t }) => (
         </thead>
         <tbody>
           {t.rows.map((row, i) => (
-            <tr key={i} className="border-t border-white/[0.04]">
+            <tr key={i} className="border-t border-gray-100 dark:border-white/[0.04]">
               {row.map((cell, j) => (
-                <td key={j} className={`px-4 py-2.5 whitespace-nowrap ${
-                  j === 0 ? 'text-slate-200' : 'text-slate-400 tabular-nums'
-                }`}>
+                <td
+                  key={j}
+                  className={`px-4 py-2.5 whitespace-nowrap ${
+                    j === 0
+                      ? 'text-gray-800 dark:text-gray-200'
+                      : 'text-gray-500 dark:text-gray-400 tabular-nums'
+                  }`}
+                >
                   {cell}
                 </td>
               ))}
@@ -160,11 +180,14 @@ const SourcePills: React.FC<{ sources: string[] }> = ({ sources }) => {
   if (!uniq.length) return null;
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <Database className="w-3.5 h-3.5 text-slate-600" />
-      <span className="text-[11px] text-slate-600">Manba:</span>
+      <Database className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600" />
+      <span className="text-[11px] text-gray-400 dark:text-gray-500">Manba:</span>
       {uniq.map(s => (
-        <span key={s} className="text-[11px] text-slate-400 bg-white/[0.04] ring-1 ring-white/[0.06]
-                                 rounded-full px-2.5 py-0.5">
+        <span
+          key={s}
+          className="text-[11px] rounded-full px-2.5 py-0.5 text-gray-500 dark:text-gray-400
+                     bg-gray-100 dark:bg-white/[0.05]"
+        >
           {SOURCE_LABEL[s] || s}
         </span>
       ))}
@@ -176,40 +199,36 @@ const SourcePills: React.FC<{ sources: string[] }> = ({ sources }) => {
 
 interface Props {
   userRole: UserRole;
-  onExit: () => void;
+  /** Sahifa ichida ishlagani uchun ixtiyoriy — tab bo'lsa kerak emas. */
+  onExit?: () => void;
 }
 
-export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
+export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [reports, setReports] = useState<ReportOption[]>([]);
-  // Qaysi hisobot ochiq — chip'da belgilanadi. Erkin savolda null.
   const [activeReport, setActiveReport] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const hasResult = result !== null || busy;
 
-  // Rolga mos hisobotlar ro'yxatini serverdan olamiz — tugmalarni frontendda
-  // qattiq yozib qo'ysak, ruxsati yo'q rol ham ularni ko'rib, 403 olardi.
+  // Ro'yxat serverdan keladi — frontendda qattiq yozilsa, ruxsati yo'q rol
+  // tugmani ko'rib, bosib, 403 olardi.
   useEffect(() => {
     api<{ reports: ReportOption[] }>('/ai/reports')
       .then(d => setReports(d.reports || []))
       .catch(() => setReports([]));
-    inputRef.current?.focus();
   }, []);
 
-  // Esc — rejimdan chiqish (natija bo'lsa avval uni tozalaydi).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (result) { setResult(null); setActiveReport(null); setQuery(''); }
-      else onExit();
+      if (e.key === 'Escape' && result) reset();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [result, onExit]);
+  }, [result]);
 
   const runReport = useCallback(async (type: string, title: string) => {
     setBusy(true);
@@ -253,265 +272,248 @@ export const DentaAiMode: React.FC<Props> = ({ userRole, onExit }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0A0C10] text-slate-100 overflow-y-auto">
-      {/* Fon: bitta yumshoq nur. Yagona bezak — qolgani jim. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 top-0 h-[420px] opacity-60"
-        style={{ background: 'radial-gradient(60% 100% at 50% 0%, rgba(124,107,245,0.16), transparent 70%)' }}
-      />
+    <div className="w-full">
+      {/* Bosh holat: markazda, nafas oladigan bo'sh joy bilan.
+          Natija chiqqach yuqoriga siljiydi — motion layout buni silliq qiladi. */}
+      <motion.div layout transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}>
+        <AnimatePresence>
+          {!hasResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="text-center pt-10 pb-8"
+            >
+              <h2 className="text-[26px] sm:text-[32px] font-bold tracking-tight text-gray-900 dark:text-white">
+                Klinikangiz haqida so'rang
+              </h2>
+              <p className="text-gray-500 dark:text-gray-400 mt-2 text-[15px]">
+                Javob real ma'lumotlaringizdan olinadi — taxmin emas.
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Yuqori panel */}
-      <div className="relative flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-violet-500/15 ring-1 ring-violet-400/25 grid place-items-center">
-            <Sparkles className="w-3.5 h-3.5 text-violet-300" />
-          </div>
-          <span className="text-[15px] font-medium tracking-tight">DentaAI</span>
+        {/* Qidiruv — sahifadagi yagona urg'uli element */}
+        <div className="max-w-2xl mx-auto relative group">
+          <Search
+            className="absolute left-5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] pointer-events-none
+                       text-gray-400 dark:text-gray-500 group-focus-within:text-violet-500 transition-colors"
+          />
+          <textarea
+            ref={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); }
+            }}
+            rows={1}
+            placeholder="Masalan: bugun nechta qabul bor?"
+            className="w-full rounded-2xl pl-14 pr-14 py-4 text-[15px] resize-none outline-none
+                       bg-white dark:bg-gray-800/60
+                       ring-1 ring-gray-200 dark:ring-white/[0.08]
+                       focus:ring-2 focus:ring-violet-500/60
+                       placeholder:text-gray-400 dark:placeholder:text-gray-500
+                       text-gray-900 dark:text-white transition-shadow shadow-sm"
+          />
+          <button
+            onClick={ask}
+            disabled={!query.trim() || busy}
+            aria-label="Yuborish"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center
+                       rounded-xl bg-violet-600 text-white transition-colors
+                       disabled:bg-gray-100 dark:disabled:bg-white/[0.06]
+                       disabled:text-gray-300 dark:disabled:text-gray-600"
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
+          </button>
         </div>
-        <div className="flex items-center gap-2">
+      </motion.div>
+
+      {/* Natija ochiq — hisobotlar chip qatoriga aylanadi va JOYIDA qoladi.
+          Ilgari ular yo'qolardi va boshqasini ko'rish uchun qayta boshlash kerak edi. */}
+      {hasResult && reports.length > 0 && (
+        <div className="max-w-2xl mx-auto mt-3 flex items-center gap-2 overflow-x-auto pb-1
+                        [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {reports.map(r => {
+            const Icon = ICONS[r.type] || Sparkles;
+            const on = activeReport === r.type;
+            return (
+              <button
+                key={r.type}
+                onClick={() => runReport(r.type, r.title)}
+                disabled={busy}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]
+                            font-medium transition-colors disabled:opacity-40 ${
+                  on
+                    ? 'bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 ring-1 ring-violet-200 dark:ring-violet-400/30'
+                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {r.title}
+              </button>
+            );
+          })}
           {result && (
             <button
               onClick={reset}
-              className="flex items-center gap-1.5 text-[13px] text-slate-400 hover:text-slate-200
-                         px-3 py-1.5 rounded-lg hover:bg-white/[0.05] transition-colors"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]
+                         text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300
+                         hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors ml-auto"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Yangi so'rov
+              <RotateCcw className="w-3.5 h-3.5" /> Boshidan
             </button>
           )}
-          <button
-            onClick={onExit}
-            aria-label="Yopish"
-            className="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-slate-100
-                       hover:bg-white/[0.06] transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
-      </div>
+      )}
 
-      <div className="relative max-w-4xl mx-auto px-6 pb-24">
-        {/* Kirish maydoni. layout — markazdan yuqoriga silliq siljish. */}
-        <motion.div
-          layout
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className={hasResult ? 'pt-2' : 'pt-[16vh]'}
-        >
-          <AnimatePresence>
-            {!hasResult && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="text-center mb-8"
-              >
-                <h1 className="text-[30px] sm:text-[38px] font-semibold tracking-tight leading-tight">
-                  Klinikangiz haqida so'rang
-                </h1>
-                <p className="text-slate-500 mt-2.5 text-[15px]">
-                  Javob real ma'lumotlaringizdan olinadi — taxmin emas.
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div className="relative group">
-            <div className="absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none">
-              <Search className="w-[18px] h-[18px] text-slate-600 group-focus-within:text-violet-400 transition-colors" />
+      {/* Bosh ekran: kengaytirilgan hisobot kartalari */}
+      <AnimatePresence>
+        {!hasResult && reports.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ delay: 0.08 }}
+            className="max-w-3xl mx-auto mt-10 pb-6"
+          >
+            <div className="text-[11px] uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500 mb-3">
+              Bir bosishda
             </div>
-            <textarea
-              ref={inputRef}
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); }
-              }}
-              rows={1}
-              placeholder="Masalan: bugun nechta qabul bor?"
-              className="w-full bg-white/[0.04] ring-1 ring-white/[0.08] focus:ring-violet-500/50
-                         rounded-2xl pl-14 pr-14 py-4 text-[16px] placeholder:text-slate-600
-                         outline-none resize-none transition-shadow focus:bg-white/[0.06]
-                         focus:shadow-[0_0_0_4px_rgba(124,107,245,0.08)]"
-            />
-            <button
-              onClick={ask}
-              disabled={!query.trim() || busy}
-              aria-label="Yuborish"
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center
-                         rounded-xl bg-violet-500 text-white disabled:bg-white/[0.06]
-                         disabled:text-slate-600 transition-colors"
-            >
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Natija ochiq bo'lganda hisobotlar chip qatoriga aylanadi va JOYIDA
-            qoladi. Ilgari ular yo'qolib ketardi va boshqa hisobotni ko'rish uchun
-            "Yangi so'rov" bosish kerak edi — bu ortiqcha qadam. */}
-        {hasResult && reports.length > 0 && (
-          <div className="mt-5 -mx-1 px-1 flex items-center gap-2 overflow-x-auto pb-1
-                          [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {reports.map(r => {
-              const Icon = ICONS[r.type] || Sparkles;
-              const on = activeReport === r.type;
-              return (
-                <button
-                  key={r.type}
-                  onClick={() => runReport(r.type, r.title)}
-                  disabled={busy}
-                  className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-[13px]
-                              transition-colors disabled:opacity-40 ${
-                    on
-                      ? 'bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/40'
-                      : 'bg-white/[0.04] text-slate-400 ring-1 ring-white/[0.06] hover:bg-white/[0.07] hover:text-slate-200'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {r.title}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Tayyor hisobotlar — bosh ekranda kengaytirilgan kartalar */}
-        <AnimatePresence>
-          {!hasResult && reports.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ delay: 0.1 }}
-              className="mt-10"
-            >
-              <div className="text-[11px] uppercase tracking-[0.14em] text-slate-600 mb-3 px-1">
-                Bir bosishda
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {reports.map((r, i) => {
-                  const Icon = ICONS[r.type] || Sparkles;
-                  return (
-                    <motion.button
-                      key={r.type}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.12 + i * 0.04 }}
-                      whileHover={{ y: -2 }}
-                      onClick={() => runReport(r.type, r.title)}
-                      className="text-left rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06]
-                                 hover:ring-violet-400/30 hover:bg-white/[0.05] px-4 py-3.5
-                                 transition-colors group"
-                    >
-                      <div className="flex items-center gap-2.5 mb-1.5">
-                        <Icon className="w-4 h-4 text-slate-500 group-hover:text-violet-300 transition-colors" />
-                        <span className="text-[14px] font-medium">{r.title}</span>
-                      </div>
-                      <div className="text-[12px] text-slate-500 leading-snug">{r.hint}</div>
-                    </motion.button>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Yuklanmoqda */}
-        <AnimatePresence>
-          {busy && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="mt-8"
-            >
-              <div className="flex items-center gap-2.5 text-[13px] text-slate-500 mb-5">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-400" />
-                {busyLabel}…
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-                {[0, 1, 2, 3].map(i => (
-                  <div key={i} className="rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.05] px-5 py-4">
-                    <div className="h-2 w-14 bg-white/[0.06] rounded mb-3.5 animate-pulse" />
-                    <div className="h-6 w-20 bg-white/[0.06] rounded animate-pulse" />
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Natija */}
-        <AnimatePresence mode="wait">
-          {result && !busy && (
-            <motion.div
-              key={result.kind}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-8 space-y-6"
-            >
-              {result.kind === 'error' && (
-                <div className="rounded-2xl ring-1 ring-rose-500/25 bg-rose-500/[0.06] px-5 py-4
-                                flex items-start gap-3">
-                  <AlertTriangle className="w-4 h-4 text-rose-300 mt-0.5 shrink-0" />
-                  <div>
-                    <div className="text-[14px] text-rose-200 font-medium mb-0.5">Javob olinmadi</div>
-                    <div className="text-[13px] text-rose-200/70">{result.message}</div>
-                  </div>
-                </div>
-              )}
-
-              {result.kind === 'report' && (
-                <>
-                  <div className="flex items-baseline justify-between gap-4 flex-wrap">
-                    <h2 className="text-[22px] font-semibold tracking-tight">{result.report.title}</h2>
-                    <span className="text-[12px] text-slate-500 tabular-nums">{result.report.period}</span>
-                  </div>
-
-                  {/* Ma'lumot umuman bo'lmasa nol devorini ko'rsatish ma'nosiz —
-                      u xato bo'lib tuyuladi. O'rniga holatni ochiq aytamiz. */}
-                  {result.report.empty ? (
-                    <div className="rounded-2xl ring-1 ring-white/[0.06] bg-white/[0.02] px-6 py-10 text-center">
-                      <div className="w-10 h-10 rounded-xl bg-white/[0.04] grid place-items-center mx-auto mb-3.5">
-                        <Inbox className="w-5 h-5 text-slate-600" />
-                      </div>
-                      <div className="text-[15px] text-slate-300 mb-1">Ma'lumot yo'q</div>
-                      <div className="text-[13px] text-slate-500 max-w-sm mx-auto">
-                        {result.report.emptyText || 'Bu davr uchun yozuv topilmadi.'}
-                      </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {reports.map((r, i) => {
+                const Icon = ICONS[r.type] || Sparkles;
+                return (
+                  <motion.button
+                    key={r.type}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 + i * 0.035 }}
+                    whileHover={{ y: -2 }}
+                    onClick={() => runReport(r.type, r.title)}
+                    className={`text-left rounded-2xl px-4 py-3.5 transition-colors group
+                                hover:ring-violet-300 dark:hover:ring-violet-400/30 ${CARD}`}
+                  >
+                    <div className="flex items-center gap-2.5 mb-1.5">
+                      <Icon className="w-4 h-4 text-gray-400 dark:text-gray-500
+                                       group-hover:text-violet-500 transition-colors" />
+                      <span className="text-[14px] font-semibold text-gray-900 dark:text-white">
+                        {r.title}
+                      </span>
                     </div>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-                        {result.report.metrics.map((m, i) => <MetricCard key={m.label} m={m} i={i} />)}
-                      </div>
+                    <div className="text-[12px] text-gray-500 dark:text-gray-400 leading-snug">
+                      {r.hint}
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-                      {result.report.narrative && (
-                        <p className="text-[15px] leading-relaxed text-slate-300 max-w-2xl whitespace-pre-wrap">
-                          {result.report.narrative}
-                        </p>
-                      )}
+      {/* Yuklanmoqda */}
+      <AnimatePresence>
+        {busy && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-8">
+            <div className="flex items-center gap-2.5 text-[13px] text-gray-500 dark:text-gray-400 mb-5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-500" />
+              {busyLabel}…
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className={`rounded-2xl px-5 py-4 ${CARD}`}>
+                  <div className="h-2 w-14 bg-gray-200 dark:bg-white/[0.07] rounded mb-3.5 animate-pulse" />
+                  <div className="h-6 w-20 bg-gray-200 dark:bg-white/[0.07] rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-                      {result.report.table && <DataTable t={result.report.table} />}
-                    </>
-                  )}
-                  <SourcePills sources={result.report.sources} />
-                </>
-              )}
+      {/* Natija */}
+      <AnimatePresence mode="wait">
+        {result && !busy && (
+          <motion.div
+            key={result.kind + (activeReport || '')}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-8 space-y-5"
+          >
+            {result.kind === 'error' && (
+              <div className="rounded-2xl px-5 py-4 flex items-start gap-3
+                              ring-1 ring-rose-200 dark:ring-rose-500/25
+                              bg-rose-50 dark:bg-rose-500/[0.07]">
+                <AlertTriangle className="w-4 h-4 text-rose-500 dark:text-rose-400 mt-0.5 shrink-0" />
+                <div>
+                  <div className="text-[14px] font-semibold text-rose-700 dark:text-rose-200 mb-0.5">
+                    Javob olinmadi
+                  </div>
+                  <div className="text-[13px] text-rose-600/80 dark:text-rose-200/70">{result.message}</div>
+                </div>
+              </div>
+            )}
 
-              {result.kind === 'answer' && (
-                <>
-                  <div className="text-[13px] text-slate-500">{result.question}</div>
-                  <p className="text-[16px] leading-relaxed text-slate-200 whitespace-pre-wrap max-w-2xl">
-                    {result.text}
-                  </p>
-                  <SourcePills sources={result.sources} />
-                </>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            {result.kind === 'report' && (
+              <>
+                <div className="flex items-baseline justify-between gap-4 flex-wrap">
+                  <h3 className="text-[20px] font-bold tracking-tight text-gray-900 dark:text-white">
+                    {result.report.title}
+                  </h3>
+                  <span className="text-[12px] text-gray-400 dark:text-gray-500 tabular-nums">
+                    {result.report.period}
+                  </span>
+                </div>
+
+                {/* Nol devori xatodek tuyuladi — o'rniga holatni ochiq aytamiz. */}
+                {result.report.empty ? (
+                  <div className={`rounded-2xl px-6 py-12 text-center ${CARD}`}>
+                    <div className="w-10 h-10 rounded-xl grid place-items-center mx-auto mb-3.5
+                                    bg-gray-100 dark:bg-white/[0.05]">
+                      <Inbox className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                    </div>
+                    <div className="text-[15px] text-gray-700 dark:text-gray-300 mb-1">Ma'lumot yo'q</div>
+                    <div className="text-[13px] text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                      {result.report.emptyText || 'Bu davr uchun yozuv topilmadi.'}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                      {result.report.metrics.map((m, i) => <MetricCard key={m.label} m={m} i={i} />)}
+                    </div>
+
+                    {result.report.narrative && (
+                      <p className="text-[15px] leading-relaxed text-gray-700 dark:text-gray-300
+                                    max-w-2xl whitespace-pre-wrap">
+                        {result.report.narrative}
+                      </p>
+                    )}
+
+                    {result.report.table && <DataTable t={result.report.table} />}
+                  </>
+                )}
+                <SourcePills sources={result.report.sources} />
+              </>
+            )}
+
+            {result.kind === 'answer' && (
+              <>
+                <div className="text-[13px] text-gray-400 dark:text-gray-500">{result.question}</div>
+                <p className="text-[16px] leading-relaxed text-gray-800 dark:text-gray-200
+                              whitespace-pre-wrap max-w-2xl">
+                  {result.text}
+                </p>
+                <SourcePills sources={result.sources} />
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
