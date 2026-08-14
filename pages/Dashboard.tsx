@@ -414,8 +414,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <DashboardAiTab userRole={userRole} stats={aiStats} />
       )}
 
-      {/* UMUMIY TAB — KPI Cards Grid */}
-      {activeTab === 'overview' && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+      {/* UMUMIY TAB — qolgan hamma narsa */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <StatCard
           label={t('dashboard.totalPatients')} value={totalPatients.toLocaleString()} icon={Users} color="primary"
           subtitle={<span className="flex items-center"><span className="font-bold text-success-600 bg-success-50 dark:bg-success-900/30 px-1.5 py-0.5 rounded-full">+{activePatients}</span><span className="ml-1.5">{t('dashboard.active')}</span></span>}
@@ -1165,7 +1167,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </Modal>
         );
       })()}
-      </div>}
+        </div>
+      )}
 
       {/* Tezkor amal modallari */}
       {onAddPatient && (
