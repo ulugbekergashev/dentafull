@@ -3,12 +3,14 @@ import {
   Bot, Send, Sparkles, RefreshCw, MessageSquare,
   Lightbulb, AlertCircle, Loader2, ChevronRight, Zap
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { API_URL, isDemoMode } from '../services/api';
 import { UserRole } from '../types';
 
 // ─── Tiplар ─────────────────────────────────────────────────────────────────
 
 interface ChatMessage {
+  id: string;
   role: 'user' | 'assistant';
   content: string;
   loading?: boolean;
@@ -94,6 +96,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
   // Chat holati
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
+      id: 'init-msg',
       role: 'assistant',
       content:
         'Salom! Men DentaCRM AI yordamchisiman. Klinikangiz haqida savol bering — qabullar, tushum, qarzdorlar, ombor va lidlar haqida ma\'lumot bera olaman.',
@@ -108,14 +111,13 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
   const [insights, setInsights] = useState<string[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState('');
-  const [insightsLoaded, setInsightsLoaded] = useState(false);
 
   // Auto-scroll
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Insights — sahifa ochilganda avtomatik yuklash (faqat admin)
+  // Insights — sahifa ochilganda avtomatik yuklash
   const loadInsights = useCallback(async () => {
     if (!isAdmin) return;
     setInsightsLoading(true);
@@ -128,7 +130,6 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
         const data = await apiPost<{ insights: string[] }>('/ai/insights', { stats });
         setInsights(data.insights || []);
       }
-      setInsightsLoaded(true);
     } catch (e: any) {
       setInsightsError(e.message || 'Tahlil xatoligi');
     } finally {
@@ -138,15 +139,18 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
 
   useEffect(() => {
     loadInsights();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadInsights]);
 
   // Chat yuborish
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || chatLoading) return;
 
-    const userMsg: ChatMessage = { role: 'user', content: text };
-    const loadingMsg: ChatMessage = { role: 'assistant', content: '', loading: true };
+    const userMsgId = Date.now().toString();
+    const loadingMsgId = (Date.now() + 1).toString();
+    
+    const userMsg: ChatMessage = { id: userMsgId, role: 'user', content: text };
+    const loadingMsg: ChatMessage = { id: loadingMsgId, role: 'assistant', content: '', loading: true };
 
     setMessages(prev => [...prev, userMsg, loadingMsg]);
     setInput('');
@@ -156,7 +160,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
       let reply = '';
 
       if (isDemoMode()) {
-        await new Promise(r => setTimeout(r, 1000 + Math.random() * 600));
+        await new Promise(r => setTimeout(r, 1500));
         const lower = text.toLowerCase();
         if (lower.includes('qabul')) reply = DEMO_CHAT_RESPONSES.qabul;
         else if (lower.includes('tushum') || lower.includes('daromad') || lower.includes('pul')) reply = DEMO_CHAT_RESPONSES.tushum;
@@ -164,7 +168,6 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
         else if (lower.includes('qarz') || lower.includes('qarzdor')) reply = DEMO_CHAT_RESPONSES.qarz;
         else reply = DEMO_CHAT_RESPONSES.default;
       } else {
-        // Suhbat tarixi (loading msg ni olib tashlab)
         const history = messages
           .filter(m => !m.loading)
           .concat(userMsg)
@@ -176,13 +179,14 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
       }
 
       setMessages(prev => [
-        ...prev.filter(m => !m.loading),
-        { role: 'assistant', content: reply },
+        ...prev.filter(m => m.id !== loadingMsgId),
+        { id: Date.now().toString(), role: 'assistant', content: reply },
       ]);
     } catch (e: any) {
       setMessages(prev => [
-        ...prev.filter(m => !m.loading),
+        ...prev.filter(m => m.id !== loadingMsgId),
         {
+          id: Date.now().toString(),
           role: 'assistant',
           content: `Xatolik: ${e.message || 'AI bilan aloqa yo\'q. Iltimos, qayta urining.'}`,
         },
@@ -200,7 +204,6 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
     }
   };
 
-  // Tezkor savol tugmalari
   const quickQuestions = isAdmin
     ? [
         'Bugun nechta qabul bor?',
@@ -217,231 +220,283 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
   // ─── UI ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 animate-fade-in">
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 mb-8">
 
       {/* CHAT PANELI (7 ustun) */}
-      <div className="xl:col-span-7 flex flex-col bg-white dark:bg-gray-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden" style={{ minHeight: 520 }}>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="xl:col-span-7 flex flex-col bg-white/70 dark:bg-[#111318]/70 backdrop-blur-3xl rounded-[2.5rem] border border-white/20 dark:border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative" 
+        style={{ minHeight: 600 }}
+      >
+        {/* Glow Effects */}
+        <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-violet-400/20 dark:bg-violet-600/10 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-[100px] translate-x-1/3 translate-y-1/3 pointer-events-none" />
 
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-900/20 dark:to-indigo-900/20">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm flex-shrink-0">
-            <MessageSquare className="w-4 h-4 text-white" />
+        <div className="relative z-10 flex items-center gap-4 px-8 py-6 border-b border-gray-200/50 dark:border-gray-800/50">
+          <div className="relative flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-violet-500/30">
+            <Sparkles className="w-6 h-6 text-white" />
+            <div className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-gray-900"></span>
+            </div>
           </div>
           <div>
-            <h3 className="text-sm font-black text-gray-900 dark:text-white">AI Suhbat</h3>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              {isAdmin ? 'Klinika ma\'lumotlariga asoslangan javoblar' : 'Umumiy yordam'}
+            <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300">
+              DentaAI Yordamchi
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              {isAdmin ? 'Ma\'lumotlar bazasi bilan bog\'langan' : 'Umumiy stomatologiya maslahatlari'}
             </p>
-          </div>
-          <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded-full">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Jonli</span>
           </div>
         </div>
 
         {/* Xabarlar */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4" style={{ maxHeight: 360 }}>
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'assistant' && (
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Bot className="w-3.5 h-3.5 text-white" />
-                </div>
-              )}
-              <div
-                className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-tr-sm shadow-md'
-                    : 'bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-gray-700 rounded-tl-sm'
-                }`}
+        <div className="relative z-10 flex-1 overflow-y-auto px-8 py-6 space-y-6 custom-scrollbar" style={{ maxHeight: 420 }}>
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => (
+              <motion.div 
+                key={msg.id}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                {msg.loading ? (
-                  <span className="flex items-center gap-1.5 text-gray-400">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </span>
-                ) : (
-                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                {msg.role === 'assistant' && (
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm flex-shrink-0 mt-1">
+                    <Bot className="w-4.5 h-4.5 text-white" />
+                  </div>
                 )}
-              </div>
-              {msg.role === 'user' && (
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-white text-[10px] font-black">S</span>
+                <div
+                  className={`max-w-[75%] px-5 py-3.5 rounded-3xl text-[15px] leading-relaxed shadow-sm ${
+                    msg.role === 'user'
+                      ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-tr-sm shadow-violet-500/20'
+                      : 'bg-white dark:bg-[#1C1F26] text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-gray-800 rounded-tl-sm'
+                  }`}
+                >
+                  {msg.loading ? (
+                    <div className="flex items-center gap-2 h-6 px-2">
+                      <motion.span animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} className="w-2 h-2 bg-violet-400 rounded-full" />
+                      <motion.span animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} className="w-2 h-2 bg-violet-400 rounded-full" />
+                      <motion.span animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} className="w-2 h-2 bg-violet-400 rounded-full" />
+                    </div>
+                  ) : (
+                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+              </motion.div>
+            ))}
+          </AnimatePresence>
           <div ref={chatEndRef} />
         </div>
 
         {/* Tezkor savollar */}
-        <div className="px-5 py-2 flex items-center gap-2 overflow-x-auto border-t border-gray-50 dark:border-gray-800">
+        <div className="relative z-10 px-8 py-3 flex items-center gap-3 overflow-x-auto scrollbar-hide border-t border-gray-200/30 dark:border-gray-800/50 bg-white/30 dark:bg-black/10 backdrop-blur-md">
           {quickQuestions.map((q, i) => (
-            <button
+            <motion.button
               key={i}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => { setInput(q); setTimeout(() => inputRef.current?.focus(), 50); }}
-              className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 bg-gray-50 dark:bg-gray-800 hover:bg-violet-50 dark:hover:bg-violet-900/20 text-gray-600 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 border border-gray-100 dark:border-gray-700 hover:border-violet-200 dark:hover:border-violet-800 rounded-full transition-all whitespace-nowrap"
+              className="flex-shrink-0 text-[13px] font-medium px-4 py-2 bg-white dark:bg-gray-800/80 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-gray-700 dark:text-gray-300 hover:text-violet-700 dark:hover:text-violet-300 border border-gray-200 dark:border-gray-700 hover:border-violet-300 dark:hover:border-violet-700 rounded-2xl transition-colors shadow-sm whitespace-nowrap"
             >
               {q}
-            </button>
+            </motion.button>
           ))}
         </div>
 
         {/* Kiritish maydoni */}
-        <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800">
-          <div className="flex items-end gap-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3 focus-within:border-violet-400 dark:focus-within:border-violet-600 transition-colors">
+        <div className="relative z-10 p-6 bg-white/50 dark:bg-[#111318]/80 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-800/50">
+          <div className="relative flex items-end gap-3 bg-white dark:bg-[#1C1F26] border border-gray-200 dark:border-gray-700 rounded-[2rem] p-2 pr-2.5 shadow-sm focus-within:ring-4 focus-within:ring-violet-500/10 focus-within:border-violet-500 transition-all duration-300">
             <textarea
               ref={inputRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Savol bering... (Enter — yuborish, Shift+Enter — yangi qator)"
+              placeholder="AIni ishga soling..."
               rows={1}
               style={{ resize: 'none' }}
-              className="flex-1 bg-transparent text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none leading-relaxed"
+              className="flex-1 bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none leading-relaxed py-3 px-4 max-h-32 custom-scrollbar"
             />
-            <button
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={sendMessage}
               disabled={!input.trim() || chatLoading}
-              className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-300 dark:disabled:from-gray-700 dark:disabled:to-gray-700 flex items-center justify-center transition-all active:scale-95 shadow-sm"
+              className="flex-shrink-0 w-12 h-12 rounded-[1.5rem] bg-gradient-to-br from-violet-600 to-indigo-600 disabled:from-gray-300 disabled:to-gray-400 dark:disabled:from-gray-700 dark:disabled:to-gray-800 flex items-center justify-center shadow-md disabled:shadow-none transition-all disabled:opacity-70 mb-0.5"
             >
               {chatLoading ? (
-                <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                <Loader2 className="w-5 h-5 text-white animate-spin" />
               ) : (
-                <Send className="w-3.5 h-3.5 text-white" />
+                <Send className="w-5 h-5 text-white ml-1" />
               )}
-            </button>
+            </motion.button>
           </div>
-          <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-1.5 pl-1">
-            {isDemoMode() ? 'Demo rejim — real ma\'lumotlar ko\'rsatilmaydi' : 'Ma\'lumotlar shifrlangan va maxfiy'}
-          </p>
-        </div>
-      </div>
-
-      {/* INSIGHTS PANELI (5 ustun) */}
-      <div className="xl:col-span-5 flex flex-col bg-white dark:bg-gray-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
-
-        {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-sm flex-shrink-0">
-            <Lightbulb className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <h3 className="text-sm font-black text-gray-900 dark:text-white">Aqlli Tavsiyalar</h3>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              Statistikangiz asosidagi AI tahlili
+          <div className="flex justify-between items-center mt-3 px-4">
+             <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium tracking-wide">
+              {isDemoMode() ? 'Demo rejim faol' : 'Ma\'lumotlar to\'liq shifrlangan'}
+            </p>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
+              AI xato qilishi mumkin.
             </p>
           </div>
-          <button
+        </div>
+      </motion.div>
+
+      {/* INSIGHTS PANELI (5 ustun) */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
+        className="xl:col-span-5 flex flex-col bg-white/70 dark:bg-[#111318]/70 backdrop-blur-3xl rounded-[2.5rem] border border-white/20 dark:border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative"
+      >
+        {/* Glow Effects */}
+        <div className="absolute -top-32 -right-32 w-[400px] h-[400px] bg-amber-400/20 dark:bg-orange-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+        {/* Header */}
+        <div className="relative z-10 flex items-center gap-4 px-8 py-6 border-b border-gray-200/50 dark:border-gray-800/50">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20 flex-shrink-0">
+            <Lightbulb className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300">
+              Aqlli Tavsiyalar
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Biznesingizni o'stirish uchun
+            </p>
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 180 }}
+            whileTap={{ scale: 0.9 }}
             onClick={loadInsights}
             disabled={insightsLoading}
-            title="Qayta yuklash"
-            className="ml-auto w-7 h-7 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 flex items-center justify-center transition-all"
+            className="ml-auto w-10 h-10 rounded-xl bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-500/50 flex items-center justify-center transition-colors shadow-sm"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-amber-600 dark:text-amber-400 ${insightsLoading ? 'animate-spin' : ''}`} />
-          </button>
+            <RefreshCw className={`w-4.5 h-4.5 text-orange-500 ${insightsLoading ? 'animate-spin' : ''}`} />
+          </motion.button>
         </div>
 
         {/* Insights content */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="relative z-10 flex-1 overflow-y-auto px-8 py-6 custom-scrollbar">
           {!isAdmin ? (
-            <div className="flex flex-col items-center justify-center h-40 text-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
-                <Zap className="w-6 h-6 text-gray-300 dark:text-gray-600" />
+            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center gap-4">
+              <div className="w-16 h-16 rounded-[2rem] bg-gray-100 dark:bg-gray-800/50 flex items-center justify-center shadow-inner">
+                <Zap className="w-8 h-8 text-gray-400 dark:text-gray-500" />
               </div>
-              <p className="text-sm text-gray-400 dark:text-gray-500">
-                Tavsiyalar faqat klinika ma'muri uchun mavjud
+              <p className="text-base font-medium text-gray-500 dark:text-gray-400 max-w-[200px]">
+                Tavsiyalar faqat klinika ma'muriyatiga ko'rsatiladi
               </p>
             </div>
           ) : insightsLoading ? (
-            <div className="space-y-3 py-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="animate-pulse rounded-2xl bg-gray-50 dark:bg-gray-800 p-4 space-y-2">
-                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full w-3/4" />
-                  <div className="h-3 bg-gray-100 dark:bg-gray-700/60 rounded-full w-full" />
-                  <div className="h-3 bg-gray-100 dark:bg-gray-700/60 rounded-full w-5/6" />
-                </div>
+            <div className="space-y-4 py-2">
+              {[1, 2, 3].map((i, index) => (
+                <motion.div 
+                  key={i} 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="rounded-[1.5rem] bg-white dark:bg-[#1C1F26] border border-gray-100 dark:border-gray-800 p-5 space-y-3 shadow-sm"
+                >
+                  <div className="h-4 bg-gray-200/50 dark:bg-gray-800 rounded-full w-2/3 animate-pulse" />
+                  <div className="h-3 bg-gray-100 dark:bg-gray-800/50 rounded-full w-full animate-pulse" />
+                  <div className="h-3 bg-gray-100 dark:bg-gray-800/50 rounded-full w-4/5 animate-pulse" />
+                </motion.div>
               ))}
-              <p className="text-center text-xs text-gray-400 dark:text-gray-500 animate-pulse pt-1">
-                AI tahlil qilmoqda...
-              </p>
             </div>
           ) : insightsError ? (
-            <div className="flex flex-col items-center justify-center h-40 gap-3 text-center">
-              <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-red-400" />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center justify-center h-full min-h-[300px] gap-4 text-center bg-red-50/50 dark:bg-red-900/10 rounded-[2rem] border border-red-100 dark:border-red-900/30 p-8"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500">
+                <AlertCircle className="w-7 h-7" />
               </div>
-              <p className="text-xs text-red-500 dark:text-red-400">{insightsError}</p>
-              <button
+              <h4 className="text-lg font-bold text-red-600 dark:text-red-400">Xatolik yuz berdi</h4>
+              <p className="text-sm text-red-500 dark:text-red-300 mb-2">{insightsError}</p>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={loadInsights}
-                className="text-xs font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                className="px-6 py-2.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 font-bold rounded-xl transition-colors text-sm flex items-center gap-2"
               >
-                <RefreshCw className="w-3 h-3" /> Qayta urinish
-              </button>
-            </div>
+                <RefreshCw className="w-4 h-4" /> Boshqatdan urinish
+              </motion.button>
+            </motion.div>
           ) : insights.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-center gap-3">
-              <Sparkles className="w-10 h-10 text-gray-200 dark:text-gray-700" />
-              <p className="text-sm text-gray-400 dark:text-gray-500">
-                Tavsiyalar hali yuklanmagan
+            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center gap-4">
+              <Sparkles className="w-12 h-12 text-gray-300 dark:text-gray-700" />
+              <p className="text-base text-gray-400 dark:text-gray-500 font-medium">
+                Siz uchun tavsiyalar tayyor
               </p>
-              <button
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={loadInsights}
-                className="text-xs font-bold px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-xl border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all"
+                className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 mt-2"
               >
-                Tahlil qilish
-              </button>
+                Tahlilni boshlash
+              </motion.button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4 pb-4">
               {insights.map((insight, i) => {
                 const colonIdx = insight.indexOf(':');
                 const header = colonIdx > -1 ? insight.slice(0, colonIdx).trim() : insight;
                 const body = colonIdx > -1 ? insight.slice(colonIdx + 1).trim() : '';
                 return (
-                  <div
+                  <motion.div
                     key={i}
-                    className="group p-4 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-amber-200 dark:hover:border-amber-800 hover:bg-amber-50/50 dark:hover:bg-amber-900/10 transition-all cursor-default"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.1, duration: 0.4 }}
+                    className="group p-5 rounded-[1.5rem] bg-white dark:bg-[#1C1F26] border border-gray-100 dark:border-gray-800 hover:border-orange-300 dark:hover:border-orange-500/50 hover:shadow-xl hover:shadow-orange-500/5 transition-all duration-300"
                   >
-                    <div className="flex items-start gap-3">
-                      <span className="text-xs font-black px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-full flex-shrink-0 mt-0.5">
+                    <div className="flex items-start gap-4">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 font-black text-sm flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
                         {i + 1}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-black text-gray-900 dark:text-white leading-snug">{header}</p>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug">{header}</p>
                         {body && (
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">{body}</p>
+                          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{body}</p>
                         )}
                       </div>
-                      <ChevronRight className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 group-hover:text-amber-400 transition-colors flex-shrink-0 mt-0.5 ml-auto" />
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
-              <p className="text-[10px] text-center text-gray-300 dark:text-gray-600 pt-1">
-                AI tavsiyalari — {new Date().toLocaleDateString('uz-UZ')}
-              </p>
             </div>
           )}
         </div>
 
         {/* Stats mini panel */}
         {isAdmin && (
-          <div className="px-5 py-3 border-t border-gray-50 dark:border-gray-800 grid grid-cols-3 gap-2">
-            {[
-              { label: 'Bemorlar', value: stats.totalPatients ?? '—' },
-              { label: 'Tushum', value: stats.monthRevenue ? `${(stats.monthRevenue / 1_000_000).toFixed(1)}M` : '—' },
-              { label: 'Lidlar', value: stats.newLeads ?? '—' },
-            ].map(({ label, value }) => (
-              <div key={label} className="text-center py-1.5 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                <p className="text-xs font-black text-gray-900 dark:text-white tabular-nums">{value}</p>
-                <p className="text-[9px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider">{label}</p>
-              </div>
-            ))}
+          <div className="relative z-10 px-8 py-5 border-t border-gray-200/50 dark:border-gray-800/50 bg-gray-50/50 dark:bg-[#1C1F26]/50 backdrop-blur-md">
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: 'Oylik Bemorlar', value: stats.totalPatients ?? '—' },
+                { label: 'Oy Tushumi', value: stats.monthRevenue ? `${(stats.monthRevenue / 1_000_000).toFixed(1)}M` : '—' },
+                { label: 'Yangi Lidlar', value: stats.newLeads ?? '—' },
+              ].map(({ label, value }, idx) => (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 + (idx * 0.1) }}
+                  key={label} 
+                  className="flex flex-col items-center justify-center py-3 bg-white dark:bg-[#111318] border border-gray-100 dark:border-gray-800 rounded-2xl shadow-sm"
+                >
+                  <p className="text-lg font-black text-gray-900 dark:text-white tabular-nums tracking-tight">{value}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mt-0.5">{label}</p>
+                </motion.div>
+              ))}
+            </div>
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 };
