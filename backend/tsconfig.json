@@ -14,7 +14,10 @@
         "smsService.ts",
         "bot.ts",
         "seed.ts",
-        "dmedService.ts"
+        "dmedService.ts",
+        "aiService.ts",
+        "ai/tools.ts",
+        "ai/prompts.ts"
     ],
     "exclude": [
         "node_modules",

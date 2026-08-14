@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
+import { DashboardAiTab } from './DashboardAiTab';
 import { Card, Badge, Input, Modal, Button } from '../components/Common';
 import { StatCard } from '../components/StatCard';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
-  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock
+  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot, Sparkles
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -54,6 +55,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const [debtPayMethod, setDebtPayMethod] = useState<PaymentMethod>('Cash');
   const [debtSaving, setDebtSaving] = useState(false);
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
+  const [activeTab, setActiveTab] = useState<'overview' | 'ai'>('overview');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -294,6 +296,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     setIsQuickPaymentOpen(true);
   };
 
+  // AI tab uchun stats obyekti
+  const aiStats = useMemo(() => ({
+    todayAppointments: todayAppointments.length,
+    monthAppointments: filteredAppointments.length,
+    monthRevenue: totalRevenue,
+    newLeads: newLeadsCount,
+    debtorsCount: pendingDebts.length,
+    pendingRevenue,
+    totalPatients,
+    avgCheck,
+    unpaidCompleted: unpaidCompleted.length,
+  }), [todayAppointments, filteredAppointments, totalRevenue, newLeadsCount, pendingDebts, pendingRevenue, totalPatients, avgCheck, unpaidCompleted]);
+
   return (
     <div className="space-y-6 animate-fade-in">
 
@@ -365,8 +380,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+      {/* Tab navigatsiya */}
+      <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl w-fit">
+        <button
+          id="tab-overview"
+          onClick={() => setActiveTab('overview')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'overview'
+              ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Umumiy
+        </button>
+        <button
+          id="tab-ai"
+          onClick={() => setActiveTab('ai')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'ai'
+              ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+          }`}
+        >
+          <Bot className="w-3.5 h-3.5" />
+          DentaAI
+          <span className="text-[9px] font-black px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-full uppercase tracking-wider">Yangi</span>
+        </button>
+      </div>
+
+      {/* AI TAB */}
+      {activeTab === 'ai' && (
+        <DashboardAiTab userRole={userRole} stats={aiStats} />
+      )}
+
+      {/* UMUMIY TAB — KPI Cards Grid */}
+      {activeTab === 'overview' && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <StatCard
           label={t('dashboard.totalPatients')} value={totalPatients.toLocaleString()} icon={Users} color="primary"
           subtitle={<span className="flex items-center"><span className="font-bold text-success-600 bg-success-50 dark:bg-success-900/30 px-1.5 py-0.5 rounded-full">+{activePatients}</span><span className="ml-1.5">{t('dashboard.active')}</span></span>}
@@ -1116,6 +1165,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </Modal>
         );
       })()}
+      </div>}
 
       {/* Tezkor amal modallari */}
       {onAddPatient && (

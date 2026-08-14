@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, BrainCircuit, ArrowRight, CheckCircle, Send, AlertCircle, Bot, Zap } from "lucide-react";
+import { API_URL } from "../../services/api";
 
 export default function AiAssistantWidget() {
   const [topic, setTopic] = useState<"treatment_plan" | "sms_generator" | "staff_optimization">("treatment_plan");
@@ -32,7 +33,9 @@ export default function AiAssistantWidget() {
     setError("");
 
     try {
-      const res = await fetch("/api/gemini/dental-advisor", {
+      // Nisbiy manzil ishlamaydi: frontend Vercel'da, backend Railway'da turadi.
+      // API_URL ikkalasini to'g'ri bog'laydi.
+      const res = await fetch(`${API_URL}/ai/dental-advisor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic, inputData })

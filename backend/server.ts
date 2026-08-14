@@ -815,6 +815,223 @@ app.get('/api/clinics/:id/reviews', authenticateToken, async (req, res) => {
     }
 });
 
+// ─── AI (1-bosqich: bilim yordamchisi) ───────────────────────────────────────
+// Bu bosqichda AI klinika bazasiga UMUMAN kirmaydi — faqat umumiy stomatologik
+// va marketing bilimi. Shuning uchun bemor ma'lumoti hech qachon modelga
+// yuborilmaydi va tenant izolyatsiyasi bu yerda muammo emas.
+const aiService = require('./aiService');
+const aiPrompts = require('./ai/prompts');
+
+// Oddiy xotiradagi rate limiter. Public endpoint LLM'ga ulangani uchun
+// himoyasiz qoldirilsa, birinchi bot butun oylik bepul limitni yoqib yuboradi.
+const aiRateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+const aiRateLimit = (key: string, limit: number, windowMs: number): boolean => {
+    const now = Date.now();
+    const bucket = aiRateBuckets.get(key);
+    if (!bucket || now > bucket.resetAt) {
+        aiRateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+        return true;
+    }
+    if (bucket.count >= limit) return false;
+    bucket.count++;
+    return true;
+};
+
+// Xotira o'sib ketmasligi uchun muddati o'tgan yozuvlarni vaqti-vaqti bilan tozalaymiz.
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of aiRateBuckets) {
+        if (now > v.resetAt) aiRateBuckets.delete(k);
+    }
+}, 10 * 60 * 1000).unref?.();
+
+const DENTAL_ADVISOR_PROMPTS: Record<string, string> = {
+    treatment_plan:
+        'Sen tajribali stomatolog-maslahatchisan. Berilgan klinik holat asosida ' +
+        'bosqichma-bosqich davolash rejasini tuz: tashxis taxmini, bosqichlar, ' +
+        'taxminiy seanslar soni va profilaktika. Qisqa va aniq yoz.',
+    sms_generator:
+        'Sen stomatologiya klinikasining marketing mutaxassisisan. Bemorga ' +
+        'yuboriladigan qisqa, samimiy va bosim o\'tkazmaydigan SMS matnini yoz. ' +
+        '160 belgidan oshmasin, spam ohangidan qoch.',
+    staff_optimization:
+        'Sen klinika boshqaruvi bo\'yicha maslahatchisan. Berilgan muammo uchun ' +
+        'amaliy, bugundan qo\'llasa bo\'ladigan 3-5 ta yechim taklif qil.',
+};
+
+// Landing sahifasidagi demo. Autentifikatsiyasiz — shuning uchun IP bo'yicha
+// qattiq cheklangan va javob uzunligi kichik.
+app.post('/api/ai/dental-advisor', async (req: any, res: any) => {
+    try {
+        const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+            || req.socket?.remoteAddress || 'unknown';
+
+        if (!aiRateLimit(`advisor:${ip}`, 5, 60 * 60 * 1000)) {
+            return res.status(429).json({
+                success: false,
+                message: 'So\'rovlar chegarasiga yetdingiz. Bir soatdan keyin qayta urinib ko\'ring.',
+            });
+        }
+
+        const { topic, inputData } = req.body || {};
+        const systemPrompt = DENTAL_ADVISOR_PROMPTS[topic];
+        if (!systemPrompt) {
+            return res.status(400).json({ success: false, message: 'Noto\'g\'ri mavzu tanlandi.' });
+        }
+        if (!inputData || typeof inputData !== 'string' || inputData.trim().length < 10) {
+            return res.status(400).json({ success: false, message: 'Iltimos, holatni batafsilroq yozing.' });
+        }
+
+        if (!aiService.isAiConfigured()) {
+            return res.status(503).json({
+                success: false,
+                message: 'AI xizmati hozircha sozlanmagan. Administratorga murojaat qiling.',
+            });
+        }
+
+        // Widget javobni oddiy matn sifatida chiqaradi (whitespace-pre-wrap),
+        // markdown parse qilinmaydi — shuning uchun uni aniq taqiqlaymiz,
+        // aks holda foydalanuvchi ** va | belgilarini xom holda ko'radi.
+        const formatRule =
+            ' Javobni o\'zbek tilida yoz. Faqat oddiy matn ishlat: markdown ' +
+            'jadval, ** qalin belgi, ## sarlavha va emoji ISHLATMA. Raqamlangan ' +
+            'ro\'yxat va oddiy qatorlar yetarli. 200 so\'zdan oshirma.';
+
+        const response = await aiService.chat(
+            [
+                { role: 'system', content: systemPrompt + formatRule },
+                { role: 'user', content: inputData.slice(0, 2000) },
+            ],
+            { task: 'chat', maxTokens: 1000, label: `advisor:${topic}` }
+        );
+
+        res.json({ success: true, response });
+    } catch (error: any) {
+        console.error('[AI] dental-advisor xatolik:', error.message);
+        res.status(502).json({
+            success: false,
+            message: 'AI javob bera olmadi. Biroz kutib, qayta urinib ko\'ring.',
+        });
+    }
+});
+
+// Tizim ichidagi chat. Faqat tizimga kirgan foydalanuvchilar uchun.
+app.post('/api/ai/chat', authenticateToken, async (req: any, res: any) => {
+    try {
+        const user = (req as any).user;
+
+        if (!aiRateLimit(`chat:${user?.id || user?.username}`, 30, 60 * 60 * 1000)) {
+            return res.status(429).json({
+                error: 'Soatlik so\'rovlar chegarasiga yetdingiz. Biroz kutib turing.',
+            });
+        }
+
+        const { messages } = req.body || {};
+        if (!Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({ error: 'messages massivi kerak' });
+        }
+
+        // Mijoz yuborgan system prompt'ga ishonmaymiz — uni faqat server belgilaydi.
+        const history = messages
+            .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
+            .slice(-12)
+            .map((m: any) => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
+
+        if (history.length === 0) {
+            return res.status(400).json({ error: 'Xabar matni bo\'sh' });
+        }
+
+        if (!aiService.isAiConfigured()) {
+            return res.status(503).json({ error: 'AI xizmati sozlanmagan' });
+        }
+
+        const reply = await aiService.chat(
+            [{ role: 'system', content: aiPrompts.chatSystemPrompt() }, ...history],
+            { task: 'chat', maxTokens: 1024, label: `chat:${user?.role}` }
+        );
+
+        res.json({ reply });
+    } catch (error: any) {
+        console.error('[AI] chat xatolik:', error.message);
+        res.status(502).json({ error: 'AI javob bera olmadi. Qayta urinib ko\'ring.' });
+    }
+});
+
+// ─── AI (2-bosqich: klinika ma'lumotini o'qiydigan chat) ─────────────────────
+// /api/ai/chat dan farqi: bu yerda AI tool'lar orqali bazani O'QIY oladi.
+// Yozish, o'zgartirish yoki o'chirish imkoniyati yo'q — faqat SELECT.
+const aiTools = require('./ai/tools');
+
+// Klinikalar O'zbekistonda — sana UTC+5 bo'yicha hisoblanadi, aks holda
+// kechqurun "bugun" so'ralganda model ertangi/kechagi sanani oladi.
+const clinicToday = (): string =>
+    new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
+    try {
+        const user = (req as any).user;
+        const clinicId = getScopedClinicId(req);
+
+        if (!clinicId) {
+            return res.status(400).json({
+                error: 'Klinika aniqlanmadi. SUPER_ADMIN uchun clinicId yuborilishi kerak.',
+            });
+        }
+
+        if (!aiRateLimit(`ask:${user?.id || user?.username || user?.name}`, 40, 60 * 60 * 1000)) {
+            return res.status(429).json({ error: 'Soatlik so\'rovlar chegarasiga yetdingiz.' });
+        }
+
+        const { messages } = req.body || {};
+        if (!Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({ error: 'messages massivi kerak' });
+        }
+
+        // Faqat user/assistant qabul qilinadi — system prompt'ni server belgilaydi,
+        // aks holda foydalanuvchi cheklovlarni o'chirib tashlay olardi.
+        const history = messages
+            .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
+            .slice(-10)
+            .map((m: any) => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
+
+        if (history.length === 0) {
+            return res.status(400).json({ error: 'Xabar matni bo\'sh' });
+        }
+
+        if (!aiService.isAiConfigured()) {
+            return res.status(503).json({ error: 'AI xizmati sozlanmagan' });
+        }
+
+        const ctx = {
+            clinicId,
+            role: user?.role,
+            doctorId: user?.doctorId,
+        };
+
+        const tools = aiTools.toolsForRole(user?.role);
+
+        const { reply, toolCalls } = await aiService.chatWithTools(
+            [{ role: 'system', content: aiPrompts.askSystemPrompt(clinicToday()) }, ...history],
+            tools,
+            (name: string, args: any) => aiTools.runTool(name, args, ctx),
+            { task: 'chat', maxTokens: 1200, maxRounds: 5, label: `ask:${user?.role}` }
+        );
+
+        // toolCalls — shaffoflik uchun: foydalanuvchi javob qaysi ma'lumotga
+        // tayanganini ko'ra oladi.
+        res.json({ reply, sources: toolCalls.map((t: any) => t.name) });
+    } catch (error: any) {
+        console.error('[AI] ask xatolik:', error.message);
+        res.status(502).json({ error: 'AI javob bera olmadi. Qayta urinib ko\'ring.' });
+    }
+});
+
+// Diagnostika: qaysi provayderlar sozlangan. Kalitlar hech qachon qaytarilmaydi.
+app.get('/api/ai/status', authenticateToken, requireRole('SUPER_ADMIN'), (_req: any, res: any) => {
+    res.json({ ...aiService.aiStatus(), sana: clinicToday() });
+});
+
 // --- Authentication ---
 app.post('/api/auth/login', async (req, res) => {
     try {
@@ -5291,6 +5508,148 @@ app.get('/api/superadmin/sales', authenticateToken, async (req, res) => {
         res.json(formatted);
     } catch (error: any) {
         res.status(500).json({ error: 'Sotuvchilarni yuklashda xatolik: ' + error.message });
+    }
+});
+
+// ============================================
+// AI ENDPOINTS
+// ============================================
+
+const { chat: aiChat, chatWithTools, isAiConfigured } = require('./aiService');
+const { toolsForRole, runTool } = require('./ai/tools');
+const { askSystemPrompt, chatSystemPrompt } = require('./ai/prompts');
+
+// AI holati — konfiguratsiya tekshiruvi
+app.get('/api/ai/status', authenticateToken, (req: any, res: any) => {
+    const { aiStatus } = require('./aiService');
+    res.json({ success: true, ...aiStatus() });
+});
+
+/**
+ * POST /api/ai/ask
+ * DB tool'lar orqali klinika ma'lumotlari haqida savol-javob.
+ * Barcha rollar uchun — tool'lar roliga qarab filtrlanadi.
+ */
+app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (!isAiConfigured()) {
+            return res.status(503).json({ success: false, message: 'AI sozlanmagan: server .env da API kalit yo\'q.' });
+        }
+        const user = req.user;
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId && user?.role !== 'SUPER_ADMIN') {
+            return res.status(400).json({ success: false, message: 'clinicId aniqlanmadi.' });
+        }
+
+        const { messages } = req.body as { messages?: { role: string; content: string }[] };
+        if (!Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({ success: false, message: '`messages` massivi kerak.' });
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        const ctx = { clinicId: clinicId || '', role: user?.role || 'CLINIC_ADMIN', doctorId: user?.doctorId };
+
+        const tools = toolsForRole(user?.role || 'CLINIC_ADMIN');
+        const history = [
+            { role: 'system', content: askSystemPrompt(today) },
+            ...messages,
+        ];
+
+        const { reply } = await chatWithTools(
+            history,
+            tools,
+            (name: string, args: any) => runTool(name, args, ctx),
+            { label: 'ask', maxRounds: 5 }
+        );
+
+        res.json({ success: true, reply });
+    } catch (e: any) {
+        console.error('[AI/ask]', e.message);
+        res.status(500).json({ success: false, message: e.message || 'AI so\'rovida xatolik.' });
+    }
+});
+
+/**
+ * POST /api/ai/chat
+ * Tool'siz umumiy yordamchi (tizim bo'yicha savollar, stomatologiya maslahati).
+ */
+app.post('/api/ai/chat', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (!isAiConfigured()) {
+            return res.status(503).json({ success: false, message: 'AI sozlanmagan.' });
+        }
+        const { messages } = req.body as { messages?: { role: string; content: string }[] };
+        if (!Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({ success: false, message: '`messages` massivi kerak.' });
+        }
+
+        const history = [
+            { role: 'system', content: chatSystemPrompt() },
+            ...messages,
+        ];
+
+        const reply = await aiChat(history, { label: 'chat', task: 'cheap' });
+        res.json({ success: true, reply });
+    } catch (e: any) {
+        console.error('[AI/chat]', e.message);
+        res.status(500).json({ success: false, message: e.message || 'AI so\'rovida xatolik.' });
+    }
+});
+
+/**
+ * POST /api/ai/insights
+ * Frontenddan klinika statistikasini qabul qilib, 3-5 ta tavsiya qaytaradi.
+ * Faqat CLINIC_ADMIN va SUPER_ADMIN uchun.
+ */
+app.post('/api/ai/insights', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (!isAiConfigured()) {
+            return res.status(503).json({ success: false, message: 'AI sozlanmagan.' });
+        }
+        const user = req.user;
+        if (!['CLINIC_ADMIN', 'SUPER_ADMIN'].includes(user?.role)) {
+            return res.status(403).json({ success: false, message: 'Ruxsat yo\'q.' });
+        }
+
+        const stats = req.body?.stats || {};
+        const today = new Date().toISOString().split('T')[0];
+
+        const systemPrompt =
+            `Sen stomatologiya klinikasi boshqaruv tizimining tahlilchisisisan. ` +
+            `Bugungi sana: ${today}. ` +
+            `Quyidagi klinika statistikasini tahlil qilib, 3-5 ta ANIQ va AMALIY tavsiya ber. ` +
+            `Har bir tavsiyani quyidagi formatda yoz: ` +
+            `EMOJI SARLAVHA: izoh (1-2 gap). ` +
+            `Markdown ishlatma. Faqat oddiy matn. Tavsiyalar o'zbek tilida bo'lsin.`;
+
+        const userMsg =
+            `Klinika statistikasi:\n` +
+            `- Bugungi qabullar: ${stats.todayAppointments ?? '?'}\n` +
+            `- Oy davomida jami qabullar: ${stats.monthAppointments ?? '?'}\n` +
+            `- Oy davomida tushum: ${stats.monthRevenue ?? '?'} so'm\n` +
+            `- Yangi lidlar: ${stats.newLeads ?? '?'}\n` +
+            `- Qarzdorlar soni: ${stats.debtorsCount ?? '?'}\n` +
+            `- Kutilayotgan to'lovlar: ${stats.pendingRevenue ?? '?'} so'm\n` +
+            `- Bemorlar soni: ${stats.totalPatients ?? '?'}\n` +
+            `- O'rtacha chek: ${stats.avgCheck ?? '?'} so'm\n` +
+            `- Bugun to'lanmagan yakunlangan qabullar: ${stats.unpaidCompleted ?? '?'}\n` +
+            `Tavsiyalar ber.`;
+
+        const reply = await aiChat(
+            [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
+            { label: 'insights', task: 'cheap', maxTokens: 600 }
+        );
+
+        // Tavsiyalarni massivga ajratamiz
+        const lines = reply
+            .split('\n')
+            .map((l: string) => l.trim())
+            .filter((l: string) => l.length > 10);
+
+        res.json({ success: true, insights: lines, raw: reply });
+    } catch (e: any) {
+        console.error('[AI/insights]', e.message);
+        res.status(500).json({ success: false, message: e.message || 'Tahlil xatoligi.' });
     }
 });
 
