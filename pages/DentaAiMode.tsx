@@ -309,10 +309,11 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
             }}
             rows={1}
             placeholder="Masalan: bugun nechta qabul bor?"
-            className="w-full rounded-2xl pl-14 pr-14 py-4 text-[15px] resize-none outline-none
+            className="w-full rounded-2xl pl-14 pr-14 py-[18px] text-[15.5px] resize-none outline-none
                        bg-white dark:bg-gray-800/60
                        ring-1 ring-gray-200 dark:ring-white/[0.08]
                        focus:ring-2 focus:ring-violet-500/60
+                       focus:shadow-[0_0_0_5px_rgba(139,92,246,0.07)]
                        placeholder:text-gray-400 dark:placeholder:text-gray-500
                        text-gray-900 dark:text-white transition-shadow shadow-sm"
           />
@@ -391,20 +392,29 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 + i * 0.035 }}
                     whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.99 }}
                     onClick={() => runReport(r.type, r.title)}
-                    className={`text-left rounded-2xl px-4 py-3.5 transition-colors group
-                                hover:ring-violet-300 dark:hover:ring-violet-400/30 ${CARD}`}
+                    className={`text-left rounded-2xl p-4 flex items-start gap-3.5 transition-colors
+                                group hover:ring-violet-300 dark:hover:ring-violet-400/30 ${CARD}`}
                   >
-                    <div className="flex items-center gap-2.5 mb-1.5">
-                      <Icon className="w-4 h-4 text-gray-400 dark:text-gray-500
-                                       group-hover:text-violet-500 transition-colors" />
-                      <span className="text-[14px] font-semibold text-gray-900 dark:text-white">
+                    {/* Ikona alohida maydonchada — ro'yxatni ko'z bilan tez
+                        skanerlashga yordam beradi, yalang'och ikona esa
+                        matnga qo'shilib ketadi. */}
+                    <span className="shrink-0 w-9 h-9 rounded-xl grid place-items-center transition-colors
+                                     bg-gray-100 dark:bg-white/[0.05]
+                                     group-hover:bg-violet-50 dark:group-hover:bg-violet-500/15">
+                      <Icon className="w-[18px] h-[18px] text-gray-500 dark:text-gray-400
+                                       group-hover:text-violet-500 dark:group-hover:text-violet-300
+                                       transition-colors" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-semibold text-gray-900 dark:text-white mb-0.5">
                         {r.title}
                       </span>
-                    </div>
-                    <div className="text-[12px] text-gray-500 dark:text-gray-400 leading-snug">
-                      {r.hint}
-                    </div>
+                      <span className="block text-[12.5px] text-gray-500 dark:text-gray-400 leading-snug">
+                        {r.hint}
+                      </span>
+                    </span>
                   </motion.button>
                 );
               })}

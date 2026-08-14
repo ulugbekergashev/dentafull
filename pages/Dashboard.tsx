@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { motion } from 'motion/react';
 import { DentaAiMode } from './DentaAiMode';
 import { Card, Badge, Input, Modal, Button } from '../components/Common';
 import { StatCard } from '../components/StatCard';
@@ -312,36 +313,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* Nom va bo'lim tanlovi bitta qatorda: chapda nom, o'ng tomonida
-          switch'lar. Minimalistik — ramka yo'q, faqat pastki chiziq va
-          faol bo'lim ostidagi indikator. */}
-      <div className="flex items-center gap-8 border-b border-gray-200 dark:border-gray-700/60">
-        <h1 className="text-[22px] font-bold text-gray-900 dark:text-white tracking-tight pb-3.5">
+      {/* Nom chapda, tanlov o'ng chekkada.
+          Pastki chiziqli indikator o'rniga segment switch: chetga chiqarilgan
+          chiziq uzilib qolgandek ko'rinardi, quti esa o'zi tugagan joyini
+          ko'rsatadi. Faol segment layoutId bilan silliq siljiydi. */}
+      <div className="flex items-center justify-between gap-6 pb-4 border-b border-gray-200 dark:border-gray-700/60">
+        <h1 className="text-[22px] font-bold text-gray-900 dark:text-white tracking-tight">
           Dashboard
         </h1>
 
-        {([
-          { id: 'overview' as const, label: 'Hisobot' },
-          { id: 'ai' as const, label: 'DentaAI' },
-        ]).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`relative pb-3.5 text-[15.5px] font-semibold transition-colors ${
-              activeTab === tab.id
-                ? 'text-gray-900 dark:text-white'
-                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              {tab.id === 'ai' && <Sparkles className="w-4 h-4 text-violet-500" />}
-              {tab.label}
-            </span>
-            {activeTab === tab.id && (
-              <span className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full bg-violet-500" />
-            )}
-          </button>
-        ))}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-gray-100 dark:bg-white/[0.04]">
+          {([
+            { id: 'overview' as const, label: 'Hisobot' },
+            { id: 'ai' as const, label: 'DentaAI' },
+          ]).map(tab => {
+            const on = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative px-4 py-1.5 rounded-lg text-[14.5px] font-semibold transition-colors ${
+                  on
+                    ? 'text-gray-900 dark:text-white'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                {on && (
+                  <motion.span
+                    layoutId="dashboard-tab-pill"
+                    transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                    className="absolute inset-0 rounded-lg bg-white dark:bg-gray-800
+                               shadow-sm ring-1 ring-gray-200/70 dark:ring-white/[0.06]"
+                  />
+                )}
+                <span className="relative flex items-center gap-1.5 whitespace-nowrap">
+                  {tab.id === 'ai' && (
+                    <Sparkles className={`w-4 h-4 ${on ? 'text-violet-500' : 'text-violet-400/60'}`} />
+                  )}
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Boshqaruvlar — faqat Hisobot bo'limida.
