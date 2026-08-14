@@ -312,8 +312,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-2">
+      {/* Header — faqat Umumiy bo'limida.
+          AI da yashiriladi, chunki bu boshqaruvlar shu bo'limga tegishli:
+          sana oralig'i AI hisobotlariga ta'sir qilmaydi (ular o'z davrini
+          hisoblaydi), ya'ni ikkita raqobatlashuvchi sana manbai ko'rinardi.
+          Sarlavha ham takrorlanardi — AI ekranining o'z sarlavhasi bor. */}
+      <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-2 ${
+        activeTab === 'ai' ? 'hidden' : ''
+      }`}>
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
             {t('dashboard.overview')}
@@ -382,7 +388,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       {/* Bo'lim navigatsiyasi — minimalistik: ramka yo'q, faqat pastki chiziq.
           AI modalka emas, shu yerda, ilova navigatsiyasi joyida turganda ochiladi. */}
-      <div className="flex items-center gap-6 border-b border-gray-200 dark:border-gray-700/60 -mt-2">
+      <div className={`flex items-center gap-6 border-b border-gray-200 dark:border-gray-700/60 ${
+        activeTab === 'ai' ? 'mt-0' : '-mt-2'
+      }`}>
         {([
           { id: 'overview' as const, label: t('dashboard.overview') },
           { id: 'ai' as const, label: 'DentaAI' },
