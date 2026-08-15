@@ -365,7 +365,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-2 ${
         activeTab === 'ai' ? 'hidden' : ''
       }`}>
-        <div />
+        {!isReceptionist && (
+          <div className="flex items-center gap-3 p-1.5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center gap-2 px-3">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
+              />
+            </div>
+            <div className="w-px h-8 bg-gray-100 dark:bg-gray-700" />
+            <div className="flex items-center gap-2 px-3">
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Quick Actions — dashboarddan turib bajariladi */}
@@ -399,28 +420,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             )}
           </div>
 
-          {!isReceptionist && (
-            <div className="flex items-center gap-3 p-1.5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-              <div className="flex items-center gap-2 px-3">
-                <Calendar className="w-4 h-4 text-gray-400" />
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
-                />
-              </div>
-              <div className="w-px h-8 bg-gray-100 dark:bg-gray-700" />
-              <div className="flex items-center gap-2 px-3">
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
-                />
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
