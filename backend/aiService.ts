@@ -115,6 +115,24 @@ const stripReasoning = (text: string): string =>
         .replace(/<think>[\s\S]*$/i, '')
         .trim();
 
+/**
+ * Markdown belgilarini olib tashlaydi.
+ *
+ * UI javobni oddiy matn sifatida chizadi (whitespace-pre-wrap), markdown
+ * parse qilinmaydi — ya'ni `**Qarzlar**` foydalanuvchiga yulduzchalari bilan
+ * ko'rinadi. Prompt buni taqiqlaydi, lekin prompt ehtimoliy: model ba'zan
+ * baribir ishlatadi. Shuning uchun serverda kafolatlab tozalanadi.
+ */
+const stripMarkdown = (text: string): string =>
+    text
+        .replace(/\*\*(.+?)\*\*/g, '$1')      // **qalin**
+        .replace(/(^|\s)\*(\S[^*]*?)\*/g, '$1$2')  // *kursiv* (ko'paytirishga tegmaydi)
+        .replace(/^#{1,6}\s+/gm, '')           // ## sarlavha
+        .replace(/^\s*[-*]\s+/gm, '• ')        // ro'yxat belgisi -> nuqta
+        .replace(/`([^`]+)`/g, '$1');          // `kod`
+
+const cleanReply = (text: string): string => stripMarkdown(stripReasoning(text)).trim();
+
 interface ProviderError extends Error {
     status?: number;
     provider?: string;
@@ -184,7 +202,7 @@ const callProvider = async (
 
         const data: any = await res.json();
         const raw = data?.choices?.[0]?.message?.content;
-        const text = typeof raw === 'string' ? stripReasoning(raw) : raw;
+        const text = typeof raw === 'string' ? cleanReply(raw) : raw;
         if (!text) {
             const err: ProviderError = new Error(`${p.name}: bo'sh javob qaytdi`);
             err.status = 502;
@@ -379,7 +397,7 @@ export const chatWithTools = async (
 
         if (!calls || calls.length === 0) {
             const raw = msg?.content;
-            const reply = typeof raw === 'string' ? stripReasoning(raw) : '';
+            const reply = typeof raw === 'string' ? cleanReply(raw) : '';
             console.log(
                 `[AI] ${opts.label || 'ask'} · ${provider.name} · raund=${round + 1} · ` +
                 `tool=${trace.length} · in=${data?.usage?.prompt_tokens ?? '?'} out=${data?.usage?.completion_tokens ?? '?'}`

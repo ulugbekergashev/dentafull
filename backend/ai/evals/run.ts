@@ -123,6 +123,12 @@ const runOne = async (q: EvalQuestion): Promise<Result> => {
         if (!toolOk) sabab.push(`kutilgan tool: ${want.join(',')}; chaqirilgan: ${called.join(',') || 'hech narsa'}`);
     }
 
+    // 1a. Keng savollar: model o'zi bir nechta manbadan ma'lumot yig'ishi kerak.
+    if (q.minTools && calls.length < q.minTools) {
+        toolOk = false;
+        sabab.push(`kamida ${q.minTools} ta tool kutilgan, chaqirilgan: ${calls.length}`);
+    }
+
     // 1b. TAQIQLANGAN TOOL — rol cheklovining asosiy tekshiruvi.
     for (const f of q.forbiddenTools || []) {
         if (called.includes(f)) {

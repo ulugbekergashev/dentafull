@@ -14,7 +14,7 @@ import { EVAL_TODAY, EVAL_YESTERDAY, EVAL_TOMORROW } from './fixtures';
 
 export interface EvalQuestion {
     id: number;
-    category: 'sana' | 'moliya' | 'qarz' | 'shifokor' | 'bemor' | 'ombor' | 'lid' | 'rol' | 'chegara' | 'tool_kerakmas';
+    category: 'sana' | 'moliya' | 'qarz' | 'shifokor' | 'bemor' | 'ombor' | 'lid' | 'rol' | 'chegara' | 'tool_kerakmas' | 'keng';
     role: 'CLINIC_ADMIN' | 'DOCTOR' | 'RECEPTIONIST';
     q: string;
     /**
@@ -27,6 +27,8 @@ export interface EvalQuestion {
      * aytmasligi. Buning uchun `forbiddenTools` + `mustNotInclude` ishlating.
      */
     tool: string | string[] | null | '*';
+    /** Kamida shuncha tool chaqirilishi kerak (keng savollar uchun). */
+    minTools?: number;
     /** Bu tool'lar chaqirilmasligi SHART (rol cheklovi tekshiruvi). */
     forbiddenTools?: string[];
     /** Argumentlar tekshiruvi. Faqat `tool` chaqirilganda ishlaydi. */
@@ -102,6 +104,14 @@ export const QUESTIONS: EvalQuestion[] = [
     { id: 37, category: 'lid', role: 'RECEPTIONIST', q: 'Javobsiz qolgan lidlar bormi?', tool: 'get_leads', mustInclude: [5] },
     { id: 38, category: 'lid', role: 'CLINIC_ADMIN', q: 'Lidlar asosan qaysi manbadan kelyapti?', tool: 'get_leads', mustInclude: ['Instagram', 12] },
     { id: 39, category: 'lid', role: 'CLINIC_ADMIN', q: 'Nechta lid bemorga aylandi?', tool: 'get_leads', mustInclude: [4] },
+
+    // ── Keng, tahliliy savollar ─────────────────────────────────────────────
+    // Model bunday savolda foydalanuvchidan "qaysi bo'lim kerak?" deb
+    // SO'RAMASLIGI kerak — tool'lar uning qo'lida, o'zi yig'ib xulosa
+    // chiqarishi shart. Bir marta shunday bo'lgan va javob foydasiz chiqqan.
+    { id: 51, category: 'keng', role: 'CLINIC_ADMIN', q: 'Nima deb o\'ylaysan, klinikada asosan muammo qayerda?', tool: '*', minTools: 2, mustNotInclude: ['qaysi bo\'lim', 'aytsangiz', 'ayting'] },
+    { id: 52, category: 'keng', role: 'CLINIC_ADMIN', q: 'Ishlar qanday ketyapti?', tool: '*', minTools: 2, mustNotInclude: ['qaysi bo\'lim', 'aytsangiz'] },
+    { id: 53, category: 'keng', role: 'CLINIC_ADMIN', q: 'Nimaga e\'tibor berishim kerak?', tool: '*', minTools: 2, mustNotInclude: ['qaysi bo\'lim', 'aytsangiz'] },
 
     // ── Rol cheklovi (salbiy testlar) ───────────────────────────────────────
     // Model ruxsat berilgan tool bilan javob izlashi mumkin — bu xato emas.
