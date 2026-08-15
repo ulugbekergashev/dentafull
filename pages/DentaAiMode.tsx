@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { UserRole } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 // ─── DentaAI ─────────────────────────────────────────────────────────────────
 // Bu modal EMAS. Sahifa ichida, ilova navigatsiyasi joyida turgan holda
@@ -105,14 +106,14 @@ const fmtValue = (v: number | string): string =>
 
 // "get_revenue" hech kimga hech narsa demaydi — "moliya" javob qayerdan
 // kelganini tushuntiradi.
-const SOURCE_LABEL: Record<string, string> = {
-  get_appointments: 'qabullar',
-  get_revenue: 'moliya',
-  get_debtors: 'qarzdorlar',
-  get_doctor_stats: 'shifokorlar',
-  find_patient: 'bemorlar',
-  get_low_stock: 'ombor',
-  get_leads: 'lidlar',
+const SOURCE_LABEL: Record<string, { uz: string; ru: string }> = {
+  get_appointments: { uz: 'qabullar', ru: 'приёмы' },
+  get_revenue: { uz: 'moliya', ru: 'финансы' },
+  get_debtors: { uz: 'qarzdorlar', ru: 'должники' },
+  get_doctor_stats: { uz: 'shifokorlar', ru: 'врачи' },
+  find_patient: { uz: 'bemorlar', ru: 'пациенты' },
+  get_low_stock: { uz: 'ombor', ru: 'склад' },
+  get_leads: { uz: 'lidlar', ru: 'лиды' },
 };
 
 const MetricCard: React.FC<{ m: Metric; i: number }> = ({ m, i }) => (
@@ -175,20 +176,20 @@ const DataTable: React.FC<{ t: ReportTable }> = ({ t }) => (
   </div>
 );
 
-const SourcePills: React.FC<{ sources: string[] }> = ({ sources }) => {
+const SourcePills: React.FC<{ sources: string[]; label: string; lang: 'uz' | 'ru' }> = ({ sources, label, lang }) => {
   const uniq: string[] = sources.filter((s, i) => s && sources.indexOf(s) === i);
   if (!uniq.length) return null;
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <Database className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600" />
-      <span className="text-[11px] text-gray-400 dark:text-gray-500">Manba:</span>
+      <span className="text-[11px] text-gray-400 dark:text-gray-500">{label}</span>
       {uniq.map(s => (
         <span
           key={s}
           className="text-[11px] rounded-full px-2.5 py-0.5 text-gray-500 dark:text-gray-400
                      bg-gray-100 dark:bg-white/[0.05]"
         >
-          {SOURCE_LABEL[s] || s}
+          {SOURCE_LABEL[s]?.[lang] || s}
         </span>
       ))}
     </div>
@@ -204,6 +205,7 @@ interface Props {
 }
 
 export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
+  const { t, language } = useLanguage();
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState('');
@@ -217,10 +219,10 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
   // Ro'yxat serverdan keladi — frontendda qattiq yozilsa, ruxsati yo'q rol
   // tugmani ko'rib, bosib, 403 olardi.
   useEffect(() => {
-    api<{ reports: ReportOption[] }>('/ai/reports')
+    api<{ reports: ReportOption[] }>(`/ai/reports?lang=${language}`)
       .then(d => setReports(d.reports || []))
       .catch(() => setReports([]));
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -236,7 +238,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
     setActiveReport(type);
     setResult(null);
     try {
-      const d = await api<{ report: Report }>('/ai/report', { type });
+      const d = await api<{ report: Report }>('/ai/report', { type, lang: language });
       setResult({ kind: 'report', report: d.report });
     } catch (e: any) {
       setResult({ kind: 'error', message: e.message });
@@ -255,6 +257,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
     try {
       const d = await api<{ reply: string; sources?: string[] }>('/ai/ask', {
         messages: [{ role: 'user', content: q }],
+        lang: language,
       });
       setResult({ kind: 'answer', question: q, text: d.reply, sources: d.sources || [] });
     } catch (e: any) {
@@ -262,7 +265,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
     } finally {
       setBusy(false);
     }
-  }, [query, busy]);
+  }, [query, busy, language, t]);
 
   const reset = () => {
     setResult(null);
@@ -285,10 +288,10 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
               className="text-center pt-10 pb-8"
             >
               <h2 className="text-[26px] sm:text-[32px] font-bold tracking-tight text-gray-900 dark:text-white">
-                Klinikangiz haqida so'rang
+                {t('ai.heroTitle')}
               </h2>
               <p className="text-gray-500 dark:text-gray-400 mt-2 text-[15px]">
-                Javob real ma'lumotlaringizdan olinadi — taxmin emas.
+                {t('ai.heroSub')}
               </p>
             </motion.div>
           )}
@@ -308,7 +311,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); }
             }}
             rows={1}
-            placeholder="Masalan: bugun nechta qabul bor?"
+            placeholder={t('ai.placeholder')}
             className="w-full rounded-2xl pl-14 pr-14 py-[18px] text-[15.5px] resize-none outline-none
                        bg-white dark:bg-gray-800/60
                        ring-1 ring-gray-200 dark:ring-white/[0.08]
@@ -320,7 +323,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
           <button
             onClick={ask}
             disabled={!query.trim() || busy}
-            aria-label="Yuborish"
+            aria-label={t('ai.send')}
             className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center
                        rounded-xl bg-violet-600 text-white transition-colors
                        disabled:bg-gray-100 dark:disabled:bg-white/[0.06]
@@ -363,7 +366,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
                          text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300
                          hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors ml-auto"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Boshidan
+              <RotateCcw className="w-3.5 h-3.5" /> {t('ai.restart')}
             </button>
           )}
         </div>
@@ -380,7 +383,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
             className="max-w-3xl mx-auto mt-10 pb-6"
           >
             <div className="text-[11px] uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500 mb-3">
-              Bir bosishda
+              {t('ai.oneClick')}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
               {reports.map((r, i) => {
@@ -461,7 +464,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
                 <AlertTriangle className="w-4 h-4 text-rose-500 dark:text-rose-400 mt-0.5 shrink-0" />
                 <div>
                   <div className="text-[14px] font-semibold text-rose-700 dark:text-rose-200 mb-0.5">
-                    Javob olinmadi
+                    {t('ai.errorTitle')}
                   </div>
                   <div className="text-[13px] text-rose-600/80 dark:text-rose-200/70">{result.message}</div>
                 </div>
@@ -486,9 +489,9 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
                                     bg-gray-100 dark:bg-white/[0.05]">
                       <Inbox className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                     </div>
-                    <div className="text-[15px] text-gray-700 dark:text-gray-300 mb-1">Ma'lumot yo'q</div>
+                    <div className="text-[15px] text-gray-700 dark:text-gray-300 mb-1">{t('ai.noData')}</div>
                     <div className="text-[13px] text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-                      {result.report.emptyText || 'Bu davr uchun yozuv topilmadi.'}
+                      {result.report.emptyText || t('ai.noDataFallback')}
                     </div>
                   </div>
                 ) : (
@@ -507,7 +510,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
                     {result.report.table && <DataTable t={result.report.table} />}
                   </>
                 )}
-                <SourcePills sources={result.report.sources} />
+                <SourcePills sources={result.report.sources} label={t('ai.source')} lang={language} />
               </>
             )}
 
@@ -518,7 +521,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
                               whitespace-pre-wrap max-w-2xl">
                   {result.text}
                 </p>
-                <SourcePills sources={result.sources} />
+                <SourcePills sources={result.sources} label={t('ai.source')} lang={language} />
               </>
             )}
           </motion.div>

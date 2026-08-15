@@ -45,6 +45,10 @@ interface DashboardProps {
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
+// Dashboard ro'yxatlarida ko'rsatiladigan qatorlar soni. Qolgani "Hammasi" ortida —
+// dashboard umumiy holatni ko'rsatadi, to'liq ro'yxat o'z sahifasida.
+const DASH_ROW_LIMIT = 4;
+
 export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -324,8 +328,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
         <div className="flex items-center gap-1 p-1 rounded-xl bg-gray-100 dark:bg-white/[0.04]">
           {([
-            { id: 'overview' as const, label: 'Hisobot' },
-            { id: 'ai' as const, label: 'DentaAI' },
+            { id: 'overview' as const, label: t('ai.reportTab') },
+            { id: 'ai' as const, label: t('ai.tab') },
           ]).map(tab => {
             const on = activeTab === tab.id;
             return (
@@ -501,7 +505,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 </tr>
               </thead>
               <tbody>
-                {todayAppointments.map(app => {
+                {todayAppointments.slice(0, DASH_ROW_LIMIT).map(app => {
                   const patient = patients.find(p => p.id === app.patientId);
                   const hasDebt = patient?.balance !== undefined && patient.balance < 0;
                   const hasLabWarning = overdueLabPatients.has(app.patientName);
@@ -585,171 +589,151 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 })}
               </tbody>
             </table>
+
+            {todayAppointments.length > DASH_ROW_LIMIT && (
+              <button
+                onClick={() => navigate('/calendar')}
+                className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
+              >
+                Yana {todayAppointments.length - DASH_ROW_LIMIT} ta · Hammasi <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
       </Card>
 
-      {/* Kutilayotgan to'lovlar (qarzdorlar) — Pending tranzaksiyalar */}
-      {showFinance && pendingDebts.length > 0 && (
-        <Card className="p-6 rounded-[2rem] border border-red-200 dark:border-red-800/50">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">
-                Kutilayotgan <span className="text-red-500">To'lovlar</span> (Qarzdorlar)
-              </h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
-                Qarzga yozilgan, hali yopilmagan to'lovlar
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-black rounded-full">
-                {pendingDebtsTotal.toLocaleString()} UZS
-              </span>
-              <span className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs font-black rounded-full">
-                {pendingDebts.length} ta
-              </span>
-            </div>
-          </div>
+      {/* Yig'ilmagan pul — ikkita ro'yxat yonma-yon.
+          Ikkalasi ham "hali olinmagan pul" bo'lgani uchun bir qatorda turadi. */}
+      {((showFinance && pendingDebts.length > 0) || unpaidCompleted.length > 0) && (
+        <div className={`grid grid-cols-1 gap-6 ${showFinance && pendingDebts.length > 0 && unpaidCompleted.length > 0 ? 'xl:grid-cols-2' : ''}`}>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Sana</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Bemor</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Xizmat</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Summa</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Amal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingDebts.map(tx => {
+          {/* Qarzdorlar — qarzga yozilgan, yopilmagan to'lovlar */}
+          {showFinance && pendingDebts.length > 0 && (
+            <Card className="p-6 rounded-[2rem] border border-red-200 dark:border-red-800/50">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                    Kutilayotgan <span className="text-red-500">To'lovlar</span>
+                  </h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                    Qarzga yozilgan, hali yopilmagan
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="px-3 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-black rounded-full whitespace-nowrap">
+                    {pendingDebtsTotal.toLocaleString()} UZS
+                  </span>
+                  <span className="text-[10px] font-bold text-gray-400">{pendingDebts.length} ta</span>
+                </div>
+              </div>
+
+              <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
+                {pendingDebts.slice(0, DASH_ROW_LIMIT).map(tx => {
                   const patient = patients.find(p => p.id === tx.patientId)
                     || patients.find(p => `${p.lastName} ${p.firstName}` === tx.patientName);
                   const serviceLabel = tx.service?.includes('|') ? tx.service.split('||')[0].split('|')[0] : (tx.service || '—');
                   return (
-                    <tr key={tx.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0 hover:bg-red-50/40 dark:hover:bg-red-900/10 transition-colors">
-                      <td className="py-3.5 pr-4">
-                        <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">{tx.date}</span>
-                      </td>
-                      <td className="py-3.5 pr-4">
+                    <div key={tx.id} className="flex items-center gap-3 py-3 group">
+                      <div className="min-w-0 flex-1">
                         <button
                           onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
-                          className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                          className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
                         >
                           {tx.patientName}
                         </button>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <span className="text-sm text-gray-500 dark:text-gray-400">{serviceLabel}</span>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <span className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">
-                          {tx.amount.toLocaleString()} UZS
-                        </span>
-                      </td>
-                      <td className="py-3.5">
-                        {onUpdateTransaction && (
-                          <button
-                            onClick={() => openDebtPayment(tx)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-success hover:bg-success-700 text-white text-xs font-bold rounded-lg transition-colors"
-                          >
-                            <CreditCard className="w-3.5 h-3.5" /> To'lov
-                          </button>
-                        )}
-                      </td>
-                    </tr>
+                        <p className="text-[11px] text-gray-400 truncate">{tx.date} · {serviceLabel}</p>
+                      </div>
+                      <span className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">
+                        {tx.amount.toLocaleString()}
+                      </span>
+                      {onUpdateTransaction && (
+                        <button
+                          onClick={() => openDebtPayment(tx)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" /> To'lov
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+              </div>
 
-      {/* To'lovni kutayotgan qabullar — shifokor yakunlagan, lekin hali to'lanmagan */}
-      {unpaidCompleted.length > 0 && (
-        <Card className="p-6 rounded-[2rem] border border-amber-200 dark:border-amber-800/50">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">
-                To'lovni <span className="text-amber-500">Kutayotgan</span> Qabullar
-              </h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
-                Protsedura yakunlangan, to'lov hali qabul qilinmagan
-              </p>
-            </div>
-            <span className="px-3 py-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-black rounded-full">
-              {unpaidCompleted.length} ta
-            </span>
-          </div>
+              {pendingDebts.length > DASH_ROW_LIMIT && (
+                <button
+                  onClick={() => navigate('/finance')}
+                  className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
+                >
+                  Yana {pendingDebts.length - DASH_ROW_LIMIT} ta · Hammasi <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </Card>
+          )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Sana</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Vaqt</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Bemor</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Shifokor</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Xizmat</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Summa</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Amal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unpaidCompleted.map(app => {
+          {/* To'lovni kutayotgan qabullar — protsedura yakunlangan, to'lov olinmagan */}
+          {unpaidCompleted.length > 0 && (
+            <Card className="p-6 rounded-[2rem] border border-amber-200 dark:border-amber-800/50">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                    To'lovni <span className="text-amber-500">Kutayotgan</span>
+                  </h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                    Yakunlangan, to'lov qabul qilinmagan
+                  </p>
+                </div>
+                <span className="px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-black rounded-full flex-shrink-0">
+                  {unpaidCompleted.length} ta
+                </span>
+              </div>
+
+              <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
+                {unpaidCompleted.slice(0, DASH_ROW_LIMIT).map(app => {
                   const patient = patients.find(p => p.id === app.patientId);
                   const doctorColor = doctors.find(d => d.id === app.doctorId)?.color || '#3B82F6';
                   const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
                   const serviceLabel = breakdown ? breakdown.split('||')[0].split('|')[0] : app.type;
                   return (
-                    <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800/60 last:border-0 hover:bg-amber-50/40 dark:hover:bg-amber-900/10 transition-colors">
-                      <td className="py-3.5 pr-4">
-                        <span className="text-sm font-bold text-gray-500 dark:text-gray-400 tabular-nums">{app.date}</span>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">{app.time}</span>
-                      </td>
-                      <td className="py-3.5 pr-4">
+                    <div key={app.id} className="flex items-center gap-3 py-3">
+                      <div className="min-w-0 flex-1">
                         <button
                           onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
-                          className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                          className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
                         >
                           {app.patientName}
                         </button>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: doctorColor }} />
-                          <span className="text-sm text-gray-600 dark:text-gray-300">{app.doctorName}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <span className="text-sm text-gray-500 dark:text-gray-400">{serviceLabel}</span>
-                      </td>
-                      <td className="py-3.5 pr-4">
-                        <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
-                          {total > 0 ? `${total.toLocaleString()} UZS` : '—'}
-                        </span>
-                      </td>
-                      <td className="py-3.5">
-                        {onAddTransaction && (
-                          <button
-                            onClick={() => openPaymentForAppointment(app)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-success hover:bg-success-700 text-white text-xs font-bold rounded-lg transition-colors"
-                          >
-                            <CreditCard className="w-3.5 h-3.5" /> To'lovni yopish
-                          </button>
-                        )}
-                      </td>
-                    </tr>
+                        <p className="flex items-center gap-1.5 text-[11px] text-gray-400 truncate">
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: doctorColor }} />
+                          <span className="truncate">{app.date} · {serviceLabel}</span>
+                        </p>
+                      </div>
+                      <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">
+                        {total > 0 ? total.toLocaleString() : '—'}
+                      </span>
+                      {onAddTransaction && (
+                        <button
+                          onClick={() => openPaymentForAppointment(app)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" /> Yopish
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+              </div>
+
+              {unpaidCompleted.length > DASH_ROW_LIMIT && (
+                <button
+                  onClick={() => navigate('/finance')}
+                  className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
+                >
+                  Yana {unpaidCompleted.length - DASH_ROW_LIMIT} ta · Hammasi <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Charts Row - hidden for receptionist */}

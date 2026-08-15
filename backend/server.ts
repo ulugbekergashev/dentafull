@@ -5406,6 +5406,12 @@ const { askSystemPrompt, chatSystemPrompt } = require('./ai/prompts');
 // Klinikalar O'zbekistonda — sana UTC+5 bo'yicha hisoblanadi. Server UTC'da
 // ishlaydi, shuning uchun oddiy toISOString() kechqurun soat 19:00 dan keyin
 // ertangi sanani beradi va "bugun nechta qabul bor?" savoli noto'g'ri javob oladi.
+
+// Interfeys tili. Noma'lum qiymatda o'zbekchaga qaytadi — AI javobi ilova
+// tilidan farq qilib qolmasligi uchun har bir AI endpointda ishlatiladi.
+const reqLang = (req: any): 'uz' | 'ru' =>
+    (req.query?.lang || req.body?.lang) === 'ru' ? 'ru' : 'uz';
+
 const clinicToday = (): string =>
     new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -5456,7 +5462,7 @@ app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
         const tools = toolsForRole(user?.role || 'CLINIC_ADMIN');
 
         const { reply, toolCalls } = await chatWithTools(
-            [{ role: 'system', content: askSystemPrompt(clinicToday()) }, ...history],
+            [{ role: 'system', content: askSystemPrompt(clinicToday(), reqLang(req)) }, ...history],
             tools,
             (name: string, args: any) => runTool(name, args, ctx),
             { label: `ask:${user?.role}`, maxRounds: 5, maxTokens: 1200 }
@@ -5486,7 +5492,7 @@ app.post('/api/ai/chat', authenticateToken, async (req: any, res: any) => {
         }
 
         const history = [
-            { role: 'system', content: chatSystemPrompt() },
+            { role: 'system', content: chatSystemPrompt(reqLang(req)) },
             ...messages,
         ];
 
@@ -5508,7 +5514,7 @@ const { buildReport, reportsForRole } = require('./ai/reports');
 
 // Rolga ko'ra mavjud hisobotlar ro'yxati — UI tugmalarni shu asosda chizadi.
 app.get('/api/ai/reports', authenticateToken, (req: any, res: any) => {
-    res.json({ success: true, reports: reportsForRole(req.user?.role || '') });
+    res.json({ success: true, reports: reportsForRole(req.user?.role || '', reqLang(req)) });
 });
 
 app.post('/api/ai/report', authenticateToken, async (req: any, res: any) => {
@@ -5531,7 +5537,8 @@ app.post('/api/ai/report', authenticateToken, async (req: any, res: any) => {
         const report = await buildReport(
             type,
             { clinicId, role: user?.role, doctorId: user?.doctorId },
-            clinicToday()
+            clinicToday(),
+            reqLang(req)
         );
         res.json({ success: true, report });
     } catch (e: any) {

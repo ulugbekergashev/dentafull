@@ -79,23 +79,63 @@ const REPORT_ROLES: Record<ReportType, string[]> = {
     leads: ['SUPER_ADMIN', 'CLINIC_ADMIN', 'RECEPTIONIST'],
 };
 
-export const REPORT_CATALOG: { type: ReportType; title: string; hint: string; roles: string[] }[] = [
-    { type: 'today', title: 'Bugungi hisobot', hint: 'Qabullar, kelmaganlar, bugungi tushum', roles: REPORT_ROLES.today },
-    { type: 'performance', title: 'Samaradorlik', hint: 'Shifokorlar kesimida qabul va tushum', roles: REPORT_ROLES.performance },
-    { type: 'finance', title: 'Moliya holati', hint: 'Tushum, xarajat, to\'lov usullari', roles: REPORT_ROLES.finance },
-    { type: 'debtors', title: 'Qarzdorlar', hint: 'Kim qancha qarz, jami summa', roles: REPORT_ROLES.debtors },
-    { type: 'inventory', title: 'Ombor', hint: 'Tugayotgan materiallar', roles: REPORT_ROLES.inventory },
-    { type: 'leads', title: 'Lidlar', hint: 'Manba, konversiya, javobsizlar', roles: REPORT_ROLES.leads },
-];
+export type Lang = 'uz' | 'ru';
 
-/** Rolga ko'ra mavjud hisobotlar. */
-export const reportsForRole = (role: string) =>
-    REPORT_CATALOG.filter(r => r.roles.includes(role)).map(({ type, title, hint }) => ({ type, title, hint }));
+// Nom, izoh va bo'sh holat matni ikki tilda. Ilova ruschaga o'tganda hisobot
+// tugmalari ham ruscha bo'lishi kerak — ilgari ular qattiq kodda o'zbekcha edi.
+type Text = { title: string; hint: string; empty: string };
+
+const TEXT: Record<ReportType, Record<Lang, Text>> = {
+    today: {
+        uz: { title: 'Bugungi hisobot', hint: 'Qabullar, kelmaganlar, bugungi tushum',
+              empty: "Bugunga qabul ham, to'lov ham yozilmagan. Jadval bo'sh." },
+        ru: { title: 'Отчёт за сегодня', hint: 'Приёмы, неявки, выручка за день',
+              empty: 'На сегодня нет ни приёмов, ни платежей. Расписание пустое.' },
+    },
+    performance: {
+        uz: { title: 'Samaradorlik', hint: 'Shifokorlar kesimida qabul va tushum',
+              empty: "Bu davrda shifokorlar bo'yicha yozuv yo'q." },
+        ru: { title: 'Эффективность', hint: 'Приёмы и выручка по врачам',
+              empty: 'За этот период нет записей по врачам.' },
+    },
+    finance: {
+        uz: { title: 'Moliya holati', hint: "Tushum, xarajat, to'lov usullari",
+              empty: "Bu oyda hali to'lov ham, xarajat ham yozilmagan." },
+        ru: { title: 'Финансы', hint: 'Выручка, расходы, способы оплаты',
+              empty: 'В этом месяце ещё нет ни платежей, ни расходов.' },
+    },
+    debtors: {
+        uz: { title: 'Qarzdorlar', hint: 'Kim qancha qarz, jami summa',
+              empty: "Qarzdor bemor yo'q — hammasi to'langan." },
+        ru: { title: 'Должники', hint: 'Кто сколько должен, общая сумма',
+              empty: 'Должников нет — всё оплачено.' },
+    },
+    inventory: {
+        uz: { title: 'Ombor', hint: 'Tugayotgan materiallar',
+              empty: "Omborda hali material qo'shilmagan." },
+        ru: { title: 'Склад', hint: 'Заканчивающиеся материалы',
+              empty: 'На склад ещё не добавлены материалы.' },
+    },
+    leads: {
+        uz: { title: 'Lidlar', hint: 'Manba, konversiya, javobsizlar',
+              empty: 'Oxirgi 30 kunda lid kelmagan.' },
+        ru: { title: 'Лиды', hint: 'Источник, конверсия, без ответа',
+              empty: 'За последние 30 дней лидов не было.' },
+    },
+};
+
+const REPORT_LIST: ReportType[] = ['today', 'performance', 'finance', 'debtors', 'inventory', 'leads'];
+
+/** Rolga va tilga ko'ra mavjud hisobotlar. */
+export const reportsForRole = (role: string, lang: Lang = 'uz') =>
+    REPORT_LIST
+        .filter(t => REPORT_ROLES[t].includes(role))
+        .map(t => ({ type: t, title: TEXT[t][lang].title, hint: TEXT[t][lang].hint }));
 
 // ─── Hisobot quruvchilari ────────────────────────────────────────────────────
 // Har biri: kerakli tool'larni chaqiradi, metrikalarni ajratadi, jadval quradi.
 
-type Builder = (ctx: ReportContext, today: string) => Promise<Omit<Report, 'type' | 'narrative'>>;
+type Builder = (ctx: ReportContext, today: string) => Promise<Omit<Report, 'type' | 'narrative' | 'title' | 'emptyText'>>;
 
 const BUILDERS: Record<ReportType, Builder> = {
 
@@ -125,7 +165,6 @@ const BUILDERS: Record<ReportType, Builder> = {
         }
 
         return {
-            title: 'Bugungi hisobot',
             period: today,
             empty: jami === 0 && tushum === 0,
             emptyText: 'Bugunga qabul ham, to\'lov ham yozilmagan. Jadval bo\'sh.',
@@ -149,10 +188,8 @@ const BUILDERS: Record<ReportType, Builder> = {
         const top = [...docs].sort((a: any, b: any) => (b.tushum || 0) - (a.tushum || 0))[0];
 
         return {
-            title: 'Samaradorlik hisoboti',
             period: `${r.dateFrom} — ${r.dateTo}`,
             empty: docs.length === 0 || jamiTushum === 0,
-            emptyText: "Bu davrda shifokorlar bo'yicha yozuv yo'q.",
             metrics: [
                 { label: 'Shifokorlar', value: docs.length, unit: 'ta' },
                 { label: 'Jami tushum', ...som(jamiTushum), tone: good(jamiTushum) },
@@ -175,10 +212,8 @@ const BUILDERS: Record<ReportType, Builder> = {
         const usul = f.usul_kesimida || {};
 
         return {
-            title: 'Moliya holati',
             period: `${r.dateFrom} — ${r.dateTo}`,
             empty: !(f.kassaga_kirgan || f.xarajat || f.tolovlar_soni),
-            emptyText: "Bu oyda hali to'lov ham, xarajat ham yozilmagan.",
             metrics: [
                 { label: 'Kassaga kirgan', ...som(f.kassaga_kirgan || 0), tone: good(f.kassaga_kirgan || 0) },
                 { label: 'Xarajat', ...som(f.xarajat || 0), tone: bad(f.xarajat || 0) },
@@ -202,10 +237,8 @@ const BUILDERS: Record<ReportType, Builder> = {
         const list = d.bemorlar || [];
 
         return {
-            title: 'Qarzdorlar',
             period: 'Hozirgi holat',
             empty: list.length === 0,
-            emptyText: "Qarzdor bemor yo'q — hammasi to'langan.",
             metrics: [
                 { label: 'Qarzdorlar', value: d.topildi ?? list.length, unit: 'ta', tone: warn(d.topildi ?? list.length) },
                 { label: 'Jami qarz', ...som(d.jami_qarz || 0), tone: bad(d.jami_qarz || 0) },
@@ -226,10 +259,8 @@ const BUILDERS: Record<ReportType, Builder> = {
         const list = s.materiallar || [];
 
         return {
-            title: 'Ombor holati',
             period: 'Hozirgi holat',
             empty: (s.jami_pozitsiya ?? 0) === 0,
-            emptyText: "Omborda hali material qo'shilmagan.",
             metrics: [
                 { label: 'Jami pozitsiya', value: s.jami_pozitsiya ?? 0, unit: 'ta' },
                 { label: 'Tugayotgan', value: s.tugayotgan ?? 0, unit: 'ta', tone: (s.tugayotgan ?? 0) > 0 ? 'warn' : 'good' },
@@ -252,10 +283,8 @@ const BUILDERS: Record<ReportType, Builder> = {
         const booked = st['Booked'] || 0;
 
         return {
-            title: 'Lidlar',
             period: 'Oxirgi 30 kun',
             empty: jami === 0,
-            emptyText: 'Oxirgi 30 kunda lid kelmagan.',
             metrics: [
                 { label: 'Jami lid', value: jami, unit: 'ta' },
                 { label: 'Bemorga aylandi', value: booked, unit: 'ta', tone: good(booked), hint: jami ? `${Math.round((booked / jami) * 100)}% konversiya` : undefined },
@@ -277,7 +306,7 @@ const BUILDERS: Record<ReportType, Builder> = {
 // u hisoblamaydi va tool tanlamaydi — faqat nimaga e'tibor berish kerakligini
 // aytadi. Shuning uchun xato qilish ehtimoli minimal.
 
-const narrativeFor = async (r: Omit<Report, 'type' | 'narrative'>): Promise<string> => {
+const narrativeFor = async (r: Omit<Report, 'type' | 'narrative'>, lang: Lang): Promise<string> => {
     const fakt = r.metrics
         .map(m => `${m.label}: ${m.value}${m.unit ? ' ' + m.unit : ''}${m.hint ? ` (${m.hint})` : ''}`)
         .join('; ');
@@ -312,13 +341,15 @@ const narrativeFor = async (r: Omit<Report, 'type' | 'narrative'>): Promise<stri
 export const buildReport = async (
     type: ReportType,
     ctx: ReportContext,
-    today: string
+    today: string,
+    lang: Lang = 'uz'
 ): Promise<Report> => {
     const allowed = REPORT_ROLES[type];
     if (!allowed) throw new Error(`Noma'lum hisobot turi: ${type}`);
     if (!allowed.includes(ctx.role)) throw new Error('Bu hisobotga sizning rolingizda ruxsat yo\'q.');
 
-    const base = await BUILDERS[type](ctx, today);
-    const narrative = await narrativeFor(base);
+    const txt = TEXT[type][lang];
+    const base = { ...await BUILDERS[type](ctx, today), title: txt.title, emptyText: txt.empty };
+    const narrative = await narrativeFor(base, lang);
     return { type, ...base, narrative };
 };

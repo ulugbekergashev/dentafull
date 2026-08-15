@@ -1,5 +1,19 @@
 export const translations = {
   uz: {
+    // DentaAI
+    'ai.tab': 'DentaAI',
+    'ai.reportTab': 'Hisobot',
+    'ai.heroTitle': "Klinikangiz haqida so'rang",
+    'ai.heroSub': "Javob real ma'lumotlaringizdan olinadi — taxmin emas.",
+    'ai.placeholder': 'Masalan: bugun nechta qabul bor?',
+    'ai.oneClick': 'Bir bosishda',
+    'ai.searching': "Ma'lumot izlanmoqda",
+    'ai.noData': "Ma'lumot yo'q",
+    'ai.noDataFallback': 'Bu davr uchun yozuv topilmadi.',
+    'ai.errorTitle': 'Javob olinmadi',
+    'ai.source': 'Manba:',
+    'ai.restart': 'Boshidan',
+    'ai.send': 'Yuborish',
     // Navigation
     'nav.dashboard': 'Boshqaruv Paneli',
     'nav.leads': 'Lidlar',
@@ -745,6 +759,20 @@ export const translations = {
     'finance.debtorsModal.debtorsCount': "ta qarzdor",
   },
   ru: {
+    // DentaAI
+    'ai.tab': 'DentaAI',
+    'ai.reportTab': 'Отчёт',
+    'ai.heroTitle': 'Спросите о своей клинике',
+    'ai.heroSub': 'Ответ берётся из ваших реальных данных — не догадка.',
+    'ai.placeholder': 'Например: сколько приёмов сегодня?',
+    'ai.oneClick': 'В один клик',
+    'ai.searching': 'Идёт поиск данных',
+    'ai.noData': 'Нет данных',
+    'ai.noDataFallback': 'За этот период записей не найдено.',
+    'ai.errorTitle': 'Ответ не получен',
+    'ai.source': 'Источник:',
+    'ai.restart': 'Сначала',
+    'ai.send': 'Отправить',
     // Navigation
     'nav.dashboard': 'Панель управления',
     'nav.leads': 'Лиды',

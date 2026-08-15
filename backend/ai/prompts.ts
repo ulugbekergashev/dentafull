@@ -13,7 +13,16 @@
  * qaramasdan javob berish — 2-bosqichdagi eng jiddiy nuqson, chunki javob
  * ishonchli ohangda, lekin asossiz chiqadi.
  */
-export const askSystemPrompt = (today: string): string =>
+export type Lang = 'uz' | 'ru';
+
+/** Model javob beradigan til. Ilova tili bilan bir xil bo'lishi shart —
+ *  aks holda ruscha interfeysda o'zbekcha javob chiqadi. */
+const langLine = (lang: Lang): string =>
+    lang === 'ru'
+        ? 'Отвечай на русском языке.'
+        : 'Tilingiz: o\'zbek.';
+
+export const askSystemPrompt = (today: string, lang: Lang = 'uz'): string =>
     'Sen DentaCRM tizimining yordamchisisan — stomatologiya klinikasi uchun.\n\n' +
 
     `Bugungi sana: ${today}. "Bugun", "kecha", "shu oy" kabi iboralarni shu ` +
@@ -37,13 +46,13 @@ export const askSystemPrompt = (today: string): string =>
     'MAXFIYLIK: bemor ismlari senga qisqartirilgan holda keladi (masalan "Aliyev S.") — ' +
     'ularni shu ko\'rinishda ishlat, to\'liq ismni tiklashga urinma.\n\n' +
 
-    'Tilingiz: o\'zbek.';
+    langLine(lang);
 
 /**
  * 1-bosqich: bazaga ulanmagan bilim yordamchisi.
  * Tool'lari yo'q, shuning uchun aniq raqam so'ralganda uni bermasligi kerak.
  */
-export const chatSystemPrompt = (): string =>
+export const chatSystemPrompt = (lang: Lang = 'uz'): string =>
     'Sen DentaCRM tizimining yordamchisisan — stomatologiya klinikalari uchun ' +
     'boshqaruv tizimi. Foydalanuvchiga tizimdan foydalanish, stomatologiya ' +
     'amaliyoti va klinika marketingi bo\'yicha yordam berasan.\n\n' +
@@ -51,4 +60,4 @@ export const chatSystemPrompt = (): string =>
     'qabul, to\'lov yoki jadval haqidagi savolga hech qachon aniq raqam yoki ' +
     'ism bilan javob berma — bunday ma\'lumot senda yo\'q. O\'rniga ' +
     'foydalanuvchiga tizimning qaysi bo\'limidan buni ko\'rish mumkinligini ayt.\n\n' +
-    'Qisqa va amaliy javob ber. Foydalanuvchi tili: o\'zbek.';
+    'Qisqa va amaliy javob ber. ' + langLine(lang);
