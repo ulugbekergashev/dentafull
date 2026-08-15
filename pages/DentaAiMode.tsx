@@ -51,8 +51,14 @@ interface ReportOption {
 
 type Result =
   | { kind: 'report'; report: Report }
-  | { kind: 'answer'; question: string; text: string; sources: string[] }
   | { kind: 'error'; message: string };
+
+/** Suhbatning bitta almashinuvi. */
+interface Turn {
+  q: string;
+  a: string;
+  sources: string[];
+}
 
 // ─── API ─────────────────────────────────────────────────────────────────────
 
@@ -212,9 +218,13 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
   const [result, setResult] = useState<Result | null>(null);
   const [reports, setReports] = useState<ReportOption[]>([]);
   const [activeReport, setActiveReport] = useState<string | null>(null);
+  // Suhbat tarixi. Modelga oldingi almashinuvlar ham yuboriladi, aks holda
+  // "va o'tgan oychi?" kabi davomiy savol kontekstsiz qoladi.
+  const [thread, setThread] = useState<Turn[]>([]);
+  const threadEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const hasResult = result !== null || busy;
+  const hasResult = result !== null || busy || thread.length > 0;
 
   // Ro'yxat serverdan keladi — frontendda qattiq yozilsa, ruxsati yo'q rol
   // tugmani ko'rib, bosib, 403 olardi.
@@ -224,19 +234,25 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
       .catch(() => setReports([]));
   }, [language]);
 
+  // Yangi javob kelganda oxiriga suriladi.
+  useEffect(() => {
+    if (thread.length) threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [thread.length]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && result) reset();
+      if (e.key === 'Escape' && (result || thread.length)) reset();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [result]);
+  }, [result, thread.length]);
 
   const runReport = useCallback(async (type: string, title: string) => {
     setBusy(true);
     setBusyLabel(title);
     setActiveReport(type);
     setResult(null);
+    setThread([]);
     try {
       const d = await api<{ report: Report }>('/ai/report', { type, lang: language });
       setResult({ kind: 'report', report: d.report });
@@ -254,22 +270,29 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
     setBusyLabel('Ma\'lumot izlanmoqda');
     setActiveReport(null);
     setResult(null);
+    setQuery('');
     try {
+      // Oldingi almashinuvlar + yangi savol. Server oxirgi 10 tasini oladi.
+      const history = thread.flatMap(t => ([
+        { role: 'user', content: t.q },
+        { role: 'assistant', content: t.a },
+      ]));
       const d = await api<{ reply: string; sources?: string[] }>('/ai/ask', {
-        messages: [{ role: 'user', content: q }],
+        messages: [...history, { role: 'user', content: q }],
         lang: language,
       });
-      setResult({ kind: 'answer', question: q, text: d.reply, sources: d.sources || [] });
+      setThread(prev => [...prev, { q, a: d.reply, sources: d.sources || [] }]);
     } catch (e: any) {
       setResult({ kind: 'error', message: e.message });
     } finally {
       setBusy(false);
     }
-  }, [query, busy, language, t]);
+  }, [query, busy, language, t, thread]);
 
   const reset = () => {
     setResult(null);
     setActiveReport(null);
+    setThread([]);
     setQuery('');
     inputRef.current?.focus();
   };
@@ -359,7 +382,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
               </button>
             );
           })}
-          {result && (
+          {(result || thread.length > 0) && (
             <button
               onClick={reset}
               className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]
@@ -426,6 +449,39 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
         )}
       </AnimatePresence>
 
+      {/* Suhbat. Hisobotdan farqi: bu yerda tarix saqlanadi va modelga
+          yuboriladi, shuning uchun "va o'tgan oychi?" kabi davomiy savol
+          ishlaydi. Har bir almashinuv joyida qoladi — foydalanuvchi nima
+          so'raganini va nima javob olganini ko'rib turadi. */}
+      {thread.length > 0 && !result && (
+        <div className="mt-8 space-y-7">
+          {thread.map((turn, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="space-y-2.5"
+            >
+              <div className="flex items-start gap-2.5">
+                <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                <div className="text-[15px] font-medium text-gray-900 dark:text-white">
+                  {turn.q}
+                </div>
+              </div>
+              <p className="text-[15.5px] leading-relaxed text-gray-700 dark:text-gray-300
+                            whitespace-pre-wrap max-w-2xl pl-4">
+                {turn.a}
+              </p>
+              <div className="pl-4">
+                <SourcePills sources={turn.sources} label={t('ai.source')} lang={language} />
+              </div>
+            </motion.div>
+          ))}
+          <div ref={threadEndRef} />
+        </div>
+      )}
+
       {/* Yuklanmoqda */}
       <AnimatePresence>
         {busy && (
@@ -434,14 +490,24 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
               <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-500" />
               {busyLabel}…
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className={`rounded-2xl px-5 py-4 ${CARD}`}>
-                  <div className="h-2 w-14 bg-gray-200 dark:bg-white/[0.07] rounded mb-3.5 animate-pulse" />
-                  <div className="h-6 w-20 bg-gray-200 dark:bg-white/[0.07] rounded animate-pulse" />
-                </div>
-              ))}
-            </div>
+            {/* Hisobot kutilayotganda kartalar skeleti, suhbatda esa
+                matn qatorlari — kelayotgan narsaning shakliga mos. */}
+            {activeReport ? (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {[0, 1, 2, 3].map(i => (
+                  <div key={i} className={`rounded-2xl px-5 py-4 ${CARD}`}>
+                    <div className="h-2 w-14 bg-gray-200 dark:bg-white/[0.07] rounded mb-3.5 animate-pulse" />
+                    <div className="h-6 w-20 bg-gray-200 dark:bg-white/[0.07] rounded animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-w-2xl pl-4">
+                <div className="h-3.5 w-11/12 bg-gray-200 dark:bg-white/[0.07] rounded animate-pulse" />
+                <div className="h-3.5 w-4/5 bg-gray-200 dark:bg-white/[0.07] rounded animate-pulse" />
+                <div className="h-3.5 w-2/3 bg-gray-200 dark:bg-white/[0.07] rounded animate-pulse" />
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -514,16 +580,6 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
               </>
             )}
 
-            {result.kind === 'answer' && (
-              <>
-                <div className="text-[13px] text-gray-400 dark:text-gray-500">{result.question}</div>
-                <p className="text-[16px] leading-relaxed text-gray-800 dark:text-gray-200
-                              whitespace-pre-wrap max-w-2xl">
-                  {result.text}
-                </p>
-                <SourcePills sources={result.sources} label={t('ai.source')} lang={language} />
-              </>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
