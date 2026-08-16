@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '../components/Common';
-import { Patient, Doctor, Appointment, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger } from '../types';
+import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus } from '../types';
 import { api } from '../services/api';
 import {
     MessageSquare, Clock, Send, CalendarDays, Plus, X, Pencil, Trash2,
@@ -12,7 +12,6 @@ interface MessagesManagementProps {
     currentClinic?: Clinic;
     patients: Patient[];
     doctors: Doctor[];
-    appointments: Appointment[];
     transactions: Transaction[];
     addToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
@@ -85,22 +84,40 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     const [logs, setLogs] = useState<MessageLog[]>([]);
     const [logStats, setLogStats] = useState({ total: 0, sent: 0, failed: 0 });
     const [smsConnected, setSmsConnected] = useState(false);
+    const [historyFilter, setHistoryFilter] = useState<'all' | 'sent' | 'failed'>('all');
+    const [logsLoading, setLogsLoading] = useState(false);
+
+    // Filtr serverda qo'llanadi: aks holda limitdan tashqarida qolgan xatolar
+    // ro'yxatda ko'rinmay, yuqoridagi hisoblagich bilan ziddiyat hosil qilardi.
+    const loadLogs = useCallback(async (filter: 'all' | 'sent' | 'failed' = historyFilter): Promise<MessageLog[]> => {
+        if (!clinicId) return [];
+        setLogsLoading(true);
+        try {
+            const res = await api.messages.getLogs(clinicId, filter === 'all' ? undefined : filter);
+            setLogs(res.logs || []);
+            setLogStats(res.stats || { total: 0, sent: 0, failed: 0 });
+            return res.logs || [];
+        } catch {
+            return [];
+        } finally {
+            setLogsLoading(false);
+        }
+    }, [clinicId, historyFilter]);
 
     useEffect(() => {
         if (!clinicId) return;
         api.messageTemplates.getAll(clinicId).then(setTemplates).catch(() => { });
         api.automationRules.getAll(clinicId).then(setRules).catch(() => { });
         api.sms.getSettings(clinicId).then((s: any) => setSmsConnected(!!s.isConnected)).catch(() => { });
-        loadLogs();
+        loadLogs('all');
+        // Sahifa qayta ochilganda fonda ketayotgan yuborish bo'lsa — ulanib olamiz
+        api.messages.bulkStatus(clinicId).then(s => { if (s.active && !s.done) setBulkJob(s); }).catch(() => { });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [clinicId]);
 
-    const loadLogs = () => {
-        if (!clinicId) return;
-        api.messages.getLogs(clinicId).then(res => {
-            setLogs(res.logs || []);
-            setLogStats(res.stats || { total: 0, sent: 0, failed: 0 });
-        }).catch(() => { });
+    const changeHistoryFilter = (filter: 'all' | 'sent' | 'failed') => {
+        setHistoryFilter(filter);
+        loadLogs(filter);
     };
 
     const telegramConnected = !!currentClinic?.botToken;
@@ -164,35 +181,60 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     };
 
     // ── Avtomatik tab ──
-    const [isRuleFormOpen, setIsRuleFormOpen] = useState(false);
-    const [ruleForm, setRuleForm] = useState({
+    const EMPTY_RULE_FORM = {
         name: '',
         templateId: '',
         trigger: 'before_appointment' as AutomationTrigger,
         hoursBefore: 2,
         channel: 'sms' as MessageChannel,
         doctorId: '',
-    });
+    };
+    const [isRuleFormOpen, setIsRuleFormOpen] = useState(false);
+    const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
+    const [ruleForm, setRuleForm] = useState(EMPTY_RULE_FORM);
     const [ruleSaving, setRuleSaving] = useState(false);
+
+    const openRuleForm = (rule?: AutomationRule) => {
+        setEditingRule(rule || null);
+        setRuleForm(rule ? {
+            name: rule.name,
+            templateId: rule.templateId,
+            trigger: rule.trigger,
+            hoursBefore: rule.hoursBefore || 2,
+            channel: rule.channel,
+            doctorId: rule.doctorId || '',
+        } : EMPTY_RULE_FORM);
+        setIsRuleFormOpen(true);
+    };
+
+    const closeRuleForm = () => {
+        setIsRuleFormOpen(false);
+        setEditingRule(null);
+        setRuleForm(EMPTY_RULE_FORM);
+    };
 
     const handleSaveRule = async () => {
         if (!ruleForm.name.trim() || !ruleForm.templateId) return;
         setRuleSaving(true);
+        const payload = {
+            name: ruleForm.name,
+            templateId: ruleForm.templateId,
+            trigger: ruleForm.trigger,
+            hoursBefore: ruleForm.trigger === 'before_appointment' ? ruleForm.hoursBefore : null,
+            channel: ruleForm.channel,
+            doctorId: ruleForm.doctorId || null,
+        };
         try {
-            const created = await api.automationRules.create({
-                name: ruleForm.name,
-                templateId: ruleForm.templateId,
-                trigger: ruleForm.trigger,
-                hoursBefore: ruleForm.trigger === 'before_appointment' ? ruleForm.hoursBefore : null,
-                channel: ruleForm.channel,
-                doctorId: ruleForm.doctorId || null,
-                active: true,
-                clinicId,
-            });
-            setRules(prev => [created, ...prev]);
-            setIsRuleFormOpen(false);
-            setRuleForm({ name: '', templateId: '', trigger: 'before_appointment', hoursBefore: 2, channel: 'sms', doctorId: '' });
-            addToast('success', "Qoida qo'shildi.");
+            if (editingRule) {
+                const updated = await api.automationRules.update(editingRule.id, payload);
+                setRules(prev => prev.map(r => r.id === editingRule.id ? updated : r));
+                addToast('success', 'Qoida yangilandi.');
+            } else {
+                const created = await api.automationRules.create({ ...payload, active: true, clinicId });
+                setRules(prev => [created, ...prev]);
+                addToast('success', "Qoida qo'shildi.");
+            }
+            closeRuleForm();
         } catch (e: any) {
             addToast('error', e.message || 'Xatolik yuz berdi');
         } finally {
@@ -269,19 +311,40 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         });
     }, [patients, manualChannel, audienceStatus, audienceDoctorId, audienceInactive, quickFilter, debtorIds]);
 
+    // Yuborish serverda fonda ketadi (yuzlab SMS bir HTTP so'roviga sig'maydi).
+    const [bulkJob, setBulkJob] = useState<BulkSendStatus | null>(null);
+
+    useEffect(() => {
+        if (!clinicId || !bulkJob || bulkJob.done) return;
+        const timer = setInterval(() => {
+            api.messages.bulkStatus(clinicId).then(status => {
+                if (!status.active) { setBulkJob(null); return; }
+                setBulkJob(status);
+                if (status.done) {
+                    loadLogs();
+                    if (status.error) {
+                        addToast('error', status.error);
+                    } else if ((status.failed || 0) > 0) {
+                        addToast('info', `Yuborildi: ${status.sent} ta, xato: ${status.failed} ta.`);
+                    } else {
+                        addToast('success', `${status.sent} ta xabar muvaffaqiyatli yuborildi!`);
+                    }
+                }
+            }).catch(() => { });
+        }, 3000);
+        return () => clearInterval(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [clinicId, bulkJob]);
+
     const handleManualSend = async () => {
         if (!manualMessage.trim() || recipients.length === 0) return;
         if (!confirm(`${recipients.length} ta bemorga ${manualChannel === 'sms' ? 'SMS' : 'Telegram'} xabar yuborilsinmi?`)) return;
         setManualSending(true);
         try {
             const result = await api.messages.sendBulk(clinicId, recipients.map(r => r.id), manualMessage, manualChannel);
-            if (result.failed > 0) {
-                addToast('info', `Yuborildi: ${result.sent} ta, xato: ${result.failed} ta. Tarix bo'limida ko'ring.`);
-            } else {
-                addToast('success', `${result.sent} ta xabar muvaffaqiyatli yuborildi!`);
-            }
+            addToast('info', `${result.total} ta bemorga yuborish boshlandi. Jarayonni Tarix bo'limida kuzating.`);
+            setBulkJob({ active: true, total: result.total, sent: 0, failed: 0, done: false });
             setManualMessage('');
-            loadLogs();
             setActiveTab('history');
         } catch (e: any) {
             addToast('error', e.message || 'Yuborishda xatolik yuz berdi');
@@ -291,17 +354,13 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     };
 
     // ── Tarix tab ──
-    const [historyFilter, setHistoryFilter] = useState<'all' | 'sent' | 'failed'>('all');
     const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
     const [retrying, setRetrying] = useState(false);
 
-    const filteredLogs = useMemo(() => {
-        if (historyFilter === 'sent') return logs.filter(l => l.status === 'Sent');
-        if (historyFilter === 'failed') return logs.filter(l => l.status === 'Failed');
-        return logs;
-    }, [logs, historyFilter]);
-
-    const failedLogs = useMemo(() => logs.filter(l => l.status === 'Failed'), [logs]);
+    const loadedFailedIds = useMemo(
+        () => logs.filter(l => l.status === 'Failed').map(l => l.id),
+        [logs]
+    );
 
     const toggleLogSelection = (id: string) => {
         setSelectedLogIds(prev => {
@@ -311,12 +370,25 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         });
     };
 
+    // Xatolar limitdan tashqarida bo'lishi mumkin — avval "Xato" filtriga o'tib,
+    // serverdan to'liq ro'yxatni olib, keyin tanlaymiz.
+    const selectAllFailed = async () => {
+        if (historyFilter === 'failed') {
+            setSelectedLogIds(new Set(loadedFailedIds));
+            return;
+        }
+        setHistoryFilter('failed');
+        const failed = await loadLogs('failed');
+        setSelectedLogIds(new Set(failed.filter(l => l.status === 'Failed').map(l => l.id)));
+    };
+
     const handleRetry = async (ids: string[]) => {
         if (ids.length === 0) return;
         setRetrying(true);
         try {
             const result = await api.messages.retry(clinicId, ids);
-            addToast(result.success > 0 ? 'success' : 'info', `Qayta yuborildi: ${result.success} ta muvaffaqiyatli, ${result.failed} ta xato.`);
+            const skippedNote = result.skipped > 0 ? `, ${result.skipped} ta qayta yuborib bo'lmadi` : '';
+            addToast(result.success > 0 ? 'success' : 'info', `Qayta yuborildi: ${result.success} ta muvaffaqiyatli, ${result.failed} ta xato${skippedNote}.`);
             setSelectedLogIds(new Set());
             loadLogs();
         } catch (e: any) {
@@ -325,6 +397,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             setRetrying(false);
         }
     };
+
+    const bulkRunning = !!bulkJob && !bulkJob.done;
 
     const formatLogDate = (iso: string) => {
         const d = new Date(iso);
@@ -402,7 +476,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
 
                     <div className="flex items-center gap-2 px-4 py-2.5 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-xs text-primary-700 dark:text-primary-400">
                         <Smartphone className="w-3.5 h-3.5 shrink-0" />
-                        <span>Eskiz SMS ulangan bo'lsa, har bir shablon saqlanganda avtomatik Eskiz moderatsiyasiga yuboriladi. Holatini "🔄" tugmasi bilan yangilab turing.</span>
+                        <span>Eskiz SMS ulangan bo'lsa, shablon saqlangach fonda Eskiz moderatsiyasiga yuboriladi (o'zgaruvchilar Eskiz talab qilgan <code className="font-mono">%w</code> ko'rinishiga aylantiriladi). Holatini "🔄" tugmasi bilan yangilab turing.</span>
                     </div>
 
                     {isTemplateFormOpen && (
@@ -456,12 +530,12 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 whitespace-pre-wrap break-words">{tpl.text}</p>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                        {tpl.eskizStatus && (
+                                        {smsConnected && (
                                             <button
                                                 onClick={() => handleSyncEskizStatus(tpl)}
                                                 disabled={syncingTemplateId === tpl.id}
                                                 className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
-                                                title="Eskiz holatini yangilash"
+                                                title={tpl.eskizStatus ? 'Eskiz holatini yangilash' : "Eskiz moderatsiyasiga yuborish"}
                                             >
                                                 <RefreshCw className={`w-4 h-4 ${syncingTemplateId === tpl.id ? 'animate-spin' : ''}`} />
                                             </button>
@@ -489,7 +563,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             {activeTab === 'auto' && (
                 <div className="space-y-4">
                     <div className="flex justify-end">
-                        <Button onClick={() => setIsRuleFormOpen(true)}>
+                        <Button onClick={() => openRuleForm()}>
                             <Plus className="w-4 h-4 mr-1" /> Yangi qoida
                         </Button>
                     </div>
@@ -497,8 +571,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     {isRuleFormOpen && (
                         <Card className="p-6 space-y-4">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Yangi qoida</h3>
-                                <button onClick={() => setIsRuleFormOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                                    {editingRule ? 'Qoidani tahrirlash' : 'Yangi qoida'}
+                                </h3>
+                                <button onClick={closeRuleForm} className="text-gray-400 hover:text-gray-600">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
@@ -584,7 +660,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 </select>
                             </div>
                             <div className="flex justify-end gap-2 pt-2">
-                                <Button variant="secondary" onClick={() => setIsRuleFormOpen(false)}>Bekor</Button>
+                                <Button variant="secondary" onClick={closeRuleForm}>Bekor</Button>
                                 <Button onClick={handleSaveRule} disabled={ruleSaving || !ruleForm.name.trim() || !ruleForm.templateId}>
                                     {ruleSaving ? 'Saqlanmoqda...' : 'Saqlash'}
                                 </Button>
@@ -615,6 +691,9 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                             title={rule.active ? "O'chirish" : 'Yoqish'}
                                         >
                                             <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${rule.active ? 'left-[22px]' : 'left-0.5'}`} />
+                                        </button>
+                                        <button onClick={() => openRuleForm(rule)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors" title="Tahrirlash">
+                                            <Pencil className="w-4 h-4" />
                                         </button>
                                         <button onClick={() => handleDeleteRule(rule)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="O'chirish">
                                             <Trash2 className="w-4 h-4" />
@@ -762,17 +841,23 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             className={inputCls}
                         />
                         <VarButtons onInsert={token => setManualMessage(m => m + token)} />
+                        <p className="text-xs text-gray-400">
+                            <strong>{'{sana}'}</strong>, <strong>{'{vaqt}'}</strong> va <strong>{"{shifokor_ismi}"}</strong> bemorning eng yaqin kelgusi qabuli bo'yicha to'ldiriladi.
+                            Qabuli bo'lmasa {'{sana}'} bugungi sana bo'ladi, qolganlari bo'sh qoladi.
+                        </p>
                         <button
-                            disabled={manualSending || !manualMessage.trim() || recipients.length === 0}
+                            disabled={manualSending || bulkRunning || !manualMessage.trim() || recipients.length === 0}
                             onClick={handleManualSend}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-white transition-all bg-primary-600 hover:bg-primary-700 disabled:bg-primary-300 disabled:cursor-not-allowed"
                         >
-                            {manualSending ? (
+                            {manualSending || bulkRunning ? (
                                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                             ) : (
                                 <Send className="w-4 h-4" />
                             )}
-                            {recipients.length} ta bemorga {manualChannel === 'sms' ? 'SMS' : 'Telegram xabar'} yuborish
+                            {bulkRunning
+                                ? 'Oldingi yuborish davom etmoqda...'
+                                : `${recipients.length} ta bemorga ${manualChannel === 'sms' ? 'SMS' : 'Telegram xabar'} yuborish`}
                         </button>
                     </Card>
                 </div>
@@ -797,21 +882,50 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         </Card>
                     </div>
 
-                    {/* Xatolar banneri */}
-                    {failedLogs.length > 0 && (
+                    {/* Fonda ketayotgan yuborish */}
+                    {bulkJob && (
+                        <div className="px-4 py-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                                <span className="flex items-center gap-2 font-bold text-primary-700 dark:text-primary-400">
+                                    {!bulkJob.done && <span className="w-3.5 h-3.5 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin" />}
+                                    {bulkJob.done ? 'Yuborish tugadi' : 'Yuborilmoqda...'}
+                                </span>
+                                <span className="flex items-center gap-2 text-xs text-primary-600 dark:text-primary-400">
+                                    {(bulkJob.sent || 0) + (bulkJob.failed || 0)} / {bulkJob.total || 0}
+                                    {(bulkJob.failed || 0) > 0 ? ` · ${bulkJob.failed} ta xato` : ''}
+                                    {bulkJob.done && (
+                                        <button onClick={() => setBulkJob(null)} className="text-primary-400 hover:text-primary-700" title="Yopish">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="h-1.5 bg-primary-100 dark:bg-primary-900/40 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-primary-600 transition-all"
+                                    style={{ width: `${Math.round((((bulkJob.sent || 0) + (bulkJob.failed || 0)) / Math.max(1, bulkJob.total || 0)) * 100)}%` }}
+                                />
+                            </div>
+                            {bulkJob.error && <p className="text-xs text-red-600">{bulkJob.error}</p>}
+                        </div>
+                    )}
+
+                    {/* Xatolar banneri — hisob butun baza bo'yicha, ro'yxat limitidan mustaqil */}
+                    {logStats.failed > 0 && (
                         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
                             <div className="flex items-center gap-2 text-sm">
                                 <XCircle className="w-5 h-5 text-red-500 shrink-0" />
                                 <div>
-                                    <p className="font-bold text-red-700 dark:text-red-400">{failedLogs.length} ta xato xabar</p>
+                                    <p className="font-bold text-red-700 dark:text-red-400">{logStats.failed} ta xato xabar</p>
                                     <p className="text-red-600/80 dark:text-red-400/80 text-xs">Qayta yuborish uchun tanlang yoki hammasini qayta yuboring</p>
                                 </div>
                             </div>
                             <button
-                                onClick={() => setSelectedLogIds(new Set(failedLogs.map(l => l.id)))}
-                                className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all"
+                                onClick={selectAllFailed}
+                                disabled={logsLoading}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white text-xs font-bold rounded-xl transition-all"
                             >
-                                <RefreshCw className="w-3.5 h-3.5" /> Hammasini tanlash
+                                <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? 'animate-spin' : ''}`} /> Hammasini tanlash
                             </button>
                         </div>
                     )}
@@ -843,7 +957,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 ] as const).map(([key, lbl]) => (
                                     <button
                                         key={key}
-                                        onClick={() => setHistoryFilter(key)}
+                                        onClick={() => changeHistoryFilter(key)}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${historyFilter === key
                                             ? 'bg-primary-600 text-white'
                                             : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
@@ -852,26 +966,28 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     </button>
                                 ))}
                             </div>
-                            <button onClick={loadLogs} className="flex items-center gap-1.5 text-xs font-bold text-primary-600 hover:text-primary-700">
-                                <RefreshCw className="w-3.5 h-3.5" /> Yangilash
+                            <button onClick={() => loadLogs()} disabled={logsLoading} className="flex items-center gap-1.5 text-xs font-bold text-primary-600 hover:text-primary-700 disabled:opacity-50">
+                                <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? 'animate-spin' : ''}`} /> Yangilash
                             </button>
                         </div>
                         <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[60vh] overflow-y-auto">
-                            {filteredLogs.map(log => {
+                            {logs.map(log => {
                                 const name = log.patient ? `${log.patient.firstName} ${log.patient.lastName}` : (log.recipient || '-');
                                 const contact = log.recipient || log.patient?.phone || '';
                                 const isFailed = log.status === 'Failed';
+                                const isRetried = log.status === 'Retried';
                                 return (
                                     <div key={log.id} className="px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                        {isFailed && (
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedLogIds.has(log.id)}
-                                                onChange={() => toggleLogSelection(log.id)}
-                                                className="mt-1.5 w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                                            />
-                                        )}
-                                        <span className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${isFailed ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                                        {/* Checkbox faqat xatolar uchun faol, lekin joyi doim band —
+                                            aks holda qatorlar chapga siljib, ro'yxat notekis ko'rinardi */}
+                                        <input
+                                            type="checkbox"
+                                            checked={isFailed && selectedLogIds.has(log.id)}
+                                            onChange={() => toggleLogSelection(log.id)}
+                                            disabled={!isFailed}
+                                            className={`mt-1.5 w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 ${isFailed ? '' : 'invisible'}`}
+                                        />
+                                        <span className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${isFailed ? 'bg-red-500' : isRetried ? 'bg-gray-400' : 'bg-emerald-500'}`} />
                                         <div className="flex-1 min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className="font-bold text-gray-900 dark:text-white text-sm">{name}</span>
@@ -883,6 +999,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-red-50 dark:bg-red-900/20 text-red-600 rounded-md">
                                                         <XCircle className="w-3 h-3" /> Xato
                                                     </span>
+                                                ) : isRetried ? (
+                                                    <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-md">
+                                                        <RefreshCw className="w-3 h-3" /> Qayta yuborilgan
+                                                    </span>
                                                 ) : (
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-md">
                                                         <CheckCircle2 className="w-3 h-3" /> Yuborildi
@@ -890,14 +1010,16 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                 )}
                                             </div>
                                             {log.message && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{log.message}</p>}
-                                            {isFailed && log.error && <p className="text-xs text-red-500 mt-0.5">{log.error}</p>}
+                                            {(isFailed || isRetried) && log.error && <p className={`text-xs mt-0.5 ${isFailed ? 'text-red-500' : 'text-gray-400'}`}>{log.error}</p>}
                                         </div>
                                         <span className="text-xs text-gray-400 shrink-0">{formatLogDate(log.sentAt)}</span>
                                     </div>
                                 );
                             })}
-                            {filteredLogs.length === 0 && (
-                                <div className="px-4 py-10 text-center text-gray-500 text-sm">Xabarlar tarixi bo'sh.</div>
+                            {logs.length === 0 && (
+                                <div className="px-4 py-10 text-center text-gray-500 text-sm">
+                                    {logsLoading ? 'Yuklanmoqda...' : historyFilter === 'all' ? "Xabarlar tarixi bo'sh." : 'Bu filtr bo\'yicha xabar yo\'q.'}
+                                </div>
                             )}
                         </div>
                     </Card>

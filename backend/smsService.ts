@@ -5,6 +5,33 @@ const ESKIZ_BASE_URL = 'https://notify.eskiz.uz/api';
 // Sender name registered in Eskiz cabinet (default for most accounts)
 const ESKIZ_NICK = process.env.ESKIZ_NICK || '4546';
 
+// Eskiz shablonida o'zgaruvchan qism `%w` bilan belgilanadi. Bizning
+// `{bemor_ismi}` kabi tokenlarimiz literal matn sifatida yuborilsa, moderatsiyadan
+// o'tgan shablon real (ism qo'yilgan) SMS'ga mos kelmaydi va yuborish rad etiladi.
+const TEMPLATE_TOKEN_RE = /\{[A-Za-z_]+\}/g;
+export const toEskizTemplate = (text: string): string => (text || '').replace(TEMPLATE_TOKEN_RE, '%w');
+
+// Eskiz matnni ozgina qayta formatlab qaytarishi mumkin — solishtirishdan oldin
+// bo'sh joy va registr farqlarini yo'qotamiz.
+const normalizeForMatch = (text: string): string => (text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/**
+ * O'zbekiston raqamini Eskiz kutadigan 998XXXXXXXXX ko'rinishiga keltiradi.
+ * Bemor telefoni erkin matn sifatida kiritilgani uchun ( "+998 90 123 45 67",
+ * "(90) 123-45-67", "90 123 45 67" ... ) faqat raqamlarni ajratib olamiz.
+ * Tanib bo'lmasa null qaytaradi — buzuq raqamni Eskizga yubormaymiz.
+ */
+export function normalizeUzPhone(phone?: string | null): string | null {
+    const digits = (phone || '').replace(/\D/g, '');
+    if (!digits) return null;
+    if (digits.length === 12 && digits.startsWith('998')) return digits;
+    if (digits.length === 13 && digits.startsWith('0998')) return digits.slice(1);
+    if (digits.length === 9) return `998${digits}`;
+    // Ichki formatlar: 0XX XXX XX XX yoki 8XX XXX XX XX
+    if (digits.length === 10 && (digits.startsWith('0') || digits.startsWith('8'))) return `998${digits.slice(1)}`;
+    return null;
+}
+
 class SmsService {
     /**
      * Get a valid Eskiz token for the clinic.
@@ -101,8 +128,10 @@ class SmsService {
                 return { success: false, error: 'Eskiz token topilmadi. Iltimos SMS sozlamalarini tekshiring.' };
             }
 
-            // Normalize phone: remove spaces, +, leading zeros
-            const cleanPhone = phone.replace(/\s/g, '').replace(/^\+/, '').replace(/^0+/, '');
+            const cleanPhone = normalizeUzPhone(phone);
+            if (!cleanPhone) {
+                return { success: false, error: `Telefon raqami noto'g'ri formatda: ${phone}` };
+            }
 
             // Use stored nickname or fallback to environment/default
             const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } }) as any;
@@ -162,6 +191,7 @@ class SmsService {
 
     /**
      * Shablon matnini Eskiz moderatsiyasiga yuboradi (POST /api/user/template).
+     * Tokenlar (`{bemor_ismi}` ...) Eskiz kutadigan `%w` ga aylantiriladi.
      * Eskiz javobi shablonni tasdiqlamaydi/rad etmaydi — faqat qabul qilinganini bildiradi,
      * haqiqiy holatni keyin getTemplates() orqali tekshirish kerak.
      */
@@ -173,7 +203,7 @@ class SmsService {
             }
 
             const formData = new URLSearchParams();
-            formData.append('template', text);
+            formData.append('template', toEskizTemplate(text));
 
             await axios.post(`${ESKIZ_BASE_URL}/user/template`, formData, {
                 headers: {
@@ -217,6 +247,22 @@ class SmsService {
     }
 
     /**
+     * Berilgan shablon matnini Eskiz'dagi ro'yxatdan topadi (tokenlar `%w` ga
+     * aylantirilgan holda solishtiriladi) va ID + moderatsiya holatini qaytaradi.
+     */
+    public async findTemplate(clinicId: string, text: string): Promise<{ match: { id: number; status: string } | null; error?: string }> {
+        const { templates, error } = await this.getTemplates(clinicId);
+        if (error) return { match: null, error };
+
+        const target = normalizeForMatch(toEskizTemplate(text));
+        // Oxirgi yuborilgani ustuvor — bir xil matn bir necha marta yuborilgan bo'lishi mumkin
+        const found = [...templates].reverse().find(t =>
+            normalizeForMatch(t.original_text) === target || normalizeForMatch(t.template) === target
+        );
+        return { match: found ? { id: found.id, status: found.status } : null };
+    }
+
+    /**
      * Shablonni Eskiz'ga yuborib, so'ng ro'yxatdan (matn bo'yicha) topib, ID va holatini qaytaradi.
      * Klinikada Eskiz ulanmagan bo'lsa jim o'tkazib yuboradi (null qaytaradi).
      */
@@ -227,8 +273,7 @@ class SmsService {
             return { eskizTemplateId: null, eskizStatus: submitResult.error === 'Eskiz token topilmadi' ? null : 'error' };
         }
 
-        const { templates } = await this.getTemplates(clinicId);
-        const match = [...templates].reverse().find(t => t.original_text === text || t.template === text);
+        const { match } = await this.findTemplate(clinicId, text);
         if (match) {
             return { eskizTemplateId: match.id, eskizStatus: match.status };
         }

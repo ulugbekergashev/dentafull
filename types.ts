@@ -244,7 +244,8 @@ export interface MessageLog {
   clinicId: string;
   patientId?: string | null;
   type: string;
-  status: 'Sent' | 'Failed';
+  // 'Retried' — xato yozuv qayta yuborishga jo'natilgan, natijasi alohida logda
+  status: 'Sent' | 'Failed' | 'Retried';
   message?: string | null;
   error?: string | null;
   sentAt: string;
@@ -254,6 +255,17 @@ export interface MessageLog {
   refId?: string | null;
   recipient?: string | null;
   patient?: { id: string; firstName: string; lastName: string; phone?: string } | null;
+}
+
+// Fonda ketayotgan qo'lda (bulk) yuborish holati
+export interface BulkSendStatus {
+  active: boolean;
+  total?: number;
+  sent?: number;
+  failed?: number;
+  done?: boolean;
+  startedAt?: number;
+  error?: string;
 }
 
 export interface InstallmentPlan {

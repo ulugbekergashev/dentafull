@@ -819,9 +819,6 @@ class BotManager {
         replyMarkup?: any,
         logExtra?: { source?: string; ruleId?: string; refId?: string }
     ): Promise<{ success: boolean; error?: string }> {
-        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
-        if (!clinic || !clinic.botToken) return { success: false, error: 'Bot sozlanmagan' };
-
         const extra = {
             channel: 'telegram',
             source: logExtra?.source || 'manual',
@@ -830,20 +827,30 @@ class BotManager {
             recipient: chatId,
         };
 
+        // Har qanday muvaffaqiyatsizlik ham tarixga yozilishi shart: aks holda xabar
+        // "yo'qoladi" va avtomatika dvigateli (ruleId+refId bo'yicha dedupe qiladi)
+        // o'sha qabulga har 10 daqiqada qayta urinaveradi.
+        const logFailure = async (error: string) => {
+            await prisma.telegramLog.create({
+                data: { clinicId, patientId, type, status: 'Failed', message, error, ...extra }
+            }).catch((err: any) => console.error('Telegram log error:', err));
+            return { success: false, error };
+        };
+
+        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
+        if (!clinic || !clinic.botToken) return await logFailure('Bot sozlanmagan');
+
         const bot = this.bots.get(clinic.botToken);
-        if (!bot) return { success: false, error: 'Bot instance topilmadi' };
+        if (!bot) return await logFailure('Bot instance topilmadi (bot ishga tushmagan)');
         try {
             await bot.telegram.sendMessage(chatId, message, replyMarkup ? { reply_markup: replyMarkup } : undefined);
             await prisma.telegramLog.create({
                 data: { clinicId, patientId, type, status: 'Sent', message, ...extra }
-            });
+            }).catch((err: any) => console.error('Telegram log error:', err));
             return { success: true };
         } catch (e: any) {
             console.error(`Failed to send message in clinic ${clinicId}:`, e);
-            await prisma.telegramLog.create({
-                data: { clinicId, patientId, type, status: 'Failed', message, error: e.message, ...extra }
-            });
-            return { success: false, error: e.message };
+            return await logFailure(e.message || 'Telegram xatosi');
         }
     }
 

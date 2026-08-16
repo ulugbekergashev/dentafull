@@ -1591,7 +1591,6 @@ const AppContent: React.FC = () => {
                       currentClinic={currentClinic}
                       patients={patients}
                       doctors={doctors}
-                      appointments={appointments}
                       transactions={transactions}
                       addToast={addToast}
                     />

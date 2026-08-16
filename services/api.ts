@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -1198,29 +1198,38 @@ export const api = {
         },
     },
     messages: {
+        // Yuborish serverda fonda bajariladi — javob darhol qaytadi, jarayonni
+        // bulkStatus() orqali kuzatiladi, natija esa Tarix bo'limida ko'rinadi.
         sendBulk: (clinicId: string, patientIds: string[], message: string, channel: MessageChannel) => {
             if (isDemoMode()) {
-                return Promise.resolve({ total: patientIds.length, sent: patientIds.length, failed: 0, details: [] as any[] });
+                return Promise.resolve({ total: patientIds.length, queued: true });
             }
-            return fetchJson<{ total: number; sent: number; failed: number; details: any[] }>('/messages/send-bulk', {
+            return fetchJson<{ total: number; queued: boolean }>('/messages/send-bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ clinicId, patientIds, message, channel }),
             });
         },
-        getLogs: (clinicId: string, limit = 200) => {
+        bulkStatus: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve({ active: false } as BulkSendStatus);
+            return fetchJson<BulkSendStatus>(`/messages/bulk-status?clinicId=${clinicId}`);
+        },
+        getLogs: (clinicId: string, status?: 'sent' | 'failed', limit = 200) => {
             if (isDemoMode()) {
-                const sent = DEMO_MESSAGE_LOGS.filter(l => l.status === 'Sent').length;
-                return Promise.resolve({
-                    logs: DEMO_MESSAGE_LOGS,
-                    stats: { total: DEMO_MESSAGE_LOGS.length, sent, failed: DEMO_MESSAGE_LOGS.length - sent }
-                });
+                const all = DEMO_MESSAGE_LOGS;
+                const sent = all.filter(l => l.status === 'Sent').length;
+                const failed = all.filter(l => l.status === 'Failed').length;
+                const logs = status === 'sent' ? all.filter(l => l.status === 'Sent')
+                    : status === 'failed' ? all.filter(l => l.status === 'Failed')
+                        : all;
+                return Promise.resolve({ logs, stats: { total: all.length, sent, failed } });
             }
-            return fetchJson<{ logs: MessageLog[]; stats: { total: number; sent: number; failed: number } }>(`/messages/logs?clinicId=${clinicId}&limit=${limit}`);
+            const statusParam = status ? `&status=${status}` : '';
+            return fetchJson<{ logs: MessageLog[]; stats: { total: number; sent: number; failed: number } }>(`/messages/logs?clinicId=${clinicId}&limit=${limit}${statusParam}`);
         },
         retry: (clinicId: string, logIds: string[]) => {
-            if (isDemoMode()) return Promise.resolve({ retried: logIds.length, success: logIds.length, failed: 0 });
-            return fetchJson<{ retried: number; success: number; failed: number }>('/messages/retry', {
+            if (isDemoMode()) return Promise.resolve({ retried: logIds.length, success: logIds.length, failed: 0, skipped: 0 });
+            return fetchJson<{ retried: number; success: number; failed: number; skipped: number }>('/messages/retry', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ clinicId, logIds }),

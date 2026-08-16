@@ -509,6 +509,8 @@ app.get('/api/message-templates', authenticateToken, async (req, res) => {
 
 // Shablon matnini Eskiz moderatsiyasiga yuborib, natijani baza yozuviga qo'shadi.
 // Klinikada Eskiz ulanmagan bo'lsa jim o'tkazib yuboradi (eskizStatus null qoladi).
+// Eskizga 2-3 ta so'rov ketgani uchun (30+ soniya) HTTP javobini kutdirmaymiz —
+// fonda bajariladi, foydalanuvchi holatni 🔄 tugmasi bilan yangilaydi.
 const submitTemplateToEskizModeration = async (templateId: string, clinicId: string, text: string) => {
     try {
         const { eskizTemplateId, eskizStatus } = await smsService.submitAndSyncTemplate(clinicId, text);
@@ -528,13 +530,12 @@ app.post('/api/message-templates', authenticateToken, async (req, res) => {
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { name, text } = req.body;
         if (!name || !text) return res.status(400).json({ error: 'Nomi va matni kiritilishi shart' });
-        let template = await prisma.messageTemplate.create({
+        const template = await prisma.messageTemplate.create({
             data: { name, text, clinicId: clinicId as string }
         });
 
-        // Shablonni darhol Eskiz moderatsiyasiga yuboramiz (javobni kutib, holatini saqlaymiz)
-        await submitTemplateToEskizModeration(template.id, clinicId as string, text);
-        template = await prisma.messageTemplate.findUnique({ where: { id: template.id } }) as any;
+        // Fonda Eskiz moderatsiyasiga yuboriladi (javobni kutmaymiz)
+        void submitTemplateToEskizModeration(template.id, clinicId as string, text);
 
         res.json(template);
     } catch (error) {
@@ -547,18 +548,21 @@ app.put('/api/message-templates/:id', authenticateToken, async (req, res) => {
         if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
         const { name, text } = req.body;
         const existing = await prisma.messageTemplate.findUnique({ where: { id: req.params.id } });
-        let template = await prisma.messageTemplate.update({
+        const textChanged = text !== undefined && text !== existing?.text;
+
+        const template = await prisma.messageTemplate.update({
             where: { id: req.params.id },
             data: {
                 ...(name !== undefined && { name }),
                 ...(text !== undefined && { text }),
+                // Matn o'zgardi — eski moderatsiya natijasi endi bu matnga tegishli emas
+                ...(textChanged && { eskizTemplateId: null, eskizStatus: null, eskizSubmittedAt: null }),
             }
         });
 
-        // Matn o'zgargan bo'lsa — Eskiz'da eski shablon endi mos kelmaydi, qayta yuboramiz
-        if (text !== undefined && text !== existing?.text) {
-            await submitTemplateToEskizModeration(template.id, template.clinicId, text);
-            template = await prisma.messageTemplate.findUnique({ where: { id: template.id } }) as any;
+        // Matn o'zgargan bo'lsa — Eskiz'da eski shablon endi mos kelmaydi, fonda qayta yuboramiz
+        if (textChanged) {
+            void submitTemplateToEskizModeration(template.id, template.clinicId, text);
         }
 
         res.json(template);
@@ -567,22 +571,32 @@ app.put('/api/message-templates/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// Shablonning Eskiz'dagi moderatsiya holatini qayta yuborishsiz yangilaydi (faqat status tekshiruvi)
+// Shablonning Eskiz'dagi moderatsiya holatini yangilaydi. Agar shablon Eskiz'da
+// umuman topilmasa (masalan yaratilganda Eskiz hali ulanmagan edi) — avval
+// moderatsiyaga yuboradi, so'ng holatini o'qiydi.
 app.post('/api/message-templates/:id/sync-eskiz-status', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
         const existing = await prisma.messageTemplate.findUnique({ where: { id: req.params.id } });
         if (!existing) return res.status(404).json({ error: 'Shablon topilmadi' });
 
-        const { templates, error } = await smsService.getTemplates(existing.clinicId);
+        let { match, error } = await smsService.findTemplate(existing.clinicId, existing.text);
         if (error) return res.status(400).json({ error });
 
-        const match = [...templates].reverse().find((t: any) => t.original_text === existing.text || t.template === existing.text);
+        // Hali yuborilmagan — hozir yuboramiz va qayta tekshiramiz
+        let submittedNow = false;
+        if (!match) {
+            const submitResult = await smsService.submitTemplate(existing.clinicId, existing.text);
+            if (!submitResult.success) return res.status(400).json({ error: submitResult.error });
+            submittedNow = true;
+            ({ match } = await smsService.findTemplate(existing.clinicId, existing.text));
+        }
+
         const template = await prisma.messageTemplate.update({
             where: { id: req.params.id },
             data: match
-                ? { eskizTemplateId: match.id, eskizStatus: match.status }
-                : { eskizStatus: 'not_found' }
+                ? { eskizTemplateId: match.id, eskizStatus: match.status, ...(submittedNow && { eskizSubmittedAt: new Date() }) }
+                : { eskizStatus: submittedNow ? 'moderation' : 'not_found', ...(submittedNow && { eskizSubmittedAt: new Date() }) }
         });
         res.json(template);
     } catch (error) {
@@ -682,7 +696,63 @@ app.delete('/api/automation-rules/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// Qo'lda bulk yuborish: tanlangan bemorlarga shaxsiylashtirilgan xabar
+// Qo'lda bulk yuborish: tanlangan bemorlarga shaxsiylashtirilgan xabar.
+// Har bir SMS Eskiz'ga alohida so'rov (15s timeout) bo'lgani uchun yuzlab bemorda
+// HTTP so'rovi timeout bo'lardi. Shuning uchun yuborish fonda bajariladi, klinika
+// jarayonni /api/messages/bulk-status orqali kuzatadi, natija esa Tarixda ko'rinadi.
+const bulkJobs = new Map<string, { total: number; sent: number; failed: number; done: boolean; startedAt: number; error?: string }>();
+
+async function runBulkSend(clinicId: string, clinic: any, patients: any[], message: string, channel: string) {
+    const job = bulkJobs.get(clinicId)!;
+    try {
+        const patientIds = patients.map(p => p.id);
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        // {qarz} uchun: Pending tranzaksiyalar + faol bo'lib to'lash qoldiqlari
+        const pendingTx = await prisma.transaction.findMany({
+            where: { clinicId, status: 'Pending', patientId: { in: patientIds } },
+            select: { patientId: true, amount: true }
+        });
+        const activePlans = await prisma.installmentPlan.findMany({
+            where: { clinicId, status: 'Active', patientId: { in: patientIds } },
+            select: { patientId: true, totalAmount: true, totalPaid: true }
+        });
+        const debtMap = new Map<string, number>();
+        pendingTx.forEach((t: any) => { if (t.patientId) debtMap.set(t.patientId, (debtMap.get(t.patientId) || 0) + t.amount); });
+        activePlans.forEach((p: any) => debtMap.set(p.patientId, (debtMap.get(p.patientId) || 0) + Math.max(0, p.totalAmount - p.totalPaid)));
+
+        // {sana}/{vaqt}/{shifokor_ismi} — bemorning eng yaqin kelgusi qabuli bo'yicha
+        const upcoming = await prisma.appointment.findMany({
+            where: { clinicId, patientId: { in: patientIds }, date: { gte: todayStr }, status: { in: ['Confirmed', 'Pending'] } },
+            include: { doctor: true },
+            orderBy: [{ date: 'asc' }, { time: 'asc' }]
+        });
+        const nextAppt = new Map<string, any>();
+        upcoming.forEach((a: any) => { if (a.patientId && !nextAppt.has(a.patientId)) nextAppt.set(a.patientId, a); });
+
+        for (const patient of patients) {
+            const appt = nextAppt.get(patient.id);
+            const personalized = processTemplate(message, {
+                patientName: `${patient.firstName} ${patient.lastName}`,
+                firstName: patient.firstName,
+                lastName: patient.lastName,
+                date: appt?.date || todayStr,
+                time: appt?.time || '',
+                doctorName: appt?.doctor ? `${appt.doctor.firstName} ${appt.doctor.lastName}` : '',
+                clinicName: clinic.name,
+                amount: debtMap.get(patient.id) || 0,
+            });
+            const result = await sendUnified(clinic, patient, personalized, { channel: channel as any, source: 'bulk', type: 'Bulk' });
+            if (result.success) job.sent++; else job.failed++;
+        }
+    } catch (error: any) {
+        console.error('Bulk send error:', error);
+        job.error = error.message || 'Xabarlarni yuborishda xatolik';
+    } finally {
+        job.done = true;
+    }
+}
+
 app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
@@ -692,61 +762,54 @@ app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
         if (!message || !message.trim()) return res.status(400).json({ error: 'Xabar matni bo\'sh' });
         if (!MESSAGE_CHANNELS.includes(channel)) return res.status(400).json({ error: 'Noto\'g\'ri kanal' });
 
+        const running = bulkJobs.get(clinicId as string);
+        if (running && !running.done) {
+            return res.status(409).json({ error: 'Oldingi yuborish hali tugamadi. Tugashini kuting.' });
+        }
+
         const clinic = await prisma.clinic.findUnique({ where: { id: clinicId as string } });
         if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
 
         const patients = await prisma.patient.findMany({
             where: { id: { in: patientIds }, clinicId: clinicId as string }
         });
+        if (patients.length === 0) return res.status(400).json({ error: 'Bemorlar topilmadi' });
 
-        // {qarz} uchun: Pending tranzaksiyalar + faol bo'lib to'lash qoldiqlari
-        const pendingTx = await prisma.transaction.findMany({
-            where: { clinicId: clinicId as string, status: 'Pending', patientId: { in: patientIds } },
-            select: { patientId: true, amount: true }
-        });
-        const activePlans = await prisma.installmentPlan.findMany({
-            where: { clinicId: clinicId as string, status: 'Active', patientId: { in: patientIds } },
-            select: { patientId: true, totalAmount: true, totalPaid: true }
-        });
-        const debtMap = new Map<string, number>();
-        pendingTx.forEach((t: any) => { if (t.patientId) debtMap.set(t.patientId, (debtMap.get(t.patientId) || 0) + t.amount); });
-        activePlans.forEach((p: any) => debtMap.set(p.patientId, (debtMap.get(p.patientId) || 0) + Math.max(0, p.totalAmount - p.totalPaid)));
+        bulkJobs.set(clinicId as string, { total: patients.length, sent: 0, failed: 0, done: false, startedAt: Date.now() });
+        void runBulkSend(clinicId as string, clinic, patients, message, channel);
 
-        const todayStr = new Date().toISOString().split('T')[0];
-        let sent = 0;
-        let failed = 0;
-        const details: any[] = [];
-
-        for (const patient of patients) {
-            const personalized = processTemplate(message, {
-                patientName: `${patient.firstName} ${patient.lastName}`,
-                firstName: patient.firstName,
-                lastName: patient.lastName,
-                date: todayStr,
-                clinicName: clinic.name,
-                amount: debtMap.get(patient.id) || 0,
-            });
-            const result = await sendUnified(clinic, patient, personalized, { channel, source: 'bulk', type: 'Bulk' });
-            if (result.success) sent++; else failed++;
-            details.push({ patientId: patient.id, name: `${patient.firstName} ${patient.lastName}`, success: result.success, error: result.error });
-        }
-
-        res.json({ total: patients.length, sent, failed, details });
+        res.json({ total: patients.length, queued: true });
     } catch (error: any) {
         console.error('Bulk send error:', error);
         res.status(500).json({ error: 'Xabarlarni yuborishda xatolik' });
     }
 });
 
-// Yagona tarix (Telegram + SMS) + statistika
+// Fonda ketayotgan bulk yuborish holati
+app.get('/api/messages/bulk-status', authenticateToken, async (req, res) => {
+    const clinicId = getScopedClinicId(req);
+    if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+    const job = bulkJobs.get(clinicId as string);
+    if (!job) return res.json({ active: false });
+    res.json({ active: true, ...job });
+});
+
+// Yagona tarix (Telegram + SMS) + statistika.
+// `status` filtri serverda qo'llanadi — aks holda limit ichiga tushmagan xatolar
+// ro'yxatda ko'rinmay, statistikadagi son bilan ziddiyat hosil qilardi.
 app.get('/api/messages/logs', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const limit = Math.min(parseInt(req.query.limit as string) || 200, 500);
+        const statusParam = req.query.status as string | undefined;
+        const statusFilter = statusParam === 'sent' ? { status: 'Sent' }
+            : statusParam === 'failed' ? { status: 'Failed' }
+                : {};
+
         const [logs, total, sentCount, failedCount] = await Promise.all([
             prisma.telegramLog.findMany({
-                where: { clinicId: clinicId as string },
+                where: { clinicId: clinicId as string, ...statusFilter },
                 include: { patient: { select: { id: true, firstName: true, lastName: true, phone: true } } },
                 orderBy: { sentAt: 'desc' },
                 take: limit
@@ -761,7 +824,10 @@ app.get('/api/messages/logs', authenticateToken, async (req, res) => {
     }
 });
 
-// Xato xabarlarni qayta yuborish
+// Xato xabarlarni qayta yuborish.
+// Urinishdan keyin eski yozuv 'Retried' ga o'tadi — aks holda "Xato" hisoblagichi
+// hech qachon kamaymay, bir xil xabarni cheksiz qayta yuborish mumkin bo'lardi.
+// Yangi urinish natijasi (Sent yoki Failed) sendUnified tomonidan alohida log qilinadi.
 app.post('/api/messages/retry', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
@@ -779,13 +845,26 @@ app.post('/api/messages/retry', authenticateToken, async (req, res) => {
 
         let success = 0;
         let failed = 0;
+        let skipped = 0;
         for (const log of logs) {
-            if (!log.patient || !log.message) { failed++; continue; }
+            // Bemori yoki matni yo'q yozuvni qayta yuborib bo'lmaydi — sababini yozib qo'yamiz
+            if (!log.patient || !log.message) {
+                skipped++;
+                await prisma.telegramLog.update({
+                    where: { id: log.id },
+                    data: { error: 'Qayta yuborib bo\'lmaydi: bemor yoki xabar matni saqlanmagan' }
+                }).catch(() => { });
+                continue;
+            }
             const channel = (log.channel === 'sms' ? 'sms' : 'telegram') as 'sms' | 'telegram';
             const result = await sendUnified(clinic, log.patient, log.message, { channel, source: 'retry', type: log.type });
             if (result.success) success++; else failed++;
+            await prisma.telegramLog.update({
+                where: { id: log.id },
+                data: { status: 'Retried' }
+            }).catch((err: any) => console.error('Retry log update error:', err));
         }
-        res.json({ retried: logs.length, success, failed });
+        res.json({ retried: logs.length, success, failed, skipped });
     } catch (error) {
         console.error('Retry error:', error);
         res.status(500).json({ error: 'Qayta yuborishda xatolik' });
