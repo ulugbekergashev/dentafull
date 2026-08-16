@@ -16,6 +16,9 @@ export const toEskizTemplate = (text: string): string => (text || '').replace(TE
 const normalizeForMatch = (text: string): string => (text || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
 /**
+ * ⚠️ Bu funksiya `utils/phone.ts` dagi nusxasi bilan bir xil bo'lishi shart —
+ * frontend yuboriladigan bemorlar sonini o'sha nusxa bilan hisoblaydi.
+ *
  * O'zbekiston raqamini Eskiz kutadigan 998XXXXXXXXX ko'rinishiga keltiradi.
  * Bemor telefoni erkin matn sifatida kiritilgani uchun ( "+998 90 123 45 67",
  * "(90) 123-45-67", "90 123 45 67" ... ) faqat raqamlarni ajratib olamiz.

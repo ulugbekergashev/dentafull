@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '../components/Common';
 import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus } from '../types';
 import { api } from '../services/api';
+import { isSendablePhone } from '../utils/phone';
 import {
     MessageSquare, Clock, Send, CalendarDays, Plus, X, Pencil, Trash2,
     AlertTriangle, Eye, Users, RefreshCw, CheckCircle2, XCircle, Smartphone
@@ -34,6 +35,14 @@ const TRIGGER_LABELS: Record<AutomationTrigger, string> = {
 };
 
 const HOUR_OPTIONS = [1, 2, 3, 6, 12, 24];
+
+type QuickFilter = 'debtors' | 'birthday_today' | 'birthday_month';
+
+const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
+    { key: 'debtors', label: '⏰ Qarzdorlar' },
+    { key: 'birthday_today', label: "🎁 Bugun tug'ilgan kun" },
+    { key: 'birthday_month', label: "🎁 Bu oy tug'ilgan kunlari" },
+];
 
 const SOURCE_LABELS: Record<string, string> = {
     manual: "Qo'lda yuborildi",
@@ -267,7 +276,11 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     const [audienceDoctorId, setAudienceDoctorId] = useState('All');
     const [audienceStatus, setAudienceStatus] = useState<'Active' | 'All'>('Active');
     const [audienceInactive, setAudienceInactive] = useState<'none' | '1' | '3' | '6'>('none');
-    const [quickFilter, setQuickFilter] = useState<'none' | 'debtors' | 'birthday_today' | 'birthday_month'>('none');
+    // Hech qachon kelmagan bemor "uzoq kelmagan" emas — "sizni sog'indik" xabari
+    // kecha ro'yxatdan o'tgan odamga ketmasligi uchun sukut bo'yicha o'chirilgan.
+    const [includeNeverVisited, setIncludeNeverVisited] = useState(false);
+    // Tezkor filtrlar birga ishlaydi (VA mantiqi): masalan "qarzdor + bu oy tug'ilgan kun"
+    const [quickFilters, setQuickFilters] = useState<Set<QuickFilter>>(new Set());
     const [manualMessage, setManualMessage] = useState('');
     const [manualSending, setManualSending] = useState(false);
 
@@ -286,8 +299,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         const thisMonth = String(now.getMonth() + 1).padStart(2, '0');
 
         return patients.filter(p => {
-            // Kanal bo'yicha yetib borish imkoni
-            if (manualChannel === 'sms' && !p.phone) return false;
+            // Kanal bo'yicha yetib borish imkoni. SMS uchun raqam formati ham
+            // tekshiriladi — backend yaroqsiz raqamni baribir rad etadi, shuning
+            // uchun ro'yxatga qo'shib, sonni oshirib ko'rsatishdan ma'no yo'q.
+            if (manualChannel === 'sms' && !isSendablePhone(p.phone)) return false;
             if (manualChannel === 'telegram' && !p.telegramChatId) return false;
 
             if (audienceStatus === 'Active' && p.status !== 'Active') return false;
@@ -297,19 +312,33 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                 const months = parseInt(audienceInactive);
                 const cutoff = new Date();
                 cutoff.setMonth(cutoff.getMonth() - months);
-                if (p.lastVisit) {
-                    const lastVisit = new Date(p.lastVisit);
-                    if (!isNaN(lastVisit.getTime()) && lastVisit > cutoff) return false;
+                const visit = p.lastVisit ? new Date(p.lastVisit) : null;
+                const hasVisit = !!visit && !isNaN(visit.getTime());
+                if (!hasVisit) {
+                    // Sanasi yo'q yoki o'qib bo'lmaydi — ataylab qaror qabul qilamiz
+                    if (!includeNeverVisited) return false;
+                } else if (visit! > cutoff) {
+                    return false;
                 }
             }
 
-            if (quickFilter === 'debtors' && !debtorIds.has(p.id)) return false;
-            if (quickFilter === 'birthday_today' && dobToMonthDay(p.dob) !== todayMonthDay) return false;
-            if (quickFilter === 'birthday_month' && !dobToMonthDay(p.dob).startsWith(`${thisMonth}-`)) return false;
+            if (quickFilters.has('debtors') && !debtorIds.has(p.id)) return false;
+            if (quickFilters.has('birthday_today') && dobToMonthDay(p.dob) !== todayMonthDay) return false;
+            if (quickFilters.has('birthday_month') && !dobToMonthDay(p.dob).startsWith(`${thisMonth}-`)) return false;
 
             return true;
         });
-    }, [patients, manualChannel, audienceStatus, audienceDoctorId, audienceInactive, quickFilter, debtorIds]);
+    }, [patients, manualChannel, audienceStatus, audienceDoctorId, audienceInactive, includeNeverVisited, quickFilters, debtorIds]);
+
+    // SMS kanalida format sababli chiqib ketgan bemorlar — foydalanuvchi buni bilishi kerak
+    const invalidPhoneCount = useMemo(() => {
+        if (manualChannel !== 'sms') return 0;
+        return patients.filter(p => {
+            if (audienceStatus === 'Active' && p.status !== 'Active') return false;
+            if (audienceDoctorId !== 'All' && p.doctorId !== audienceDoctorId) return false;
+            return !isSendablePhone(p.phone);
+        }).length;
+    }, [patients, manualChannel, audienceStatus, audienceDoctorId]);
 
     // Yuborish serverda fonda ketadi (yuzlab SMS bir HTTP so'roviga sig'maydi).
     const [bulkJob, setBulkJob] = useState<BulkSendStatus | null>(null);
@@ -578,6 +607,20 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
+                            {templates.length === 0 && (
+                                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-400">
+                                    <span className="flex items-center gap-2">
+                                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                                        Avval kamida bitta shablon yarating — qoida shablonsiz ishlamaydi.
+                                    </span>
+                                    <button
+                                        onClick={() => { closeRuleForm(); setActiveTab('templates'); openTemplateForm(); }}
+                                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-all"
+                                    >
+                                        Shablon yaratish
+                                    </button>
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className={labelCls}>Qoida nomi</label>
@@ -773,28 +816,46 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 <label className={labelCls}>Uzoq kelmagan</label>
                                 <select value={audienceInactive} onChange={e => setAudienceInactive(e.target.value as any)} className={inputCls}>
                                     <option value="none">Filtr yo'q</option>
-                                    <option value="1">1 oydan ko'p</option>
-                                    <option value="3">3 oydan ko'p</option>
-                                    <option value="6">6 oydan ko'p</option>
+                                    <option value="1">1 oydan beri kelmagan</option>
+                                    <option value="3">3 oydan beri kelmagan</option>
+                                    <option value="6">6 oydan beri kelmagan</option>
                                 </select>
+                                {audienceInactive !== 'none' && (
+                                    <label className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={includeNeverVisited}
+                                            onChange={e => setIncludeNeverVisited(e.target.checked)}
+                                            className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                        />
+                                        Hech qachon kelmaganlarni ham qo'shish
+                                    </label>
+                                )}
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            {([
-                                ['debtors', '⏰ Qarzdorlar'],
-                                ['birthday_today', "🎁 Bugun tug'ilgan kun"],
-                                ['birthday_month', "🎁 Bu oy tug'ilgan kunlari"],
-                            ] as const).map(([key, lbl]) => (
-                                <button
-                                    key={key}
-                                    onClick={() => setQuickFilter(f => f === key ? 'none' : key)}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${quickFilter === key
-                                        ? 'bg-primary-600 text-white border-primary-600'
-                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
-                                >
-                                    {lbl}
-                                </button>
-                            ))}
+                        <div>
+                            <p className="text-xs text-gray-400 mb-2">Tezkor filtrlar (birga ishlaydi):</p>
+                            <div className="flex flex-wrap gap-2">
+                                {QUICK_FILTERS.map(({ key, label }) => {
+                                    const active = quickFilters.has(key);
+                                    return (
+                                        <button
+                                            key={key}
+                                            onClick={() => setQuickFilters(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(key)) next.delete(key); else next.add(key);
+                                                return next;
+                                            })}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${active
+                                                ? 'bg-primary-600 text-white border-primary-600'
+                                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
+                                        >
+                                            {active && <CheckCircle2 className="w-3.5 h-3.5" />}
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
                         <div className="flex items-center gap-2 px-4 py-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-sm">
                             <Eye className="w-4 h-4 text-primary-600 shrink-0" />
@@ -810,6 +871,15 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 )}
                             </span>
                         </div>
+                        {invalidPhoneCount > 0 && (
+                            <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                <span>
+                                    Yana <strong>{invalidPhoneCount} ta bemor</strong> ro'yxatga kirmadi — telefon raqami yo'q yoki formati noto'g'ri.
+                                    Bemor kartasida raqamni <span className="font-mono">+998 90 123 45 67</span> ko'rinishida to'g'rilang.
+                                </span>
+                            </div>
+                        )}
                     </Card>
 
                     {/* Xabar matni */}
