@@ -27,6 +27,8 @@ export interface FieldContext {
     /** Telefon raqami Eskiz uchun yaroqlimi */
     isSendablePhone: (phone?: string | null) => boolean;
     now: Date;
+    /** Jamlanmalar — faqat kerak bo'lganlari hisoblangan */
+    agg: import('./segmentAggregates').Aggregates;
 }
 
 export interface SegmentFieldDef {
@@ -46,6 +48,11 @@ export interface SegmentFieldDef {
     where?: (op: string, value: any) => any | null;
     /** Zaxira yo'l: JSda tekshirish */
     predicate?: (patient: any, op: string, value: any, ctx: FieldContext) => boolean;
+    /**
+     * Bu maydon qaysi jamlanmani talab qiladi. Faqat shartlarda ishlatilgan
+     * maydonlarning jamlanmasi hisoblanadi — keraksiz so'rov ketmasin.
+     */
+    needs?: import('./segmentAggregates').AggregateKey[];
 }
 
 // ─── Yordamchilar ────────────────────────────────────────────────────────────
@@ -316,6 +323,84 @@ export const SEGMENT_FIELDS: SegmentFieldDef[] = [
         },
     },
 
+    // ── Davolanish tarixi (jamlanmalar) ──
+    {
+        id: 'totalSpent',
+        label: "Jami to'lagan summa",
+        type: 'number',
+        group: 'Davolanish tarixi',
+        operators: OP_NUM,
+        unit: "so'm",
+        defaultOp: 'gte',
+        defaultValue: 5000000,
+        needs: ['totalSpent'],
+        predicate: (p, op, v, ctx) => numCompare(ctx.agg.totalSpent?.get(p.id) || 0, op, v),
+    },
+    {
+        id: 'visitCount',
+        label: 'Tashriflar soni',
+        type: 'number',
+        group: 'Davolanish tarixi',
+        operators: OP_NUM,
+        unit: 'marta',
+        defaultOp: 'gte',
+        defaultValue: 3,
+        needs: ['visitCount'],
+        predicate: (p, op, v, ctx) => numCompare(ctx.agg.visitCount?.get(p.id) || 0, op, v),
+    },
+    {
+        id: 'noShowCount',
+        label: 'Kelmagan qabullar soni',
+        type: 'number',
+        group: 'Davolanish tarixi',
+        operators: OP_NUM,
+        unit: 'marta',
+        defaultOp: 'gte',
+        defaultValue: 2,
+        needs: ['noShowCount'],
+        predicate: (p, op, v, ctx) => numCompare(ctx.agg.noShowCount?.get(p.id) || 0, op, v),
+    },
+    {
+        id: 'hasUpcomingAppointment',
+        label: 'Kelgusida qabuli bor',
+        type: 'bool',
+        group: 'Davolanish tarixi',
+        operators: OP_BOOL,
+        defaultOp: 'is_false',
+        needs: ['upcomingAppointment'],
+        predicate: (p, op, _v, ctx) => {
+            const has = ctx.agg.upcomingAppointment?.has(p.id) || false;
+            return op === 'is_true' ? has : !has;
+        },
+    },
+    {
+        id: 'lastApptType',
+        label: 'Oxirgi qabul turi',
+        type: 'enum',
+        group: 'Davolanish tarixi',
+        operators: OP_EQ,
+        options: [], // ish vaqtida klinikaning haqiqiy turlaridan to'ldiriladi
+        defaultOp: 'eq',
+        needs: ['lastApptType'],
+        predicate: (p, op, v, ctx) => {
+            const t = ctx.agg.lastApptType?.get(p.id) || '';
+            return op === 'eq' ? t === v : t !== v;
+        },
+    },
+    {
+        id: 'hasActiveInstallment',
+        label: "Faol bo'lib to'lash rejasi",
+        type: 'bool',
+        group: 'Moliya',
+        operators: OP_BOOL,
+        defaultOp: 'is_true',
+        needs: ['activeInstallment'],
+        predicate: (p, op, _v, ctx) => {
+            const has = ctx.agg.activeInstallment?.has(p.id) || false;
+            return op === 'is_true' ? has : !has;
+        },
+    },
+
     // ── Aloqa ──
     {
         id: 'hasTelegram',
@@ -347,18 +432,38 @@ export const getField = (id: string) => SEGMENT_FIELDS.find(f => f.id === id);
  * Frontendga yuboriladigan tavsif (funksiyalarsiz).
  * doctorId kabi dinamik variantlar shu yerda to'ldiriladi.
  */
-export function fieldDescriptors(doctors: { id: string; firstName: string; lastName: string }[] = []) {
-    return SEGMENT_FIELDS.map(f => ({
-        id: f.id,
-        label: f.label,
-        type: f.type,
-        group: f.group,
-        operators: f.operators,
-        unit: f.unit,
-        defaultOp: f.defaultOp,
-        defaultValue: f.defaultValue,
-        options: f.id === 'doctorId'
-            ? doctors.map(d => ({ value: d.id, label: `${d.lastName} ${d.firstName}` }))
-            : f.options,
-    }));
+export function fieldDescriptors(
+    doctors: { id: string; firstName: string; lastName: string }[] = [],
+    appointmentTypes: string[] = [],
+) {
+    const dynamicOptions = (id: string): FieldOption[] | undefined => {
+        if (id === 'doctorId') return doctors.map(d => ({ value: d.id, label: `${d.lastName} ${d.firstName}` }));
+        if (id === 'lastApptType') return appointmentTypes.map(t => ({ value: t, label: t }));
+        return undefined;
+    };
+
+    return SEGMENT_FIELDS
+        // Variantlari bo'sh bo'lgan dinamik maydonni ko'rsatishdan ma'no yo'q
+        .filter(f => !(f.id === 'lastApptType' && appointmentTypes.length === 0))
+        .map(f => ({
+            id: f.id,
+            label: f.label,
+            type: f.type,
+            group: f.group,
+            operators: f.operators,
+            unit: f.unit,
+            defaultOp: f.defaultOp,
+            defaultValue: f.defaultValue,
+            options: dynamicOptions(f.id) ?? f.options,
+        }));
+}
+
+/** Berilgan shartlar qaysi jamlanmalarni talab qiladi */
+export function neededAggregates(conditions: { field: string }[]): Set<string> {
+    const set = new Set<string>();
+    for (const c of conditions) {
+        const def = getField(c.field);
+        for (const n of def?.needs || []) set.add(n);
+    }
+    return set;
 }

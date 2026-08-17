@@ -15,6 +15,7 @@
         "triggers.ts",
         "segments.ts",
         "segmentFields.ts",
+        "segmentAggregates.ts",
         "savedSegments.ts",
         "ruleExtras.ts",
         "bot.ts",

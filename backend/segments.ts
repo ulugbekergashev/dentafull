@@ -12,7 +12,8 @@
  */
 
 import { prisma } from './db';
-import { getField, SEGMENT_FIELDS, FieldContext } from './segmentFields';
+import { getField, SEGMENT_FIELDS, FieldContext, neededAggregates } from './segmentFields';
+import { buildAggregates, AggregateKey } from './segmentAggregates';
 import { normalizeUzPhone } from './smsService';
 
 export interface SegmentCondition {
@@ -173,18 +174,24 @@ export async function resolveSegment(clinicId: string, segment?: AudienceSegment
         jsConditions.push(cond);
     }
 
-    const [scoped, clinicTotal, debtMap] = await Promise.all([
+    // Jamlanmalar (to'lovlar summasi, tashriflar soni ...) — faqat shartlarda
+    // ishlatilganlari hisoblanadi, keraksiz jadvalga so'rov ketmaydi
+    const needed = neededAggregates(conditions) as Set<AggregateKey>;
+
+    const [scoped, clinicTotal, debtMap, agg] = await Promise.all([
         prisma.patient.findMany({
             where: { clinicId, ...(whereFragments.length ? { AND: whereFragments } : {}) },
         }),
         prisma.patient.count({ where: { clinicId } }),
         buildDebtMap(clinicId),
+        buildAggregates(clinicId, needed),
     ]);
 
     const ctx: FieldContext = {
         debtMap,
         isSendablePhone: (phone) => normalizeUzPhone(phone) !== null,
         now: new Date(),
+        agg,
     };
 
     let patients: any[];

@@ -23,6 +23,9 @@ const PRESETS: { label: string; conditions: SegmentCondition[] }[] = [
     { label: '🔄 6 oydan beri kelmagan', conditions: [{ field: 'lastVisit', op: 'before', value: 6 }] },
     { label: '✈️ Botga ulanmagan', conditions: [{ field: 'hasTelegram', op: 'is_false' }] },
     { label: '🆕 Yangi (30 kun)', conditions: [{ field: 'registered', op: 'within', value: 30 }] },
+    { label: '⭐ VIP (5 mln+)', conditions: [{ field: 'totalSpent', op: 'gte', value: 5000000 }] },
+    { label: '❗ 2+ marta kelmagan', conditions: [{ field: 'noShowCount', op: 'gte', value: 2 }] },
+    { label: '📅 Qabuli yo\'q', conditions: [{ field: 'hasUpcomingAppointment', op: 'is_false' }] },
 ];
 
 interface Props {

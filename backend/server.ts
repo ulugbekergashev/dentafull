@@ -564,6 +564,7 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
 const { TRIGGER_IDS, TRIGGER_DESCRIPTORS, getTrigger } = require('./triggers');
 const { resolveSegment, describeSegment, buildDebtMap, normalizeSegment } = require('./segments');
 const { fieldDescriptors } = require('./segmentFields');
+const { listAppointmentTypes } = require('./segmentAggregates');
 const { listSegments, saveSegment, deleteSegment } = require('./savedSegments');
 const { getExtras, getExtrasMap, saveExtras, deleteExtras } = require('./ruleExtras');
 const AUTOMATION_TRIGGERS: string[] = TRIGGER_IDS;
@@ -904,14 +905,17 @@ app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
 app.get('/api/messages/segment-fields', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
-        const doctors = clinicId
-            ? await prisma.doctor.findMany({
+        if (!clinicId) return res.json(fieldDescriptors([], []));
+
+        const [doctors, appointmentTypes] = await Promise.all([
+            prisma.doctor.findMany({
                 where: { clinicId: clinicId as string },
                 select: { id: true, firstName: true, lastName: true },
                 orderBy: { lastName: 'asc' },
-            })
-            : [];
-        res.json(fieldDescriptors(doctors));
+            }),
+            listAppointmentTypes(clinicId as string),
+        ]);
+        res.json(fieldDescriptors(doctors, appointmentTypes));
     } catch (error) {
         console.error('Segment fields error:', error);
         res.status(500).json({ error: 'Maydonlarni olishda xatolik' });
