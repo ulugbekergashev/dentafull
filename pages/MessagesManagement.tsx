@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '../components/Common';
-import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, RuleSchedule } from '../types';
+import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, RuleSchedule } from '../types';
 import { SegmentBuilder } from '../components/SegmentBuilder';
 import { api } from '../services/api';
 import { analyzeSms, hasTypographicApostrophe, fixApostrophes } from '../utils/sms';
@@ -92,6 +92,31 @@ function eskizStatusBadge(status?: string | null): { label: string; cls: string 
     return { label: `Moderatsiyada (${status})`, cls: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' };
 }
 
+/**
+ * Eski formatdagi segmentni shartlar ro'yxatiga aylantiradi.
+ * Server ham xuddi shunday qiladi (backend/segments.ts normalizeSegment) —
+ * bu yerda faqat forma to'g'ri ko'rinishi uchun kerak.
+ */
+function toConditionSegment(seg?: AudienceSegment | null): AudienceSegment {
+    if (seg && Array.isArray(seg.conditions)) return seg;
+
+    const conditions: AudienceSegment['conditions'] = [];
+    if (!seg || seg.status !== 'All') conditions.push({ field: 'status', op: 'eq', value: 'Active' });
+    if (seg?.doctorId) conditions.push({ field: 'doctorId', op: 'eq', value: seg.doctorId });
+    if (seg?.inactiveMonths) {
+        conditions.push({
+            field: 'lastVisit',
+            op: seg.includeNeverVisited ? 'before_or_never' : 'before',
+            value: seg.inactiveMonths,
+        });
+    }
+    if (seg?.debtors) conditions.push({ field: 'hasDebt', op: 'is_true' });
+    if (seg?.birthdayToday) conditions.push({ field: 'birthdayToday', op: 'is_true' });
+    if (seg?.birthdayMonth) conditions.push({ field: 'birthdayMonth', op: 'eq', value: 'current' });
+
+    return { match: 'all', conditions };
+}
+
 // Auditoriya hisobining bitta qatori — son qayerdan kelgani ko'rinib tursin
 const FunnelRow: React.FC<{ label: string; value: number; diff?: number; isDeduction?: boolean }> = ({
     label, value, diff, isDeduction,
@@ -148,6 +173,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         api.messageTemplates.getAll(clinicId).then(setTemplates).catch(() => { });
         api.automationRules.getAll(clinicId).then(setRules).catch(() => { });
         api.automationTriggers.getAll().then(setTriggerDefs).catch(() => { });
+        api.messages.segmentFields(clinicId).then(setSegmentFields).catch(() => { });
         api.sms.getSettings(clinicId).then((s: any) => {
             setSmsConnected(!!s.isConnected);
             if (s.isConnected) {
@@ -236,7 +262,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         hoursBefore: 2,
         channel: 'telegram_first' as MessageChannel,
         doctorId: '',
-        segment: { status: 'Active' } as AudienceSegment,
+        segment: { match: 'all', conditions: [{ field: 'status', op: 'eq', value: 'Active' }] } as AudienceSegment,
         schedule: { kind: 'weekly', weekday: 1, hour: 10 } as RuleSchedule,
     };
     const [isRuleFormOpen, setIsRuleFormOpen] = useState(false);
@@ -254,7 +280,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             hoursBefore: rule.hoursBefore || 2,
             channel: rule.channel,
             doctorId: rule.doctorId || '',
-            segment: rule.segment || { status: 'Active' },
+            // Eski formatda saqlangan qoidalar shartlarga aylantiriladi
+            segment: toConditionSegment(rule.segment),
             schedule: rule.schedule || { kind: 'weekly', weekday: 1, hour: 10 },
         } : EMPTY_RULE_FORM);
         setIsRuleFormOpen(true);
@@ -323,7 +350,11 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     // Auditoriyani SERVER hisoblaydi (backend/segments.ts). Frontend faqat
     // filtrni yig'adi — shu sabab "qarzdor" ta'rifi va {qarz} summasi qo'lda
     // yuborishda ham, avtomatikada ham bir xil bo'ladi.
-    const [segment, setSegment] = useState<AudienceSegment>({ status: 'Active' });
+    const [segment, setSegment] = useState<AudienceSegment>({
+        match: 'all',
+        conditions: [{ field: 'status', op: 'eq', value: 'Active' }],
+    });
+    const [segmentFields, setSegmentFields] = useState<SegmentFieldDescriptor[]>([]);
     const [audience, setAudience] = useState<AudiencePreview | null>(null);
     const [audienceLoading, setAudienceLoading] = useState(false);
     const [showUnreachable, setShowUnreachable] = useState(false);
@@ -877,8 +908,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     <SegmentBuilder
                                         value={ruleForm.segment}
                                         onChange={next => setRuleForm(f => ({ ...f, segment: next }))}
-                                        doctors={doctors}
-                                        compact
+                                        fields={segmentFields}
                                     />
                                 </div>
                             )}
@@ -1023,7 +1053,12 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <Users className="w-5 h-5 text-gray-400" /> Kimga yuborish?
                         </h3>
-                        <SegmentBuilder value={segment} onChange={setSegment} doctors={doctors} facets={audience?.facets} />
+                        <SegmentBuilder
+                            value={segment}
+                            onChange={setSegment}
+                            fields={segmentFields}
+                            conditionCounts={audience?.conditionCounts}
+                        />
 
                         {/* Hisob-kitob: son qayerdan kelgani bosqichma-bosqich ko'rinadi */}
                         {audienceLoading ? (
@@ -1033,29 +1068,16 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         ) : audience ? (
                             <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
                                 <div className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                                    <FunnelRow
-                                        label="Klinikada bemorlar"
-                                        value={audience.funnel.clinicTotal}
-                                    />
-                                    {audience.funnel.afterStatus !== audience.funnel.clinicTotal && (
+                                    <FunnelRow label="Klinikada bemorlar" value={audience.clinicTotal} />
+                                    {audience.matched !== audience.clinicTotal && (
                                         <FunnelRow
-                                            label={segment.status === 'All' ? 'Shifokor filtridan keyin' : 'Faol bemorlar' + (segment.doctorId ? ' + shifokor' : '')}
-                                            value={audience.funnel.afterStatus}
-                                            diff={audience.funnel.afterStatus - audience.funnel.clinicTotal}
-                                        />
-                                    )}
-                                    {audience.funnel.afterInactive !== audience.funnel.afterStatus && (
-                                        <FunnelRow
-                                            label={`${segment.inactiveMonths} oydan beri kelmagan`}
-                                            value={audience.funnel.afterInactive}
-                                            diff={audience.funnel.afterInactive - audience.funnel.afterStatus}
-                                        />
-                                    )}
-                                    {audience.funnel.matched !== audience.funnel.afterInactive && (
-                                        <FunnelRow
-                                            label="Tezkor filtrlardan keyin"
-                                            value={audience.funnel.matched}
-                                            diff={audience.funnel.matched - audience.funnel.afterInactive}
+                                            label={
+                                                (segment.conditions?.length || 0) === 0
+                                                    ? 'Filtrsiz'
+                                                    : (segment.match === 'any' ? 'Shartlardan biriga mos' : 'Barcha shartlarga mos')
+                                            }
+                                            value={audience.matched}
+                                            diff={audience.matched - audience.clinicTotal}
                                         />
                                     )}
                                     {unreachableCount > 0 && (

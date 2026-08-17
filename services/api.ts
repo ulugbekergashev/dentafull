@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -19,7 +19,7 @@ export interface CashCloseInput {
     expectedClick?: number | null;
     note?: string;
 }
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, DEMO_TRIGGERS, saveDemoData } from './demoData';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, DEMO_TRIGGERS, DEMO_SEGMENT_FIELDS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -1236,6 +1236,11 @@ export const api = {
                 body: JSON.stringify({ clinicId, cooldownDays }),
             });
         },
+        // Segment qurish uchun mavjud maydonlar — forma shu ro'yxatdan quriladi
+        segmentFields: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_SEGMENT_FIELDS);
+            return fetchJson<SegmentFieldDescriptor[]>(`/messages/segment-fields?clinicId=${clinicId}`);
+        },
         // Auditoriyani doim server hisoblaydi — "qarzdor" ta'rifi bitta bo'lsin
         audience: (clinicId: string, segment: AudienceSegment, channel: MessageChannel) => {
             if (isDemoMode()) {
@@ -1245,8 +1250,9 @@ export const api = {
                     matched: n,
                     unreachable: 0,
                     unreachableList: [],
-                    funnel: { clinicTotal: n, afterStatus: n, afterInactive: n, matched: n },
-                    facets: { debtors: 0, birthdayToday: 0, birthdayMonth: 0 },
+                    clinicTotal: n,
+                    conditionCounts: (segment.conditions || []).map(() => n),
+                    conditions: segment.conditions || [],
                     viaTelegram: n,
                     viaSms: 0,
                     description: 'Demo',

@@ -1,55 +1,79 @@
 /**
  * Auditoriya segmenti — "kimga yuborish" savoliga YAGONA javob.
  *
- * Nega kerak: ilgari qo'lda yuborishda bemorlarni frontend o'zi filtrlardi,
- * backend esa {qarz} ni boshqacha hisoblardi (frontend faqat Pending
- * tranzaksiyalarni, backend esa Pending + faol bo'lib to'lash qoldig'ini).
- * Ya'ni "qarzdorlar" ro'yxati va xabardagi qarz summasi ikki xil haqiqat edi.
- * Endi segmentni faqat shu fayl hal qiladi — UI ham, avtomatika ham shu yerga
- * murojaat qiladi.
+ * Segment — shartlar ro'yxati. Har bir shart qaysi maydon bo'yicha ekanini
+ * ./segmentFields.ts reyestri hal qiladi, ya'ni yangi filtr qo'shish uchun bu
+ * fayl o'zgarmaydi.
  *
- * MUHIM: bu fayl BAZA SXEMASINI O'ZGARTIRMAYDI — faqat mavjud jadvallardan
- * o'qiydi (Patient, Transaction, InstallmentPlan).
+ * Qarz bir joyda hisoblanadi (buildDebtMap): "qarzdorlar" filtri ham, xabardagi
+ * {qarz} summasi ham shundan keladi. Ilgari ular ikki xil edi.
+ *
+ * MUHIM: BAZA SXEMASINI O'ZGARTIRMAYDI — faqat mavjud ustunlardan o'qiydi.
  */
 
 import { prisma } from './db';
+import { getField, SEGMENT_FIELDS, FieldContext } from './segmentFields';
+import { normalizeUzPhone } from './smsService';
+
+export interface SegmentCondition {
+    field: string;
+    op: string;
+    value?: any;
+}
 
 export interface AudienceSegment {
-    /** Bitta shifokorning bemorlari ('' yoki null — hammasi) */
+    /** 'all' — barcha shartlar bajarilsin (VA), 'any' — bittasi yetarli (YOKI) */
+    match?: 'all' | 'any';
+    conditions?: SegmentCondition[];
+
+    // ── Eski format (moslik uchun; o'qishda avtomatik shartlarga aylanadi) ──
     doctorId?: string | null;
-    /** 'Active' — faqat faol bemorlar (sukut), 'All' — hammasi */
     status?: 'Active' | 'All';
-    /** Shuncha oydan beri kelmaganlar (null — filtr yo'q) */
     inactiveMonths?: number | null;
-    /** Hech qachon kelmaganlar ham kirsinmi (sukut: yo'q) */
     includeNeverVisited?: boolean;
-    /** Faqat qarzi borlar */
     debtors?: boolean;
-    /** Bugun tug'ilgan kuni bo'lganlar */
     birthdayToday?: boolean;
-    /** Shu oyda tug'ilgan kuni bo'lganlar */
     birthdayMonth?: boolean;
 }
 
-export const EMPTY_SEGMENT: AudienceSegment = { status: 'Active' };
+export const EMPTY_SEGMENT: AudienceSegment = {
+    match: 'all',
+    conditions: [{ field: 'status', op: 'eq', value: 'Active' }],
+};
 
-/** Bemor tug'ilgan kunini MM-DD ga keltirish (YYYY-MM-DD yoki DD.MM.YYYY) */
-function dobToMonthDay(dob: string): string {
-    if (!dob) return '';
-    if (dob.includes('-')) {
-        const parts = dob.split('-');
-        if (parts.length === 3) return `${parts[1]}-${parts[2]}`;
-    } else if (dob.includes('.')) {
-        const parts = dob.split('.');
-        if (parts.length >= 2) return `${parts[1]}-${parts[0]}`;
+/**
+ * Eski formatdagi segmentni shartlar ro'yxatiga aylantiradi.
+ * Saqlangan qoidalar eski formatda bo'lgani uchun kerak — migratsiyasiz o'tadi.
+ */
+export function normalizeSegment(seg?: AudienceSegment | null): { match: 'all' | 'any'; conditions: SegmentCondition[] } {
+    if (!seg) return { match: 'all', conditions: [...(EMPTY_SEGMENT.conditions || [])] };
+
+    // Yangi format
+    if (Array.isArray(seg.conditions)) {
+        return { match: seg.match === 'any' ? 'any' : 'all', conditions: seg.conditions };
     }
-    return '';
+
+    // Eski format → shartlar
+    const conditions: SegmentCondition[] = [];
+    if (seg.status !== 'All') conditions.push({ field: 'status', op: 'eq', value: 'Active' });
+    if (seg.doctorId) conditions.push({ field: 'doctorId', op: 'eq', value: seg.doctorId });
+    if (seg.inactiveMonths) {
+        conditions.push({
+            field: 'lastVisit',
+            op: seg.includeNeverVisited ? 'before_or_never' : 'before',
+            value: seg.inactiveMonths,
+        });
+    }
+    if (seg.debtors) conditions.push({ field: 'hasDebt', op: 'is_true' });
+    if (seg.birthdayToday) conditions.push({ field: 'birthdayToday', op: 'is_true' });
+    if (seg.birthdayMonth) conditions.push({ field: 'birthdayMonth', op: 'eq', value: 'current' });
+
+    return { match: 'all', conditions };
 }
 
 /**
  * Klinikaning qarz xaritasi: Pending tranzaksiyalar + faol bo'lib to'lash
- * qoldiqlari. {qarz} o'zgaruvchisi ham, "qarzdorlar" filtri ham SHU hisobdan
- * foydalanadi — ikkisi hech qachon ajralib ketmasligi uchun.
+ * qoldiqlari. {qarz} o'zgaruvchisi ham, "qarzi bor" filtri ham shu hisobdan.
  */
 export async function buildDebtMap(clinicId: string, patientIds?: string[]): Promise<Map<string, number>> {
     const scope = patientIds && patientIds.length > 0 ? { patientId: { in: patientIds } } : {};
@@ -78,109 +102,127 @@ export async function buildDebtMap(clinicId: string, patientIds?: string[]): Pro
     return debtMap;
 }
 
+/** Bitta shart bitta bemorga mos keladimi */
+function conditionMatches(patient: any, cond: SegmentCondition, ctx: FieldContext): boolean {
+    const def = getField(cond.field);
+    if (!def) return true; // noma'lum maydon — filtrlamaymiz, xabarni bloklamaymiz
+    if (def.predicate) return def.predicate(patient, cond.op, cond.value, ctx);
+
+    // where bor, lekin bu yerda JS tekshiruvi kerak (masalan 'any' rejimida)
+    return whereFallbackMatches(patient, cond);
+}
+
+/** `where` bilan ishlaydigan maydonlarning JS ekvivalenti (OR rejimi uchun) */
+function whereFallbackMatches(patient: any, cond: SegmentCondition): boolean {
+    const v = cond.value;
+    switch (cond.field) {
+        case 'status': return cond.op === 'eq' ? patient.status === v : patient.status !== v;
+        case 'gender': return cond.op === 'eq' ? patient.gender === v : patient.gender !== v;
+        case 'doctorId': return cond.op === 'eq' ? patient.doctorId === v : patient.doctorId !== v;
+        case 'address': return String(patient.address || '').toLowerCase().includes(String(v || '').toLowerCase());
+        case 'hasTelegram': return cond.op === 'is_true' ? !!patient.telegramChatId : !patient.telegramChatId;
+        case 'balance': {
+            const b = Number(patient.balance || 0);
+            if (cond.op === 'gte') return b >= Number(v);
+            if (cond.op === 'lte') return b <= Number(v);
+            const [min, max] = Array.isArray(v) ? v : [v, v];
+            return b >= Number(min) && b <= Number(max);
+        }
+        case 'registered': {
+            const days = Number(v) || 0;
+            const cutoff = new Date(Date.now() - days * 86400000);
+            const created = new Date(patient.createdAt);
+            return cond.op === 'within' ? created >= cutoff : created < cutoff;
+        }
+        default: return true;
+    }
+}
+
 export interface ResolvedAudience {
     patients: any[];
-    /** Har bemorning qarzi — {qarz} uchun */
     debtMap: Map<string, number>;
-    /** Filtrlar bosqichma-bosqich nechtadan qoldirgani (UI da "voronka" uchun) */
-    funnel: {
-        /** Klinikadagi barcha bemorlar */
-        clinicTotal: number;
-        /** Status + shifokor filtridan keyin */
-        afterStatus: number;
-        /** "Uzoq kelmagan" filtridan keyin */
-        afterInactive: number;
-        /** Tezkor filtrlardan keyin (yakuniy) */
-        matched: number;
-    };
-    /**
-     * Har bir tezkor filtr joriy bazada nechta bemorga mos keladi.
-     * Foydalanuvchi tugmani bosishdan oldin natijani ko'radi.
-     */
-    facets: { debtors: number; birthdayToday: number; birthdayMonth: number };
+    /** Klinikadagi jami bemorlar (filtrlarsiz) */
+    clinicTotal: number;
+    /** Har bir shart alohida nechta bemorga mos — UI da shart yonida ko'rsatiladi */
+    conditionCounts: number[];
+    conditions: SegmentCondition[];
+    match: 'all' | 'any';
 }
 
 /**
  * Segmentni haqiqiy bemorlar ro'yxatiga aylantiradi.
- * Filtrlar VA mantiqi bilan birlashtiriladi.
+ *
+ * Tez yo'l: 'all' rejimida `where` bera oladigan shartlar Prisma so'roviga
+ * qo'shiladi, qolganlari JSda tekshiriladi. 'any' (YOKI) rejimida hammasi
+ * JSda — chunki OR ni fragmentlarga bo'lib bo'lmaydi.
  */
 export async function resolveSegment(clinicId: string, segment?: AudienceSegment | null): Promise<ResolvedAudience> {
-    const seg: AudienceSegment = { ...EMPTY_SEGMENT, ...(segment || {}) };
+    const { match, conditions } = normalizeSegment(segment);
 
-    const [allPatients, debtMap] = await Promise.all([
-        prisma.patient.findMany({ where: { clinicId } }),
+    // Tez yo'l uchun where fragmentlarini yig'amiz
+    const whereFragments: any[] = [];
+    const jsConditions: SegmentCondition[] = [];
+
+    for (const cond of conditions) {
+        const def = getField(cond.field);
+        if (!def) continue;
+        if (match === 'all' && def.where) {
+            const frag = def.where(cond.op, cond.value);
+            if (frag) { whereFragments.push(frag); continue; }
+        }
+        jsConditions.push(cond);
+    }
+
+    const [scoped, clinicTotal, debtMap] = await Promise.all([
+        prisma.patient.findMany({
+            where: { clinicId, ...(whereFragments.length ? { AND: whereFragments } : {}) },
+        }),
+        prisma.patient.count({ where: { clinicId } }),
         buildDebtMap(clinicId),
     ]);
 
-    const now = new Date();
-    const todayMonthDay = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const thisMonth = String(now.getMonth() + 1).padStart(2, '0');
-
-    // 1-bosqich: status + shifokor
-    const afterStatus = (allPatients as any[]).filter(p => {
-        if (seg.status !== 'All' && p.status !== 'Active') return false;
-        if (seg.doctorId && p.doctorId !== seg.doctorId) return false;
-        return true;
-    });
-
-    // 2-bosqich: "uzoq kelmagan"
-    let cutoff: Date | null = null;
-    if (seg.inactiveMonths) {
-        cutoff = new Date();
-        cutoff.setMonth(cutoff.getMonth() - seg.inactiveMonths);
-    }
-    const afterInactive = afterStatus.filter(p => {
-        if (!cutoff) return true;
-        const visit = p.lastVisit ? new Date(p.lastVisit) : null;
-        const hasVisit = !!visit && !isNaN(visit.getTime());
-        if (!hasVisit) return !!seg.includeNeverVisited; // sanasi yo'q — ataylab qaror
-        return visit! <= cutoff;
-    });
-
-    // Tezkor filtrlar bo'yicha predikatlar
-    const isDebtor = (p: any) => (debtMap.get(p.id) || 0) > 0;
-    const isBirthdayToday = (p: any) => dobToMonthDay(p.dob) === todayMonthDay;
-    const isBirthdayMonth = (p: any) => dobToMonthDay(p.dob).startsWith(`${thisMonth}-`);
-
-    // Facet: har bir tugma joriy bazada nechtaga mos — bosishdan oldin ko'rinadi
-    const facets = {
-        debtors: afterInactive.filter(isDebtor).length,
-        birthdayToday: afterInactive.filter(isBirthdayToday).length,
-        birthdayMonth: afterInactive.filter(isBirthdayMonth).length,
-    };
-
-    // 3-bosqich: tanlangan tezkor filtrlar
-    const matched = afterInactive.filter(p => {
-        if (seg.debtors && !isDebtor(p)) return false;
-        if (seg.birthdayToday && !isBirthdayToday(p)) return false;
-        if (seg.birthdayMonth && !isBirthdayMonth(p)) return false;
-        return true;
-    });
-
-    return {
-        patients: matched,
+    const ctx: FieldContext = {
         debtMap,
-        funnel: {
-            clinicTotal: allPatients.length,
-            afterStatus: afterStatus.length,
-            afterInactive: afterInactive.length,
-            matched: matched.length,
-        },
-        facets,
+        isSendablePhone: (phone) => normalizeUzPhone(phone) !== null,
+        now: new Date(),
     };
+
+    let patients: any[];
+    if (match === 'any') {
+        // Bitta shart bajarilsa yetarli; shartsiz segment — hamma
+        patients = conditions.length === 0
+            ? (scoped as any[])
+            : (scoped as any[]).filter(p => conditions.some(c => conditionMatches(p, c, ctx)));
+    } else {
+        patients = (scoped as any[]).filter(p => jsConditions.every(c => conditionMatches(p, c, ctx)));
+    }
+
+    // Har bir shart YAKKA o'zi nechtaga mos — foydalanuvchi qaysi shart
+    // ro'yxatni qisqartirayotganini ko'rsin
+    const allPatients = await prisma.patient.findMany({ where: { clinicId } });
+    const conditionCounts = conditions.map(c =>
+        (allPatients as any[]).filter(p => conditionMatches(p, c, ctx)).length
+    );
+
+    return { patients, debtMap, clinicTotal, conditionCounts, conditions, match };
 }
 
-/** Segment tavsifini odam o'qiy oladigan matnga aylantiradi (UI va loglar uchun) */
-export function describeSegment(seg?: AudienceSegment | null, doctorName?: string): string {
-    if (!seg) return 'Barcha faol bemorlar';
-    const parts: string[] = [];
-    parts.push(seg.status === 'All' ? 'Barcha bemorlar' : 'Faol bemorlar');
-    if (seg.doctorId) parts.push(doctorName ? `shifokor: ${doctorName}` : 'bitta shifokor');
-    if (seg.inactiveMonths) {
-        parts.push(`${seg.inactiveMonths} oydan beri kelmagan${seg.includeNeverVisited ? ' (umuman kelmaganlar ham)' : ''}`);
-    }
-    if (seg.debtors) parts.push('qarzi bor');
-    if (seg.birthdayToday) parts.push("bugun tug'ilgan kun");
-    if (seg.birthdayMonth) parts.push("shu oyda tug'ilgan kun");
-    return parts.join(' · ');
+/** Segmentni odam o'qiy oladigan matnga aylantiradi */
+export function describeSegment(seg?: AudienceSegment | null): string {
+    const { match, conditions } = normalizeSegment(seg);
+    if (conditions.length === 0) return 'Barcha bemorlar';
+
+    const parts = conditions.map(c => {
+        const def = getField(c.field);
+        if (!def) return c.field;
+        const op = def.operators.find(o => o.id === c.op);
+        const opLabel = op?.label || c.op;
+        if (op?.arity === 0) return `${def.label}: ${opLabel}`;
+        const valLabel = def.options?.find(o => o.value === String(c.value))?.label ?? c.value;
+        return `${def.label} ${opLabel} ${Array.isArray(valLabel) ? valLabel.join('–') : valLabel}`;
+    });
+
+    return parts.join(match === 'any' ? ' YOKI ' : ' · ');
 }
+
+export { SEGMENT_FIELDS };

@@ -285,12 +285,24 @@ export interface MessageLog {
   patient?: { id: string; firstName: string; lastName: string; phone?: string } | null;
 }
 
+/** Bitta filtr sharti */
+export interface SegmentCondition {
+  field: string;
+  op: string;
+  value?: any;
+}
+
 /**
- * Auditoriya segmenti — "kimga yuborish". Qo'lda yuborishda ham, jadval
- * bo'yicha qoidada ham bir xil. Bemorlarni doim server hisoblaydi
- * (backend/segments.ts), frontend faqat filtrni yig'adi.
+ * Auditoriya segmenti — "kimga yuborish". Shartlar ro'yxati; qaysi maydonlar
+ * mavjudligini backend/segmentFields.ts reyestri hal qiladi.
+ * Eski maydonli format ham qabul qilinadi (saqlangan qoidalar uchun) va
+ * server o'qishda avtomatik shartlarga aylantiradi.
  */
 export interface AudienceSegment {
+  match?: 'all' | 'any';
+  conditions?: SegmentCondition[];
+
+  // Eski format — faqat moslik uchun, yangi kodda ishlatilmaydi
   doctorId?: string | null;
   status?: 'Active' | 'All';
   inactiveMonths?: number | null;
@@ -298,6 +310,19 @@ export interface AudienceSegment {
   debtors?: boolean;
   birthdayToday?: boolean;
   birthdayMonth?: boolean;
+}
+
+/** Segment qurish uchun mavjud maydon (backenddan keladi) */
+export interface SegmentFieldDescriptor {
+  id: string;
+  label: string;
+  type: 'enum' | 'bool' | 'number' | 'months_ago' | 'days_ago' | 'text' | 'month_of_year';
+  group: string;
+  operators: { id: string; label: string; arity: 0 | 1 | 2 }[];
+  options?: { value: string; label: string }[];
+  unit?: string;
+  defaultOp: string;
+  defaultValue?: any;
 }
 
 /** Jadval bo'yicha yuborish qoidasi */
@@ -320,15 +345,11 @@ export interface AudiencePreview {
   unreachable: number;
   /** Kimga yetib bormaydi va nima uchun — klinika tuzata olishi uchun */
   unreachableList: { id: string; name: string; reason: string }[];
-  /** Filtrlar bosqichma-bosqich nechtadan qoldirgani */
-  funnel: {
-    clinicTotal: number;
-    afterStatus: number;
-    afterInactive: number;
-    matched: number;
-  };
-  /** Har bir tezkor filtr nechtaga mos — bosishdan oldin ko'rinadi */
-  facets: { debtors: number; birthdayToday: number; birthdayMonth: number };
+  /** Klinikadagi jami bemorlar (filtrlarsiz) */
+  clinicTotal: number;
+  /** Har bir shart YAKKA o'zi nechtaga mos — shart yonida ko'rsatiladi */
+  conditionCounts: number[];
+  conditions: SegmentCondition[];
   viaTelegram: number;
   viaSms: number;
   description: string;

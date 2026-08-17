@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor, SegmentFieldDescriptor } from '../types';
 
 // --- PERSISTENCE HELPERS ---
 const STORAGE_KEY = 'dentalflow_demo_data';
@@ -414,6 +414,37 @@ export const DEMO_TRIGGERS: TriggerDescriptor[] = [
     { id: 'payment_received', label: "To'lov qabul qilindi", respectCooldown: false, supportsDoctorFilter: false, offset: { label: 'Necha soat keyin', unit: 'hour', options: [0, 1, 2, 24], default: 0 } },
     { id: 'recall', label: 'Uzoq kelmaganlarni qaytarish', respectCooldown: true, supportsDoctorFilter: true, offset: { label: 'Necha oydan beri kelmagan', unit: 'month', options: [3, 6, 9, 12], default: 6 } },
     { id: 'debt_reminder', label: 'Qarz eslatmasi', respectCooldown: true, supportsDoctorFilter: false, offset: { label: 'Qarz necha kundan beri', unit: 'day', options: [3, 7, 14, 30], default: 7 } },
+];
+
+// Demo rejim uchun segment maydonlari — backend/segmentFields.ts qisqartmasi
+export const DEMO_SEGMENT_FIELDS: SegmentFieldDescriptor[] = [
+    {
+        id: 'status', label: 'Bemor holati', type: 'enum', group: "Bemor ma'lumotlari",
+        operators: [{ id: 'eq', label: 'teng', arity: 1 }, { id: 'neq', label: 'teng emas', arity: 1 }],
+        options: [{ value: 'Active', label: 'Faol' }, { value: 'Archived', label: 'Arxivlangan' }],
+        defaultOp: 'eq', defaultValue: 'Active',
+    },
+    {
+        id: 'gender', label: 'Jinsi', type: 'enum', group: "Bemor ma'lumotlari",
+        operators: [{ id: 'eq', label: 'teng', arity: 1 }, { id: 'neq', label: 'teng emas', arity: 1 }],
+        options: [{ value: 'Female', label: 'Ayol' }, { value: 'Male', label: 'Erkak' }],
+        defaultOp: 'eq', defaultValue: 'Female',
+    },
+    {
+        id: 'age', label: 'Yoshi', type: 'number', group: "Bemor ma'lumotlari",
+        operators: [{ id: 'gte', label: 'kamida', arity: 1 }, { id: 'lte', label: "ko'pi bilan", arity: 1 }, { id: 'between', label: "oralig'ida", arity: 2 }],
+        unit: 'yosh', defaultOp: 'between', defaultValue: [18, 45],
+    },
+    {
+        id: 'hasDebt', label: 'Qarzi bor', type: 'bool', group: 'Moliya',
+        operators: [{ id: 'is_true', label: 'ha', arity: 0 }, { id: 'is_false', label: "yo'q", arity: 0 }],
+        defaultOp: 'is_true',
+    },
+    {
+        id: 'hasTelegram', label: 'Telegram botga ulangan', type: 'bool', group: 'Aloqa',
+        operators: [{ id: 'is_true', label: 'ha', arity: 0 }, { id: 'is_false', label: "yo'q", arity: 0 }],
+        defaultOp: 'is_true',
+    },
 ];
 
 export let DEMO_MESSAGE_LOGS: MessageLog[] = savedData?.messageLogs || [

@@ -562,7 +562,8 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
 // Triggerlar ro'yxati ./triggers.ts dan keladi — yangi trigger qo'shilganda
 // bu yer o'zgarmaydi. Baza ustuni oddiy String bo'lgani uchun migratsiya kerak emas.
 const { TRIGGER_IDS, TRIGGER_DESCRIPTORS, getTrigger } = require('./triggers');
-const { resolveSegment, describeSegment, buildDebtMap } = require('./segments');
+const { resolveSegment, describeSegment, buildDebtMap, normalizeSegment } = require('./segments');
+const { fieldDescriptors } = require('./segmentFields');
 const { getExtras, getExtrasMap, saveExtras, deleteExtras } = require('./ruleExtras');
 const AUTOMATION_TRIGGERS: string[] = TRIGGER_IDS;
 const MESSAGE_CHANNELS = ['sms', 'telegram', 'both', 'telegram_first'];
@@ -897,6 +898,25 @@ app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
     }
 });
 
+// Segment qurish uchun mavjud maydonlar. UI forma shu ro'yxatdan quriladi,
+// shuning uchun yangi filtr qo'shilganda frontend o'zgarmaydi.
+app.get('/api/messages/segment-fields', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        const doctors = clinicId
+            ? await prisma.doctor.findMany({
+                where: { clinicId: clinicId as string },
+                select: { id: true, firstName: true, lastName: true },
+                orderBy: { lastName: 'asc' },
+            })
+            : [];
+        res.json(fieldDescriptors(doctors));
+    } catch (error) {
+        console.error('Segment fields error:', error);
+        res.status(500).json({ error: 'Maydonlarni olishda xatolik' });
+    }
+});
+
 // Segment bo'yicha auditoriyani hisoblab beradi — UI shu javobni ko'rsatadi.
 // Frontend endi bemorlarni o'zi filtrlamaydi: "qarzdor" ta'rifi, qarz summasi
 // va yuboriladigan bemorlar ro'yxati bir joydan (segments.ts) keladi.
@@ -906,7 +926,8 @@ app.post('/api/messages/audience', authenticateToken, async (req, res) => {
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { segment, channel } = req.body;
 
-        const { patients, debtMap, funnel, facets } = await resolveSegment(clinicId as string, segment);
+        const { patients, debtMap, clinicTotal, conditionCounts, conditions } =
+            await resolveSegment(clinicId as string, segment);
 
         const hasPhone = (p: any) => !!normalizeUzPhone(p.phone);
         const hasTg = (p: any) => !!p.telegramChatId;
@@ -956,8 +977,9 @@ app.post('/api/messages/audience', authenticateToken, async (req, res) => {
             matched: patients.length,
             unreachable: unreachableList.length,
             unreachableList: unreachableList.slice(0, 50),
-            funnel,
-            facets,
+            clinicTotal,
+            conditionCounts,
+            conditions,
             viaTelegram,
             viaSms,
             description: describeSegment(segment),
