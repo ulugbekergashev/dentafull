@@ -17,7 +17,13 @@ export type AggregateKey =
     | 'noShowCount'
     | 'activeInstallment'
     | 'upcomingAppointment'
-    | 'lastApptType';
+    | 'lastApptType'
+    | 'procedures'
+    | 'diagnoses'
+    | 'lastRating';
+
+/** Bemor qilgan bitta muolaja va uning sanasi */
+export interface ProcedureRecord { name: string; at: Date | null; }
 
 export interface Aggregates {
     /** Bemor bo'yicha to'langan summa (status: Paid) */
@@ -32,6 +38,12 @@ export interface Aggregates {
     upcomingAppointment?: Set<string>;
     /** Oxirgi qabul turi */
     lastApptType?: Map<string, string>;
+    /** Bemor qilgan muolajalar (nomi + sanasi) */
+    procedures?: Map<string, ProcedureRecord[]>;
+    /** Bemorning tashxis kodlari */
+    diagnoses?: Map<string, Set<string>>;
+    /** Oxirgi qo'ygan bahosi */
+    lastRating?: Map<string, number>;
 }
 
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -120,8 +132,93 @@ export async function buildAggregates(clinicId: string, needed: Set<AggregateKey
         })());
     }
 
+    if (needed.has('procedures')) {
+        jobs.push((async () => {
+            // Muolajalar Visit orqali bemorga bog'lanadi
+            const rows = await prisma.treatmentProcedure.findMany({
+                where: { visit: { clinicId } },
+                select: {
+                    procedureName: true,
+                    completedAt: true,
+                    createdAt: true,
+                    visit: { select: { patientId: true } },
+                },
+            });
+            const m = new Map<string, ProcedureRecord[]>();
+            for (const r of rows as any[]) {
+                const pid = r.visit?.patientId;
+                if (!pid) continue;
+                if (!m.has(pid)) m.set(pid, []);
+                m.get(pid)!.push({ name: r.procedureName || '', at: r.completedAt || r.createdAt || null });
+            }
+            agg.procedures = m;
+        })());
+    }
+
+    if (needed.has('diagnoses')) {
+        jobs.push((async () => {
+            const rows = await prisma.patientDiagnosis.findMany({
+                where: { clinicId },
+                select: { patientId: true, code: true },
+            });
+            const m = new Map<string, Set<string>>();
+            for (const r of rows as any[]) {
+                if (!m.has(r.patientId)) m.set(r.patientId, new Set());
+                m.get(r.patientId)!.add(r.code);
+            }
+            agg.diagnoses = m;
+        })());
+    }
+
+    if (needed.has('lastRating')) {
+        jobs.push((async () => {
+            // Baho qabul orqali bemorga bog'lanadi
+            const rows = await prisma.review.findMany({
+                where: { appointment: { clinicId } },
+                select: { rating: true, createdAt: true, appointment: { select: { patientId: true } } },
+                orderBy: { createdAt: 'desc' },
+            });
+            const m = new Map<string, number>();
+            for (const r of rows as any[]) {
+                const pid = r.appointment?.patientId;
+                if (pid && !m.has(pid)) m.set(pid, r.rating);
+            }
+            agg.lastRating = m;
+        })());
+    }
+
     await Promise.all(jobs);
     return agg;
+}
+
+/** Klinikada bajarilgan muolaja nomlari — filtr variantlari uchun */
+export async function listProcedureNames(clinicId: string): Promise<string[]> {
+    try {
+        const rows = await prisma.treatmentProcedure.findMany({
+            where: { visit: { clinicId } },
+            select: { procedureName: true },
+            distinct: ['procedureName'],
+        });
+        return (rows as any[]).map(r => r.procedureName).filter(Boolean).sort();
+    } catch {
+        return [];
+    }
+}
+
+/** Klinikada qo'yilgan tashxis kodlari */
+export async function listDiagnosisCodes(clinicId: string): Promise<{ code: string; name: string }[]> {
+    try {
+        const rows = await prisma.patientDiagnosis.findMany({
+            where: { clinicId },
+            select: { code: true, icd10: { select: { name: true } } },
+            distinct: ['code'],
+        });
+        return (rows as any[])
+            .map(r => ({ code: r.code, name: r.icd10?.name || r.code }))
+            .sort((a, b) => a.code.localeCompare(b.code));
+    } catch {
+        return [];
+    }
 }
 
 /** Qabul turlari ro'yxati — filtr variantlari uchun */

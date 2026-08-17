@@ -15,7 +15,7 @@
  * `where` bor maydonlar avtomatik tez yo'ldan ketadi va UI o'zgarmaydi.
  */
 
-export type FieldType = 'enum' | 'bool' | 'number' | 'months_ago' | 'days_ago' | 'text' | 'month_of_year';
+export type FieldType = 'enum' | 'bool' | 'number' | 'months_ago' | 'days_ago' | 'text' | 'month_of_year' | 'enum_months';
 
 export interface FieldOption { value: string; label: string; }
 
@@ -401,6 +401,80 @@ export const SEGMENT_FIELDS: SegmentFieldDef[] = [
         },
     },
 
+    // ── Klinik ──
+    {
+        id: 'procedureDone',
+        label: 'Muolaja qilingan',
+        type: 'enum',
+        group: 'Klinik',
+        operators: [
+            { id: 'eq', label: 'qilgan', arity: 1 },
+            { id: 'neq', label: 'qilmagan', arity: 1 },
+        ],
+        options: [], // klinikaning haqiqiy muolajalaridan to'ldiriladi
+        defaultOp: 'eq',
+        needs: ['procedures'],
+        predicate: (p, op, v, ctx) => {
+            const list = ctx.agg.procedures?.get(p.id) || [];
+            const has = list.some(r => r.name === v);
+            return op === 'eq' ? has : !has;
+        },
+    },
+    {
+        id: 'procedureDoneAgo',
+        label: 'Muolajadan beri o\'tgan vaqt',
+        type: 'enum_months',
+        group: 'Klinik',
+        operators: [{ id: 'before', label: 'kamida shuncha oy o\'tgan', arity: 2 }],
+        options: [],
+        unit: 'oy',
+        defaultOp: 'before',
+        defaultValue: ['', 12],
+        needs: ['procedures'],
+        // Stomatologiyaning asosiy stsenariysi: "implant qo'ygan va bir yil o'tgan"
+        predicate: (p, _op, v, ctx) => {
+            const [name, months] = Array.isArray(v) ? v : ['', 12];
+            if (!name) return false;
+            const list = ctx.agg.procedures?.get(p.id) || [];
+            const cutoff = new Date(ctx.now);
+            cutoff.setMonth(cutoff.getMonth() - (Number(months) || 0));
+            // Shu muolajaning ENG OXIRGISI cutoffdan oldin bo'lsa
+            const dates = list.filter(r => r.name === name && r.at).map(r => r.at!.getTime());
+            if (dates.length === 0) return false;
+            return new Date(Math.max(...dates)) <= cutoff;
+        },
+    },
+    {
+        id: 'diagnosisCode',
+        label: 'Tashxis kodi',
+        type: 'enum',
+        group: 'Klinik',
+        operators: OP_EQ,
+        options: [],
+        defaultOp: 'eq',
+        needs: ['diagnoses'],
+        predicate: (p, op, v, ctx) => {
+            const has = ctx.agg.diagnoses?.get(p.id)?.has(String(v)) || false;
+            return op === 'eq' ? has : !has;
+        },
+    },
+    {
+        id: 'lastRating',
+        label: "Oxirgi qo'ygan bahosi",
+        type: 'number',
+        group: 'Klinik',
+        operators: OP_NUM,
+        unit: 'yulduz',
+        defaultOp: 'gte',
+        defaultValue: 5,
+        needs: ['lastRating'],
+        predicate: (p, op, v, ctx) => {
+            const r = ctx.agg.lastRating?.get(p.id);
+            if (r === undefined) return false; // baho bermagan
+            return numCompare(r, op, v);
+        },
+    },
+
     // ── Aloqa ──
     {
         id: 'hasTelegram',
@@ -435,16 +509,25 @@ export const getField = (id: string) => SEGMENT_FIELDS.find(f => f.id === id);
 export function fieldDescriptors(
     doctors: { id: string; firstName: string; lastName: string }[] = [],
     appointmentTypes: string[] = [],
+    procedures: string[] = [],
+    diagnoses: { code: string; name: string }[] = [],
 ) {
     const dynamicOptions = (id: string): FieldOption[] | undefined => {
         if (id === 'doctorId') return doctors.map(d => ({ value: d.id, label: `${d.lastName} ${d.firstName}` }));
         if (id === 'lastApptType') return appointmentTypes.map(t => ({ value: t, label: t }));
+        if (id === 'procedureDone' || id === 'procedureDoneAgo') return procedures.map(t => ({ value: t, label: t }));
+        if (id === 'diagnosisCode') return diagnoses.map(d => ({ value: d.code, label: `${d.code} — ${d.name}` }));
         return undefined;
     };
 
+    // Variantlari bo'sh bo'lgan dinamik maydonni ko'rsatishdan ma'no yo'q
+    const emptyDynamic = (id: string): boolean =>
+        (id === 'lastApptType' && appointmentTypes.length === 0) ||
+        ((id === 'procedureDone' || id === 'procedureDoneAgo') && procedures.length === 0) ||
+        (id === 'diagnosisCode' && diagnoses.length === 0);
+
     return SEGMENT_FIELDS
-        // Variantlari bo'sh bo'lgan dinamik maydonni ko'rsatishdan ma'no yo'q
-        .filter(f => !(f.id === 'lastApptType' && appointmentTypes.length === 0))
+        .filter(f => !emptyDynamic(f.id))
         .map(f => ({
             id: f.id,
             label: f.label,
@@ -459,9 +542,10 @@ export function fieldDescriptors(
 }
 
 /** Berilgan shartlar qaysi jamlanmalarni talab qiladi */
-export function neededAggregates(conditions: { field: string }[]): Set<string> {
+export function neededAggregates(conditions: { field?: string }[]): Set<string> {
     const set = new Set<string>();
     for (const c of conditions) {
+        if (!c.field) continue;
         const def = getField(c.field);
         for (const n of def?.needs || []) set.add(n);
     }

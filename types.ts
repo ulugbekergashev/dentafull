@@ -285,11 +285,19 @@ export interface MessageLog {
   patient?: { id: string; firstName: string; lastName: string; phone?: string } | null;
 }
 
-/** Bitta filtr sharti */
+/**
+ * Bitta filtr sharti — yo maydon sharti, yo ichma-ich guruh.
+ * Guruhda `conditions` bo'ladi; oddiy shartda `field`.
+ * Shu tufayli eski tekis format ham o'qiladi (guruh — shunchaki ichki segment).
+ */
 export interface SegmentCondition {
-  field: string;
-  op: string;
+  // Maydon sharti
+  field?: string;
+  op?: string;
   value?: any;
+  // Guruh (qavs): "ayol VA (VIP YOKI implant)"
+  match?: 'all' | 'any';
+  conditions?: SegmentCondition[];
 }
 
 /**

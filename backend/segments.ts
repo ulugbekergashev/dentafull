@@ -16,11 +16,20 @@ import { getField, SEGMENT_FIELDS, FieldContext, neededAggregates } from './segm
 import { buildAggregates, AggregateKey } from './segmentAggregates';
 import { normalizeUzPhone } from './smsService';
 
+/**
+ * Shart — yo maydon sharti (field/op/value), yo qavs ichidagi guruh
+ * (match/conditions). Guruh oddiy shartning o'rnida tura oladi, shuning uchun
+ * "ayol VA (VIP YOKI implant)" kabi ifodalar tuziladi.
+ */
 export interface SegmentCondition {
-    field: string;
-    op: string;
+    field?: string;
+    op?: string;
     value?: any;
+    match?: 'all' | 'any';
+    conditions?: SegmentCondition[];
 }
+
+const isGroup = (c: SegmentCondition): boolean => Array.isArray(c.conditions);
 
 export interface AudienceSegment {
     /** 'all' — barcha shartlar bajarilsin (VA), 'any' — bittasi yetarli (YOKI) */
@@ -103,14 +112,36 @@ export async function buildDebtMap(clinicId: string, patientIds?: string[]): Pro
     return debtMap;
 }
 
-/** Bitta shart bitta bemorga mos keladimi */
+/** Bitta shart (yoki butun guruh) bitta bemorga mos keladimi — rekursiv */
 function conditionMatches(patient: any, cond: SegmentCondition, ctx: FieldContext): boolean {
-    const def = getField(cond.field);
-    if (!def) return true; // noma'lum maydon — filtrlamaymiz, xabarni bloklamaymiz
-    if (def.predicate) return def.predicate(patient, cond.op, cond.value, ctx);
+    // Guruh: ichidagilarni o'z rejimi bo'yicha birlashtiramiz
+    if (isGroup(cond)) {
+        const kids = cond.conditions || [];
+        if (kids.length === 0) return true;
+        return cond.match === 'any'
+            ? kids.some(k => conditionMatches(patient, k, ctx))
+            : kids.every(k => conditionMatches(patient, k, ctx));
+    }
 
-    // where bor, lekin bu yerda JS tekshiruvi kerak (masalan 'any' rejimida)
+    const def = cond.field ? getField(cond.field) : null;
+    if (!def) return true; // noma'lum maydon — filtrlamaymiz, xabarni bloklamaymiz
+    if (def.predicate) return def.predicate(patient, cond.op || def.defaultOp, cond.value, ctx);
+
+    // where bor, lekin bu yerda JS tekshiruvi kerak ('any' rejimi yoki guruh ichida)
     return whereFallbackMatches(patient, cond);
+}
+
+/** Daraxtdagi barcha maydon shartlarini tekislab beradi (jamlanmalarni aniqlash uchun) */
+function flattenFields(conditions: SegmentCondition[]): SegmentCondition[] {
+    const out: SegmentCondition[] = [];
+    const walk = (list: SegmentCondition[]) => {
+        for (const c of list) {
+            if (isGroup(c)) walk(c.conditions || []);
+            else if (c.field) out.push(c);
+        }
+    };
+    walk(conditions);
+    return out;
 }
 
 /** `where` bilan ishlaydigan maydonlarning JS ekvivalenti (OR rejimi uchun) */
@@ -165,18 +196,18 @@ export async function resolveSegment(clinicId: string, segment?: AudienceSegment
     const jsConditions: SegmentCondition[] = [];
 
     for (const cond of conditions) {
-        const def = getField(cond.field);
-        if (!def) continue;
-        if (match === 'all' && def.where) {
-            const frag = def.where(cond.op, cond.value);
+        // Guruh SQLga tushmaydi — qavs ichidagi YOKI ni fragmentga bo'lib bo'lmaydi
+        const def = !isGroup(cond) && cond.field ? getField(cond.field) : null;
+        if (match === 'all' && def?.where) {
+            const frag = def.where(cond.op || def.defaultOp, cond.value);
             if (frag) { whereFragments.push(frag); continue; }
         }
         jsConditions.push(cond);
     }
 
     // Jamlanmalar (to'lovlar summasi, tashriflar soni ...) — faqat shartlarda
-    // ishlatilganlari hisoblanadi, keraksiz jadvalga so'rov ketmaydi
-    const needed = neededAggregates(conditions) as Set<AggregateKey>;
+    // ishlatilganlari hisoblanadi. Guruhlar ichidagilar ham hisobga olinadi.
+    const needed = neededAggregates(flattenFields(conditions)) as Set<AggregateKey>;
 
     const [scoped, clinicTotal, debtMap, agg] = await Promise.all([
         prisma.patient.findMany({
@@ -219,15 +250,21 @@ export function describeSegment(seg?: AudienceSegment | null): string {
     const { match, conditions } = normalizeSegment(seg);
     if (conditions.length === 0) return 'Barcha bemorlar';
 
-    const parts = conditions.map(c => {
-        const def = getField(c.field);
-        if (!def) return c.field;
+    const describeOne = (c: SegmentCondition): string => {
+        if (isGroup(c)) {
+            const inner = (c.conditions || []).map(describeOne).join(c.match === 'any' ? ' YOKI ' : ' VA ');
+            return inner ? `(${inner})` : '';
+        }
+        const def = c.field ? getField(c.field) : null;
+        if (!def) return c.field || '';
         const op = def.operators.find(o => o.id === c.op);
-        const opLabel = op?.label || c.op;
+        const opLabel = op?.label || c.op || '';
         if (op?.arity === 0) return `${def.label}: ${opLabel}`;
         const valLabel = def.options?.find(o => o.value === String(c.value))?.label ?? c.value;
         return `${def.label} ${opLabel} ${Array.isArray(valLabel) ? valLabel.join('–') : valLabel}`;
-    });
+    };
+
+    const parts = conditions.map(describeOne).filter(Boolean);
 
     return parts.join(match === 'any' ? ' YOKI ' : ' · ');
 }
