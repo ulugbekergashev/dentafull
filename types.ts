@@ -354,7 +354,25 @@ export interface AudiencePreview {
   viaSms: number;
   description: string;
   patientIds: string[];
+  /** To'liq ro'yxat — kimga ketishini ko'rib chiqish uchun (500 tagacha) */
+  recipients: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    channel: 'sms' | 'telegram';
+    debt: number;
+  }[];
+  recipientsTruncated: boolean;
   sample: { id: string; firstName: string; lastName: string; debt: number }[];
+}
+
+/** Saqlangan segment — bir marta yig'ilib, qayta ishlatiladi */
+export interface SavedSegment {
+  id: string;
+  name: string;
+  segment: AudienceSegment;
+  createdAt: string;
 }
 
 // Fonda ketayotgan qo'lda (bulk) yuborish holati

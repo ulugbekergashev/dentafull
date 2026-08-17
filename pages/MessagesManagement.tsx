@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '../components/Common';
-import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, RuleSchedule } from '../types';
+import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, RuleSchedule } from '../types';
 import { SegmentBuilder } from '../components/SegmentBuilder';
 import { api } from '../services/api';
 import { analyzeSms, hasTypographicApostrophe, fixApostrophes } from '../utils/sms';
@@ -174,6 +174,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         api.automationRules.getAll(clinicId).then(setRules).catch(() => { });
         api.automationTriggers.getAll().then(setTriggerDefs).catch(() => { });
         api.messages.segmentFields(clinicId).then(setSegmentFields).catch(() => { });
+        api.messages.savedSegments(clinicId).then(setSavedSegments).catch(() => { });
         api.sms.getSettings(clinicId).then((s: any) => {
             setSmsConnected(!!s.isConnected);
             if (s.isConnected) {
@@ -355,6 +356,11 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         conditions: [{ field: 'status', op: 'eq', value: 'Active' }],
     });
     const [segmentFields, setSegmentFields] = useState<SegmentFieldDescriptor[]>([]);
+    const [savedSegments, setSavedSegments] = useState<SavedSegment[]>([]);
+    // Ro'yxatdan qo'lda chiqarilgan bemorlar — yuborishdan oldin belgisi olinganlar
+    const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
+    const [showRecipients, setShowRecipients] = useState(false);
+    const [recipientSearch, setRecipientSearch] = useState('');
     const [audience, setAudience] = useState<AudiencePreview | null>(null);
     const [audienceLoading, setAudienceLoading] = useState(false);
     const [showUnreachable, setShowUnreachable] = useState(false);
@@ -374,12 +380,63 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         return () => clearTimeout(timer);
     }, [clinicId, activeTab, segment, manualChannel]);
 
-    const recipientIds = audience?.patientIds ?? [];
-    const recipientCount = audience?.total ?? 0;
+    // Segment o'zgarsa qo'lda chiqarilganlar ro'yxati ham eskiradi
+    useEffect(() => { setExcludedIds(new Set()); }, [segment, manualChannel]);
+
+    const allRecipients = audience?.recipients ?? [];
+    const recipientIds = (audience?.patientIds ?? []).filter(id => !excludedIds.has(id));
+    const recipientCount = recipientIds.length;
     const recipientSample = audience?.sample ?? [];
-    const viaTelegram = audience?.viaTelegram ?? 0;
-    const viaSms = audience?.viaSms ?? 0;
     const unreachableCount = audience?.unreachable ?? 0;
+
+    // Qo'lda chiqarilganlarni hisobga olib qayta sanaymiz
+    const { viaTelegram, viaSms } = useMemo(() => {
+        if (allRecipients.length === 0) {
+            return { viaTelegram: audience?.viaTelegram ?? 0, viaSms: audience?.viaSms ?? 0 };
+        }
+        const kept = allRecipients.filter(r => !excludedIds.has(r.id));
+        const tg = kept.filter(r => r.channel === 'telegram').length;
+        return { viaTelegram: tg, viaSms: kept.length - tg };
+    }, [allRecipients, excludedIds, audience]);
+
+    const visibleRecipients = useMemo(() => {
+        const q = recipientSearch.trim().toLowerCase();
+        if (!q) return allRecipients;
+        return allRecipients.filter(r =>
+            `${r.firstName} ${r.lastName}`.toLowerCase().includes(q) || r.phone.toLowerCase().includes(q)
+        );
+    }, [allRecipients, recipientSearch]);
+
+    const toggleExcluded = (id: string) => {
+        setExcludedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    // ── Segmentni saqlash ──
+    const handleSaveSegment = async () => {
+        const name = prompt('Segment nomi (masalan: "8 mart — ayollar"):');
+        if (!name || !name.trim()) return;
+        try {
+            const saved = await api.messages.saveSegment(clinicId, name.trim(), segment);
+            setSavedSegments(prev => [saved, ...prev.filter(s => s.id !== saved.id)]);
+            addToast('success', `"${saved.name}" saqlandi.`);
+        } catch (e: any) {
+            addToast('error', e.message || 'Saqlashda xatolik');
+        }
+    };
+
+    const handleDeleteSegment = async (s: SavedSegment) => {
+        if (!confirm(`"${s.name}" segmentini o'chirishni tasdiqlaysizmi?`)) return;
+        try {
+            await api.messages.deleteSegment(clinicId, s.id);
+            setSavedSegments(prev => prev.filter(x => x.id !== s.id));
+        } catch (e: any) {
+            addToast('error', e.message || 'Xatolik');
+        }
+    };
 
     // Xabar matnini shaxsiylashtirilgandan keyingi eng yomon holat bo'yicha o'lchaymiz:
     // {bemor_ismi} o'rniga eng uzun ism qo'yilsa, SMS qismlari soni oshib ketishi mumkin.
@@ -1053,12 +1110,45 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <Users className="w-5 h-5 text-gray-400" /> Kimga yuborish?
                         </h3>
+                        {/* Saqlangan segmentlar — bir marta yig'ilib qayta ishlatiladi */}
+                        {savedSegments.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Saqlangan:</span>
+                                {savedSegments.map(s => (
+                                    <span key={s.id} className="flex items-center rounded-lg border border-primary-200 dark:border-primary-800 overflow-hidden">
+                                        <button
+                                            onClick={() => setSegment(s.segment)}
+                                            className="px-2.5 py-1 text-xs font-bold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20"
+                                        >
+                                            {s.name}
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteSegment(s)}
+                                            title="O'chirish"
+                                            className="px-1.5 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
                         <SegmentBuilder
                             value={segment}
                             onChange={setSegment}
                             fields={segmentFields}
                             conditionCounts={audience?.conditionCounts}
                         />
+
+                        {(segment.conditions?.length || 0) > 0 && (
+                            <button
+                                onClick={handleSaveSegment}
+                                className="self-start text-xs font-bold text-gray-500 hover:text-primary-600"
+                            >
+                                💾 Shu segmentni saqlab qo'yish
+                            </button>
+                        )}
 
                         {/* Hisob-kitob: son qayerdan kelgani bosqichma-bosqich ko'rinadi */}
                         {audienceLoading ? (
@@ -1084,6 +1174,13 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         <FunnelRow
                                             label="Tanlangan kanal bilan yetib bo'lmaydi"
                                             value={-unreachableCount}
+                                            isDeduction
+                                        />
+                                    )}
+                                    {excludedIds.size > 0 && (
+                                        <FunnelRow
+                                            label="Ro'yxatdan qo'lda chiqarildi"
+                                            value={-excludedIds.size}
                                             isDeduction
                                         />
                                     )}
@@ -1121,10 +1218,78 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     </div>
                                 )}
 
-                                {recipientSample.length > 0 && (
-                                    <div className="px-4 py-2.5 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500">
-                                        Masalan: {recipientSample.map(r => `${r.firstName} ${r.lastName}`).join(', ')}
-                                        {recipientCount > recipientSample.length ? ` va yana ${recipientCount - recipientSample.length} ta` : ''}
+                                {/* To'liq ro'yxat — kimga ketishini ko'rib, kerakmasini olib tashlash */}
+                                {allRecipients.length > 0 && (
+                                    <div className="border-t border-gray-200 dark:border-gray-700">
+                                        <button
+                                            onClick={() => setShowRecipients(v => !v)}
+                                            className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-xs text-gray-500 hover:text-primary-600"
+                                        >
+                                            <span>
+                                                {recipientSample.map(r => `${r.firstName} ${r.lastName}`).join(', ')}
+                                                {recipientCount > recipientSample.length ? ` va yana ${recipientCount - recipientSample.length} ta` : ''}
+                                            </span>
+                                            <span className="font-bold shrink-0">
+                                                {showRecipients ? 'Yashirish' : "To'liq ro'yxat"}
+                                            </span>
+                                        </button>
+
+                                        {showRecipients && (
+                                            <div className="border-t border-gray-100 dark:border-gray-800">
+                                                <div className="px-4 py-2 flex flex-wrap items-center gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={recipientSearch}
+                                                        onChange={e => setRecipientSearch(e.target.value)}
+                                                        placeholder="Ism yoki raqam bo'yicha qidirish"
+                                                        className="flex-1 min-w-[180px] px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs outline-none dark:text-white"
+                                                    />
+                                                    {excludedIds.size > 0 && (
+                                                        <button
+                                                            onClick={() => setExcludedIds(new Set())}
+                                                            className="text-xs font-bold text-primary-600 hover:text-primary-700"
+                                                        >
+                                                            {excludedIds.size} tasini qaytarish
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-72 overflow-y-auto">
+                                                    {visibleRecipients.map(r => {
+                                                        const off = excludedIds.has(r.id);
+                                                        return (
+                                                            <label
+                                                                key={r.id}
+                                                                className={`flex items-center gap-3 px-4 py-2 text-xs cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 ${off ? 'opacity-40' : ''}`}
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!off}
+                                                                    onChange={() => toggleExcluded(r.id)}
+                                                                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                                                />
+                                                                <span className="font-medium text-gray-700 dark:text-gray-300 flex-1 min-w-0 truncate">
+                                                                    {r.firstName} {r.lastName}
+                                                                </span>
+                                                                <span className={r.channel === 'telegram' ? 'text-emerald-600' : 'text-amber-600'}>
+                                                                    {r.channel === 'telegram' ? '✈️ bepul' : '📱 SMS'}
+                                                                </span>
+                                                                {r.debt > 0 && (
+                                                                    <span className="text-gray-400 tabular-nums">{r.debt.toLocaleString()} so'm</span>
+                                                                )}
+                                                            </label>
+                                                        );
+                                                    })}
+                                                    {visibleRecipients.length === 0 && (
+                                                        <div className="px-4 py-6 text-center text-xs text-gray-400">Topilmadi</div>
+                                                    )}
+                                                </div>
+                                                {audience.recipientsTruncated && (
+                                                    <div className="px-4 py-2 text-xs text-gray-400 border-t border-gray-100 dark:border-gray-800">
+                                                        Birinchi 500 tasi ko'rsatilgan — yuborish baribir hammasiga ketadi.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

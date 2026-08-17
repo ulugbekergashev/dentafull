@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -1241,6 +1241,25 @@ export const api = {
             if (isDemoMode()) return Promise.resolve(DEMO_SEGMENT_FIELDS);
             return fetchJson<SegmentFieldDescriptor[]>(`/messages/segment-fields?clinicId=${clinicId}`);
         },
+        // Saqlangan segmentlar — bir marta yig'ilib, qayta ishlatiladi
+        savedSegments: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([] as SavedSegment[]);
+            return fetchJson<SavedSegment[]>(`/messages/saved-segments?clinicId=${clinicId}`);
+        },
+        saveSegment: (clinicId: string, name: string, segment: AudienceSegment) => {
+            if (isDemoMode()) {
+                return Promise.resolve({ id: `demo-${Date.now()}`, name, segment, createdAt: new Date().toISOString() } as SavedSegment);
+            }
+            return fetchJson<SavedSegment>('/messages/saved-segments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, name, segment }),
+            });
+        },
+        deleteSegment: (clinicId: string, id: string) => {
+            if (isDemoMode()) return Promise.resolve({ success: true as const });
+            return fetchJson<{ success: true }>(`/messages/saved-segments/${id}?clinicId=${clinicId}`, { method: 'DELETE' });
+        },
         // Auditoriyani doim server hisoblaydi — "qarzdor" ta'rifi bitta bo'lsin
         audience: (clinicId: string, segment: AudienceSegment, channel: MessageChannel) => {
             if (isDemoMode()) {
@@ -1253,6 +1272,11 @@ export const api = {
                     clinicTotal: n,
                     conditionCounts: (segment.conditions || []).map(() => n),
                     conditions: segment.conditions || [],
+                    recipients: DEMO_PATIENTS.map(p => ({
+                        id: p.id, firstName: p.firstName, lastName: p.lastName,
+                        phone: p.phone, channel: 'telegram' as const, debt: 0,
+                    })),
+                    recipientsTruncated: false,
                     viaTelegram: n,
                     viaSms: 0,
                     description: 'Demo',

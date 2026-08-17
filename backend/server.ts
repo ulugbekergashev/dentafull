@@ -564,6 +564,7 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
 const { TRIGGER_IDS, TRIGGER_DESCRIPTORS, getTrigger } = require('./triggers');
 const { resolveSegment, describeSegment, buildDebtMap, normalizeSegment } = require('./segments');
 const { fieldDescriptors } = require('./segmentFields');
+const { listSegments, saveSegment, deleteSegment } = require('./savedSegments');
 const { getExtras, getExtrasMap, saveExtras, deleteExtras } = require('./ruleExtras');
 const AUTOMATION_TRIGGERS: string[] = TRIGGER_IDS;
 const MESSAGE_CHANNELS = ['sms', 'telegram', 'both', 'telegram_first'];
@@ -917,6 +918,42 @@ app.get('/api/messages/segment-fields', authenticateToken, async (req, res) => {
     }
 });
 
+// ─── Saqlangan segmentlar ───────────────────────────────────────────────────
+// "8 mart — ayollar" bir marta yig'iladi va qayta ishlatiladi.
+app.get('/api/messages/saved-segments', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        res.json(await listSegments(clinicId as string));
+    } catch (error) {
+        res.status(500).json({ error: 'Segmentlarni olishda xatolik' });
+    }
+});
+
+app.post('/api/messages/saved-segments', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { name, segment } = req.body;
+        if (!name || !String(name).trim()) return res.status(400).json({ error: 'Segment nomi kiritilsin' });
+        res.json(await saveSegment(clinicId as string, String(name), segment || {}));
+    } catch (error) {
+        console.error('Saved segment create error:', error);
+        res.status(500).json({ error: 'Segmentni saqlashda xatolik' });
+    }
+});
+
+app.delete('/api/messages/saved-segments/:id', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        await deleteSegment(clinicId as string, req.params.id);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Segmentni o\'chirishda xatolik' });
+    }
+});
+
 // Segment bo'yicha auditoriyani hisoblab beradi — UI shu javobni ko'rsatadi.
 // Frontend endi bemorlarni o'zi filtrlamaydi: "qarzdor" ta'rifi, qarz summasi
 // va yuboriladigan bemorlar ro'yxati bir joydan (segments.ts) keladi.
@@ -984,6 +1021,17 @@ app.post('/api/messages/audience', authenticateToken, async (req, res) => {
             viaSms,
             description: describeSegment(segment),
             patientIds: reachable.map((p: any) => p.id),
+            // To'liq ro'yxat — klinika kimga ketishini ko'rib, kerakmasini
+            // belgilab qo'ya olishi uchun. Katta bazada javob shishmasin deb cheklangan.
+            recipients: reachable.slice(0, 500).map((p: any) => ({
+                id: p.id,
+                firstName: p.firstName,
+                lastName: p.lastName,
+                phone: p.phone || '',
+                channel: (channel === 'sms' ? 'sms' : hasTg(p) ? 'telegram' : 'sms') as 'sms' | 'telegram',
+                debt: debtMap.get(p.id) || 0,
+            })),
+            recipientsTruncated: reachable.length > 500,
             sample: reachable.slice(0, 3).map((p: any) => ({
                 id: p.id,
                 firstName: p.firstName,
