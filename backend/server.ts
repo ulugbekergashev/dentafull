@@ -278,7 +278,9 @@ const canAccessClinic = (req: any, clinicId: string): boolean => {
 // ─── Markaziy (yagona) xabar yuborish funksiyasi ─────────────────────────────
 // Barcha kanallar (Telegram/SMS) shu yerdan o'tadi va yagona TelegramLog tarixiga yoziladi.
 type UnifiedSendOpts = {
-    channel: 'sms' | 'telegram' | 'both' | 'auto'; // 'auto' = clinic.notificationMode bo'yicha
+    // 'auto' = clinic.notificationMode bo'yicha
+    // 'telegram_first' = Telegram bo'lsa faqat Telegram, aks holda SMS (arzon yo'l)
+    channel: 'sms' | 'telegram' | 'both' | 'telegram_first' | 'auto';
     source?: string;   // 'manual' | 'auto' | 'debt' | 'birthday' | 'noshow' | 'bulk' | 'retry'...
     ruleId?: string;   // AutomationRule dedupe uchun
     refId?: string;    // masalan appointmentId
@@ -306,15 +308,17 @@ async function sendUnified(
     let lastError: string | undefined;
 
     // Telegram
-    if ((channel === 'telegram' || channel === 'both') && clinic.botToken && patient.telegramChatId) {
+    if ((channel === 'telegram' || channel === 'both' || channel === 'telegram_first') && clinic.botToken && patient.telegramChatId) {
         attempted = true;
         const result = await botManager.notifyClinicUser(clinic.id, patient.telegramChatId, message, patient.id || undefined, logType, opts.replyMarkup, logExtra);
         if (result.success) anySuccess = true; else lastError = result.error;
         console.log(`[Notification] Telegram ${result.success ? 'sent' : 'FAILED'} → ${patientName}`);
     }
 
-    // SMS
-    if ((channel === 'sms' || channel === 'both') && clinic.eskizEmail && patient.phone) {
+    // SMS. 'telegram_first' da SMS faqat Telegram ishlamagan holda yuboriladi —
+    // bemor botga ulangan bo'lsa, ustiga pullik SMS ketmaydi.
+    const smsNeeded = channel === 'sms' || channel === 'both' || (channel === 'telegram_first' && !anySuccess);
+    if (smsNeeded && clinic.eskizEmail && patient.phone) {
         attempted = true;
         try {
             const result = await smsService.sendSms(clinic.id, patient.phone, message);
@@ -347,7 +351,9 @@ async function sendUnified(
             ? (!clinic.eskizEmail ? 'Eskiz SMS ulanmagan' : 'Bemorda telefon raqami yo\'q')
             : channel === 'telegram'
                 ? (!clinic.botToken ? 'Telegram bot sozlanmagan' : 'Bemor botga ulanmagan')
-                : 'Aloqa kanali mavjud emas';
+                : channel === 'telegram_first'
+                    ? 'Bemor botga ulanmagan va telefon raqami ham yo\'q'
+                    : 'Aloqa kanali mavjud emas';
         await prisma.telegramLog.create({
             data: {
                 clinicId: clinic.id,
@@ -356,7 +362,9 @@ async function sendUnified(
                 status: 'Failed',
                 message,
                 error: reason,
-                channel: channel === 'both' ? 'telegram' : channel,
+                // Log ustuni faqat 'sms' | 'telegram' qiymatlarini biladi —
+                // ko'p kanalli variantlarni 'telegram' deb yozamiz
+                channel: channel === 'sms' ? 'sms' : 'telegram',
                 source: logExtra.source,
                 ruleId: logExtra.ruleId || null,
                 refId: logExtra.refId || null,
@@ -490,7 +498,7 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
 // ─── Xabarlar: Shablonlar / Avto qoidalar / Bulk yuborish / Tarix ───────────
 
 const AUTOMATION_TRIGGERS = ['before_appointment', 'birthday', 'no_show'];
-const MESSAGE_CHANNELS = ['sms', 'telegram', 'both'];
+const MESSAGE_CHANNELS = ['sms', 'telegram', 'both', 'telegram_first'];
 
 // Templates CRUD
 app.get('/api/message-templates', authenticateToken, async (req, res) => {

@@ -212,7 +212,9 @@ export interface CashAuditLog {
 }
 
 // ─── Xabarlar (yagona xabarlar tizimi) ───
-export type MessageChannel = 'sms' | 'telegram' | 'both';
+// 'both' — ikkalasiga ham yuboradi (SMS uchun alohida pul ketadi).
+// 'telegram_first' — Telegram bo'lsa faqat Telegram, bo'lmasa/xato bo'lsa SMS.
+export type MessageChannel = 'sms' | 'telegram' | 'both' | 'telegram_first';
 export type AutomationTrigger = 'before_appointment' | 'birthday' | 'no_show';
 
 export interface MessageTemplate {

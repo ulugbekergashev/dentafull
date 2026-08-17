@@ -3,6 +3,7 @@ import { Card, Button } from '../components/Common';
 import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus } from '../types';
 import { api } from '../services/api';
 import { isSendablePhone } from '../utils/phone';
+import { analyzeSms, hasTypographicApostrophe, fixApostrophes } from '../utils/sms';
 import {
     MessageSquare, Clock, Send, CalendarDays, Plus, X, Pencil, Trash2,
     AlertTriangle, Eye, Users, RefreshCw, CheckCircle2, XCircle, Smartphone
@@ -35,6 +36,13 @@ const TRIGGER_LABELS: Record<AutomationTrigger, string> = {
 };
 
 const HOUR_OPTIONS = [1, 2, 3, 6, 12, 24];
+
+const CHANNEL_OPTIONS: { value: MessageChannel; label: string; hint: string }[] = [
+    { value: 'telegram_first', label: '✈️→📱 Avval Telegram', hint: 'Bemor botga ulangan bo\'lsa — bepul Telegram. Ulanmagan yoki xato bo\'lsa — SMS. Eng tejamli variant.' },
+    { value: 'telegram', label: '✈️ Telegram', hint: 'Faqat Telegram. Botga ulanmagan bemorlarga xabar bormaydi.' },
+    { value: 'sms', label: '📱 SMS', hint: 'Faqat SMS. Har bir xabar uchun pul yechiladi.' },
+    { value: 'both', label: '⚠️ Ikkalasi', hint: 'Telegram VA SMS — ikkalasi ham yuboriladi. Botga ulangan bemor ikki marta xabar oladi va SMS uchun baribir pul ketadi.' },
+];
 
 type QuickFilter = 'debtors' | 'birthday_today' | 'birthday_month';
 
@@ -93,6 +101,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     const [logs, setLogs] = useState<MessageLog[]>([]);
     const [logStats, setLogStats] = useState({ total: 0, sent: 0, failed: 0 });
     const [smsConnected, setSmsConnected] = useState(false);
+    // Balansni aynan pul sarflanadigan joyda ko'rsatamiz (ilgari faqat Sozlamalarda edi)
+    const [smsBalance, setSmsBalance] = useState<number | null>(null);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'sent' | 'failed'>('all');
     const [logsLoading, setLogsLoading] = useState(false);
 
@@ -117,7 +127,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         if (!clinicId) return;
         api.messageTemplates.getAll(clinicId).then(setTemplates).catch(() => { });
         api.automationRules.getAll(clinicId).then(setRules).catch(() => { });
-        api.sms.getSettings(clinicId).then((s: any) => setSmsConnected(!!s.isConnected)).catch(() => { });
+        api.sms.getSettings(clinicId).then((s: any) => {
+            setSmsConnected(!!s.isConnected);
+            if (s.isConnected) {
+                api.sms.getBalance(clinicId)
+                    .then((b: any) => setSmsBalance(typeof b?.balance === 'number' ? b.balance : null))
+                    .catch(() => { });
+            }
+        }).catch(() => { });
         loadLogs('all');
         // Sahifa qayta ochilganda fonda ketayotgan yuborish bo'lsa — ulanib olamiz
         api.messages.bulkStatus(clinicId).then(s => { if (s.active && !s.done) setBulkJob(s); }).catch(() => { });
@@ -272,7 +289,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     };
 
     // ── Qo'lda tab ──
-    const [manualChannel, setManualChannel] = useState<'sms' | 'telegram'>('sms');
+    const [manualChannel, setManualChannel] = useState<'sms' | 'telegram' | 'telegram_first'>('telegram_first');
     const [audienceDoctorId, setAudienceDoctorId] = useState('All');
     const [audienceStatus, setAudienceStatus] = useState<'Active' | 'All'>('Active');
     const [audienceInactive, setAudienceInactive] = useState<'none' | '1' | '3' | '6'>('none');
@@ -304,6 +321,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             // uchun ro'yxatga qo'shib, sonni oshirib ko'rsatishdan ma'no yo'q.
             if (manualChannel === 'sms' && !isSendablePhone(p.phone)) return false;
             if (manualChannel === 'telegram' && !p.telegramChatId) return false;
+            // Avval Telegram: bemorga ikkala yo'lning birortasi bilan yetib borsak bo'ldi
+            if (manualChannel === 'telegram_first' && !p.telegramChatId && !isSendablePhone(p.phone)) return false;
 
             if (audienceStatus === 'Active' && p.status !== 'Active') return false;
             if (audienceDoctorId !== 'All' && p.doctorId !== audienceDoctorId) return false;
@@ -329,6 +348,33 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             return true;
         });
     }, [patients, manualChannel, audienceStatus, audienceDoctorId, audienceInactive, includeNeverVisited, quickFilters, debtorIds]);
+
+    // Qaysi bemor qaysi kanal bilan oladi — pul faqat SMS uchun ketadi
+    const { viaTelegram, viaSms } = useMemo(() => {
+        if (manualChannel === 'telegram') return { viaTelegram: recipients.length, viaSms: 0 };
+        if (manualChannel === 'sms') return { viaTelegram: 0, viaSms: recipients.length };
+        const tg = recipients.filter(r => r.telegramChatId).length;
+        return { viaTelegram: tg, viaSms: recipients.length - tg };
+    }, [recipients, manualChannel]);
+
+    // Xabar matnini shaxsiylashtirilgandan keyingi eng yomon holat bo'yicha o'lchaymiz:
+    // {bemor_ismi} o'rniga eng uzun ism qo'yilsa, SMS qismlari soni oshib ketishi mumkin.
+    const smsInfo = useMemo(() => {
+        const longest = (vals: (string | undefined)[]) =>
+            vals.reduce<string>((a, b) => ((b || '').length > a.length ? (b || '') : a), '');
+        const sample = manualMessage
+            .split('{bemor_ismi}').join(longest(recipients.map(r => r.firstName)))
+            .split('{bemor_familyasi}').join(longest(recipients.map(r => r.lastName)))
+            .split('{klinika_nomi}').join(currentClinic?.name || '')
+            .split('{sana}').join('2026-08-20')
+            .split('{vaqt}').join('14:30')
+            .split('{shifokor_ismi}').join(longest(doctors.map(d => `${d.firstName} ${d.lastName}`)))
+            .split('{qarz}').join('1 500 000');
+        return analyzeSms(sample);
+    }, [manualMessage, recipients, doctors, currentClinic]);
+
+    const totalSmsParts = smsInfo.parts * viaSms;
+    const messageHasBadApostrophe = hasTypographicApostrophe(manualMessage);
 
     // SMS kanalida format sababli chiqib ketgan bemorlar — foydalanuvchi buni bilishi kerak
     const invalidPhoneCount = useMemo(() => {
@@ -367,7 +413,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
 
     const handleManualSend = async () => {
         if (!manualMessage.trim() || recipients.length === 0) return;
-        if (!confirm(`${recipients.length} ta bemorga ${manualChannel === 'sms' ? 'SMS' : 'Telegram'} xabar yuborilsinmi?`)) return;
+        const costNote = viaSms > 0
+            ? `\n\n✈️ Telegram: ${viaTelegram} ta (bepul)\n📱 SMS: ${viaSms} ta × ${smsInfo.parts} qism = ${totalSmsParts} SMS (pullik)`
+            : `\n\nHammasi Telegram orqali — bepul.`;
+        if (!confirm(`${recipients.length} ta bemorga xabar yuborilsinmi?${costNote}`)) return;
         setManualSending(true);
         try {
             const result = await api.messages.sendBulk(clinicId, recipients.map(r => r.id), manualMessage, manualChannel);
@@ -674,20 +723,24 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             </div>
                             <div>
                                 <label className={labelCls}>Yuborish kanali</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {([['sms', '📱 SMS'], ['telegram', '✈️ Telegram'], ['both', 'Ikkalasi']] as [MessageChannel, string][]).map(([ch, lbl]) => (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    {CHANNEL_OPTIONS.map(({ value, label, hint }) => (
                                         <button
-                                            key={ch}
+                                            key={value}
                                             type="button"
-                                            onClick={() => setRuleForm(f => ({ ...f, channel: ch }))}
-                                            className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${ruleForm.channel === ch
+                                            title={hint}
+                                            onClick={() => setRuleForm(f => ({ ...f, channel: value }))}
+                                            className={`px-3 py-2.5 rounded-xl text-sm font-bold border transition-all ${ruleForm.channel === value
                                                 ? 'bg-primary-600 text-white border-primary-600'
                                                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                                         >
-                                            {lbl}
+                                            {label}
                                         </button>
                                     ))}
                                 </div>
+                                <p className="text-xs text-gray-400 mt-2">
+                                    {CHANNEL_OPTIONS.find(c => c.value === ruleForm.channel)?.hint}
+                                </p>
                             </div>
                             <div>
                                 <label className={labelCls}>Shifokor filtri (ixtiyoriy)</label>
@@ -722,7 +775,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                                             {TRIGGER_LABELS[rule.trigger]}
                                             {rule.trigger === 'before_appointment' && rule.hoursBefore ? ` · ${rule.hoursBefore} soat oldin` : ''}
-                                            {' · '}{rule.channel === 'sms' ? 'SMS' : rule.channel === 'telegram' ? 'Telegram' : 'SMS + Telegram'}
+                                            {' · '}{rule.channel === 'sms' ? 'SMS'
+                                                : rule.channel === 'telegram' ? 'Telegram'
+                                                    : rule.channel === 'telegram_first' ? 'Avval Telegram, keyin SMS'
+                                                        : 'SMS + Telegram'}
                                             {tpl ? ` · Shablon: ${tpl.name}` : ''}
                                             {doctor ? ` · ${doctor.lastName} ${doctor.firstName}` : ''}
                                         </p>
@@ -758,14 +814,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             {activeTab === 'manual' && (
                 <div className="space-y-4">
                     {/* Kanal tanlash */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <button
-                            onClick={() => setManualChannel('sms')}
-                            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold border transition-all ${manualChannel === 'sms'
+                            onClick={() => setManualChannel('telegram_first')}
+                            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold border transition-all ${manualChannel === 'telegram_first'
                                 ? 'bg-primary-600 text-white border-primary-600'
                                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                         >
-                            <Smartphone className="w-4 h-4" /> SMS {!smsConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+                            ✈️→📱 Avval Telegram
                         </button>
                         <button
                             onClick={() => setManualChannel('telegram')}
@@ -775,9 +831,22 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         >
                             ✈️ Telegram {!telegramConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
                         </button>
+                        <button
+                            onClick={() => setManualChannel('sms')}
+                            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold border transition-all ${manualChannel === 'sms'
+                                ? 'bg-primary-600 text-white border-primary-600'
+                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
+                        >
+                            <Smartphone className="w-4 h-4" /> Faqat SMS {!smsConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+                        </button>
                     </div>
+                    {manualChannel === 'telegram_first' && (
+                        <p className="text-xs text-gray-400 px-1">
+                            Botga ulangan bemorga bepul Telegram, qolganiga SMS ketadi — eng tejamli variant.
+                        </p>
+                    )}
 
-                    {manualChannel === 'sms' && !smsConnected && (
+                    {(manualChannel === 'sms' || manualChannel === 'telegram_first') && !smsConnected && (
                         <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-400">
                             <AlertTriangle className="w-4 h-4 shrink-0" />
                             <span>Eskiz SMS ulanmagan. <strong>Sozlamalar → SMS va Telegram</strong> bo'limida login va parolni kiriting.</span>
@@ -861,7 +930,9 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             <Eye className="w-4 h-4 text-primary-600 shrink-0" />
                             <span className="text-primary-700 dark:text-primary-400">
                                 <strong>{recipients.length} ta bemor</strong>
-                                {' '}({manualChannel === 'sms' ? '📱 telefon raqami bor' : '✈️ Telegramga ulangan'})
+                                {' '}({manualChannel === 'sms' ? '📱 telefon raqami bor'
+                                    : manualChannel === 'telegram' ? '✈️ Telegramga ulangan'
+                                        : '✈️ Telegram yoki 📱 SMS bilan yetib boradi'})
                                 {recipients.length > 0 && (
                                     <span className="text-primary-600/70 dark:text-primary-400/70">
                                         {' — '}
@@ -871,6 +942,30 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 )}
                             </span>
                         </div>
+                        {/* Narx taqsimoti — pul faqat SMS uchun ketadi */}
+                        {recipients.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm">
+                                {viaTelegram > 0 && (
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                        ✈️ {viaTelegram} ta — bepul
+                                    </span>
+                                )}
+                                {viaSms > 0 && (
+                                    <span className="text-amber-600 dark:text-amber-400 font-bold">
+                                        📱 {viaSms} ta — pullik
+                                        {smsInfo.parts > 1 && ` × ${smsInfo.parts} qism`}
+                                        {totalSmsParts > 0 && ` = ${totalSmsParts} SMS`}
+                                    </span>
+                                )}
+                                {smsBalance !== null && (
+                                    <span className={`text-xs ${totalSmsParts > smsBalance ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                                        Balans: {smsBalance.toLocaleString()}
+                                        {totalSmsParts > smsBalance && ' — yetmaydi!'}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
                         {invalidPhoneCount > 0 && (
                             <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
                                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -910,6 +1005,36 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             rows={5}
                             className={inputCls}
                         />
+                        {/* SMS hisoblagichi — operator har QISM uchun alohida pul oladi */}
+                        {manualMessage.trim() && viaSms > 0 && (
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                                    <span className="text-gray-500">
+                                        {smsInfo.length} belgi · <strong className={smsInfo.parts > 1 ? 'text-amber-600' : 'text-gray-700 dark:text-gray-300'}>{smsInfo.parts} qism</strong>
+                                        {' '}({smsInfo.encoding}, qismiga {smsInfo.perPart} belgi)
+                                    </span>
+                                    <span className="text-gray-400">Keyingi qismgacha: {smsInfo.remaining}</span>
+                                </div>
+                                {smsInfo.encoding === 'UCS-2' && (
+                                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-400">
+                                        <span className="flex items-center gap-1.5">
+                                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                            {messageHasBadApostrophe
+                                                ? <>Tipografik apostrof (<span className="font-mono">’</span>) ishlatilgan — shu sabab bitta SMS 160 emas, 70 belgi.</>
+                                                : <>Lotin alifbosidan tashqari belgi bor ({smsInfo.nonGsmChars.slice(0, 6).join(' ')}) — bitta SMS 70 belgi.</>}
+                                        </span>
+                                        {messageHasBadApostrophe && (
+                                            <button
+                                                onClick={() => setManualMessage(m => fixApostrophes(m))}
+                                                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-md shrink-0"
+                                            >
+                                                Apostrofni to'g'rilash
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <VarButtons onInsert={token => setManualMessage(m => m + token)} />
                         <p className="text-xs text-gray-400">
                             <strong>{'{sana}'}</strong>, <strong>{'{vaqt}'}</strong> va <strong>{"{shifokor_ismi}"}</strong> bemorning eng yaqin kelgusi qabuli bo'yicha to'ldiriladi.
@@ -927,7 +1052,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             )}
                             {bulkRunning
                                 ? 'Oldingi yuborish davom etmoqda...'
-                                : `${recipients.length} ta bemorga ${manualChannel === 'sms' ? 'SMS' : 'Telegram xabar'} yuborish`}
+                                : `${recipients.length} ta bemorga yuborish${viaSms > 0 ? ` (${totalSmsParts} SMS)` : ' (bepul)'}`}
                         </button>
                     </Card>
                 </div>
