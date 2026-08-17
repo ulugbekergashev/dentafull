@@ -247,7 +247,8 @@ export interface MessageLog {
   patientId?: string | null;
   type: string;
   // 'Retried' — xato yozuv qayta yuborishga jo'natilgan, natijasi alohida logda
-  status: 'Sent' | 'Failed' | 'Retried';
+  // 'Skipped' — chastota chegarasi sababli ataylab yuborilmagan (xato emas)
+  status: 'Sent' | 'Failed' | 'Retried' | 'Skipped';
   message?: string | null;
   error?: string | null;
   sentAt: string;

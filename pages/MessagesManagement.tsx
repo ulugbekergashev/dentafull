@@ -4,6 +4,7 @@ import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, 
 import { api } from '../services/api';
 import { isSendablePhone } from '../utils/phone';
 import { analyzeSms, hasTypographicApostrophe, fixApostrophes } from '../utils/sms';
+import { processTemplate } from '../utils/messageTemplate';
 import {
     MessageSquare, Clock, Send, CalendarDays, Plus, X, Pencil, Trash2,
     AlertTriangle, Eye, Users, RefreshCw, CheckCircle2, XCircle, Smartphone
@@ -135,6 +136,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     .catch(() => { });
             }
         }).catch(() => { });
+        api.messages.getSettings(clinicId).then(s => setCooldownDays(s.cooldownDays || 0)).catch(() => { });
         loadLogs('all');
         // Sahifa qayta ochilganda fonda ketayotgan yuborish bo'lsa — ulanib olamiz
         api.messages.bulkStatus(clinicId).then(s => { if (s.active && !s.done) setBulkJob(s); }).catch(() => { });
@@ -376,6 +378,66 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     const totalSmsParts = smsInfo.parts * viaSms;
     const messageHasBadApostrophe = hasTypographicApostrophe(manualMessage);
 
+    // ── Preview: bemor aynan nimani ko'radi ──
+    const [previewIndex, setPreviewIndex] = useState(0);
+    const previewPatient = recipients.length > 0 ? recipients[previewIndex % recipients.length] : null;
+    const previewText = useMemo(() => {
+        if (!previewPatient) return '';
+        return processTemplate(manualMessage, {
+            patientName: `${previewPatient.firstName} ${previewPatient.lastName}`,
+            firstName: previewPatient.firstName,
+            lastName: previewPatient.lastName,
+            date: new Date().toISOString().split('T')[0],
+            time: '',
+            clinicName: currentClinic?.name || '',
+            doctorName: '',
+            amount: 0,
+        });
+    }, [manualMessage, previewPatient, currentClinic]);
+
+    // ── Test yuborish ──
+    const [testOpen, setTestOpen] = useState(false);
+    const [testPhone, setTestPhone] = useState('');
+    const [testSending, setTestSending] = useState(false);
+
+    const handleTestSend = async () => {
+        if (!manualMessage.trim()) return;
+        const testChannel: 'sms' | 'telegram' = manualChannel === 'telegram' ? 'telegram' : 'sms';
+        if (testChannel === 'sms' && !testPhone.trim()) {
+            addToast('error', 'Test uchun telefon raqamini kiriting');
+            return;
+        }
+        setTestSending(true);
+        try {
+            await api.messages.testSend(clinicId, manualMessage, testChannel, testPhone.trim(), previewPatient?.id);
+            addToast('success', testChannel === 'telegram'
+                ? 'Test xabar klinika Telegramiga yuborildi.'
+                : `Test SMS ${testPhone} raqamiga yuborildi.`);
+        } catch (e: any) {
+            addToast('error', e.message || 'Test yuborishda xatolik');
+        } finally {
+            setTestSending(false);
+        }
+    };
+
+    // ── Chastota chegarasi ──
+    const [cooldownDays, setCooldownDays] = useState(0);
+    const [cooldownSaving, setCooldownSaving] = useState(false);
+    const [ignoreCooldown, setIgnoreCooldown] = useState(false);
+
+    const saveCooldown = async (days: number) => {
+        setCooldownDays(days);
+        setCooldownSaving(true);
+        try {
+            await api.messages.saveSettings(clinicId, days);
+            addToast('success', days === 0 ? "Chastota chegarasi o'chirildi." : `Chegara: ${days} kunda bir marta.`);
+        } catch (e: any) {
+            addToast('error', e.message || 'Saqlashda xatolik');
+        } finally {
+            setCooldownSaving(false);
+        }
+    };
+
     // SMS kanalida format sababli chiqib ketgan bemorlar — foydalanuvchi buni bilishi kerak
     const invalidPhoneCount = useMemo(() => {
         if (manualChannel !== 'sms') return 0;
@@ -419,7 +481,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         if (!confirm(`${recipients.length} ta bemorga xabar yuborilsinmi?${costNote}`)) return;
         setManualSending(true);
         try {
-            const result = await api.messages.sendBulk(clinicId, recipients.map(r => r.id), manualMessage, manualChannel);
+            const result = await api.messages.sendBulk(clinicId, recipients.map(r => r.id), manualMessage, manualChannel, ignoreCooldown);
             addToast('info', `${result.total} ta bemorga yuborish boshlandi. Jarayonni Tarix bo'limida kuzating.`);
             setBulkJob({ active: true, total: result.total, sent: 0, failed: 0, done: false });
             setManualMessage('');
@@ -640,6 +702,33 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             {/* ═══ AVTOMATIK ═══ */}
             {activeTab === 'auto' && (
                 <div className="space-y-4">
+                    {/* Chastota chegarasi — bir bemorga N kunda bittadan ko'p xabar ketmasin */}
+                    <Card className="p-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h4 className="font-bold text-gray-900 dark:text-white text-sm">Chastota chegarasi</h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    Bitta bemorga shu muddat ichida bittadan ko'p xabar yuborilmaydi.
+                                    Qabul eslatmalari bundan mustasno — ular baribir yetib boradi.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                {[0, 1, 3, 7, 30].map(d => (
+                                    <button
+                                        key={d}
+                                        disabled={cooldownSaving}
+                                        onClick={() => saveCooldown(d)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 ${cooldownDays === d
+                                            ? 'bg-primary-600 text-white'
+                                            : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                                    >
+                                        {d === 0 ? "O'chiq" : `${d} kun`}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </Card>
+
                     <div className="flex justify-end">
                         <Button onClick={() => openRuleForm()}>
                             <Plus className="w-4 h-4 mr-1" /> Yangi qoida
@@ -1040,6 +1129,80 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             <strong>{'{sana}'}</strong>, <strong>{'{vaqt}'}</strong> va <strong>{"{shifokor_ismi}"}</strong> bemorning eng yaqin kelgusi qabuli bo'yicha to'ldiriladi.
                             Qabuli bo'lmasa {'{sana}'} bugungi sana bo'ladi, qolganlari bo'sh qoladi.
                         </p>
+                        {/* Bemor aynan nimani ko'radi */}
+                        {manualMessage.trim() && previewPatient && (
+                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                                <div className="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                                        <Eye className="w-3.5 h-3.5" /> Bemor ko'radigan matn
+                                    </span>
+                                    <div className="flex items-center gap-2 text-xs">
+                                        <span className="text-gray-400">{previewPatient.firstName} {previewPatient.lastName}</span>
+                                        {recipients.length > 1 && (
+                                            <button
+                                                onClick={() => setPreviewIndex(i => i + 1)}
+                                                className="px-2 py-0.5 font-bold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded"
+                                            >
+                                                Boshqasi →
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                <p className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
+                                    {previewText}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Test yuborish — 26 kishiga tarqatishdan oldin o'zingizga */}
+                        {manualMessage.trim() && (
+                            <div className="border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-3">
+                                {!testOpen ? (
+                                    <button
+                                        onClick={() => setTestOpen(true)}
+                                        className="flex items-center gap-2 text-sm font-bold text-primary-600 hover:text-primary-700"
+                                    >
+                                        <Send className="w-4 h-4" /> Avval o'zimga test yuborish
+                                    </button>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <p className="text-xs text-gray-500">
+                                            {manualChannel === 'telegram'
+                                                ? "Test xabar klinikaning Telegram chatiga yuboriladi."
+                                                : "Test SMS shu raqamga yuboriladi (bemorlarga tegmaydi, chastota chegarasidan ozod)."}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {manualChannel !== 'telegram' && (
+                                                <input
+                                                    type="tel"
+                                                    placeholder="+998 90 123 45 67"
+                                                    value={testPhone}
+                                                    onChange={e => setTestPhone(e.target.value)}
+                                                    className={`${inputCls} flex-1 min-w-[200px]`}
+                                                />
+                                            )}
+                                            <Button onClick={handleTestSend} disabled={testSending}>
+                                                {testSending ? 'Yuborilmoqda...' : 'Test yuborish'}
+                                            </Button>
+                                            <Button variant="secondary" onClick={() => setTestOpen(false)}>Yopish</Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {cooldownDays > 0 && (
+                            <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={ignoreCooldown}
+                                    onChange={e => setIgnoreCooldown(e.target.checked)}
+                                    className="w-3.5 h-3.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                />
+                                Chastota chegarasini ({cooldownDays} kun) e'tiborsiz qoldirish — yaqinda xabar olganlarga ham yuborilsin
+                            </label>
+                        )}
+
                         <button
                             disabled={manualSending || bulkRunning || !manualMessage.trim() || recipients.length === 0}
                             onClick={handleManualSend}
@@ -1171,6 +1334,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 const contact = log.recipient || log.patient?.phone || '';
                                 const isFailed = log.status === 'Failed';
                                 const isRetried = log.status === 'Retried';
+                                const isSkipped = log.status === 'Skipped';
                                 return (
                                     <div key={log.id} className="px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                         {/* Checkbox faqat xatolar uchun faol, lekin joyi doim band —
@@ -1182,7 +1346,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                             disabled={!isFailed}
                                             className={`mt-1.5 w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 ${isFailed ? '' : 'invisible'}`}
                                         />
-                                        <span className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${isFailed ? 'bg-red-500' : isRetried ? 'bg-gray-400' : 'bg-emerald-500'}`} />
+                                        <span className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${isFailed ? 'bg-red-500' : (isRetried || isSkipped) ? 'bg-gray-400' : 'bg-emerald-500'}`} />
                                         <div className="flex-1 min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className="font-bold text-gray-900 dark:text-white text-sm">{name}</span>
@@ -1198,6 +1362,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-md">
                                                         <RefreshCw className="w-3 h-3" /> Qayta yuborilgan
                                                     </span>
+                                                ) : isSkipped ? (
+                                                    <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-md">
+                                                        <Clock className="w-3 h-3" /> O'tkazib yuborildi
+                                                    </span>
                                                 ) : (
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-md">
                                                         <CheckCircle2 className="w-3 h-3" /> Yuborildi
@@ -1205,7 +1373,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                 )}
                                             </div>
                                             {log.message && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{log.message}</p>}
-                                            {(isFailed || isRetried) && log.error && <p className={`text-xs mt-0.5 ${isFailed ? 'text-red-500' : 'text-gray-400'}`}>{log.error}</p>}
+                                            {(isFailed || isRetried || isSkipped) && log.error && <p className={`text-xs mt-0.5 ${isFailed ? 'text-red-500' : 'text-gray-400'}`}>{log.error}</p>}
                                         </div>
                                         <span className="text-xs text-gray-400 shrink-0">{formatLogDate(log.sentAt)}</span>
                                     </div>

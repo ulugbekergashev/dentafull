@@ -1200,14 +1200,34 @@ export const api = {
     messages: {
         // Yuborish serverda fonda bajariladi — javob darhol qaytadi, jarayonni
         // bulkStatus() orqali kuzatiladi, natija esa Tarix bo'limida ko'rinadi.
-        sendBulk: (clinicId: string, patientIds: string[], message: string, channel: MessageChannel) => {
+        sendBulk: (clinicId: string, patientIds: string[], message: string, channel: MessageChannel, ignoreCooldown = false) => {
             if (isDemoMode()) {
                 return Promise.resolve({ total: patientIds.length, queued: true });
             }
             return fetchJson<{ total: number; queued: boolean }>('/messages/send-bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clinicId, patientIds, message, channel }),
+                body: JSON.stringify({ clinicId, patientIds, message, channel, ignoreCooldown }),
+            });
+        },
+        testSend: (clinicId: string, message: string, channel: 'sms' | 'telegram', phone?: string, patientId?: string) => {
+            if (isDemoMode()) return Promise.resolve({ success: true, sentText: message });
+            return fetchJson<{ success: true; sentText: string }>('/messages/test-send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, message, channel, phone, patientId }),
+            });
+        },
+        getSettings: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve({ cooldownDays: 0 });
+            return fetchJson<{ cooldownDays: number }>(`/messages/settings?clinicId=${clinicId}`);
+        },
+        saveSettings: (clinicId: string, cooldownDays: number) => {
+            if (isDemoMode()) return Promise.resolve({ cooldownDays });
+            return fetchJson<{ cooldownDays: number }>('/messages/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, cooldownDays }),
             });
         },
         bulkStatus: (clinicId: string) => {

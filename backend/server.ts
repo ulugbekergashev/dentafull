@@ -277,6 +277,32 @@ const canAccessClinic = (req: any, clinicId: string): boolean => {
 
 // ─── Markaziy (yagona) xabar yuborish funksiyasi ─────────────────────────────
 // Barcha kanallar (Telegram/SMS) shu yerdan o'tadi va yagona TelegramLog tarixiga yoziladi.
+// ─── Chastota chegarasi (bir bemorga N kun ichida bittadan ko'p xabar yubormaslik) ──
+// Klinika sozlamasi mavjud PlatformSetting kalit-qiymat jadvalida saqlanadi —
+// shu sabab yangi ustun va migratsiya kerak emas.
+const cooldownKey = (clinicId: string) => `messages:cooldownDays:${clinicId}`;
+
+async function getMessageCooldownDays(clinicId: string): Promise<number> {
+    try {
+        const row = await prisma.platformSetting.findUnique({ where: { key: cooldownKey(clinicId) } });
+        const days = parseInt(row?.value || '0');
+        return isNaN(days) || days < 0 ? 0 : days;
+    } catch {
+        return 0;
+    }
+}
+
+// Bemorga oxirgi N kun ichida muvaffaqiyatli xabar yuborilganmi
+async function isWithinCooldown(clinicId: string, patientId: string, days: number): Promise<boolean> {
+    if (days <= 0) return false;
+    const since = new Date(Date.now() - days * 86400000);
+    const recent = await prisma.telegramLog.findFirst({
+        where: { clinicId, patientId, status: 'Sent', sentAt: { gte: since } },
+        select: { id: true }
+    });
+    return !!recent;
+}
+
 type UnifiedSendOpts = {
     // 'auto' = clinic.notificationMode bo'yicha
     // 'telegram_first' = Telegram bo'lsa faqat Telegram, aks holda SMS (arzon yo'l)
@@ -286,6 +312,9 @@ type UnifiedSendOpts = {
     refId?: string;    // masalan appointmentId
     type?: string;     // TelegramLog.type (eski maydon)
     replyMarkup?: any;
+    // Chastota chegarasi qo'llanilsinmi. Avtomatika va ommaviy yuborish uchun ha,
+    // qo'lda bitta xabar / qayta yuborish / test uchun yo'q.
+    respectCooldown?: boolean;
 };
 
 async function sendUnified(
@@ -306,6 +335,33 @@ async function sendUnified(
     let attempted = false;
     let anySuccess = false;
     let lastError: string | undefined;
+
+    // Chastota chegarasi: yaqinda xabar olgan bemorga qayta yubormaymiz.
+    // 'Skipped' holati bilan yoziladi — bu xato emas, shuning uchun "Xato"
+    // hisoblagichini shishirmaydi va qayta yuborishga tushmaydi.
+    if (opts.respectCooldown && patient.id) {
+        const cooldownDays = await getMessageCooldownDays(clinic.id);
+        if (await isWithinCooldown(clinic.id, patient.id, cooldownDays)) {
+            const reason = `Chastota chegarasi: oxirgi ${cooldownDays} kun ichida xabar yuborilgan`;
+            await prisma.telegramLog.create({
+                data: {
+                    clinicId: clinic.id,
+                    patientId: patient.id,
+                    type: logType,
+                    status: 'Skipped',
+                    message,
+                    error: reason,
+                    channel: channel === 'sms' ? 'sms' : 'telegram',
+                    source: logExtra.source,
+                    ruleId: logExtra.ruleId || null,
+                    refId: logExtra.refId || null,
+                    recipient: patient.phone || patient.telegramChatId || null,
+                }
+            }).catch((err: any) => console.error('Cooldown log error:', err));
+            console.log(`[Notification] SKIPPED (cooldown ${cooldownDays}d) → ${patientName}`);
+            return { success: false, error: reason };
+        }
+    }
 
     // Telegram
     if ((channel === 'telegram' || channel === 'both' || channel === 'telegram_first') && clinic.botToken && patient.telegramChatId) {
@@ -710,7 +766,7 @@ app.delete('/api/automation-rules/:id', authenticateToken, async (req, res) => {
 // jarayonni /api/messages/bulk-status orqali kuzatadi, natija esa Tarixda ko'rinadi.
 const bulkJobs = new Map<string, { total: number; sent: number; failed: number; done: boolean; startedAt: number; error?: string }>();
 
-async function runBulkSend(clinicId: string, clinic: any, patients: any[], message: string, channel: string) {
+async function runBulkSend(clinicId: string, clinic: any, patients: any[], message: string, channel: string, ignoreCooldown = false) {
     const job = bulkJobs.get(clinicId)!;
     try {
         const patientIds = patients.map(p => p.id);
@@ -750,7 +806,7 @@ async function runBulkSend(clinicId: string, clinic: any, patients: any[], messa
                 clinicName: clinic.name,
                 amount: debtMap.get(patient.id) || 0,
             });
-            const result = await sendUnified(clinic, patient, personalized, { channel: channel as any, source: 'bulk', type: 'Bulk' });
+            const result = await sendUnified(clinic, patient, personalized, { channel: channel as any, source: 'bulk', type: 'Bulk', respectCooldown: !ignoreCooldown });
             if (result.success) job.sent++; else job.failed++;
         }
     } catch (error: any) {
@@ -765,7 +821,7 @@ app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
-        const { patientIds, message, channel } = req.body;
+        const { patientIds, message, channel, ignoreCooldown } = req.body;
         if (!Array.isArray(patientIds) || patientIds.length === 0) return res.status(400).json({ error: 'Bemorlar tanlanmagan' });
         if (!message || !message.trim()) return res.status(400).json({ error: 'Xabar matni bo\'sh' });
         if (!MESSAGE_CHANNELS.includes(channel)) return res.status(400).json({ error: 'Noto\'g\'ri kanal' });
@@ -784,12 +840,96 @@ app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
         if (patients.length === 0) return res.status(400).json({ error: 'Bemorlar topilmadi' });
 
         bulkJobs.set(clinicId as string, { total: patients.length, sent: 0, failed: 0, done: false, startedAt: Date.now() });
-        void runBulkSend(clinicId as string, clinic, patients, message, channel);
+        void runBulkSend(clinicId as string, clinic, patients, message, channel, !!ignoreCooldown);
 
         res.json({ total: patients.length, queued: true });
     } catch (error: any) {
         console.error('Bulk send error:', error);
         res.status(500).json({ error: 'Xabarlarni yuborishda xatolik' });
+    }
+});
+
+// Xabarlar moduli sozlamalari (hozircha faqat chastota chegarasi)
+app.get('/api/messages/settings', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        res.json({ cooldownDays: await getMessageCooldownDays(clinicId as string) });
+    } catch (error) {
+        res.status(500).json({ error: 'Sozlamalarni olishda xatolik' });
+    }
+});
+
+app.put('/api/messages/settings', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const days = parseInt(req.body?.cooldownDays);
+        if (isNaN(days) || days < 0 || days > 365) {
+            return res.status(400).json({ error: 'Kunlar soni 0 dan 365 gacha bo\'lishi kerak' });
+        }
+        const key = cooldownKey(clinicId as string);
+        await prisma.platformSetting.upsert({
+            where: { key },
+            update: { value: String(days), updatedAt: new Date() },
+            create: { key, value: String(days) },
+        });
+        res.json({ cooldownDays: days });
+    } catch (error) {
+        console.error('Messages settings save error:', error);
+        res.status(500).json({ error: 'Sozlamalarni saqlashda xatolik' });
+    }
+});
+
+// Test yuborish: aynan shu matnni o'zingizga yuborib ko'rish.
+// Chastota chegarasiga bo'ysunmaydi va bemorlarga tegmaydi.
+app.post('/api/messages/test-send', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { message, channel, phone, patientId } = req.body;
+        if (!message || !message.trim()) return res.status(400).json({ error: 'Xabar matni bo\'sh' });
+
+        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId as string } });
+        if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+
+        // O'zgaruvchilar real ma'lumot bilan to'lsin — namuna bemor bo'yicha
+        let sample: any = null;
+        if (patientId) {
+            sample = await prisma.patient.findFirst({ where: { id: patientId, clinicId: clinicId as string } });
+        }
+        const todayStr = new Date().toISOString().split('T')[0];
+        const personalized = processTemplate(message, {
+            patientName: sample ? `${sample.firstName} ${sample.lastName}` : 'Test Bemor',
+            firstName: sample?.firstName || 'Test',
+            lastName: sample?.lastName || 'Bemor',
+            date: todayStr,
+            time: '14:30',
+            clinicName: clinic.name,
+            doctorName: 'Test Shifokor',
+            amount: 0,
+        });
+
+        if (channel === 'telegram') {
+            if (!clinic.telegramChatId) {
+                return res.status(400).json({ error: 'Klinika Telegram chat ID sozlanmagan. Sozlamalar bo\'limida botga /start bosing.' });
+            }
+            const result = await botManager.notifyClinicUser(
+                clinic.id, clinic.telegramChatId, personalized, undefined, 'Test', undefined, { source: 'test' }
+            );
+            if (!result.success) return res.status(400).json({ error: result.error });
+            return res.json({ success: true, sentText: personalized });
+        }
+
+        // SMS
+        const target = phone || clinic.ownerPhone;
+        if (!target) return res.status(400).json({ error: 'Test uchun telefon raqamini kiriting' });
+        const result = await smsService.sendSms(clinic.id, target, personalized);
+        if (!result.success) return res.status(400).json({ error: result.error });
+        res.json({ success: true, sentText: personalized });
+    } catch (error: any) {
+        console.error('Test send error:', error);
+        res.status(500).json({ error: 'Test yuborishda xatolik: ' + error.message });
     }
 });
 
@@ -4868,7 +5008,7 @@ async function processBirthdayRules() {
                 });
 
                 await sendUnified(clinic, patient, message, {
-                    channel: rule.channel as any, source: 'birthday', ruleId: rule.id, refId, type: 'Birthday'
+                    channel: rule.channel as any, source: 'birthday', ruleId: rule.id, refId, type: 'Birthday', respectCooldown: true
                 });
             }
         }
@@ -4918,7 +5058,7 @@ async function processNoShowRules() {
                 };
 
                 await sendUnified(clinic, appt.patient, message, {
-                    channel: rule.channel as any, source: 'noshow', ruleId: rule.id, refId: appt.id, type: 'NoShow', replyMarkup
+                    channel: rule.channel as any, source: 'noshow', ruleId: rule.id, refId: appt.id, type: 'NoShow', replyMarkup, respectCooldown: true
                 });
             }
         }
