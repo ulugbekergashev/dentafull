@@ -326,7 +326,13 @@ async function sendUnified(
     const mode = clinic.notificationMode || 'telegram_only';
     let channel = opts.channel;
     if (channel === 'auto') {
-        channel = mode === 'sms_only' ? 'sms' : mode === 'both' ? 'both' : 'telegram';
+        // 'telegram_first' — Sozlamalardagi yangi, tejamli variant.
+        // 'both' o'z ma'nosini saqlaydi (ikkalasiga ham yuboradi) — klinika uni
+        // ataylab tanlagan bo'lishi mumkin, jimgina o'zgartirmaymiz.
+        channel = mode === 'sms_only' ? 'sms'
+            : mode === 'both' ? 'both'
+                : mode === 'telegram_first' ? 'telegram_first'
+                    : 'telegram';
     }
     const patientName = `${patient.firstName} ${patient.lastName || ''}`.trim();
     const logExtra = { source: opts.source || 'manual', ruleId: opts.ruleId, refId: opts.refId };
@@ -1694,13 +1700,23 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
             }
         });
 
-        // Check if status changed to 'No-Show' and send notification
+        // Kelmagan bemorga xabar.
+        // MUHIM: klinikada faol 'no_show' qoidasi bo'lsa, bu yerdan YUBORMAYMIZ —
+        // aks holda bemor ikkita xabar oladi (bu yerdagi qat'iy matn + qoidaning
+        // shabloni) va SMS uchun ikki marta pul ketadi. Dedupe bu ikkisini
+        // ushlay olmaydi, chunki bu yo'lda ruleId yo'q.
         if (status === 'No-Show') {
             const clinic = appointment.patient.clinic as any;
-            const message = `❗️ Siz ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinic.phone}`;
+            const hasNoShowRule = await prisma.automationRule.count({
+                where: { clinicId: clinic.id, trigger: 'no_show', active: true }
+            });
 
-            // Unified notification sender
-            await sendUnified(clinic, appointment.patient, message, { channel: 'auto', source: 'noshow', refId: appointment.id, type: 'NoShow' });
+            if (hasNoShowRule === 0) {
+                const message = `❗️ Siz ${appointment.date} soat ${appointment.time} dagi qabulga kelmadingiz.\n\nIltimos, klinika bilan bog'lanib keyingi qabul vaqtini aniqlang!\n\n📞 Telefon: ${clinic.phone}`;
+                await sendUnified(clinic, appointment.patient, message, { channel: 'auto', source: 'noshow', refId: appointment.id, type: 'NoShow' });
+            } else {
+                console.log(`[NoShow] ${appointment.id}: faol qoida bor, qat'iy matn o'tkazib yuborildi`);
+            }
         }
 
         // Check if status changed to 'Completed' and send rating request after 1 hour
@@ -1824,7 +1840,8 @@ app.post('/api/patients/:id/send-message', authenticateToken, async (req, res) =
         const clinic = patient.clinic as any;
         const mode = clinic.notificationMode || 'telegram_only';
         const hasTelegram = !!clinic.botToken && !!patient.telegramChatId;
-        const hasSms = (mode === 'sms_only' || mode === 'both') && !!clinic.eskizEmail && !!patient.phone;
+        const hasSms = (mode === 'sms_only' || mode === 'both' || mode === 'telegram_first')
+            && !!clinic.eskizEmail && !!patient.phone;
 
         if (!hasTelegram && !hasSms) {
             return res.status(400).json({ error: 'Bemor bilan bog\'lanish imkoni yo\'q (Telegram ham, SMS ham ulangan emas)' });
