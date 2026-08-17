@@ -313,9 +313,22 @@ export interface RuleSchedule {
 
 /** Serverdan kelgan auditoriya hisobi */
 export interface AudiencePreview {
+  /** Xabar yetib boradigan bemorlar soni */
   total: number;
+  /** Filtrga mos kelgan bemorlar (yetib bormaydiganlari bilan birga) */
   matched: number;
   unreachable: number;
+  /** Kimga yetib bormaydi va nima uchun — klinika tuzata olishi uchun */
+  unreachableList: { id: string; name: string; reason: string }[];
+  /** Filtrlar bosqichma-bosqich nechtadan qoldirgani */
+  funnel: {
+    clinicTotal: number;
+    afterStatus: number;
+    afterInactive: number;
+    matched: number;
+  };
+  /** Har bir tezkor filtr nechtaga mos — bosishdan oldin ko'rinadi */
+  facets: { debtors: number; birthdayToday: number; birthdayMonth: number };
   viaTelegram: number;
   viaSms: number;
   description: string;

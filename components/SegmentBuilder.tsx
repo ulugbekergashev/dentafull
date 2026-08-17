@@ -15,7 +15,9 @@ import { CheckCircle2 } from 'lucide-react';
 const inputCls = "w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400";
 const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5";
 
-const QUICK_FILTERS: { key: keyof AudienceSegment; label: string }[] = [
+type FacetKey = 'debtors' | 'birthdayToday' | 'birthdayMonth';
+
+const QUICK_FILTERS: { key: FacetKey; label: string }[] = [
     { key: 'debtors', label: '⏰ Qarzdorlar' },
     { key: 'birthdayToday', label: "🎁 Bugun tug'ilgan kun" },
     { key: 'birthdayMonth', label: "🎁 Bu oy tug'ilgan kunlari" },
@@ -25,11 +27,13 @@ interface Props {
     value: AudienceSegment;
     onChange: (next: AudienceSegment) => void;
     doctors: Doctor[];
+    /** Har bir tezkor filtr nechtaga mos — tugmada ko'rsatiladi */
+    facets?: { debtors: number; birthdayToday: number; birthdayMonth: number };
     /** Ixcham ko'rinish (qoida formasi ichida) */
     compact?: boolean;
 }
 
-export const SegmentBuilder: React.FC<Props> = ({ value, onChange, doctors, compact }) => {
+export const SegmentBuilder: React.FC<Props> = ({ value, onChange, doctors, facets, compact }) => {
     const set = (patch: Partial<AudienceSegment>) => onChange({ ...value, ...patch });
 
     return (
@@ -91,17 +95,27 @@ export const SegmentBuilder: React.FC<Props> = ({ value, onChange, doctors, comp
                 <div className="flex flex-wrap gap-2">
                     {QUICK_FILTERS.map(({ key, label }) => {
                         const active = !!value[key];
+                        const count = facets?.[key];
+                        // 0 ta bemorga mos filtr — bosishdan ma'no yo'q, o'chirib qo'yamiz
+                        const empty = count === 0 && !active;
                         return (
                             <button
                                 key={key}
                                 type="button"
+                                disabled={empty}
+                                title={empty ? 'Bu filtrga mos bemor yo\'q' : undefined}
                                 onClick={() => set({ [key]: !active } as Partial<AudienceSegment>)}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${active
                                     ? 'bg-primary-600 text-white border-primary-600'
-                                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
+                                    : empty
+                                        ? 'bg-gray-50 dark:bg-gray-900 text-gray-300 dark:text-gray-600 border-gray-100 dark:border-gray-800 cursor-not-allowed'
+                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                             >
                                 {active && <CheckCircle2 className="w-3.5 h-3.5" />}
                                 {label}
+                                {count !== undefined && (
+                                    <span className={active ? 'text-white/70' : 'text-gray-400'}>({count})</span>
+                                )}
                             </button>
                         );
                     })}

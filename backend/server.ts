@@ -906,35 +906,58 @@ app.post('/api/messages/audience', authenticateToken, async (req, res) => {
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { segment, channel } = req.body;
 
-        const { patients, debtMap } = await resolveSegment(clinicId as string, segment);
-
-        // Kanal bo'yicha yetib borish imkoni
-        let reachable = patients;
-        let viaTelegram = 0;
-        let viaSms = 0;
-        let unreachable = 0;
+        const { patients, debtMap, funnel, facets } = await resolveSegment(clinicId as string, segment);
 
         const hasPhone = (p: any) => !!normalizeUzPhone(p.phone);
+        const hasTg = (p: any) => !!p.telegramChatId;
+
+        // Kanal bo'yicha yetib bora oladimi + yeta olmasa ANIQ sababi.
+        // Sabab bemor bo'yicha aytiladi, aks holda klinika nimani tuzatishni bilmaydi.
+        const canReach = (p: any): { ok: boolean; reason?: string } => {
+            if (channel === 'telegram') {
+                return hasTg(p) ? { ok: true } : { ok: false, reason: 'Botga ulanmagan' };
+            }
+            if (channel === 'sms') {
+                if (!p.phone) return { ok: false, reason: "Telefon raqami yo'q" };
+                if (!hasPhone(p)) return { ok: false, reason: `Raqam formati noto'g'ri: ${p.phone}` };
+                return { ok: true };
+            }
+            // telegram_first / both
+            if (hasTg(p) || hasPhone(p)) return { ok: true };
+            if (p.phone) return { ok: false, reason: `Botga ulanmagan, raqam formati noto'g'ri: ${p.phone}` };
+            return { ok: false, reason: "Botga ulanmagan va telefon raqami yo'q" };
+        };
+
+        const reachable: any[] = [];
+        const unreachableList: any[] = [];
+        for (const p of patients) {
+            const check = canReach(p);
+            if (check.ok) reachable.push(p);
+            else unreachableList.push({ id: p.id, name: `${p.firstName} ${p.lastName}`, reason: check.reason });
+        }
+
+        let viaTelegram = 0;
+        let viaSms = 0;
         if (channel === 'telegram') {
-            reachable = patients.filter((p: any) => p.telegramChatId);
             viaTelegram = reachable.length;
         } else if (channel === 'sms') {
-            reachable = patients.filter(hasPhone);
             viaSms = reachable.length;
+        } else if (channel === 'both') {
+            viaTelegram = reachable.filter(hasTg).length;
+            viaSms = reachable.filter(hasPhone).length;
         } else {
-            // telegram_first / both
-            reachable = patients.filter((p: any) => p.telegramChatId || hasPhone(p));
-            viaTelegram = reachable.filter((p: any) => p.telegramChatId).length;
-            viaSms = channel === 'both'
-                ? reachable.filter(hasPhone).length
-                : reachable.length - viaTelegram;
+            // telegram_first: Telegram bo'lsa u, aks holda SMS
+            viaTelegram = reachable.filter(hasTg).length;
+            viaSms = reachable.length - viaTelegram;
         }
-        unreachable = patients.length - reachable.length;
 
         res.json({
             total: reachable.length,
             matched: patients.length,
-            unreachable,
+            unreachable: unreachableList.length,
+            unreachableList: unreachableList.slice(0, 50),
+            funnel,
+            facets,
             viaTelegram,
             viaSms,
             description: describeSegment(segment),

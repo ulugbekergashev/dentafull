@@ -82,6 +82,22 @@ export interface ResolvedAudience {
     patients: any[];
     /** Har bemorning qarzi — {qarz} uchun */
     debtMap: Map<string, number>;
+    /** Filtrlar bosqichma-bosqich nechtadan qoldirgani (UI da "voronka" uchun) */
+    funnel: {
+        /** Klinikadagi barcha bemorlar */
+        clinicTotal: number;
+        /** Status + shifokor filtridan keyin */
+        afterStatus: number;
+        /** "Uzoq kelmagan" filtridan keyin */
+        afterInactive: number;
+        /** Tezkor filtrlardan keyin (yakuniy) */
+        matched: number;
+    };
+    /**
+     * Har bir tezkor filtr joriy bazada nechta bemorga mos keladi.
+     * Foydalanuvchi tugmani bosishdan oldin natijani ko'radi.
+     */
+    facets: { debtors: number; birthdayToday: number; birthdayMonth: number };
 }
 
 /**
@@ -91,47 +107,67 @@ export interface ResolvedAudience {
 export async function resolveSegment(clinicId: string, segment?: AudienceSegment | null): Promise<ResolvedAudience> {
     const seg: AudienceSegment = { ...EMPTY_SEGMENT, ...(segment || {}) };
 
-    // Bazadan tortib olinadigan qism
-    const patients = await prisma.patient.findMany({
-        where: {
-            clinicId,
-            ...(seg.status !== 'All' ? { status: 'Active' } : {}),
-            ...(seg.doctorId ? { doctorId: seg.doctorId } : {}),
-        },
-    });
-
-    const debtMap = await buildDebtMap(clinicId);
+    const [allPatients, debtMap] = await Promise.all([
+        prisma.patient.findMany({ where: { clinicId } }),
+        buildDebtMap(clinicId),
+    ]);
 
     const now = new Date();
     const todayMonthDay = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const thisMonth = String(now.getMonth() + 1).padStart(2, '0');
 
+    // 1-bosqich: status + shifokor
+    const afterStatus = (allPatients as any[]).filter(p => {
+        if (seg.status !== 'All' && p.status !== 'Active') return false;
+        if (seg.doctorId && p.doctorId !== seg.doctorId) return false;
+        return true;
+    });
+
+    // 2-bosqich: "uzoq kelmagan"
     let cutoff: Date | null = null;
     if (seg.inactiveMonths) {
         cutoff = new Date();
         cutoff.setMonth(cutoff.getMonth() - seg.inactiveMonths);
     }
+    const afterInactive = afterStatus.filter(p => {
+        if (!cutoff) return true;
+        const visit = p.lastVisit ? new Date(p.lastVisit) : null;
+        const hasVisit = !!visit && !isNaN(visit.getTime());
+        if (!hasVisit) return !!seg.includeNeverVisited; // sanasi yo'q — ataylab qaror
+        return visit! <= cutoff;
+    });
 
-    const filtered = (patients as any[]).filter(p => {
-        if (cutoff) {
-            const visit = p.lastVisit ? new Date(p.lastVisit) : null;
-            const hasVisit = !!visit && !isNaN(visit.getTime());
-            if (!hasVisit) {
-                // Sanasi yo'q yoki o'qib bo'lmaydi — ataylab qaror
-                if (!seg.includeNeverVisited) return false;
-            } else if (visit! > cutoff) {
-                return false;
-            }
-        }
+    // Tezkor filtrlar bo'yicha predikatlar
+    const isDebtor = (p: any) => (debtMap.get(p.id) || 0) > 0;
+    const isBirthdayToday = (p: any) => dobToMonthDay(p.dob) === todayMonthDay;
+    const isBirthdayMonth = (p: any) => dobToMonthDay(p.dob).startsWith(`${thisMonth}-`);
 
-        if (seg.debtors && !((debtMap.get(p.id) || 0) > 0)) return false;
-        if (seg.birthdayToday && dobToMonthDay(p.dob) !== todayMonthDay) return false;
-        if (seg.birthdayMonth && !dobToMonthDay(p.dob).startsWith(`${thisMonth}-`)) return false;
+    // Facet: har bir tugma joriy bazada nechtaga mos — bosishdan oldin ko'rinadi
+    const facets = {
+        debtors: afterInactive.filter(isDebtor).length,
+        birthdayToday: afterInactive.filter(isBirthdayToday).length,
+        birthdayMonth: afterInactive.filter(isBirthdayMonth).length,
+    };
 
+    // 3-bosqich: tanlangan tezkor filtrlar
+    const matched = afterInactive.filter(p => {
+        if (seg.debtors && !isDebtor(p)) return false;
+        if (seg.birthdayToday && !isBirthdayToday(p)) return false;
+        if (seg.birthdayMonth && !isBirthdayMonth(p)) return false;
         return true;
     });
 
-    return { patients: filtered, debtMap };
+    return {
+        patients: matched,
+        debtMap,
+        funnel: {
+            clinicTotal: allPatients.length,
+            afterStatus: afterStatus.length,
+            afterInactive: afterInactive.length,
+            matched: matched.length,
+        },
+        facets,
+    };
 }
 
 /** Segment tavsifini odam o'qiy oladigan matnga aylantiradi (UI va loglar uchun) */

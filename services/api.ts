@@ -1239,12 +1239,21 @@ export const api = {
         // Auditoriyani doim server hisoblaydi — "qarzdor" ta'rifi bitta bo'lsin
         audience: (clinicId: string, segment: AudienceSegment, channel: MessageChannel) => {
             if (isDemoMode()) {
-                return Promise.resolve({
-                    total: DEMO_PATIENTS.length, matched: DEMO_PATIENTS.length, unreachable: 0,
-                    viaTelegram: DEMO_PATIENTS.length, viaSms: 0, description: 'Demo',
+                const n = DEMO_PATIENTS.length;
+                const preview: AudiencePreview = {
+                    total: n,
+                    matched: n,
+                    unreachable: 0,
+                    unreachableList: [],
+                    funnel: { clinicTotal: n, afterStatus: n, afterInactive: n, matched: n },
+                    facets: { debtors: 0, birthdayToday: 0, birthdayMonth: 0 },
+                    viaTelegram: n,
+                    viaSms: 0,
+                    description: 'Demo',
                     patientIds: DEMO_PATIENTS.map(p => p.id),
                     sample: DEMO_PATIENTS.slice(0, 3).map(p => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, debt: 0 })),
-                } as AudiencePreview);
+                };
+                return Promise.resolve(preview);
             }
             return fetchJson<AudiencePreview>('/messages/audience', {
                 method: 'POST',

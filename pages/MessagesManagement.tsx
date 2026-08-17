@@ -92,6 +92,23 @@ function eskizStatusBadge(status?: string | null): { label: string; cls: string 
     return { label: `Moderatsiyada (${status})`, cls: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' };
 }
 
+// Auditoriya hisobining bitta qatori — son qayerdan kelgani ko'rinib tursin
+const FunnelRow: React.FC<{ label: string; value: number; diff?: number; isDeduction?: boolean }> = ({
+    label, value, diff, isDeduction,
+}) => (
+    <div className="flex items-center justify-between px-4 py-2">
+        <span className="text-gray-500 dark:text-gray-400">{label}</span>
+        <span className="flex items-center gap-2">
+            {diff !== undefined && diff !== 0 && (
+                <span className="text-xs text-gray-400">{diff > 0 ? `+${diff}` : diff}</span>
+            )}
+            <span className={`font-bold ${isDeduction ? 'text-amber-600' : 'text-gray-900 dark:text-white'}`}>
+                {isDeduction ? value : `${value} ta`}
+            </span>
+        </span>
+    </div>
+);
+
 export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     clinicId, currentClinic, doctors, addToast
 }) => {
@@ -309,6 +326,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     const [segment, setSegment] = useState<AudienceSegment>({ status: 'Active' });
     const [audience, setAudience] = useState<AudiencePreview | null>(null);
     const [audienceLoading, setAudienceLoading] = useState(false);
+    const [showUnreachable, setShowUnreachable] = useState(false);
     const [manualMessage, setManualMessage] = useState('');
     const [manualSending, setManualSending] = useState(false);
 
@@ -1005,58 +1023,119 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <Users className="w-5 h-5 text-gray-400" /> Kimga yuborish?
                         </h3>
-                        <SegmentBuilder value={segment} onChange={setSegment} doctors={doctors} />
-                        <div className="flex items-center gap-2 px-4 py-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-sm">
-                            <Eye className="w-4 h-4 text-primary-600 shrink-0" />
-                            <span className="text-primary-700 dark:text-primary-400">
-                                {audienceLoading ? 'Hisoblanmoqda...' : (
-                                    <>
-                                        <strong>{recipientCount} ta bemor</strong>
-                                        {' '}({manualChannel === 'sms' ? '📱 telefon raqami bor'
-                                            : manualChannel === 'telegram' ? '✈️ Telegramga ulangan'
-                                                : '✈️ Telegram yoki 📱 SMS bilan yetib boradi'})
-                                        {recipientSample.length > 0 && (
-                                            <span className="text-primary-600/70 dark:text-primary-400/70">
-                                                {' — '}
-                                                {recipientSample.map(r => `${r.firstName} ${r.lastName}`).join(', ')}
-                                                {recipientCount > recipientSample.length ? ` va yana ${recipientCount - recipientSample.length} ta` : ''}
+                        <SegmentBuilder value={segment} onChange={setSegment} doctors={doctors} facets={audience?.facets} />
+
+                        {/* Hisob-kitob: son qayerdan kelgani bosqichma-bosqich ko'rinadi */}
+                        {audienceLoading ? (
+                            <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl text-sm text-gray-500">
+                                Hisoblanmoqda...
+                            </div>
+                        ) : audience ? (
+                            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                                <div className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
+                                    <FunnelRow
+                                        label="Klinikada bemorlar"
+                                        value={audience.funnel.clinicTotal}
+                                    />
+                                    {audience.funnel.afterStatus !== audience.funnel.clinicTotal && (
+                                        <FunnelRow
+                                            label={segment.status === 'All' ? 'Shifokor filtridan keyin' : 'Faol bemorlar' + (segment.doctorId ? ' + shifokor' : '')}
+                                            value={audience.funnel.afterStatus}
+                                            diff={audience.funnel.afterStatus - audience.funnel.clinicTotal}
+                                        />
+                                    )}
+                                    {audience.funnel.afterInactive !== audience.funnel.afterStatus && (
+                                        <FunnelRow
+                                            label={`${segment.inactiveMonths} oydan beri kelmagan`}
+                                            value={audience.funnel.afterInactive}
+                                            diff={audience.funnel.afterInactive - audience.funnel.afterStatus}
+                                        />
+                                    )}
+                                    {audience.funnel.matched !== audience.funnel.afterInactive && (
+                                        <FunnelRow
+                                            label="Tezkor filtrlardan keyin"
+                                            value={audience.funnel.matched}
+                                            diff={audience.funnel.matched - audience.funnel.afterInactive}
+                                        />
+                                    )}
+                                    {unreachableCount > 0 && (
+                                        <FunnelRow
+                                            label="Tanlangan kanal bilan yetib bo'lmaydi"
+                                            value={-unreachableCount}
+                                            isDeduction
+                                        />
+                                    )}
+                                    <div className="flex items-center justify-between px-4 py-3 bg-primary-50 dark:bg-primary-900/20">
+                                        <span className="flex items-center gap-2 font-bold text-primary-700 dark:text-primary-400">
+                                            <Eye className="w-4 h-4" /> Xabar yetib boradi
+                                        </span>
+                                        <span className="font-black text-lg text-primary-700 dark:text-primary-400">
+                                            {recipientCount} ta
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Narx — pul faqat SMS uchun ketadi */}
+                                {recipientCount > 0 && (
+                                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 text-sm">
+                                        {viaTelegram > 0 && (
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                                ✈️ {viaTelegram} ta — bepul
                                             </span>
                                         )}
-                                    </>
+                                        {viaSms > 0 && (
+                                            <span className="text-amber-600 dark:text-amber-400 font-bold">
+                                                📱 {viaSms} ta — pullik
+                                                {smsInfo.parts > 1 && ` × ${smsInfo.parts} qism`}
+                                                {totalSmsParts > 0 && ` = ${totalSmsParts} SMS`}
+                                            </span>
+                                        )}
+                                        {smsBalance !== null && (
+                                            <span className={`text-xs ${totalSmsParts > smsBalance ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                                                Eskiz balansi: {smsBalance.toLocaleString()} SMS
+                                                {totalSmsParts > smsBalance && ' — yetmaydi!'}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
-                            </span>
-                        </div>
-                        {/* Narx taqsimoti — pul faqat SMS uchun ketadi */}
-                        {recipientCount > 0 && (
-                            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm">
-                                {viaTelegram > 0 && (
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                        ✈️ {viaTelegram} ta — bepul
-                                    </span>
-                                )}
-                                {viaSms > 0 && (
-                                    <span className="text-amber-600 dark:text-amber-400 font-bold">
-                                        📱 {viaSms} ta — pullik
-                                        {smsInfo.parts > 1 && ` × ${smsInfo.parts} qism`}
-                                        {totalSmsParts > 0 && ` = ${totalSmsParts} SMS`}
-                                    </span>
-                                )}
-                                {smsBalance !== null && (
-                                    <span className={`text-xs ${totalSmsParts > smsBalance ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                                        Balans: {smsBalance.toLocaleString()}
-                                        {totalSmsParts > smsBalance && ' — yetmaydi!'}
-                                    </span>
+
+                                {recipientSample.length > 0 && (
+                                    <div className="px-4 py-2.5 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500">
+                                        Masalan: {recipientSample.map(r => `${r.firstName} ${r.lastName}`).join(', ')}
+                                        {recipientCount > recipientSample.length ? ` va yana ${recipientCount - recipientSample.length} ta` : ''}
+                                    </div>
                                 )}
                             </div>
-                        )}
+                        ) : null}
 
+                        {/* Kimga yetib bormaydi va NIMA UCHUN — klinika tuzata olishi uchun */}
                         {unreachableCount > 0 && (
-                            <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
-                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                <span>
-                                    Filtrga mos yana <strong>{unreachableCount} ta bemor</strong> ro'yxatga kirmadi — tanlangan kanal bilan yetib bo'lmaydi
-                                    (telefon raqami yo'q yoki formati noto'g'ri, yoki botga ulanmagan).
-                                </span>
+                            <div className="border border-amber-200 dark:border-amber-800 rounded-xl overflow-hidden">
+                                <button
+                                    onClick={() => setShowUnreachable(v => !v)}
+                                    className="w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-700 dark:text-amber-400"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                        <strong>{unreachableCount} ta bemorga</strong> yetib bo'lmaydi
+                                    </span>
+                                    <span className="font-bold">{showUnreachable ? 'Yashirish' : "Kimlar? Ko'rsatish"}</span>
+                                </button>
+                                {showUnreachable && (
+                                    <div className="divide-y divide-amber-100 dark:divide-amber-900/40 max-h-56 overflow-y-auto">
+                                        {(audience?.unreachableList || []).map(u => (
+                                            <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                                                <span className="font-medium text-gray-700 dark:text-gray-300">{u.name}</span>
+                                                <span className="text-amber-600 dark:text-amber-500 text-right">{u.reason}</span>
+                                            </div>
+                                        ))}
+                                        {unreachableCount > (audience?.unreachableList?.length || 0) && (
+                                            <div className="px-4 py-2 text-xs text-gray-400">
+                                                ...va yana {unreachableCount - (audience?.unreachableList?.length || 0)} ta
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </Card>
