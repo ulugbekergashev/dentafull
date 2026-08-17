@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -19,7 +19,7 @@ export interface CashCloseInput {
     expectedClick?: number | null;
     note?: string;
 }
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, saveDemoData } from './demoData';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, DEMO_TRIGGERS, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -1152,6 +1152,12 @@ export const api = {
                 return Promise.resolve(tpl as MessageTemplate);
             }
             return fetchJson<MessageTemplate>(`/message-templates/${id}/sync-eskiz-status`, { method: 'POST' });
+        },
+    },
+    automationTriggers: {
+        getAll: () => {
+            if (isDemoMode()) return Promise.resolve(DEMO_TRIGGERS);
+            return fetchJson<TriggerDescriptor[]>('/automation-triggers');
         },
     },
     automationRules: {

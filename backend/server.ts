@@ -553,7 +553,10 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
 
 // ─── Xabarlar: Shablonlar / Avto qoidalar / Bulk yuborish / Tarix ───────────
 
-const AUTOMATION_TRIGGERS = ['before_appointment', 'birthday', 'no_show'];
+// Triggerlar ro'yxati ./triggers.ts dan keladi — yangi trigger qo'shilganda
+// bu yer o'zgarmaydi. Baza ustuni oddiy String bo'lgani uchun migratsiya kerak emas.
+const { TRIGGER_IDS, TRIGGER_DESCRIPTORS, getTrigger } = require('./triggers');
+const AUTOMATION_TRIGGERS: string[] = TRIGGER_IDS;
 const MESSAGE_CHANNELS = ['sms', 'telegram', 'both', 'telegram_first'];
 
 // Templates CRUD
@@ -682,6 +685,12 @@ app.delete('/api/message-templates/:id', authenticateToken, async (req, res) => 
     }
 });
 
+// Mavjud triggerlar ro'yxati — frontend formani shu ro'yxatdan quradi,
+// shuning uchun yangi trigger qo'shilganda UI o'zi yangilanadi.
+app.get('/api/automation-triggers', authenticateToken, async (_req, res) => {
+    res.json(TRIGGER_DESCRIPTORS);
+});
+
 // Automation rules CRUD
 app.get('/api/automation-rules', authenticateToken, async (req, res) => {
     try {
@@ -713,7 +722,14 @@ app.post('/api/automation-rules', authenticateToken, async (req, res) => {
                 name,
                 templateId,
                 trigger,
-                hoursBefore: trigger === 'before_appointment' ? (parseInt(hoursBefore) || 2) : null,
+                // hoursBefore — umumiy "offset" ustuni. Har bir trigger uni o'z
+                // ma'nosida ishlatadi (soat oldin / soat keyin / kun / oy).
+                hoursBefore: (() => {
+                    const def = getTrigger(trigger);
+                    if (!def?.offset) return null;
+                    const parsed = parseInt(hoursBefore);
+                    return isNaN(parsed) ? def.offset.default : parsed;
+                })(),
                 channel,
                 doctorId: doctorId || null,
                 clinicId: clinicId as string,
@@ -4886,184 +4902,82 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // ============================================
 
 // ─── Avtomatika dvigateli (AutomationRule asosida) ───────────────────────────
-// Toshkent vaqti (UTC+5, DST yo'q): qabul sanasi/vaqti klinika devor soatida saqlanadi.
-const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
-const tashkentNowMs = () => Date.now() + TASHKENT_OFFSET_MS;
-const tashkentDateStr = (offsetDays = 0) =>
-    new Date(Date.now() + TASHKENT_OFFSET_MS + offsetDays * 86400000).toISOString().split('T')[0];
+// Triggerlar ro'yxati ./triggers.ts da. Yangi trigger qo'shish uchun shu faylga
+// bitta yozuv qo'shiladi — bu yerdagi dvigatel va cron o'zgarmaydi.
+const { TRIGGERS, isWithinSendWindow } = require('./triggers');
 
-// Bemor tug'ilgan kunini MM-DD ga keltirish (YYYY-MM-DD yoki DD.MM.YYYY formatlari)
-function dobToMonthDay(dob: string): string {
-    if (!dob) return '';
-    if (dob.includes('-')) {
-        const parts = dob.split('-');
-        if (parts.length === 3) return `${parts[1]}-${parts[2]}`;
-    } else if (dob.includes('.')) {
-        const parts = dob.split('.');
-        if (parts.length >= 2) return `${parts[1]}-${parts[0]}`;
-    }
-    return '';
-}
+/**
+ * Bitta trigger bo'yicha barcha faol qoidalarni bajaradi.
+ * Dedupe TelegramLog.ruleId + refId indeksi orqali — bir hodisaga bir marta.
+ */
+async function runTrigger(triggerDef: any, ignoreWindow = false) {
+    // Tinch soatlar: tug'ilgan kun tabrigi yarim tunda ketmasligi uchun
+    if (!ignoreWindow && !isWithinSendWindow(triggerDef)) return;
 
-async function loadRulesWithClinics(trigger: string) {
     const rules = await prisma.automationRule.findMany({
-        where: { active: true, trigger },
-        include: { template: true }
+        where: { active: true, trigger: triggerDef.id },
+        include: { template: true },
     });
-    if (rules.length === 0) return { rules, clinicMap: new Map<string, any>() };
-    const clinicIds = [...new Set(rules.map((r: any) => r.clinicId))];
+    if (rules.length === 0) return;
+
+    const clinicIds = [...new Set(rules.map((r: any) => r.clinicId))] as string[];
     const clinics = await prisma.clinic.findMany({ where: { id: { in: clinicIds } } });
-    return { rules, clinicMap: new Map<string, any>(clinics.map((c: any) => [c.id, c])) };
-}
+    const clinicMap = new Map<string, any>(clinics.map((c: any) => [c.id, c]));
 
-// Har 10 daqiqada: "Qabuldan N soat oldin" qoidalari
-async function processBeforeAppointmentRules() {
-    try {
-        const { rules, clinicMap } = await loadRulesWithClinics('before_appointment');
-        if (rules.length === 0) return;
+    for (const rule of rules) {
+        const clinic = clinicMap.get(rule.clinicId);
+        if (!clinic || !rule.template) continue;
 
-        const todayStr = tashkentDateStr(0);
-        const tomorrowStr = tashkentDateStr(1);
-        const nowMs = tashkentNowMs();
+        let due: any[] = [];
+        try {
+            due = await triggerDef.findDue(rule, clinic);
+        } catch (err) {
+            console.error(`❌ [${triggerDef.id}] findDue xatosi (rule ${rule.id}):`, err);
+            continue;
+        }
 
-        for (const rule of rules) {
-            const clinic = clinicMap.get(rule.clinicId);
-            if (!clinic) continue;
-            const hours = rule.hoursBefore || 2;
-
-            const appointments = await prisma.appointment.findMany({
-                where: {
-                    clinicId: rule.clinicId,
-                    date: { in: [todayStr, tomorrowStr] },
-                    status: { in: ['Confirmed', 'Pending'] },
-                    ...(rule.doctorId ? { doctorId: rule.doctorId } : {}),
-                },
-                include: { patient: true, doctor: true }
-            });
-
-            for (const appt of appointments) {
-                const apptMs = Date.parse(`${appt.date}T${appt.time}:00Z`);
-                if (isNaN(apptMs)) continue;
-                const sendFromMs = apptMs - hours * 3600000;
-                // Yuborish oynasi: (qabul - N soat) dan qabul vaqtigacha
-                if (nowMs < sendFromMs || nowMs >= apptMs) continue;
-
-                // Dedupe: shu qoida shu qabulga allaqachon yuborilgan (yoki urinilgan)
-                const existing = await prisma.telegramLog.findFirst({ where: { ruleId: rule.id, refId: appt.id } });
+        for (const item of due) {
+            try {
+                // Shu qoida shu hodisaga allaqachon ishlagan (yoki urinilgan)
+                const existing = await prisma.telegramLog.findFirst({
+                    where: { ruleId: rule.id, refId: item.refId },
+                    select: { id: true },
+                });
                 if (existing) continue;
 
-                const message = processTemplate(rule.template.text, {
-                    patientName: `${appt.patient.firstName} ${appt.patient.lastName}`,
-                    firstName: appt.patient.firstName,
-                    lastName: appt.patient.lastName,
-                    date: appt.date,
-                    time: appt.time,
-                    clinicName: clinic.name,
-                    doctorName: `${appt.doctor.firstName} ${appt.doctor.lastName}`,
+                const message = processTemplate(rule.template.text, item.vars);
+
+                await sendUnified(clinic, item.patient, message, {
+                    channel: rule.channel as any,
+                    source: triggerDef.id,
+                    ruleId: rule.id,
+                    refId: item.refId,
+                    type: item.type,
+                    replyMarkup: item.replyMarkup,
+                    respectCooldown: triggerDef.respectCooldown,
                 });
 
-                await sendUnified(clinic, appt.patient, message, {
-                    channel: rule.channel as any, source: 'auto', ruleId: rule.id, refId: appt.id, type: 'AutoReminder'
-                });
-                await prisma.appointment.update({ where: { id: appt.id }, data: { reminderSent: true } }).catch(() => { });
+                // Eski maydonni moslik uchun yangilaymiz
+                if (triggerDef.id === 'before_appointment') {
+                    await prisma.appointment
+                        .update({ where: { id: item.refId }, data: { reminderSent: true } })
+                        .catch(() => { });
+                }
+            } catch (err) {
+                console.error(`❌ [${triggerDef.id}] yuborishda xatolik (rule ${rule.id}):`, err);
             }
         }
-    } catch (error) {
-        console.error('❌ before_appointment rule engine error:', error);
     }
 }
 
-// Har kuni 09:00: tug'ilgan kun qoidalari
-async function processBirthdayRules() {
-    try {
-        const { rules, clinicMap } = await loadRulesWithClinics('birthday');
-        if (rules.length === 0) return;
-
-        const now = new Date(tashkentNowMs());
-        const todayMonthDay = `${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
-        const year = now.getUTCFullYear();
-        const todayStr = tashkentDateStr(0);
-
-        for (const rule of rules) {
-            const clinic = clinicMap.get(rule.clinicId);
-            if (!clinic) continue;
-
-            const patients = await prisma.patient.findMany({
-                where: { clinicId: rule.clinicId, status: 'Active' }
-            });
-
-            for (const patient of patients) {
-                if (dobToMonthDay(patient.dob) !== todayMonthDay) continue;
-
-                const refId = `${patient.id}:${year}`;
-                const existing = await prisma.telegramLog.findFirst({ where: { ruleId: rule.id, refId } });
-                if (existing) continue;
-
-                const message = processTemplate(rule.template.text, {
-                    patientName: `${patient.firstName} ${patient.lastName}`,
-                    firstName: patient.firstName,
-                    lastName: patient.lastName,
-                    date: todayStr,
-                    clinicName: clinic.name,
-                });
-
-                await sendUnified(clinic, patient, message, {
-                    channel: rule.channel as any, source: 'birthday', ruleId: rule.id, refId, type: 'Birthday', respectCooldown: true
-                });
-            }
+/** Har 10 daqiqada barcha triggerlarni tekshiradi */
+async function runAutomationEngine() {
+    for (const triggerDef of TRIGGERS) {
+        try {
+            await runTrigger(triggerDef);
+        } catch (err) {
+            console.error(`❌ Avtomatika dvigateli xatosi (${triggerDef.id}):`, err);
         }
-    } catch (error) {
-        console.error('❌ birthday rule engine error:', error);
-    }
-}
-
-// Har kuni 20:00: kelmagan bemorlar qoidalari
-async function processNoShowRules() {
-    try {
-        const { rules, clinicMap } = await loadRulesWithClinics('no_show');
-        if (rules.length === 0) return;
-
-        const todayStr = tashkentDateStr(0);
-
-        for (const rule of rules) {
-            const clinic = clinicMap.get(rule.clinicId);
-            if (!clinic) continue;
-
-            const appointments = await prisma.appointment.findMany({
-                where: {
-                    clinicId: rule.clinicId,
-                    date: todayStr,
-                    status: 'No-Show',
-                    ...(rule.doctorId ? { doctorId: rule.doctorId } : {}),
-                },
-                include: { patient: true, doctor: true }
-            });
-
-            for (const appt of appointments) {
-                const existing = await prisma.telegramLog.findFirst({ where: { ruleId: rule.id, refId: appt.id } });
-                if (existing) continue;
-
-                const message = processTemplate(rule.template.text, {
-                    patientName: `${appt.patient.firstName} ${appt.patient.lastName}`,
-                    firstName: appt.patient.firstName,
-                    lastName: appt.patient.lastName,
-                    date: appt.date,
-                    time: appt.time,
-                    clinicName: clinic.name,
-                    doctorName: `${appt.doctor.firstName} ${appt.doctor.lastName}`,
-                });
-
-                const replyMarkup = {
-                    inline_keyboard: [[{ text: "📅 Qabulga yozilish", callback_data: "start_booking" }]]
-                };
-
-                await sendUnified(clinic, appt.patient, message, {
-                    channel: rule.channel as any, source: 'noshow', ruleId: rule.id, refId: appt.id, type: 'NoShow', replyMarkup, respectCooldown: true
-                });
-            }
-        }
-    } catch (error) {
-        console.error('❌ no_show rule engine error:', error);
     }
 }
 
@@ -5185,18 +5099,11 @@ async function sendAppointmentReminders(clinicId?: string, customMessage?: strin
 
 console.log('✅ Automated reminder cron jobs initialized');
 
-// Tug'ilgan kun qoidalari - har kuni 09:00
-cron.schedule('0 9 * * *', () => {
-    console.log('⏰ Cron: Birthday rules job triggered');
-    processBirthdayRules();
-}, {
-    timezone: "Asia/Tashkent"
-});
-
-// Kelmagan bemorlar qoidalari - har kuni 20:00
-cron.schedule('0 20 * * *', () => {
-    console.log('⏰ Cron: No-show rules job triggered');
-    processNoShowRules();
+// Barcha avtomatika qoidalari bitta dvigatelda - har 10 daqiqada.
+// Har bir trigger o'z yuborish oynasini va takrorlanmaslik kalitini o'zi
+// belgilaydi (./triggers.ts), shuning uchun alohida cron kerak emas.
+cron.schedule('*/10 * * * *', () => {
+    runAutomationEngine();
 }, {
     timezone: "Asia/Tashkent"
 });
@@ -5217,12 +5124,6 @@ cron.schedule('0 8 * * *', () => {
     timezone: "Asia/Tashkent"
 });
 
-// "Qabuldan oldin" qoidalari - har 10 daqiqada
-cron.schedule('*/10 * * * *', () => {
-    processBeforeAppointmentRules();
-}, {
-    timezone: "Asia/Tashkent"
-});
 
 /**
  * Helper function: Send daily summary reports to clinic owners
@@ -5470,7 +5371,7 @@ app.get('/api/debug/transactions', authenticateToken, async (req, res) => {
 
 app.post('/api/test/send-birthday-reminders', authenticateToken, async (req, res) => {
     try {
-        await processBirthdayRules();
+        await runTrigger(getTrigger('birthday'), true);
         res.json({ success: true, message: 'Birthday rules processed' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -5488,7 +5389,7 @@ app.post('/api/test/send-appointment-reminders', authenticateToken, async (req, 
 
 app.post('/api/test/process-before-appointment-rules', authenticateToken, async (req, res) => {
     try {
-        await processBeforeAppointmentRules();
+        await runTrigger(getTrigger('before_appointment'), true);
         res.json({ success: true, message: 'Before-appointment rules processed' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -5497,7 +5398,7 @@ app.post('/api/test/process-before-appointment-rules', authenticateToken, async 
 
 app.post('/api/test/send-noshow-followups', authenticateToken, async (req, res) => {
     try {
-        await processNoShowRules();
+        await runTrigger(getTrigger('no_show'), true);
         res.json({ success: true, message: 'No-show rules processed' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

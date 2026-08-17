@@ -215,7 +215,25 @@ export interface CashAuditLog {
 // 'both' — ikkalasiga ham yuboradi (SMS uchun alohida pul ketadi).
 // 'telegram_first' — Telegram bo'lsa faqat Telegram, bo'lmasa/xato bo'lsa SMS.
 export type MessageChannel = 'sms' | 'telegram' | 'both' | 'telegram_first';
-export type AutomationTrigger = 'before_appointment' | 'birthday' | 'no_show';
+// Trigger ro'yxati backendda (backend/triggers.ts) va oddiy String ustunda
+// saqlanadi — yangi trigger qo'shish uchun migratsiya kerak emas.
+export type AutomationTrigger = string;
+
+/** Backend qaytaradigan trigger tavsifi — forma shu asosda quriladi */
+export interface TriggerDescriptor {
+  id: string;
+  label: string;
+  respectCooldown: boolean;
+  supportsDoctorFilter: boolean;
+  /** Tinch soatlar — trigger faqat shu oraliqda yuboradi (Toshkent vaqti) */
+  sendWindow?: { fromHour: number; toHour: number };
+  offset?: {
+    label: string;
+    unit: 'hour' | 'day' | 'month';
+    options: number[];
+    default: number;
+  };
+}
 
 export interface MessageTemplate {
   id: string;

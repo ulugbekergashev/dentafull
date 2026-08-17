@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '../components/Common';
-import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus } from '../types';
+import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor } from '../types';
 import { api } from '../services/api';
 import { isSendablePhone } from '../utils/phone';
 import { analyzeSms, hasTypographicApostrophe, fixApostrophes } from '../utils/sms';
@@ -30,13 +30,23 @@ const TEMPLATE_VARS: { token: string; label: string }[] = [
     { token: '{qarz}', label: '+ Qarz miqdori' },
 ];
 
-const TRIGGER_LABELS: Record<AutomationTrigger, string> = {
-    before_appointment: '⏰ Qabuldan oldin',
-    birthday: "🎂 Tug'ilgan kun",
-    no_show: '❗ Kelmagan bemor',
+// Trigger ro'yxati backenddan keladi (backend/triggers.ts) — bu yerda faqat
+// belgichalar. Yangi trigger qo'shilsa, forma o'zi yangilanadi.
+const TRIGGER_ICONS: Record<string, string> = {
+    before_appointment: '⏰',
+    birthday: '🎂',
+    no_show: '❗',
+    after_appointment: '💬',
+    new_patient: '👋',
+    payment_received: '💰',
+    recall: '🔄',
+    debt_reminder: '📄',
 };
 
-const HOUR_OPTIONS = [1, 2, 3, 6, 12, 24];
+const triggerIcon = (id: string) => TRIGGER_ICONS[id] || '⚙️';
+
+const offsetUnitLabel = (unit: 'hour' | 'day' | 'month') =>
+    unit === 'hour' ? 'soat' : unit === 'day' ? 'kun' : 'oy';
 
 const CHANNEL_OPTIONS: { value: MessageChannel; label: string; hint: string }[] = [
     { value: 'telegram_first', label: '✈️→📱 Avval Telegram', hint: 'Bemor botga ulangan bo\'lsa — bepul Telegram. Ulanmagan yoki xato bo\'lsa — SMS. Eng tejamli variant.' },
@@ -99,6 +109,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     // ── Ma'lumotlar ──
     const [templates, setTemplates] = useState<MessageTemplate[]>([]);
     const [rules, setRules] = useState<AutomationRule[]>([]);
+    const [triggerDefs, setTriggerDefs] = useState<TriggerDescriptor[]>([]);
     const [logs, setLogs] = useState<MessageLog[]>([]);
     const [logStats, setLogStats] = useState({ total: 0, sent: 0, failed: 0 });
     const [smsConnected, setSmsConnected] = useState(false);
@@ -128,6 +139,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         if (!clinicId) return;
         api.messageTemplates.getAll(clinicId).then(setTemplates).catch(() => { });
         api.automationRules.getAll(clinicId).then(setRules).catch(() => { });
+        api.automationTriggers.getAll().then(setTriggerDefs).catch(() => { });
         api.sms.getSettings(clinicId).then((s: any) => {
             setSmsConnected(!!s.isConnected);
             if (s.isConnected) {
@@ -214,13 +226,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         templateId: '',
         trigger: 'before_appointment' as AutomationTrigger,
         hoursBefore: 2,
-        channel: 'sms' as MessageChannel,
+        channel: 'telegram_first' as MessageChannel,
         doctorId: '',
     };
     const [isRuleFormOpen, setIsRuleFormOpen] = useState(false);
     const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
     const [ruleForm, setRuleForm] = useState(EMPTY_RULE_FORM);
     const [ruleSaving, setRuleSaving] = useState(false);
+    const activeTriggerDef = triggerDefs.find(t => t.id === ruleForm.trigger);
 
     const openRuleForm = (rule?: AutomationRule) => {
         setEditingRule(rule || null);
@@ -784,27 +797,38 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className={labelCls}>Trigger turi</label>
+                                    <label className={labelCls}>Qachon yuborilsin</label>
                                     <select
                                         value={ruleForm.trigger}
-                                        onChange={e => setRuleForm(f => ({ ...f, trigger: e.target.value as AutomationTrigger }))}
+                                        onChange={e => {
+                                            const next = triggerDefs.find(t => t.id === e.target.value);
+                                            setRuleForm(f => ({
+                                                ...f,
+                                                trigger: e.target.value,
+                                                // Har trigger o'z offset shkalasiga ega — defaultga qaytaramiz
+                                                hoursBefore: next?.offset?.default ?? 0,
+                                                ...(next && !next.supportsDoctorFilter ? { doctorId: '' } : {}),
+                                            }));
+                                        }}
                                         className={inputCls}
                                     >
-                                        {(Object.keys(TRIGGER_LABELS) as AutomationTrigger[]).map(tr => (
-                                            <option key={tr} value={tr}>{TRIGGER_LABELS[tr]}</option>
+                                        {triggerDefs.map(t => (
+                                            <option key={t.id} value={t.id}>{triggerIcon(t.id)} {t.label}</option>
                                         ))}
                                     </select>
                                 </div>
-                                {ruleForm.trigger === 'before_appointment' && (
+                                {activeTriggerDef?.offset && (
                                     <div>
-                                        <label className={labelCls}>Necha soat oldin</label>
+                                        <label className={labelCls}>{activeTriggerDef.offset.label}</label>
                                         <select
                                             value={ruleForm.hoursBefore}
                                             onChange={e => setRuleForm(f => ({ ...f, hoursBefore: parseInt(e.target.value) }))}
                                             className={inputCls}
                                         >
-                                            {HOUR_OPTIONS.map(h => (
-                                                <option key={h} value={h}>{h} soat</option>
+                                            {activeTriggerDef.offset.options.map(v => (
+                                                <option key={v} value={v}>
+                                                    {v === 0 ? 'Darhol' : `${v} ${offsetUnitLabel(activeTriggerDef.offset!.unit)}`}
+                                                </option>
                                             ))}
                                         </select>
                                     </div>
@@ -831,19 +855,34 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     {CHANNEL_OPTIONS.find(c => c.value === ruleForm.channel)?.hint}
                                 </p>
                             </div>
-                            <div>
-                                <label className={labelCls}>Shifokor filtri (ixtiyoriy)</label>
-                                <select
-                                    value={ruleForm.doctorId}
-                                    onChange={e => setRuleForm(f => ({ ...f, doctorId: e.target.value }))}
-                                    className={inputCls}
-                                >
-                                    <option value="">Barcha shifokorlar</option>
-                                    {doctors.map(d => (
-                                        <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            {activeTriggerDef?.supportsDoctorFilter !== false && (
+                                <div>
+                                    <label className={labelCls}>Shifokor filtri (ixtiyoriy)</label>
+                                    <select
+                                        value={ruleForm.doctorId}
+                                        onChange={e => setRuleForm(f => ({ ...f, doctorId: e.target.value }))}
+                                        className={inputCls}
+                                    >
+                                        <option value="">Barcha shifokorlar</option>
+                                        {doctors.map(d => (
+                                            <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            {activeTriggerDef && (
+                                <div className="text-xs text-gray-400 space-y-1">
+                                    {activeTriggerDef.sendWindow && (
+                                        <p>
+                                            Yuborish vaqti: <strong>{activeTriggerDef.sendWindow.fromHour}:00 – {activeTriggerDef.sendWindow.toHour}:00</strong> oralig'ida
+                                            (bemorlarga tunda xabar ketmaydi).
+                                        </p>
+                                    )}
+                                    {!activeTriggerDef.respectCooldown && cooldownDays > 0 && (
+                                        <p>Bu trigger transaksion hisoblanadi — chastota chegarasiga ({cooldownDays} kun) bo'ysunmaydi.</p>
+                                    )}
+                                </div>
+                            )}
                             <div className="flex justify-end gap-2 pt-2">
                                 <Button variant="secondary" onClick={closeRuleForm}>Bekor</Button>
                                 <Button onClick={handleSaveRule} disabled={ruleSaving || !ruleForm.name.trim() || !ruleForm.templateId}>
@@ -857,13 +896,16 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         {rules.map(rule => {
                             const tpl = templates.find(t => t.id === rule.templateId);
                             const doctor = rule.doctorId ? doctors.find(d => d.id === rule.doctorId) : null;
+                            const def = triggerDefs.find(t => t.id === rule.trigger);
                             return (
                                 <Card key={rule.id} className={`p-5 flex items-center justify-between gap-4 ${!rule.active ? 'opacity-60' : ''}`}>
                                     <div className="min-w-0">
                                         <h4 className="font-bold text-gray-900 dark:text-white">{rule.name}</h4>
                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                            {TRIGGER_LABELS[rule.trigger]}
-                                            {rule.trigger === 'before_appointment' && rule.hoursBefore ? ` · ${rule.hoursBefore} soat oldin` : ''}
+                                            {triggerIcon(rule.trigger)} {def?.label || rule.trigger}
+                                            {def?.offset && rule.hoursBefore != null
+                                                ? ` · ${rule.hoursBefore === 0 ? 'darhol' : `${rule.hoursBefore} ${offsetUnitLabel(def.offset.unit)}`}`
+                                                : ''}
                                             {' · '}{rule.channel === 'sms' ? 'SMS'
                                                 : rule.channel === 'telegram' ? 'Telegram'
                                                     : rule.channel === 'telegram_first' ? 'Avval Telegram, keyin SMS'

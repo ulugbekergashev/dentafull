@@ -12,6 +12,7 @@
         "server.ts",
         "botManager.ts",
         "smsService.ts",
+        "triggers.ts",
         "bot.ts",
         "seed.ts",
         "dmedService.ts",

@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor } from '../types';
 
 // --- PERSISTENCE HELPERS ---
 const STORAGE_KEY = 'dentalflow_demo_data';
@@ -402,6 +402,18 @@ export let DEMO_AUTOMATION_RULES: AutomationRule[] = savedData?.automationRules 
         active: true,
         createdAt: new Date('2026-01-10').toISOString(),
     },
+];
+
+// Demo rejim uchun trigger tavsiflari — backend/triggers.ts bilan mos
+export const DEMO_TRIGGERS: TriggerDescriptor[] = [
+    { id: 'before_appointment', label: 'Qabuldan oldin', respectCooldown: false, supportsDoctorFilter: true, offset: { label: 'Necha soat oldin', unit: 'hour', options: [1, 2, 3, 6, 12, 24], default: 2 } },
+    { id: 'birthday', label: "Tug'ilgan kun", respectCooldown: true, supportsDoctorFilter: true },
+    { id: 'no_show', label: 'Kelmagan bemor', respectCooldown: true, supportsDoctorFilter: true },
+    { id: 'after_appointment', label: 'Qabuldan keyin', respectCooldown: true, supportsDoctorFilter: true, offset: { label: 'Necha soat keyin', unit: 'hour', options: [2, 4, 24, 48, 72], default: 24 } },
+    { id: 'new_patient', label: "Yangi bemor ro'yxatdan o'tdi", respectCooldown: false, supportsDoctorFilter: true, offset: { label: 'Necha soat keyin', unit: 'hour', options: [0, 1, 2, 24], default: 1 } },
+    { id: 'payment_received', label: "To'lov qabul qilindi", respectCooldown: false, supportsDoctorFilter: false, offset: { label: 'Necha soat keyin', unit: 'hour', options: [0, 1, 2, 24], default: 0 } },
+    { id: 'recall', label: 'Uzoq kelmaganlarni qaytarish', respectCooldown: true, supportsDoctorFilter: true, offset: { label: 'Necha oydan beri kelmagan', unit: 'month', options: [3, 6, 9, 12], default: 6 } },
+    { id: 'debt_reminder', label: 'Qarz eslatmasi', respectCooldown: true, supportsDoctorFilter: false, offset: { label: 'Qarz necha kundan beri', unit: 'day', options: [3, 7, 14, 30], default: 7 } },
 ];
 
 export let DEMO_MESSAGE_LOGS: MessageLog[] = savedData?.messageLogs || [
