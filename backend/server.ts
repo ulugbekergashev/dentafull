@@ -53,7 +53,7 @@ app.get('/api/tts', async (req: any, res: any) => {
 // Load everything else
 const cron = require('node-cron');
 const { botManager } = require('./botManager');
-const { smsService } = require('./smsService');
+const { smsService, normalizeUzPhone } = require('./smsService');
 const { dmedService } = require('./dmedService');
 const cors = require('cors');
 const axios = require('axios');
@@ -556,6 +556,8 @@ app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
 // Triggerlar ro'yxati ./triggers.ts dan keladi — yangi trigger qo'shilganda
 // bu yer o'zgarmaydi. Baza ustuni oddiy String bo'lgani uchun migratsiya kerak emas.
 const { TRIGGER_IDS, TRIGGER_DESCRIPTORS, getTrigger } = require('./triggers');
+const { resolveSegment, describeSegment, buildDebtMap } = require('./segments');
+const { getExtras, getExtrasMap, saveExtras, deleteExtras } = require('./ruleExtras');
 const AUTOMATION_TRIGGERS: string[] = TRIGGER_IDS;
 const MESSAGE_CHANNELS = ['sms', 'telegram', 'both', 'telegram_first'];
 
@@ -700,7 +702,14 @@ app.get('/api/automation-rules', authenticateToken, async (req, res) => {
             where: { clinicId: clinicId as string },
             orderBy: { createdAt: 'desc' }
         });
-        res.json(rules);
+        // Segment va jadval yon jadvalda — API'da esa qoidaning oddiy maydoni
+        // ko'rinishida qaytadi, ya'ni frontend saqlash joyini bilmaydi.
+        const extrasMap = await getExtrasMap(rules.map((r: any) => r.id));
+        res.json(rules.map((r: any) => ({
+            ...r,
+            segment: extrasMap.get(r.id)?.segment ?? null,
+            schedule: extrasMap.get(r.id)?.schedule ?? null,
+        })));
     } catch (error) {
         res.status(500).json({ error: 'Qoidalarni olishda xatolik' });
     }
@@ -710,8 +719,12 @@ app.post('/api/automation-rules', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
-        const { name, templateId, trigger, hoursBefore, channel, doctorId } = req.body;
+        const { name, templateId, trigger, hoursBefore, channel, doctorId, segment, schedule } = req.body;
         if (!name || !templateId) return res.status(400).json({ error: 'Qoida nomi va shablon tanlanishi shart' });
+        const triggerDef = getTrigger(trigger);
+        if (triggerDef?.supportsSchedule && !schedule) {
+            return res.status(400).json({ error: "Jadval bo'yicha qoida uchun vaqt tanlanishi shart" });
+        }
         if (!AUTOMATION_TRIGGERS.includes(trigger)) return res.status(400).json({ error: 'Noto\'g\'ri trigger turi' });
         if (!MESSAGE_CHANNELS.includes(channel)) return res.status(400).json({ error: 'Noto\'g\'ri kanal' });
         const template = await prisma.messageTemplate.findUnique({ where: { id: templateId } });
@@ -735,7 +748,13 @@ app.post('/api/automation-rules', authenticateToken, async (req, res) => {
                 clinicId: clinicId as string,
             }
         });
-        res.json(rule);
+
+        await saveExtras(rule.id, {
+            segment: triggerDef?.supportsSegment ? (segment || null) : null,
+            schedule: triggerDef?.supportsSchedule ? (schedule || null) : null,
+        });
+
+        res.json({ ...rule, segment: segment || null, schedule: schedule || null });
     } catch (error) {
         console.error('Automation rule create error:', error);
         res.status(500).json({ error: 'Qoidani saqlashda xatolik' });
@@ -745,7 +764,7 @@ app.post('/api/automation-rules', authenticateToken, async (req, res) => {
 app.put('/api/automation-rules/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'automationRule', req.params.id))) return;
-        const { name, templateId, trigger, hoursBefore, channel, doctorId, active } = req.body;
+        const { name, templateId, trigger, hoursBefore, channel, doctorId, active, segment, schedule } = req.body;
         if (trigger !== undefined && !AUTOMATION_TRIGGERS.includes(trigger)) return res.status(400).json({ error: 'Noto\'g\'ri trigger turi' });
         if (channel !== undefined && !MESSAGE_CHANNELS.includes(channel)) return res.status(400).json({ error: 'Noto\'g\'ri kanal' });
         const rule = await prisma.automationRule.update({
@@ -760,7 +779,19 @@ app.put('/api/automation-rules/:id', authenticateToken, async (req, res) => {
                 ...(active !== undefined && { active: !!active }),
             }
         });
-        res.json(rule);
+
+        // Faqat yuborilgan bo'lsa yangilaymiz (toggle so'rovlari segmentni o'chirmasin)
+        if (segment !== undefined || schedule !== undefined) {
+            const current = await getExtras(rule.id);
+            const def = getTrigger(rule.trigger);
+            await saveExtras(rule.id, {
+                segment: def?.supportsSegment ? (segment !== undefined ? segment : current.segment) : null,
+                schedule: def?.supportsSchedule ? (schedule !== undefined ? schedule : current.schedule) : null,
+            });
+        }
+
+        const extras = await getExtras(rule.id);
+        res.json({ ...rule, segment: extras.segment ?? null, schedule: extras.schedule ?? null });
     } catch (error) {
         res.status(500).json({ error: 'Qoidani yangilashda xatolik' });
     }
@@ -770,6 +801,7 @@ app.delete('/api/automation-rules/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'automationRule', req.params.id))) return;
         await prisma.automationRule.delete({ where: { id: req.params.id } });
+        await deleteExtras(req.params.id); // yon jadvalda yetim yozuv qolmasin
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: 'Qoidani o\'chirishda xatolik' });
@@ -788,18 +820,9 @@ async function runBulkSend(clinicId: string, clinic: any, patients: any[], messa
         const patientIds = patients.map(p => p.id);
         const todayStr = new Date().toISOString().split('T')[0];
 
-        // {qarz} uchun: Pending tranzaksiyalar + faol bo'lib to'lash qoldiqlari
-        const pendingTx = await prisma.transaction.findMany({
-            where: { clinicId, status: 'Pending', patientId: { in: patientIds } },
-            select: { patientId: true, amount: true }
-        });
-        const activePlans = await prisma.installmentPlan.findMany({
-            where: { clinicId, status: 'Active', patientId: { in: patientIds } },
-            select: { patientId: true, totalAmount: true, totalPaid: true }
-        });
-        const debtMap = new Map<string, number>();
-        pendingTx.forEach((t: any) => { if (t.patientId) debtMap.set(t.patientId, (debtMap.get(t.patientId) || 0) + t.amount); });
-        activePlans.forEach((p: any) => debtMap.set(p.patientId, (debtMap.get(p.patientId) || 0) + Math.max(0, p.totalAmount - p.totalPaid)));
+        // {qarz} — segments.ts dagi yagona ta'rif bo'yicha (Pending tranzaksiyalar
+        // + faol bo'lib to'lash qoldiqlari). "Qarzdorlar" filtri ham shu hisobdan.
+        const debtMap: Map<string, number> = await buildDebtMap(clinicId, patientIds);
 
         // {sana}/{vaqt}/{shifokor_ismi} — bemorning eng yaqin kelgusi qabuli bo'yicha
         const upcoming = await prisma.appointment.findMany({
@@ -837,8 +860,9 @@ app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
-        const { patientIds, message, channel, ignoreCooldown } = req.body;
-        if (!Array.isArray(patientIds) || patientIds.length === 0) return res.status(400).json({ error: 'Bemorlar tanlanmagan' });
+        const { patientIds, segment, message, channel, ignoreCooldown } = req.body;
+        const hasIds = Array.isArray(patientIds) && patientIds.length > 0;
+        if (!hasIds && !segment) return res.status(400).json({ error: 'Bemorlar tanlanmagan' });
         if (!message || !message.trim()) return res.status(400).json({ error: 'Xabar matni bo\'sh' });
         if (!MESSAGE_CHANNELS.includes(channel)) return res.status(400).json({ error: 'Noto\'g\'ri kanal' });
 
@@ -850,9 +874,11 @@ app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
         const clinic = await prisma.clinic.findUnique({ where: { id: clinicId as string } });
         if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
 
-        const patients = await prisma.patient.findMany({
-            where: { id: { in: patientIds }, clinicId: clinicId as string }
-        });
+        // Segment berilgan bo'lsa auditoriya serverda hisoblanadi — bu yerda ham,
+        // avtomatikada ham bir xil ta'rif ishlaydi.
+        const patients = hasIds
+            ? await prisma.patient.findMany({ where: { id: { in: patientIds }, clinicId: clinicId as string } })
+            : (await resolveSegment(clinicId as string, segment)).patients;
         if (patients.length === 0) return res.status(400).json({ error: 'Bemorlar topilmadi' });
 
         bulkJobs.set(clinicId as string, { total: patients.length, sent: 0, failed: 0, done: false, startedAt: Date.now() });
@@ -862,6 +888,61 @@ app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
     } catch (error: any) {
         console.error('Bulk send error:', error);
         res.status(500).json({ error: 'Xabarlarni yuborishda xatolik' });
+    }
+});
+
+// Segment bo'yicha auditoriyani hisoblab beradi — UI shu javobni ko'rsatadi.
+// Frontend endi bemorlarni o'zi filtrlamaydi: "qarzdor" ta'rifi, qarz summasi
+// va yuboriladigan bemorlar ro'yxati bir joydan (segments.ts) keladi.
+app.post('/api/messages/audience', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { segment, channel } = req.body;
+
+        const { patients, debtMap } = await resolveSegment(clinicId as string, segment);
+
+        // Kanal bo'yicha yetib borish imkoni
+        let reachable = patients;
+        let viaTelegram = 0;
+        let viaSms = 0;
+        let unreachable = 0;
+
+        const hasPhone = (p: any) => !!normalizeUzPhone(p.phone);
+        if (channel === 'telegram') {
+            reachable = patients.filter((p: any) => p.telegramChatId);
+            viaTelegram = reachable.length;
+        } else if (channel === 'sms') {
+            reachable = patients.filter(hasPhone);
+            viaSms = reachable.length;
+        } else {
+            // telegram_first / both
+            reachable = patients.filter((p: any) => p.telegramChatId || hasPhone(p));
+            viaTelegram = reachable.filter((p: any) => p.telegramChatId).length;
+            viaSms = channel === 'both'
+                ? reachable.filter(hasPhone).length
+                : reachable.length - viaTelegram;
+        }
+        unreachable = patients.length - reachable.length;
+
+        res.json({
+            total: reachable.length,
+            matched: patients.length,
+            unreachable,
+            viaTelegram,
+            viaSms,
+            description: describeSegment(segment),
+            patientIds: reachable.map((p: any) => p.id),
+            sample: reachable.slice(0, 3).map((p: any) => ({
+                id: p.id,
+                firstName: p.firstName,
+                lastName: p.lastName,
+                debt: debtMap.get(p.id) || 0,
+            })),
+        });
+    } catch (error: any) {
+        console.error('Audience resolve error:', error);
+        res.status(500).json({ error: 'Auditoriyani hisoblashda xatolik' });
     }
 });
 
@@ -4924,9 +5005,13 @@ async function runTrigger(triggerDef: any, ignoreWindow = false) {
     const clinics = await prisma.clinic.findMany({ where: { id: { in: clinicIds } } });
     const clinicMap = new Map<string, any>(clinics.map((c: any) => [c.id, c]));
 
+    // Segment va jadval yon jadvalda saqlanadi — bittada o'qib olamiz (N+1 yo'q)
+    const extrasMap = await getExtrasMap(rules.map((r: any) => r.id));
+
     for (const rule of rules) {
         const clinic = clinicMap.get(rule.clinicId);
         if (!clinic || !rule.template) continue;
+        (rule as any).extras = extrasMap.get(rule.id) || {};
 
         let due: any[] = [];
         try {

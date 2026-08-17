@@ -16,6 +16,8 @@
  */
 
 import { prisma } from './db';
+import { resolveSegment } from './segments';
+import { schedulePeriodKey } from './ruleExtras';
 
 // Toshkent vaqti (UTC+5, DST yo'q)
 const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -68,7 +70,14 @@ export interface TriggerDef {
     };
     /** Shifokor filtri mantiqiymi */
     supportsDoctorFilter: boolean;
-    /** Hozir yuborilishi kerak bo'lgan nomzodlarni qaytaradi */
+    /** To'liq auditoriya segmenti sozlanadimi (jadval bo'yicha kampaniyalar) */
+    supportsSegment?: boolean;
+    /** Yuborish jadvali sozlanadimi */
+    supportsSchedule?: boolean;
+    /**
+     * Hozir yuborilishi kerak bo'lgan nomzodlarni qaytaradi.
+     * `rule.extras` — segment va jadval (dvigatel to'ldiradi).
+     */
     findDue: (rule: any, clinic: any) => Promise<DueItem[]>;
 }
 
@@ -85,6 +94,40 @@ const wallClockMs = (date: string, time?: string) =>
     Date.parse(`${date}T${time || '00:00'}:00Z`);
 
 export const TRIGGERS: TriggerDef[] = [
+    // ── 0. Jadval bo'yicha kampaniya (segment + takrorlanuvchi vaqt) ────────
+    // Ilgari imkonsiz bo'lgan narsa: "har dushanba qarzdorlarga",
+    // "har oyning 1-kuni 6 oydan beri kelmaganlarga".
+    {
+        id: 'scheduled',
+        label: 'Jadval bo\'yicha (segmentga)',
+        respectCooldown: true,
+        supportsDoctorFilter: false, // shifokor segment ichida tanlanadi
+        supportsSegment: true,
+        supportsSchedule: true,
+        async findDue(rule, clinic) {
+            const schedule = rule.extras?.schedule;
+            if (!schedule) return [];
+
+            const tashkentNow = new Date(tashkentNowMs());
+            const period = schedulePeriodKey(schedule, tashkentNow);
+            if (!period) return []; // hozir bu qoidaning vaqti emas
+
+            const { patients, debtMap } = await resolveSegment(rule.clinicId, rule.extras?.segment);
+
+            return patients.map((p: any) => ({
+                patient: p,
+                refId: `${p.id}:${period}`, // har davrda bir marta
+                type: 'Campaign',
+                vars: {
+                    ...patientName(p),
+                    date: tashkentDateStr(0),
+                    clinicName: clinic.name,
+                    amount: debtMap.get(p.id) || 0,
+                },
+            }));
+        },
+    },
+
     // ── 1. Qabuldan N soat oldin ────────────────────────────────────────────
     {
         id: 'before_appointment',
@@ -414,6 +457,10 @@ export const TRIGGER_IDS = TRIGGERS.map(t => t.id);
 export const getTrigger = (id: string) => TRIGGERS.find(t => t.id === id);
 
 /** Frontendga yuboriladigan tavsif (findDue funksiyasisiz) */
-export const TRIGGER_DESCRIPTORS = TRIGGERS.map(({ id, label, offset, supportsDoctorFilter, respectCooldown, sendWindow }) => ({
-    id, label, offset, supportsDoctorFilter, respectCooldown, sendWindow,
-}));
+export const TRIGGER_DESCRIPTORS = TRIGGERS.map(
+    ({ id, label, offset, supportsDoctorFilter, respectCooldown, sendWindow, supportsSegment, supportsSchedule }) => ({
+        id, label, offset, supportsDoctorFilter, respectCooldown, sendWindow,
+        supportsSegment: !!supportsSegment,
+        supportsSchedule: !!supportsSchedule,
+    })
+);

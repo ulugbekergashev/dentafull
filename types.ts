@@ -257,6 +257,13 @@ export interface AutomationRule {
   doctorId?: string | null;
   active: boolean;
   createdAt?: string;
+  /**
+   * Segment va jadval — API'da qoidaning oddiy maydonlari, lekin bazada
+   * yon jadvalda saqlanadi (backend/ruleExtras.ts). Sabab: AutomationRule ga
+   * ustun qo'shish migratsiya talab qiladi, deploy'da esa u yo'q.
+   */
+  segment?: AudienceSegment | null;
+  schedule?: RuleSchedule | null;
 }
 
 export interface MessageLog {
@@ -276,6 +283,44 @@ export interface MessageLog {
   refId?: string | null;
   recipient?: string | null;
   patient?: { id: string; firstName: string; lastName: string; phone?: string } | null;
+}
+
+/**
+ * Auditoriya segmenti — "kimga yuborish". Qo'lda yuborishda ham, jadval
+ * bo'yicha qoidada ham bir xil. Bemorlarni doim server hisoblaydi
+ * (backend/segments.ts), frontend faqat filtrni yig'adi.
+ */
+export interface AudienceSegment {
+  doctorId?: string | null;
+  status?: 'Active' | 'All';
+  inactiveMonths?: number | null;
+  includeNeverVisited?: boolean;
+  debtors?: boolean;
+  birthdayToday?: boolean;
+  birthdayMonth?: boolean;
+}
+
+/** Jadval bo'yicha yuborish qoidasi */
+export interface RuleSchedule {
+  kind: 'daily' | 'weekly' | 'monthly';
+  /** 1=Dushanba ... 7=Yakshanba */
+  weekday?: number;
+  /** 1-28 */
+  dayOfMonth?: number;
+  /** Toshkent vaqti bo'yicha soat */
+  hour: number;
+}
+
+/** Serverdan kelgan auditoriya hisobi */
+export interface AudiencePreview {
+  total: number;
+  matched: number;
+  unreachable: number;
+  viaTelegram: number;
+  viaSms: number;
+  description: string;
+  patientIds: string[];
+  sample: { id: string; firstName: string; lastName: string; debt: number }[];
 }
 
 // Fonda ketayotgan qo'lda (bulk) yuborish holati

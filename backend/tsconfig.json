@@ -13,6 +13,8 @@
         "botManager.ts",
         "smsService.ts",
         "triggers.ts",
+        "segments.ts",
+        "ruleExtras.ts",
         "bot.ts",
         "seed.ts",
         "dmedService.ts",

@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -1234,6 +1234,22 @@ export const api = {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ clinicId, cooldownDays }),
+            });
+        },
+        // Auditoriyani doim server hisoblaydi — "qarzdor" ta'rifi bitta bo'lsin
+        audience: (clinicId: string, segment: AudienceSegment, channel: MessageChannel) => {
+            if (isDemoMode()) {
+                return Promise.resolve({
+                    total: DEMO_PATIENTS.length, matched: DEMO_PATIENTS.length, unreachable: 0,
+                    viaTelegram: DEMO_PATIENTS.length, viaSms: 0, description: 'Demo',
+                    patientIds: DEMO_PATIENTS.map(p => p.id),
+                    sample: DEMO_PATIENTS.slice(0, 3).map(p => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, debt: 0 })),
+                } as AudiencePreview);
+            }
+            return fetchJson<AudiencePreview>('/messages/audience', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, segment, channel }),
             });
         },
         bulkStatus: (clinicId: string) => {

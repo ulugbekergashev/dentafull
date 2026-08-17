@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '../components/Common';
-import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor } from '../types';
+import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, RuleSchedule } from '../types';
+import { SegmentBuilder } from '../components/SegmentBuilder';
 import { api } from '../services/api';
-import { isSendablePhone } from '../utils/phone';
 import { analyzeSms, hasTypographicApostrophe, fixApostrophes } from '../utils/sms';
 import { processTemplate } from '../utils/messageTemplate';
 import {
@@ -13,9 +13,9 @@ import {
 interface MessagesManagementProps {
     clinicId: string;
     currentClinic?: Clinic;
-    patients: Patient[];
+    // Bemorlar va tranzaksiyalar bu yerga uzatilmaydi: auditoriyani va qarzni
+    // server hisoblaydi (backend/segments.ts), aks holda ta'riflar ikkiga bo'linadi.
     doctors: Doctor[];
-    transactions: Transaction[];
     addToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -55,21 +55,25 @@ const CHANNEL_OPTIONS: { value: MessageChannel; label: string; hint: string }[] 
     { value: 'both', label: '⚠️ Ikkalasi', hint: 'Telegram VA SMS — ikkalasi ham yuboriladi. Botga ulangan bemor ikki marta xabar oladi va SMS uchun baribir pul ketadi.' },
 ];
 
-type QuickFilter = 'debtors' | 'birthday_today' | 'birthday_month';
-
-const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
-    { key: 'debtors', label: '⏰ Qarzdorlar' },
-    { key: 'birthday_today', label: "🎁 Bugun tug'ilgan kun" },
-    { key: 'birthday_month', label: "🎁 Bu oy tug'ilgan kunlari" },
-];
+// Auditoriya filtrlari SegmentBuilder komponentida, hisoblash esa serverda —
+// bu yerda takrorlanmaydi.
 
 const SOURCE_LABELS: Record<string, string> = {
     manual: "Qo'lda yuborildi",
     bulk: "Qo'lda yuborildi",
     auto: 'Avtomatik',
+    scheduled: 'Jadval bo\'yicha',
+    before_appointment: 'Qabuldan oldin',
+    after_appointment: 'Qabuldan keyin',
+    new_patient: 'Yangi bemor',
+    payment_received: "To'lov",
+    recall: 'Profilaktika',
+    debt_reminder: 'Qarz eslatma',
     debt: 'Qarz eslatma',
     birthday: "Tug'ilgan kun",
     noshow: 'Kelmagan bemor',
+    no_show: 'Kelmagan bemor',
+    test: 'Test',
     retry: 'Qayta yuborish',
 };
 
@@ -88,21 +92,8 @@ function eskizStatusBadge(status?: string | null): { label: string; cls: string 
     return { label: `Moderatsiyada (${status})`, cls: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' };
 }
 
-// Bemor tug'ilgan kunini MM-DD ga keltirish
-function dobToMonthDay(dob?: string): string {
-    if (!dob) return '';
-    if (dob.includes('-')) {
-        const parts = dob.split('-');
-        if (parts.length === 3) return `${parts[1]}-${parts[2]}`;
-    } else if (dob.includes('.')) {
-        const parts = dob.split('.');
-        if (parts.length >= 2) return `${parts[1]}-${parts[0]}`;
-    }
-    return '';
-}
-
 export const MessagesManagement: React.FC<MessagesManagementProps> = ({
-    clinicId, currentClinic, patients, doctors, transactions, addToast
+    clinicId, currentClinic, doctors, addToast
 }) => {
     const [activeTab, setActiveTab] = useState<'templates' | 'auto' | 'manual' | 'history'>('templates');
 
@@ -228,6 +219,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         hoursBefore: 2,
         channel: 'telegram_first' as MessageChannel,
         doctorId: '',
+        segment: { status: 'Active' } as AudienceSegment,
+        schedule: { kind: 'weekly', weekday: 1, hour: 10 } as RuleSchedule,
     };
     const [isRuleFormOpen, setIsRuleFormOpen] = useState(false);
     const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
@@ -244,6 +237,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             hoursBefore: rule.hoursBefore || 2,
             channel: rule.channel,
             doctorId: rule.doctorId || '',
+            segment: rule.segment || { status: 'Active' },
+            schedule: rule.schedule || { kind: 'weekly', weekday: 1, hour: 10 },
         } : EMPTY_RULE_FORM);
         setIsRuleFormOpen(true);
     };
@@ -264,6 +259,9 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             hoursBefore: ruleForm.trigger === 'before_appointment' ? ruleForm.hoursBefore : null,
             channel: ruleForm.channel,
             doctorId: ruleForm.doctorId || null,
+            // Faqat qo'llab-quvvatlaydigan triggerlar uchun yuboriladi
+            segment: activeTriggerDef?.supportsSegment ? ruleForm.segment : null,
+            schedule: activeTriggerDef?.supportsSchedule ? ruleForm.schedule : null,
         };
         try {
             if (editingRule) {
@@ -305,72 +303,34 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
 
     // ── Qo'lda tab ──
     const [manualChannel, setManualChannel] = useState<'sms' | 'telegram' | 'telegram_first'>('telegram_first');
-    const [audienceDoctorId, setAudienceDoctorId] = useState('All');
-    const [audienceStatus, setAudienceStatus] = useState<'Active' | 'All'>('Active');
-    const [audienceInactive, setAudienceInactive] = useState<'none' | '1' | '3' | '6'>('none');
-    // Hech qachon kelmagan bemor "uzoq kelmagan" emas — "sizni sog'indik" xabari
-    // kecha ro'yxatdan o'tgan odamga ketmasligi uchun sukut bo'yicha o'chirilgan.
-    const [includeNeverVisited, setIncludeNeverVisited] = useState(false);
-    // Tezkor filtrlar birga ishlaydi (VA mantiqi): masalan "qarzdor + bu oy tug'ilgan kun"
-    const [quickFilters, setQuickFilters] = useState<Set<QuickFilter>>(new Set());
+    // Auditoriyani SERVER hisoblaydi (backend/segments.ts). Frontend faqat
+    // filtrni yig'adi — shu sabab "qarzdor" ta'rifi va {qarz} summasi qo'lda
+    // yuborishda ham, avtomatikada ham bir xil bo'ladi.
+    const [segment, setSegment] = useState<AudienceSegment>({ status: 'Active' });
+    const [audience, setAudience] = useState<AudiencePreview | null>(null);
+    const [audienceLoading, setAudienceLoading] = useState(false);
     const [manualMessage, setManualMessage] = useState('');
     const [manualSending, setManualSending] = useState(false);
 
-    // Qarzdorlar: Pending tranzaksiyalari bor bemorlar
-    const debtorIds = useMemo(() => {
-        const ids = new Set<string>();
-        transactions.forEach(t => {
-            if (t.status === 'Pending' && t.patientId) ids.add(t.patientId);
-        });
-        return ids;
-    }, [transactions]);
+    // Filtr yoki kanal o'zgarganda qayta hisoblanadi (har bosishda so'rov ketmasin)
+    useEffect(() => {
+        if (!clinicId || activeTab !== 'manual') return;
+        setAudienceLoading(true);
+        const timer = setTimeout(() => {
+            api.messages.audience(clinicId, segment, manualChannel)
+                .then(setAudience)
+                .catch(() => setAudience(null))
+                .finally(() => setAudienceLoading(false));
+        }, 350);
+        return () => clearTimeout(timer);
+    }, [clinicId, activeTab, segment, manualChannel]);
 
-    const recipients = useMemo(() => {
-        const now = new Date();
-        const todayMonthDay = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const thisMonth = String(now.getMonth() + 1).padStart(2, '0');
-
-        return patients.filter(p => {
-            // Kanal bo'yicha yetib borish imkoni. SMS uchun raqam formati ham
-            // tekshiriladi — backend yaroqsiz raqamni baribir rad etadi, shuning
-            // uchun ro'yxatga qo'shib, sonni oshirib ko'rsatishdan ma'no yo'q.
-            if (manualChannel === 'sms' && !isSendablePhone(p.phone)) return false;
-            if (manualChannel === 'telegram' && !p.telegramChatId) return false;
-            // Avval Telegram: bemorga ikkala yo'lning birortasi bilan yetib borsak bo'ldi
-            if (manualChannel === 'telegram_first' && !p.telegramChatId && !isSendablePhone(p.phone)) return false;
-
-            if (audienceStatus === 'Active' && p.status !== 'Active') return false;
-            if (audienceDoctorId !== 'All' && p.doctorId !== audienceDoctorId) return false;
-
-            if (audienceInactive !== 'none') {
-                const months = parseInt(audienceInactive);
-                const cutoff = new Date();
-                cutoff.setMonth(cutoff.getMonth() - months);
-                const visit = p.lastVisit ? new Date(p.lastVisit) : null;
-                const hasVisit = !!visit && !isNaN(visit.getTime());
-                if (!hasVisit) {
-                    // Sanasi yo'q yoki o'qib bo'lmaydi — ataylab qaror qabul qilamiz
-                    if (!includeNeverVisited) return false;
-                } else if (visit! > cutoff) {
-                    return false;
-                }
-            }
-
-            if (quickFilters.has('debtors') && !debtorIds.has(p.id)) return false;
-            if (quickFilters.has('birthday_today') && dobToMonthDay(p.dob) !== todayMonthDay) return false;
-            if (quickFilters.has('birthday_month') && !dobToMonthDay(p.dob).startsWith(`${thisMonth}-`)) return false;
-
-            return true;
-        });
-    }, [patients, manualChannel, audienceStatus, audienceDoctorId, audienceInactive, includeNeverVisited, quickFilters, debtorIds]);
-
-    // Qaysi bemor qaysi kanal bilan oladi — pul faqat SMS uchun ketadi
-    const { viaTelegram, viaSms } = useMemo(() => {
-        if (manualChannel === 'telegram') return { viaTelegram: recipients.length, viaSms: 0 };
-        if (manualChannel === 'sms') return { viaTelegram: 0, viaSms: recipients.length };
-        const tg = recipients.filter(r => r.telegramChatId).length;
-        return { viaTelegram: tg, viaSms: recipients.length - tg };
-    }, [recipients, manualChannel]);
+    const recipientIds = audience?.patientIds ?? [];
+    const recipientCount = audience?.total ?? 0;
+    const recipientSample = audience?.sample ?? [];
+    const viaTelegram = audience?.viaTelegram ?? 0;
+    const viaSms = audience?.viaSms ?? 0;
+    const unreachableCount = audience?.unreachable ?? 0;
 
     // Xabar matnini shaxsiylashtirilgandan keyingi eng yomon holat bo'yicha o'lchaymiz:
     // {bemor_ismi} o'rniga eng uzun ism qo'yilsa, SMS qismlari soni oshib ketishi mumkin.
@@ -378,22 +338,22 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         const longest = (vals: (string | undefined)[]) =>
             vals.reduce<string>((a, b) => ((b || '').length > a.length ? (b || '') : a), '');
         const sample = manualMessage
-            .split('{bemor_ismi}').join(longest(recipients.map(r => r.firstName)))
-            .split('{bemor_familyasi}').join(longest(recipients.map(r => r.lastName)))
+            .split('{bemor_ismi}').join(longest(recipientSample.map(r => r.firstName)))
+            .split('{bemor_familyasi}').join(longest(recipientSample.map(r => r.lastName)))
             .split('{klinika_nomi}').join(currentClinic?.name || '')
             .split('{sana}').join('2026-08-20')
             .split('{vaqt}').join('14:30')
             .split('{shifokor_ismi}').join(longest(doctors.map(d => `${d.firstName} ${d.lastName}`)))
             .split('{qarz}').join('1 500 000');
         return analyzeSms(sample);
-    }, [manualMessage, recipients, doctors, currentClinic]);
+    }, [manualMessage, recipientSample, doctors, currentClinic]);
 
     const totalSmsParts = smsInfo.parts * viaSms;
     const messageHasBadApostrophe = hasTypographicApostrophe(manualMessage);
 
     // ── Preview: bemor aynan nimani ko'radi ──
     const [previewIndex, setPreviewIndex] = useState(0);
-    const previewPatient = recipients.length > 0 ? recipients[previewIndex % recipients.length] : null;
+    const previewPatient = recipientSample.length > 0 ? recipientSample[previewIndex % recipientSample.length] : null;
     const previewText = useMemo(() => {
         if (!previewPatient) return '';
         return processTemplate(manualMessage, {
@@ -451,16 +411,6 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         }
     };
 
-    // SMS kanalida format sababli chiqib ketgan bemorlar — foydalanuvchi buni bilishi kerak
-    const invalidPhoneCount = useMemo(() => {
-        if (manualChannel !== 'sms') return 0;
-        return patients.filter(p => {
-            if (audienceStatus === 'Active' && p.status !== 'Active') return false;
-            if (audienceDoctorId !== 'All' && p.doctorId !== audienceDoctorId) return false;
-            return !isSendablePhone(p.phone);
-        }).length;
-    }, [patients, manualChannel, audienceStatus, audienceDoctorId]);
-
     // Yuborish serverda fonda ketadi (yuzlab SMS bir HTTP so'roviga sig'maydi).
     const [bulkJob, setBulkJob] = useState<BulkSendStatus | null>(null);
 
@@ -487,14 +437,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     }, [clinicId, bulkJob]);
 
     const handleManualSend = async () => {
-        if (!manualMessage.trim() || recipients.length === 0) return;
+        if (!manualMessage.trim() || recipientCount === 0) return;
         const costNote = viaSms > 0
             ? `\n\n✈️ Telegram: ${viaTelegram} ta (bepul)\n📱 SMS: ${viaSms} ta × ${smsInfo.parts} qism = ${totalSmsParts} SMS (pullik)`
             : `\n\nHammasi Telegram orqali — bepul.`;
-        if (!confirm(`${recipients.length} ta bemorga xabar yuborilsinmi?${costNote}`)) return;
+        if (!confirm(`${recipientCount} ta bemorga xabar yuborilsinmi?${costNote}`)) return;
         setManualSending(true);
         try {
-            const result = await api.messages.sendBulk(clinicId, recipients.map(r => r.id), manualMessage, manualChannel, ignoreCooldown);
+            const result = await api.messages.sendBulk(clinicId, recipientIds, manualMessage, manualChannel, ignoreCooldown);
             addToast('info', `${result.total} ta bemorga yuborish boshlandi. Jarayonni Tarix bo'limida kuzating.`);
             setBulkJob({ active: true, total: result.total, sent: 0, failed: 0, done: false });
             setManualMessage('');
@@ -855,6 +805,66 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     {CHANNEL_OPTIONS.find(c => c.value === ruleForm.channel)?.hint}
                                 </p>
                             </div>
+                            {activeTriggerDef?.supportsSchedule && (
+                                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-3">
+                                    <label className={labelCls}>Qachon yuborilsin</label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <select
+                                            value={ruleForm.schedule.kind}
+                                            onChange={e => setRuleForm(f => ({ ...f, schedule: { ...f.schedule, kind: e.target.value as RuleSchedule['kind'] } }))}
+                                            className={inputCls}
+                                        >
+                                            <option value="daily">Har kuni</option>
+                                            <option value="weekly">Har hafta</option>
+                                            <option value="monthly">Har oy</option>
+                                        </select>
+                                        {ruleForm.schedule.kind === 'weekly' && (
+                                            <select
+                                                value={ruleForm.schedule.weekday || 1}
+                                                onChange={e => setRuleForm(f => ({ ...f, schedule: { ...f.schedule, weekday: parseInt(e.target.value) } }))}
+                                                className={inputCls}
+                                            >
+                                                {['Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba', 'Yakshanba'].map((d, i) => (
+                                                    <option key={i} value={i + 1}>{d}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                        {ruleForm.schedule.kind === 'monthly' && (
+                                            <select
+                                                value={ruleForm.schedule.dayOfMonth || 1}
+                                                onChange={e => setRuleForm(f => ({ ...f, schedule: { ...f.schedule, dayOfMonth: parseInt(e.target.value) } }))}
+                                                className={inputCls}
+                                            >
+                                                {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                                                    <option key={d} value={d}>{d}-kuni</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                        <select
+                                            value={ruleForm.schedule.hour}
+                                            onChange={e => setRuleForm(f => ({ ...f, schedule: { ...f.schedule, hour: parseInt(e.target.value) } }))}
+                                            className={inputCls}
+                                        >
+                                            {Array.from({ length: 13 }, (_, i) => i + 8).map(h => (
+                                                <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTriggerDef?.supportsSegment && (
+                                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-3">
+                                    <label className={labelCls}>Kimga yuborilsin</label>
+                                    <SegmentBuilder
+                                        value={ruleForm.segment}
+                                        onChange={next => setRuleForm(f => ({ ...f, segment: next }))}
+                                        doctors={doctors}
+                                        compact
+                                    />
+                                </div>
+                            )}
+
                             {activeTriggerDef?.supportsDoctorFilter !== false && (
                                 <div>
                                     <label className={labelCls}>Shifokor filtri (ixtiyoriy)</label>
@@ -995,86 +1005,29 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <Users className="w-5 h-5 text-gray-400" /> Kimga yuborish?
                         </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                                <label className={labelCls}>Shifokor bo'yicha</label>
-                                <select value={audienceDoctorId} onChange={e => setAudienceDoctorId(e.target.value)} className={inputCls}>
-                                    <option value="All">Barcha shifokorlar</option>
-                                    {doctors.map(d => (
-                                        <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className={labelCls}>Bemorlar</label>
-                                <select value={audienceStatus} onChange={e => setAudienceStatus(e.target.value as any)} className={inputCls}>
-                                    <option value="Active">Faol bemorlar</option>
-                                    <option value="All">Barcha bemorlar</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className={labelCls}>Uzoq kelmagan</label>
-                                <select value={audienceInactive} onChange={e => setAudienceInactive(e.target.value as any)} className={inputCls}>
-                                    <option value="none">Filtr yo'q</option>
-                                    <option value="1">1 oydan beri kelmagan</option>
-                                    <option value="3">3 oydan beri kelmagan</option>
-                                    <option value="6">6 oydan beri kelmagan</option>
-                                </select>
-                                {audienceInactive !== 'none' && (
-                                    <label className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={includeNeverVisited}
-                                            onChange={e => setIncludeNeverVisited(e.target.checked)}
-                                            className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                                        />
-                                        Hech qachon kelmaganlarni ham qo'shish
-                                    </label>
-                                )}
-                            </div>
-                        </div>
-                        <div>
-                            <p className="text-xs text-gray-400 mb-2">Tezkor filtrlar (birga ishlaydi):</p>
-                            <div className="flex flex-wrap gap-2">
-                                {QUICK_FILTERS.map(({ key, label }) => {
-                                    const active = quickFilters.has(key);
-                                    return (
-                                        <button
-                                            key={key}
-                                            onClick={() => setQuickFilters(prev => {
-                                                const next = new Set(prev);
-                                                if (next.has(key)) next.delete(key); else next.add(key);
-                                                return next;
-                                            })}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${active
-                                                ? 'bg-primary-600 text-white border-primary-600'
-                                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
-                                        >
-                                            {active && <CheckCircle2 className="w-3.5 h-3.5" />}
-                                            {label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
+                        <SegmentBuilder value={segment} onChange={setSegment} doctors={doctors} />
                         <div className="flex items-center gap-2 px-4 py-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-sm">
                             <Eye className="w-4 h-4 text-primary-600 shrink-0" />
                             <span className="text-primary-700 dark:text-primary-400">
-                                <strong>{recipients.length} ta bemor</strong>
-                                {' '}({manualChannel === 'sms' ? '📱 telefon raqami bor'
-                                    : manualChannel === 'telegram' ? '✈️ Telegramga ulangan'
-                                        : '✈️ Telegram yoki 📱 SMS bilan yetib boradi'})
-                                {recipients.length > 0 && (
-                                    <span className="text-primary-600/70 dark:text-primary-400/70">
-                                        {' — '}
-                                        {recipients.slice(0, 3).map(r => `${r.firstName} ${r.lastName}`).join(', ')}
-                                        {recipients.length > 3 ? ` va yana ${recipients.length - 3} ta` : ''}
-                                    </span>
+                                {audienceLoading ? 'Hisoblanmoqda...' : (
+                                    <>
+                                        <strong>{recipientCount} ta bemor</strong>
+                                        {' '}({manualChannel === 'sms' ? '📱 telefon raqami bor'
+                                            : manualChannel === 'telegram' ? '✈️ Telegramga ulangan'
+                                                : '✈️ Telegram yoki 📱 SMS bilan yetib boradi'})
+                                        {recipientSample.length > 0 && (
+                                            <span className="text-primary-600/70 dark:text-primary-400/70">
+                                                {' — '}
+                                                {recipientSample.map(r => `${r.firstName} ${r.lastName}`).join(', ')}
+                                                {recipientCount > recipientSample.length ? ` va yana ${recipientCount - recipientSample.length} ta` : ''}
+                                            </span>
+                                        )}
+                                    </>
                                 )}
                             </span>
                         </div>
                         {/* Narx taqsimoti — pul faqat SMS uchun ketadi */}
-                        {recipients.length > 0 && (
+                        {recipientCount > 0 && (
                             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl text-sm">
                                 {viaTelegram > 0 && (
                                     <span className="text-emerald-600 dark:text-emerald-400 font-bold">
@@ -1097,12 +1050,12 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             </div>
                         )}
 
-                        {invalidPhoneCount > 0 && (
+                        {unreachableCount > 0 && (
                             <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400">
                                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                                 <span>
-                                    Yana <strong>{invalidPhoneCount} ta bemor</strong> ro'yxatga kirmadi — telefon raqami yo'q yoki formati noto'g'ri.
-                                    Bemor kartasida raqamni <span className="font-mono">+998 90 123 45 67</span> ko'rinishida to'g'rilang.
+                                    Filtrga mos yana <strong>{unreachableCount} ta bemor</strong> ro'yxatga kirmadi — tanlangan kanal bilan yetib bo'lmaydi
+                                    (telefon raqami yo'q yoki formati noto'g'ri, yoki botga ulanmagan).
                                 </span>
                             </div>
                         )}
@@ -1180,7 +1133,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     </span>
                                     <div className="flex items-center gap-2 text-xs">
                                         <span className="text-gray-400">{previewPatient.firstName} {previewPatient.lastName}</span>
-                                        {recipients.length > 1 && (
+                                        {recipientSample.length > 1 && (
                                             <button
                                                 onClick={() => setPreviewIndex(i => i + 1)}
                                                 className="px-2 py-0.5 font-bold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded"
@@ -1246,7 +1199,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         )}
 
                         <button
-                            disabled={manualSending || bulkRunning || !manualMessage.trim() || recipients.length === 0}
+                            disabled={manualSending || bulkRunning || !manualMessage.trim() || recipientCount === 0}
                             onClick={handleManualSend}
                             className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold text-white transition-all bg-primary-600 hover:bg-primary-700 disabled:bg-primary-300 disabled:cursor-not-allowed"
                         >
@@ -1257,7 +1210,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             )}
                             {bulkRunning
                                 ? 'Oldingi yuborish davom etmoqda...'
-                                : `${recipients.length} ta bemorga yuborish${viaSms > 0 ? ` (${totalSmsParts} SMS)` : ' (bepul)'}`}
+                                : `${recipientCount} ta bemorga yuborish${viaSms > 0 ? ` (${totalSmsParts} SMS)` : ' (bepul)'}`}
                         </button>
                     </Card>
                 </div>

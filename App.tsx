@@ -1589,9 +1589,7 @@ const AppContent: React.FC = () => {
                     <MessagesManagement
                       clinicId={clinicId}
                       currentClinic={currentClinic}
-                      patients={patients}
                       doctors={doctors}
-                      transactions={transactions}
                       addToast={addToast}
                     />
                   } />
