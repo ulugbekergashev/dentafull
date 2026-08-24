@@ -1019,18 +1019,18 @@ export const CashBook: React.FC<CashBookProps> = ({
                         ) : (
                             <div className="overflow-auto max-h-[65vh]">
                                 <table className="w-full text-sm">
-                                    <thead className="bg-gray-50 dark:bg-gray-700/40">
+                                    <thead className="bg-gray-50 dark:bg-gray-700">
                                         <tr>
-                                            <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 dark:bg-gray-700/40 z-30 min-w-[180px]">
+                                            <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 dark:bg-gray-700 z-30 min-w-[180px]">
                                                 Bemor
                                             </th>
-                                            <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase w-20 sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">Vaqt</th>
+                                            <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase w-20 sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Vaqt</th>
                                             {doctorCols.map(col => (
-                                                <th key={col.id} className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap min-w-[110px] sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">
+                                                <th key={col.id} className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap min-w-[110px] sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">
                                                     {col.name}
                                                 </th>
                                             ))}
-                                            <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">Usul</th>
+                                            <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Usul</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -1080,18 +1080,18 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             </tr>
                                         ))}
                                     </tbody>
-                                    <tfoot className="bg-gray-50 dark:bg-gray-700/40 border-t-2 border-gray-200 dark:border-gray-600">
+                                    <tfoot className="bg-gray-50 dark:bg-gray-700 border-t-2 border-gray-200 dark:border-gray-600">
                                         <tr>
-                                            <td className="px-4 py-3 font-bold text-gray-900 dark:text-white sticky left-0 bottom-0 bg-gray-50 dark:bg-gray-700/40 z-30">
+                                            <td className="px-4 py-3 font-bold text-gray-900 dark:text-white sticky left-0 bottom-0 bg-gray-50 dark:bg-gray-700 z-30">
                                                 JAMI
                                             </td>
-                                            <td className="sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20" />
+                                            <td className="sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20" />
                                             {doctorCols.map(col => (
-                                                <td key={col.id} className="px-3 py-3 text-right font-black text-gray-900 dark:text-white tabular-nums sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">
+                                                <td key={col.id} className="px-3 py-3 text-right font-black text-gray-900 dark:text-white tabular-nums sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">
                                                     {col.total ? num(col.total) : '—'}
                                                 </td>
                                             ))}
-                                            <td className="px-3 py-3 text-right font-black text-emerald-600 dark:text-emerald-400 tabular-nums whitespace-nowrap sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">
+                                            <td className="px-3 py-3 text-right font-black text-emerald-600 dark:text-emerald-400 tabular-nums whitespace-nowrap sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">
                                                 {num(day.totals.gross)}
                                             </td>
                                         </tr>
@@ -1411,17 +1411,17 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
                     <div className="overflow-auto max-h-[70vh]">
                         <table className="w-full text-sm">
-                            <thead className="bg-gray-50 dark:bg-gray-700/40">
+                            <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 dark:bg-gray-700/40 z-30">Kun</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">Naqd</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">Naqdsiz</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">Jami</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">Xarajat</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">Kassada qoldi</th>
-                                    <th className="px-3 py-3 text-center text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700/40 z-20">Holat</th>
+                                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 dark:bg-gray-700 z-30">Kun</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Naqd</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Naqdsiz</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Jami</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Xarajat</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Kassada qoldi</th>
+                                    <th className="px-3 py-3 text-center text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Holat</th>
                                     {doctorCols.map(col => (
-                                        <th key={col.id} className="px-3 py-3 text-right text-[11px] font-bold text-gray-400 uppercase whitespace-nowrap min-w-[100px]">
+                                        <th key={col.id} className="px-3 py-3 text-right text-[11px] font-bold text-gray-400 uppercase whitespace-nowrap min-w-[100px] sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">
                                             {col.name}
                                         </th>
                                     ))}
@@ -1465,15 +1465,15 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     </tr>
                                 ))}
                             </tbody>
-                            <tfoot className="bg-gray-50 dark:bg-gray-700/40 border-t-2 border-gray-200 dark:border-gray-600">
+                            <tfoot className="bg-gray-50 dark:bg-gray-700 border-t-2 border-gray-200 dark:border-gray-600">
                                 <tr>
-                                    <td className="px-4 py-3 font-black text-gray-900 dark:text-white sticky left-0 bottom-0 bg-gray-50 dark:bg-gray-700/40 z-30">JAMI</td>
-                                    <td className="px-3 py-3 text-right font-black tabular-nums text-emerald-600 dark:text-emerald-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">{num(monthData.totals.cashIn)}</td>
-                                    <td className="px-3 py-3 text-right font-black tabular-nums text-blue-600 dark:text-blue-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">{num(monthData.totals.nonCashIn)}</td>
-                                    <td className="px-3 py-3 text-right font-black tabular-nums text-gray-900 dark:text-white sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">{num(monthData.totals.gross)}</td>
-                                    <td className="px-3 py-3 text-right font-black tabular-nums text-red-600 dark:text-red-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">−{num(monthData.totals.expenseTotal)}</td>
-                                    <td className="px-3 py-3 text-right font-black tabular-nums text-amber-600 dark:text-amber-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">{num(monthData.totals.drawer)}</td>
-                                    <td className="px-3 py-3 text-center text-[11px] font-bold text-gray-500 whitespace-nowrap sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">
+                                    <td className="px-4 py-3 font-black text-gray-900 dark:text-white sticky left-0 bottom-0 bg-gray-50 dark:bg-gray-700 z-30">JAMI</td>
+                                    <td className="px-3 py-3 text-right font-black tabular-nums text-emerald-600 dark:text-emerald-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.cashIn)}</td>
+                                    <td className="px-3 py-3 text-right font-black tabular-nums text-blue-600 dark:text-blue-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.nonCashIn)}</td>
+                                    <td className="px-3 py-3 text-right font-black tabular-nums text-gray-900 dark:text-white sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.gross)}</td>
+                                    <td className="px-3 py-3 text-right font-black tabular-nums text-red-600 dark:text-red-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">−{num(monthData.totals.expenseTotal)}</td>
+                                    <td className="px-3 py-3 text-right font-black tabular-nums text-amber-600 dark:text-amber-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.drawer)}</td>
+                                    <td className="px-3 py-3 text-center text-[11px] font-bold text-gray-500 whitespace-nowrap sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">
                                         {monthData.days.filter(d => closureByDate.get(d.date)?.closed).length}
                                         {' / '}
                                         {monthData.days.filter(d => d.hasActivity).length} yopilgan
@@ -1481,7 +1481,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     {doctorCols.map(col => {
                                         const total = monthData.days.reduce((s, d) => s + (d.byDoctor[col.id] || 0), 0);
                                         return (
-                                            <td key={col.id} className="px-3 py-3 text-right font-black tabular-nums text-gray-900 dark:text-white sticky bottom-0 bg-gray-50 dark:bg-gray-700/40 z-20">
+                                            <td key={col.id} className="px-3 py-3 text-right font-black tabular-nums text-gray-900 dark:text-white sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">
                                                 {total ? num(total) : '—'}
                                             </td>
                                         );
