@@ -5853,6 +5853,9 @@ const { clinicContext } = require('./ai/context');
 const { applyGrounding, wrapToolResult } = require('./ai/guard');
 const { logAi, rateAiLog, aiUsageStats, negativeFeedback } = require('./ai/log');
 const {
+    getClinicKey, invalidateClinicKey, verifyClinicKey, isSupportedProvider, SUPPORTED_PROVIDERS,
+} = require('./ai/keys');
+const {
     actionsForRole, isAction, previewAction, executeAction, storePending, takePending,
     PENDING_INSTRUCTION,
 } = require('./ai/actions');
@@ -5882,9 +5885,10 @@ const userKey = (u: any): string => u?.id || u?.username || u?.name || 'anon';
 const AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 55_000);
 
 // AI holati — konfiguratsiya tekshiruvi
-app.get('/api/ai/status', authenticateToken, (req: any, res: any) => {
+app.get('/api/ai/status', authenticateToken, async (req: any, res: any) => {
     const { aiStatus } = require('./aiService');
-    res.json({ success: true, ...aiStatus() });
+    // Zanjir klinikaga qarab farq qiladi — o'z kaliti bo'lsa u birinchi turadi.
+    res.json({ success: true, ...aiStatus(await getClinicKey(getScopedClinicId(req))) });
 });
 
 // ─── Umumiy savol-javob mantiqi ──────────────────────────────────────────────
@@ -5939,6 +5943,9 @@ const runAsk = async (
     const isFollowUp = history.filter(m => m.role === 'user').length > 1;
 
     const ctx = { clinicId, role, doctorId: user?.doctorId };
+    // Klinikaning o'z kaliti (keshlangan). Bo'lsa — zanjirning boshida
+    // turadi va platforma chegarasi umuman ishlatilmaydi.
+    const clinicKey = await getClinicKey(clinicId);
 
     // Kesh orqali o'qish — bir xil tool + argument 60 soniya ichida bazaga
     // qayta bormaydi.
@@ -6033,6 +6040,7 @@ const runAsk = async (
                 maxRounds: route.intent === 'keng' ? 4 : 2,
                 maxTokens: 1200,
                 onEvent,
+                clinicKey,
             }
         );
 
@@ -6066,8 +6074,9 @@ const runAsk = async (
 };
 
 /** Barcha AI endpointlari uchun umumiy kirish tekshiruvi. */
-const guardAi = (req: any, res: any, bucket: string, limit: number): boolean => {
-    if (!isAiConfigured()) {
+const guardAi = async (req: any, res: any, bucket: string, limit: number): Promise<boolean> => {
+    // Klinikaning o'z kaliti bo'lsa, platformada kalit bo'lmasa ham AI ishlaydi.
+    if (!isAiConfigured(await getClinicKey(getScopedClinicId(req)))) {
         res.status(503).json({ success: false, message: 'AI sozlanmagan: server .env da API kalit yo\'q.' });
         return false;
     }
@@ -6095,7 +6104,7 @@ const guardAi = (req: any, res: any, bucket: string, limit: number): boolean => 
  */
 app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
     try {
-        if (!guardAi(req, res, 'ask', 40)) return;
+        if (!await guardAi(req, res, 'ask', 40)) return;
         // Oqimsiz yo'l ham bir xil kafolatga ega bo'lishi kerak — mijoz
         // oqim ishlamaganda shu yerga tushadi.
         const progress: any = { stage: 'boshlandi' };
@@ -6131,7 +6140,7 @@ app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
  * bilan o'qiydi.
  */
 app.post('/api/ai/ask/stream', authenticateToken, async (req: any, res: any) => {
-    if (!guardAi(req, res, 'ask', 40)) return;
+    if (!await guardAi(req, res, 'ask', 40)) return;
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -6262,6 +6271,87 @@ app.post('/api/ai/act', authenticateToken, async (req: any, res: any) => {
     } catch (e: any) {
         console.error('[AI/act]', e.message);
         res.status(500).json({ success: false, message: e.message || 'Harakat bajarilmadi.' });
+    }
+});
+
+// ─── Klinikaning o'z AI kaliti ───────────────────────────────────────────────
+//
+// Naqsh SMS sozlamalaridan olingan (/api/clinics/:id/sms-settings): GET
+// kalitni QAYTARMAYDI, faqat holatni; PUT esa saqlashdan oldin kalitni
+// haqiqiy so'rov bilan tekshiradi.
+//
+// Kalitni qaytarmaslik muhim: u brauzerga yetib borsa, DevTools orqali
+// ko'rinadi va boshqa joyda ishlatilishi mumkin. Klinikaga kalit yozilganini
+// bilish yetarli, uni qayta o'qish shart emas.
+
+app.get('/api/clinics/:id/ai-settings', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (!canAccessClinic(req, req.params.id)) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        }
+        const clinic = await prisma.clinic.findUnique({
+            where: { id: req.params.id },
+            select: { aiProvider: true, aiApiKey: true, aiKeyCheckedAt: true },
+        }) as any;
+        if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+
+        res.json({
+            provider: clinic.aiProvider || '',
+            hasKey: !!clinic.aiApiKey,
+            // Oxirgi 4 belgi — klinika qaysi kalitni kiritganini taniy olsin.
+            keyHint: clinic.aiApiKey ? `••••${String(clinic.aiApiKey).slice(-4)}` : '',
+            checkedAt: clinic.aiKeyCheckedAt || null,
+            providers: SUPPORTED_PROVIDERS,
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: 'AI sozlamalarini olishda xatolik' });
+    }
+});
+
+app.put('/api/clinics/:id/ai-settings', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (!canAccessClinic(req, req.params.id)) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        }
+        if (!['CLINIC_ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) {
+            return res.status(403).json({ error: 'Faqat klinika administratori o\'zgartira oladi' });
+        }
+
+        const clinicId = req.params.id;
+        const { provider, apiKey } = req.body || {};
+
+        // Bo'sh kalit — o'chirish. Klinika platforma kalitiga qaytadi.
+        if (apiKey === null || apiKey === '') {
+            await prisma.clinic.update({
+                where: { id: clinicId },
+                data: { aiProvider: null, aiApiKey: null, aiKeyCheckedAt: null },
+            });
+            invalidateClinicKey(clinicId);
+            return res.json({ success: true, removed: true });
+        }
+
+        if (!isSupportedProvider(provider)) {
+            return res.status(400).json({ error: 'Provayder tanlanmagan yoki qo\'llab-quvvatlanmaydi.' });
+        }
+        if (typeof apiKey !== 'string' || apiKey.trim().length < 10) {
+            return res.status(400).json({ error: 'Kalit juda qisqa.' });
+        }
+
+        // Tekshiruv saqlashdan OLDIN: noto'g'ri kalit saqlanib qolsa, klinika
+        // buni faqat birinchi savolida — eng noqulay paytda — bilardi.
+        const check = await verifyClinicKey(provider, apiKey.trim());
+        if (!check.ok) return res.status(400).json({ error: check.error || 'Kalit tekshiruvdan o\'tmadi.' });
+
+        await prisma.clinic.update({
+            where: { id: clinicId },
+            data: { aiProvider: provider, aiApiKey: apiKey.trim(), aiKeyCheckedAt: new Date() },
+        });
+        invalidateClinicKey(clinicId);
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('[AI/ai-settings]', error.message);
+        res.status(500).json({ error: 'AI sozlamalarini saqlashda xatolik' });
     }
 });
 
@@ -6435,7 +6525,7 @@ app.post('/api/ai/chat', authenticateToken, async (req: any, res: any) => {
         const lang = reqLang(req);
         const { text, meta } = await chatMeta(
             [{ role: 'system', content: chatSystemPrompt(lang) }, ...history],
-            { label: 'chat', task: 'cheap' }
+            { label: 'chat', task: 'cheap', clinicKey: await getClinicKey(getScopedClinicId(req)) }
         );
 
         const logId = await logAi({
@@ -6573,7 +6663,7 @@ app.post('/api/ai/insights', authenticateToken, async (req: any, res: any) => {
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: `Klinika statistikasi:\n${facts}\nTavsiyalar ber.` },
             ],
-            { label: 'insights', task: 'cheap', maxTokens: 600 }
+            { label: 'insights', task: 'cheap', maxTokens: 600, clinicKey: await getClinicKey(clinicId) }
         );
 
         // Grounding: tavsiyalarda faqat yuqoridagi raqamlar bo'lishi mumkin.
@@ -6898,6 +6988,11 @@ async function runStartupMigrations() {
         CREATE INDEX IF NOT EXISTS "AiConversation_clinicId_userId_updatedAt_idx"
         ON "AiConversation" ("clinicId", "userId", "updatedAt")
     `);
+
+    // --- Klinikaning o'z AI kaliti ---
+    await migrationStep('Clinic.aiProvider', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "aiProvider" TEXT`);
+    await migrationStep('Clinic.aiApiKey', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "aiApiKey" TEXT`);
+    await migrationStep('Clinic.aiKeyCheckedAt', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "aiKeyCheckedAt" TIMESTAMP(3)`);
 
     console.log('✅ Startup migrations applied');
 }

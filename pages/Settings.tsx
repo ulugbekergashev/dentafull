@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
 import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review, LabTechnician, AccessControl, RoleAccess, LeadApiKeyInfo } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw, FlaskConical, Shield, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw, FlaskConical, Shield, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { parseAccessControl } from '../utils/accessControl';
@@ -49,7 +49,7 @@ export const Settings: React.FC<SettingsProps> = ({
    userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, currentClinic, plans, reviews
 }) => {
    const { t } = useLanguage();
-   type SettingsTab = 'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed' | 'access' | 'leadApi';
+   type SettingsTab = 'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed' | 'access' | 'leadApi' | 'ai';
    // Boshqa sahifadan aniq bo'limga yo'naltirish uchun: /settings?tab=leadApi
    const initialTab = ((): SettingsTab => {
       try {
@@ -60,6 +60,13 @@ export const Settings: React.FC<SettingsProps> = ({
       return 'services';
    })();
    const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+
+   // Klinikaning o'z AI kaliti
+   const [aiInfo, setAiInfo] = useState<{ provider: string; hasKey: boolean; keyHint: string; checkedAt: string | null; providers: string[] } | null>(null);
+   const [aiProvider, setAiProvider] = useState('gemini');
+   const [aiKeyInput, setAiKeyInput] = useState('');
+   const [aiSaving, setAiSaving] = useState(false);
+   const [aiMsg, setAiMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
    // Tashqi lid manbalari (yuboraman.uz va h.k.) uchun integratsiya kaliti
    const [leadApiInfo, setLeadApiInfo] = useState<LeadApiKeyInfo | null>(null);
@@ -78,6 +85,55 @@ export const Settings: React.FC<SettingsProps> = ({
          .finally(() => { if (!cancelled) setLeadApiLoading(false); });
       return () => { cancelled = true; };
    }, [activeTab, currentClinic?.id]);
+
+   React.useEffect(() => {
+      if (activeTab !== 'ai' || !currentClinic?.id) return;
+      let cancelled = false;
+      api.aiSettings.get(currentClinic.id)
+         .then(info => {
+            if (cancelled) return;
+            setAiInfo(info);
+            if (info.provider) setAiProvider(info.provider);
+         })
+         .catch(err => console.error("AI sozlamalarini yuklab bo'lmadi", err));
+      return () => { cancelled = true; };
+   }, [activeTab, currentClinic?.id]);
+
+   const handleSaveAiKey = async () => {
+      if (!currentClinic?.id) return;
+      setAiSaving(true);
+      setAiMsg(null);
+      try {
+         await api.aiSettings.save(currentClinic.id, aiProvider, aiKeyInput.trim());
+         setAiKeyInput('');
+         const info = await api.aiSettings.get(currentClinic.id);
+         setAiInfo(info);
+         setAiMsg({ kind: 'ok', text: 'Kalit tekshirildi va saqlandi.' });
+      } catch (e: any) {
+         // Server kalitni saqlashdan OLDIN tekshiradi, shuning uchun bu
+         // yerdagi xato aniq sabab bo'ladi: kalit noto'g'ri, provayder
+         // javob bermadi va h.k.
+         setAiMsg({ kind: 'err', text: e?.message || 'Kalit saqlanmadi.' });
+      } finally {
+         setAiSaving(false);
+      }
+   };
+
+   const handleRemoveAiKey = async () => {
+      if (!currentClinic?.id) return;
+      setAiSaving(true);
+      setAiMsg(null);
+      try {
+         await api.aiSettings.save(currentClinic.id, '', null);
+         const info = await api.aiSettings.get(currentClinic.id);
+         setAiInfo(info);
+         setAiMsg({ kind: "ok", text: "Kalit o'chirildi. Umumiy kalit ishlatiladi." });
+      } catch (e: any) {
+         setAiMsg({ kind: "err", text: e?.message || "O'chirib bo'lmadi." });
+      } finally {
+         setAiSaving(false);
+      }
+   };
 
    const copyLeadValue = async (value: string, marker: string) => {
       try {
@@ -863,6 +919,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   { id: 'messaging', name: "SMS va Telegram", icon: MessageSquare },
                   { id: 'dmed', name: "DMED (IT-MED)", icon: Activity },
                   // Kalitni faqat klinika egasi ko'radi — backend ham shu rolni talab qiladi.
+                  ...(userRole === UserRole.CLINIC_ADMIN ? [{ id: 'ai', name: 'AI kaliti', icon: Sparkles }] : []),
                   ...(userRole === UserRole.CLINIC_ADMIN ? [{ id: 'leadApi', name: 'Lid integratsiyasi', icon: Link2 }] : []),
                   ...(userRole === UserRole.CLINIC_ADMIN ? [{ id: 'access', name: 'Ruxsatlar', icon: Shield }] : []),
                ].map((item) => (
@@ -1118,6 +1175,125 @@ export const Settings: React.FC<SettingsProps> = ({
 
                {/* Services Tab */}
                {/* Access Control Tab — faqat klinika admini */}
+               {activeTab === 'ai' && userRole === UserRole.CLINIC_ADMIN && (
+                  <div className="space-y-6">
+                     <Card className="p-6">
+                        <div className="flex items-center gap-3 mb-2">
+                           <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
+                              <Sparkles className="w-5 h-5 text-primary-600 dark:text-primary-300" />
+                           </div>
+                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI kaliti</h3>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                           DentaAI hozir umumiy kalit bilan ishlaydi va u barcha klinikalarga taqsimlanadi —
+                           tig'iz paytda "xizmat band" xabari chiqishi mumkin. O'z kalitingizni kiritsangiz,
+                           chegara faqat sizniki bo'ladi va kutish yo'qoladi. Kalit bepul olinadi.
+                        </p>
+
+                        {aiInfo?.hasKey ? (
+                           <div className="rounded-lg border border-emerald-200 dark:border-emerald-800
+                                           bg-emerald-50 dark:bg-emerald-900/20 p-4 mb-5">
+                              <div className="flex items-start gap-3">
+                                 <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                                 <div className="min-w-0">
+                                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                                       O'z kalitingiz ulangan
+                                    </p>
+                                    <p className="text-sm text-emerald-700/80 dark:text-emerald-300/70 mt-0.5">
+                                       {aiInfo.provider} · {aiInfo.keyHint}
+                                       {aiInfo.checkedAt && ` · tekshirilgan: ${new Date(aiInfo.checkedAt).toLocaleString('uz-UZ')}`}
+                                    </p>
+                                 </div>
+                              </div>
+                           </div>
+                        ) : (
+                           <div className="rounded-lg border border-gray-200 dark:border-gray-700
+                                           bg-gray-50 dark:bg-gray-800/50 p-4 mb-5">
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                 Hozir umumiy kalit ishlatilmoqda.
+                              </p>
+                           </div>
+                        )}
+
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                           Provayder
+                        </label>
+                        <select
+                           value={aiProvider}
+                           onChange={e => setAiProvider(e.target.value)}
+                           className="w-full px-3 py-2.5 mb-4 bg-white dark:bg-gray-800 border border-gray-200
+                                      dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100"
+                        >
+                           <option value="gemini">Google Gemini (bepul, tavsiya etiladi)</option>
+                           <option value="groq">Groq</option>
+                           <option value="openrouter">OpenRouter</option>
+                        </select>
+
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                           Kalit
+                        </label>
+                        <div className="flex gap-2">
+                           <input
+                              type="password"
+                              value={aiKeyInput}
+                              onChange={e => setAiKeyInput(e.target.value)}
+                              placeholder={aiInfo?.hasKey ? 'Yangi kalit kiriting (almashtirish uchun)' : 'API kalitini shu yerga qo\'ying'}
+                              className="flex-1 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200
+                                         dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100"
+                           />
+                           <Button onClick={handleSaveAiKey} disabled={aiSaving || aiKeyInput.trim().length < 10}>
+                              {aiSaving ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                              Tekshirish va saqlash
+                           </Button>
+                        </div>
+
+                        {/* Saqlashdan oldin server kalitni haqiqiy so'rov bilan
+                            tekshiradi — shuning uchun bu yerdagi xabar aniq sabab
+                            bo'ladi, "keyinroq bilib olasiz" emas. */}
+                        {aiMsg && (
+                           <div className={`flex items-start gap-2 mt-3 text-sm ${aiMsg.kind === 'ok'
+                              ? 'text-emerald-700 dark:text-emerald-300'
+                              : 'text-red-600 dark:text-red-400'}`}>
+                              {aiMsg.kind === 'ok'
+                                 ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                                 : <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
+                              <span>{aiMsg.text}</span>
+                           </div>
+                        )}
+
+                        {aiInfo?.hasKey && (
+                           <div className="mt-4">
+                              <Button variant="danger" onClick={handleRemoveAiKey} disabled={aiSaving}>
+                                 <Trash2 className="w-4 h-4 mr-2" />
+                                 Kalitni o'chirish
+                              </Button>
+                           </div>
+                        )}
+                     </Card>
+
+                     <Card className="p-6">
+                        <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
+                           Bepul kalitni qanday olish
+                        </h4>
+                        <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-2 list-decimal list-inside">
+                           <li>
+                              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+                                 className="text-primary-600 dark:text-primary-400 hover:underline">
+                                 aistudio.google.com/apikey
+                              </a> manzilini oching va Google hisobingiz bilan kiring.
+                           </li>
+                           <li>"Create API key" tugmasini bosing.</li>
+                           <li>Chiqqan kalitni nusxalab, yuqoridagi maydonga qo'ying.</li>
+                           <li>"Tekshirish va saqlash" — kalit darhol sinab ko'riladi.</li>
+                        </ol>
+                        <p className="text-xs text-gray-400 mt-4">
+                           Kalit faqat serverda saqlanadi va hech qachon qaytarib berilmaydi.
+                           Uni o'chirsangiz, klinika yana umumiy kalitga qaytadi.
+                        </p>
+                     </Card>
+                  </div>
+               )}
+
                {activeTab === 'leadApi' && userRole === UserRole.CLINIC_ADMIN && (
                   <div className="space-y-6">
                      <Card className="p-6">

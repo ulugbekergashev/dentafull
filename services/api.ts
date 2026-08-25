@@ -1008,6 +1008,34 @@ export const api = {
                 body: JSON.stringify({ salesAgentId }),
             }),
     },
+    // Klinikaning O'Z AI kaliti.
+    //
+    // Kalitning o'zi hech qachon qaytarilmaydi — faqat holati va oxirgi 4
+    // belgisi. Brauzerga yetib borgan kalit DevTools orqali ko'rinadi va
+    // boshqa joyda ishlatilishi mumkin, klinikaga esa uni qayta o'qish
+    // kerak emas: kiritilganini bilish yetarli.
+    aiSettings: {
+        get: (clinicId: string) => {
+            if (isDemoMode()) {
+                return Promise.resolve({
+                    provider: '', hasKey: false, keyHint: '', checkedAt: null,
+                    providers: ['gemini', 'groq', 'openrouter'],
+                });
+            }
+            return fetchJson<{
+                provider: string; hasKey: boolean; keyHint: string;
+                checkedAt: string | null; providers: string[];
+            }>(`/clinics/${clinicId}/ai-settings`);
+        },
+        save: (clinicId: string, provider: string, apiKey: string | null) => {
+            if (isDemoMode()) return Promise.resolve({ success: true });
+            return fetchJson<{ success: boolean; removed?: boolean }>(`/clinics/${clinicId}/ai-settings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider, apiKey }),
+            });
+        },
+    },
     // Platforma (SuperAdmin) uchun tashqi lid manbasi kaliti (yuboraman.uz va h.k.).
     // Bu kalit bilan kelgan lidlar klinikaga emas, DemoRequest ro'yxatiga tushadi.
     adminLeads: {

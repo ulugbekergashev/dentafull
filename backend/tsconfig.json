@@ -30,7 +30,8 @@
         "ai/router.ts",
         "ai/context.ts",
         "ai/actions.ts",
-        "ai/proactive.ts"
+        "ai/proactive.ts",
+        "ai/keys.ts"
     ],
     "exclude": [
         "node_modules",

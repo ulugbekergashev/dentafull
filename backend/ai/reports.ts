@@ -16,6 +16,7 @@
 const { runTool } = require('./tools');
 const { chat } = require('../aiService');
 import { applyGrounding } from './guard';
+import { getClinicKey, ClinicKey } from './keys';
 
 export type ReportType = 'today' | 'performance' | 'finance' | 'debtors' | 'inventory' | 'leads';
 
@@ -307,7 +308,11 @@ const BUILDERS: Record<ReportType, Builder> = {
 // u hisoblamaydi va tool tanlamaydi — faqat nimaga e'tibor berish kerakligini
 // aytadi. Shuning uchun xato qilish ehtimoli minimal.
 
-const narrativeFor = async (r: Omit<Report, 'type' | 'narrative'>, lang: Lang): Promise<string> => {
+const narrativeFor = async (
+    r: Omit<Report, 'type' | 'narrative'>,
+    lang: Lang,
+    clinicKey: ClinicKey | null
+): Promise<string> => {
     const fakt = r.metrics
         .map(m => `${m.label}: ${m.value}${m.unit ? ' ' + m.unit : ''}${m.hint ? ` (${m.hint})` : ''}`)
         .join('; ');
@@ -326,7 +331,7 @@ const narrativeFor = async (r: Omit<Report, 'type' | 'narrative'>, lang: Lang): 
                 },
                 { role: 'user', content: `${r.title} (${r.period}). ${fakt}` },
             ],
-            { task: 'chat', maxTokens: 220, label: 'report-narrative' }
+            { task: 'chat', maxTokens: 220, label: 'report-narrative', clinicKey }
         );
 
         // Grounding: xulosadagi har bir yirik raqam metrikalarda bormi?
@@ -365,6 +370,8 @@ export const buildReport = async (
 
     const txt = TEXT[type][lang];
     const base = { ...await BUILDERS[type](ctx, today), title: txt.title, emptyText: txt.empty };
-    const narrative = await narrativeFor(base, lang);
+    // Xulosa ham klinikaning o'z kaliti bilan yoziladi — aks holda
+    // hisobotlar platforma chegarasini yeb, savol-javobga joy qoldirmasdi.
+    const narrative = await narrativeFor(base, lang, await getClinicKey(ctx.clinicId));
     return { type, ...base, narrative };
 };

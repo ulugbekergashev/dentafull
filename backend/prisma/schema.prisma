@@ -283,6 +283,14 @@ model Clinic {
   eskizToken              String?
   eskizTokenExpiry        DateTime?
   eskizNick               String?
+  /// Klinikaning O'Z AI kaliti. Bo'lsa — birinchi navbatda u ishlatiladi,
+  /// platforma kaliti zaxira bo'lib qoladi. Sabab: kalit limitlari kalitga
+  /// biriktirilgan, klinikaga emas — bitta umumiy kalitda klinikalar
+  /// bir-birining chegarasini yeb qo'yadi.
+  aiProvider              String?
+  aiApiKey                String?
+  /// Kalit oxirgi marta muvaffaqiyatli tekshirilgan vaqt.
+  aiKeyCheckedAt          DateTime?
   dmedEnabled             Boolean            @default(false)
   dmedApiKey              String?
   dmedApiSecret           String?

@@ -68,6 +68,14 @@ export interface ChatOptions {
      * kutish vaqti barcha urinishlar yig'indisi bilan cheklanadi.
      */
     deadlineAt?: number;
+    /**
+     * Klinikaning O'Z kaliti. Berilsa — zanjirning BOSHIGA qo'yiladi,
+     * platforma kalitlari zaxira bo'lib qoladi.
+     *
+     * Sabab: limitlar kalitga biriktirilgan, klinikaga emas. Bitta umumiy
+     * kalitda klinikalar bir-birining chegarasini yeb qo'yadi (ai/keys.ts).
+     */
+    clinicKey?: { provider: string; apiKey: string } | null;
 }
 
 /** Chaqiruv haqidagi ma'lumot — jurnal (ai/log.ts) uchun. */
@@ -121,9 +129,18 @@ const providers = (): ProviderConfig[] => [
         // sezilarli ustun chiqdi (35-tishni to'g'ri aniqladi, differensial tashxis berdi).
         // Tezligi ham bir xil (~1.6s). qwen3.6-27b ni ishlatmang — u ichki
         // fikrlashini ingliz tilida javobga chiqarib yuboradi.
+        // cheap: llama-3.1-8b-instant Groq'dan OLIB TASHLANGAN (404
+        // "model does not exist"). 404 qayta urinishga arzimaydigan xato,
+        // ya'ni zanjir ham yordam bermasdi — `task: 'cheap'` ishlatadigan
+        // hamma narsa jimgina yiqilardi: /ai/chat, boshqaruv tavsiyalari va
+        // kunlik Telegram xulosasi.
+        //
+        // O'rniga bir oiladagi kichik model olindi — o'zbek tilidagi sifat
+        // gpt-oss-120b bilan bir xil poydevorga tayanadi. qwen3.6-27b ni
+        // ishlatmang: u ichki fikrlashini ingliz tilida javobga chiqaradi.
         models: {
             chat: process.env.GROQ_MODEL_CHAT || 'openai/gpt-oss-120b',
-            cheap: process.env.GROQ_MODEL_CHEAP || 'llama-3.1-8b-instant',
+            cheap: process.env.GROQ_MODEL_CHEAP || 'openai/gpt-oss-20b',
         },
     },
     {
@@ -141,21 +158,34 @@ const providers = (): ProviderConfig[] => [
  * Ishlatiladigan provayderlar zanjiri.
  * AI_PROVIDER berilgan bo'lsa — o'sha birinchi bo'ladi, qolganlari zaxira.
  */
-const providerChain = (): ProviderConfig[] => {
-    const available = providers().filter(p => !!p.apiKey);
+const providerChain = (clinicKey?: { provider: string; apiKey: string } | null): ProviderConfig[] => {
+    const all = providers();
+    const available = all.filter(p => !!p.apiKey);
+
     const preferred = process.env.AI_PROVIDER;
-    if (!preferred) return available;
-    const first = available.filter(p => p.name === preferred);
-    const rest = available.filter(p => p.name !== preferred);
-    return [...first, ...rest];
+    const platform = !preferred
+        ? available
+        : [...available.filter(p => p.name === preferred), ...available.filter(p => p.name !== preferred)];
+
+    if (!clinicKey?.apiKey) return platform;
+
+    const base = all.find(p => p.name === clinicKey.provider);
+    if (!base) return platform;
+
+    // Nom ataylab boshqacha: loglarda va xatolarda klinika kaliti
+    // ishlatilgani ko'rinib tursin — aks holda "groq 429 berdi" degan
+    // yozuvdan kimning chegarasi tugagani noma'lum bo'lardi.
+    const own: ProviderConfig = { ...base, apiKey: clinicKey.apiKey, name: `${base.name}(klinika)` };
+    return [own, ...platform];
 };
 
-export const isAiConfigured = (): boolean => providerChain().length > 0;
+export const isAiConfigured = (clinicKey?: { provider: string; apiKey: string } | null): boolean =>
+    providerChain(clinicKey).length > 0;
 
 /** Sozlangan provayder nomlari — diagnostika uchun (kalitlar oshkor qilinmaydi). */
-export const aiStatus = () => ({
-    configured: isAiConfigured(),
-    providers: providerChain().map(p => ({ name: p.name, models: p.models })),
+export const aiStatus = (clinicKey?: { provider: string; apiKey: string } | null) => ({
+    configured: isAiConfigured(clinicKey),
+    providers: providerChain(clinicKey).map(p => ({ name: p.name, models: p.models })),
 });
 
 // Fallback qilishga arziydigan xatolar: limit, vaqtinchalik nosozlik, tarmoq.
@@ -504,7 +534,7 @@ const roundWithFallback = async (
     tools: any[],
     opts: ChatOptions
 ): Promise<{ data: any; provider: ProviderConfig }> => {
-    const chain = providerChain();
+    const chain = providerChain(opts.clinicKey);
     if (chain.length === 0) {
         throw new Error(
             'AI sozlanmagan: GEMINI_API_KEY, GROQ_API_KEY yoki OPENROUTER_API_KEY dan ' +

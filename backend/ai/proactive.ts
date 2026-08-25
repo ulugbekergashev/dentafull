@@ -22,6 +22,7 @@ const { prisma } = require('../db');
 import { buildReport, ReportType } from './reports';
 import { chat } from '../aiService';
 import { logAi } from './log';
+import { getClinicKey } from './keys';
 
 // ─── Anomaliya aniqlash ──────────────────────────────────────────────────────
 
@@ -238,7 +239,7 @@ export const buildDigest = async (clinicId: string, today: string): Promise<stri
                 },
                 { role: 'user', content: facts },
             ],
-            { task: 'cheap', maxTokens: 180, label: 'digest' }
+            { task: 'cheap', maxTokens: 180, label: 'digest', clinicKey: await getClinicKey(clinicId) }
         );
         if (advice) lines.push(advice);
     } catch (e: any) {
