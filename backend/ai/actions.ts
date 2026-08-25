@@ -22,7 +22,7 @@
 const { prisma } = require('../db');
 import { ToolContext, searchPatients } from './tools';
 import { invalidateToolCache } from './router';
-import { resolveDoctor } from './context';
+import { resolveDoctor, invalidateClinicContext } from './context';
 
 // ─── Ta'riflar ───────────────────────────────────────────────────────────────
 
@@ -123,17 +123,104 @@ export const ACTION_DEFS: ActionDef[] = [
     {
         name: 'create_expense',
         description:
-            'Xarajat yozuvini qo\'shadi. "Bugun 200 ming ijara to\'ladik" kabi ' +
-            'buyruqlar uchun. DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
+            'Klinikaning xarajatini yozadi (ijara, kommunal, material, laboratoriya). ' +
+            '"Bugun 200 ming ijara to\'ladik" kabi buyruqlar uchun. ' +
+            'Shifokorga yoki xodimga to\'lov uchun BUNI ISHLATMA — pay_doctor bor. ' +
+            'DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
         parameters: {
             type: 'object',
             properties: {
                 amount: { type: 'number', description: 'Summa, so\'mda' },
-                category: { type: 'string', description: 'Toifa (Ijara, Maosh, Material, Kommunal, Boshqa)' },
+                category: {
+                    type: 'string',
+                    // Qiymatlar ilovaning O'Z ro'yxatidan (types.ts,
+                    // EXPENSE_CATEGORY_LABELS). Ilgari bu yerda erkin matn
+                    // edi ("Ijara") va u bazaga o'sha holicha tushardi —
+                    // ilova esa 'Rent' kutadi, natijada toifa hech qayerda
+                    // to'g'ri ko'rinmasdi.
+                    enum: ['Rent', 'Utilities', 'Inventory', 'Lab', 'Other'],
+                    description: 'Rent — ijara; Utilities — kommunal; Inventory — ombor/material; Lab — laboratoriya; Other — boshqa',
+                },
                 title: { type: 'string', description: 'Qisqacha nomi' },
                 date: { type: 'string', description: 'Sana, YYYY-MM-DD. Berilmasa bugungi.' },
             },
-            required: ['amount', 'category', 'title'],
+            required: ['amount', 'category'],
+        },
+        roles: ADMIN,
+    },
+    {
+        name: 'send_message',
+        description:
+            'BITTA bemorga xabar yuboradi (Telegram yoki SMS). "Aliyevga xabar ' +
+            'yubor", "Karimovga eslatib qo\'y" kabi buyruqlar uchun. ' +
+            'Bir nechta bemorga birdan yuborish uchun send_reminder ishlatiladi. ' +
+            'DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
+        parameters: {
+            type: 'object',
+            properties: {
+                patientQuery: { type: 'string', description: 'Bemor ismi yoki telefoni' },
+                message: { type: 'string', description: 'Xabar matni' },
+            },
+            required: ['patientQuery', 'message'],
+        },
+        roles: FRONT_DESK,
+    },
+    {
+        name: 'record_payment',
+        description:
+            'Bemordan to\'lov qabul qilinganini yozadi. "Aliyev 500 ming to\'ladi", ' +
+            '"Karimov qarzini yopdi" kabi buyruqlar uchun. Bemorda to\'lanmagan ' +
+            'hisob bo\'lsa, u avtomatik yopiladi. ' +
+            'DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
+        parameters: {
+            type: 'object',
+            properties: {
+                patientQuery: { type: 'string', description: 'Bemor ismi yoki telefoni' },
+                amount: { type: 'number', description: 'To\'langan summa, so\'mda' },
+                method: {
+                    type: 'string',
+                    enum: ['Cash', 'Card', 'Click', 'Transfer'],
+                    description: 'To\'lov usuli. Berilmasa Cash (naqd).',
+                },
+                date: { type: 'string', description: 'Sana, YYYY-MM-DD. Berilmasa bugungi.' },
+            },
+            required: ['patientQuery', 'amount'],
+        },
+        roles: FRONT_DESK,
+    },
+    {
+        name: 'pay_doctor',
+        description:
+            'Shifokorga to\'lov (oylik yoki ulush) yozadi. "Rahimovga 3 million ' +
+            'berdim", "Karimovaga oyligini to\'ladim" kabi buyruqlar uchun. ' +
+            'DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
+        parameters: {
+            type: 'object',
+            properties: {
+                doctorName: { type: 'string', description: 'Shifokor familiyasi yoki ismi' },
+                amount: { type: 'number', description: 'Summa, so\'mda' },
+                date: { type: 'string', description: 'Sana, YYYY-MM-DD. Berilmasa bugungi.' },
+                note: { type: 'string', description: 'Izoh' },
+            },
+            required: ['doctorName', 'amount'],
+        },
+        roles: ADMIN,
+    },
+    {
+        name: 'update_doctor_pay',
+        description:
+            'Shifokorning ish haqi shartlarini o\'zgartiradi: foizi yoki belgilangan ' +
+            'oyligi. "Rahimovning foizini 40 ga tushir", "Karimovaga fiks 5 million ' +
+            'qil" kabi buyruqlar uchun. ' +
+            'DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
+        parameters: {
+            type: 'object',
+            properties: {
+                doctorName: { type: 'string', description: 'Shifokor familiyasi yoki ismi' },
+                percentage: { type: 'number', description: 'Shifokor ulushi foizda (0-100)' },
+                fixedSalary: { type: 'number', description: 'Belgilangan oylik, so\'mda' },
+            },
+            required: ['doctorName'],
         },
         roles: ADMIN,
     },
@@ -204,6 +291,27 @@ const maskName = (first?: string | null, last?: string | null): string => {
 };
 
 const som = (n: number): string => Math.round(n).toLocaleString('ru-RU');
+
+/**
+ * Xarajat toifalari — ilovaning O'Z ro'yxati (types.ts,
+ * EXPENSE_CATEGORY_LABELS). Bu yerda takrorlangan, chunki backend
+ * frontend'dagi fayldan import qila olmaydi (tsconfig chegarasi) —
+ * ai/tools.ts dagi to'lov usullari bilan bir xil sabab.
+ *
+ * DoctorShare va Salary ataylab YO'Q: ular shifokorga to'lov uchun va
+ * pay_doctor orqali, shifokorning ish haqi turiga qarab tanlanadi.
+ */
+const EXPENSE_CATEGORIES = ['Rent', 'Utilities', 'Inventory', 'Lab', 'Other'];
+
+const EXPENSE_LABELS: Record<string, string> = {
+    Rent: 'Ijara',
+    Utilities: 'Kommunal',
+    Inventory: 'Ombor',
+    Lab: 'Laboratoriya',
+    Other: 'Boshqa',
+    Salary: 'Oylik',
+    DoctorShare: 'Shifokor ulushi',
+};
 
 const clampLimit = (n: any, def: number, max: number): number => {
     const v = Number(n);
@@ -500,14 +608,191 @@ export const previewAction = async (
         };
     }
 
+    if (name === 'send_message') {
+        const text = String(args.message || '').trim();
+        if (text.length < 3) return { xato: 'Xabar matni juda qisqa.' };
+
+        const found = await findOnePatient(args.patientQuery, ctx);
+        if (found.xato) return { xato: found.xato };
+        const p = found.patient;
+
+        if (!p.phone && !p.telegramChatId) {
+            return { xato: `${maskName(p.firstName, p.lastName)} da na telefon, na Telegram bor — xabar yetib bormaydi.` };
+        }
+
+        return {
+            args: { patientId: p.id, message: text.slice(0, 600) },
+            preview: {
+                title: 'Xabar yuborish',
+                summary: `${maskName(p.firstName, p.lastName)} ga`,
+                items: [{ label: 'Bemor', detail: `${maskName(p.firstName, p.lastName)} · ${maskPhone(p.phone)}` }],
+                message: text,
+                confirmLabel: 'Yuborish',
+            },
+        };
+    }
+
+    if (name === 'record_payment') {
+        const amount = Number(args.amount);
+        if (!Number.isFinite(amount) || amount <= 0) return { xato: 'Summa noto\'g\'ri.' };
+
+        const found = await findOnePatient(args.patientQuery, ctx);
+        if (found.xato) return { xato: found.xato };
+        const p = found.patient;
+
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : today;
+        const method = ['Cash', 'Card', 'Click', 'Transfer'].includes(String(args.method))
+            ? String(args.method) : 'Cash';
+
+        // Eng eski qarzdan boshlab yopiladi — ilovaning o'zi ham shunday
+        // qiladi (pages/Dashboard.tsx, qarz to'lash oynasi).
+        const pending = await prisma.transaction.findMany({
+            where: { clinicId: ctx.clinicId, patientId: p.id, status: 'Pending' },
+            orderBy: { date: 'asc' },
+            select: { id: true, amount: true, service: true, date: true },
+        });
+        const qarz = pending.reduce((s: number, t: any) => s + (t.amount || 0), 0);
+
+        if (qarz > 0 && amount > qarz) {
+            return {
+                xato: `${maskName(p.firstName, p.lastName)} ning qarzi ${som(qarz)} so'm, `
+                    + `siz ${som(amount)} so'm dedingiz. Summani aniqlashtiring.`,
+            };
+        }
+
+        return {
+            args: { patientId: p.id, patientName: `${p.firstName} ${p.lastName || ''}`.trim(), amount, method, date },
+            preview: {
+                title: qarz > 0 ? 'To\'lov — qarz yopiladi' : 'To\'lov qabul qilish',
+                summary: `${maskName(p.firstName, p.lastName)} — ${som(amount)} so'm`,
+                items: [
+                    { label: 'Bemor', detail: maskName(p.firstName, p.lastName) },
+                    { label: 'Summa', detail: `${som(amount)} so'm` },
+                    { label: 'Usul', detail: method },
+                    { label: 'Sana', detail: date },
+                    ...(qarz > 0 ? [{ label: 'Mavjud qarzi', detail: `${som(qarz)} so'm` }] : []),
+                ],
+                warning: qarz > 0 && amount < qarz
+                    ? `Qisman to'lov: ${som(qarz - amount)} so'm qarz qoladi.`
+                    : undefined,
+                confirmLabel: 'To\'lovni yozish',
+            },
+        };
+    }
+
+    if (name === 'pay_doctor') {
+        const amount = Number(args.amount);
+        if (!Number.isFinite(amount) || amount <= 0) return { xato: 'Summa noto\'g\'ri.' };
+
+        const doctor = await resolveDoctor(ctx.clinicId, String(args.doctorName || ''));
+        if (!doctor) return { xato: `"${args.doctorName}" shifokori aniqlanmadi.` };
+
+        const row = await prisma.doctor.findFirst({
+            where: { id: doctor.id, clinicId: ctx.clinicId },
+            select: { salaryType: true, percentage: true, fixedSalary: true },
+        });
+
+        // Toifa shifokorning ish haqi turiga BOG'LIQ va buni o'ylab topib
+        // bo'lmaydi (pages/Finance.tsx):
+        //   kpi   -> 'DoctorShare' (Shifokor Hisobidan yechiladi)
+        //   fixed -> 'Salary'      (sof foydani kamaytiradi)
+        // Sof KPI shifokorga "Oylik" deb yozilsa, summa ikki marta
+        // ayiriladi va foyda noto'g'ri chiqadi.
+        const type = String(row?.salaryType || 'none');
+
+        if (type === 'fixed_kpi') {
+            return {
+                xato: `${doctor.name} da ish haqi aralash (fiks + foiz). Bunda summani `
+                    + 'ikkiga bo\'lish kerak va uni Moliya bo\'limidan qo\'lda kiritgan '
+                    + 'to\'g\'ri bo\'ladi — u yerda taqsimot avtomatik hisoblanadi.',
+            };
+        }
+
+        const category = type === 'kpi' ? 'DoctorShare' : 'Salary';
+        const title = category === 'DoctorShare'
+            ? `Shifokor ulushi — ${doctor.name}`
+            : `Oylik — ${doctor.name}`;
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : today;
+
+        return {
+            args: { doctorId: doctor.id, amount, category, title, date, note: String(args.note || '').slice(0, 300) },
+            preview: {
+                title: category === 'DoctorShare' ? 'Shifokor ulushi' : 'Shifokorga oylik',
+                summary: `${doctor.name} — ${som(amount)} so'm`,
+                items: [
+                    { label: 'Shifokor', detail: doctor.name },
+                    { label: 'Summa', detail: `${som(amount)} so'm` },
+                    { label: 'Toifa', detail: category === 'DoctorShare' ? 'Shifokor ulushi' : 'Oylik' },
+                    { label: 'Sana', detail: date },
+                ],
+                warning: type === 'none'
+                    ? 'Bu shifokorda ish haqi turi belgilanmagan — yozuv "Oylik" sifatida saqlanadi.'
+                    : undefined,
+                confirmLabel: 'To\'lovni yozish',
+            },
+        };
+    }
+
+    if (name === 'update_doctor_pay') {
+        const doctor = await resolveDoctor(ctx.clinicId, String(args.doctorName || ''));
+        if (!doctor) return { xato: `"${args.doctorName}" shifokori aniqlanmadi.` };
+
+        const row = await prisma.doctor.findFirst({
+            where: { id: doctor.id, clinicId: ctx.clinicId },
+            select: { percentage: true, fixedSalary: true, salaryType: true },
+        });
+        if (!row) return { xato: 'Shifokor topilmadi.' };
+
+        const data: any = {};
+        const items: { label: string; detail?: string }[] = [{ label: 'Shifokor', detail: doctor.name }];
+
+        if (args.percentage !== undefined && args.percentage !== null) {
+            const pct = Number(args.percentage);
+            if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+                return { xato: 'Foiz 0 dan 100 gacha bo\'lishi kerak.' };
+            }
+            data.percentage = pct;
+            items.push({ label: 'Foiz', detail: `${row.percentage || 0}%  ->  ${pct}%` });
+        }
+
+        if (args.fixedSalary !== undefined && args.fixedSalary !== null) {
+            const fx = Number(args.fixedSalary);
+            if (!Number.isFinite(fx) || fx < 0) return { xato: 'Oylik summasi noto\'g\'ri.' };
+            data.fixedSalary = fx;
+            items.push({ label: 'Belgilangan oylik', detail: `${som(row.fixedSalary || 0)}  ->  ${som(fx)} so'm` });
+        }
+
+        if (!Object.keys(data).length) {
+            return { xato: 'Nimani o\'zgartirish kerakligi aytilmadi (foiz yoki oylik).' };
+        }
+
+        return {
+            args: { doctorId: doctor.id, data },
+            preview: {
+                title: 'Ish haqi shartlarini o\'zgartirish',
+                summary: doctor.name,
+                items,
+                // Bu o'zgarish KELAJAKDAGI hisob-kitobga ta'sir qiladi.
+                // Foydalanuvchi buni tasdiqlashdan oldin bilishi kerak.
+                warning: 'O\'zgarish keyingi hisob-kitoblarga ta\'sir qiladi. '
+                    + 'Oldin yozilgan to\'lovlar o\'zgarmaydi.',
+                confirmLabel: 'O\'zgartirish',
+            },
+        };
+    }
+
     if (name === 'create_expense') {
         const amount = Number(args.amount);
         if (!Number.isFinite(amount) || amount <= 0) return { xato: 'Summa noto\'g\'ri.' };
         if (amount > 1_000_000_000) return { xato: 'Summa juda katta — tekshirib qayta ayting.' };
 
         const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : today;
-        const category = String(args.category || 'Boshqa').slice(0, 60);
-        const title = String(args.title || '').slice(0, 120) || category;
+        // Toifa ilovaning ro'yxatidan bo'lishi SHART. Noma'lum qiymat
+        // 'Other' ga tushadi — bazaga tanib bo'lmaydigan matn yozilgandan
+        // ko'ra "Boshqa" ga tushgani yaxshi.
+        const category = EXPENSE_CATEGORIES.includes(String(args.category))
+            ? String(args.category) : 'Other';
+        const title = String(args.title || '').slice(0, 120) || EXPENSE_LABELS[category];
 
         return {
             args: { amount, category, title, date },
@@ -687,6 +972,132 @@ export const executeAction = async (
                 message: `Qarz yozildi: ${args.patientName} — ${som(args.amount)} so'm (${args.service}).`,
                 details: { transactionId: created.id },
             };
+        }
+
+        if (name === 'send_message') {
+            const r = await deps.sendToPatient(args.patientId, args.message);
+            return r.success
+                ? { ok: true, message: 'Xabar yuborildi.' }
+                : { ok: false, message: `Xabar yetib bormadi: ${r.error || 'noma\'lum sabab'}.` };
+        }
+
+        if (name === 'record_payment') {
+            const patient = await prisma.patient.findFirst({
+                where: { id: args.patientId, clinicId: ctx.clinicId },
+                select: { id: true },
+            });
+            if (!patient) return { ok: false, message: 'Bemor topilmadi.' };
+
+            // Qarzlar QAYTA o'qiladi: ko'rib chiqish bilan tasdiqlash orasida
+            // boshqa xodim to'lovni yozib qo'ygan bo'lishi mumkin.
+            const pending = await prisma.transaction.findMany({
+                where: { clinicId: ctx.clinicId, patientId: args.patientId, status: 'Pending' },
+                orderBy: { date: 'asc' },
+                select: { id: true, amount: true, service: true, doctorId: true, doctorName: true },
+            });
+
+            let qoldiq = args.amount;
+            let yopilgan = 0;
+
+            // Mantiq ilovaning o'zidan (pages/Dashboard.tsx): to'liq yopilsa
+            // yozuvning holati Paid ga o'tadi, qisman bo'lsa — yangi Paid
+            // yozuv yaratiladi va eski qarz shuncha kamayadi.
+            for (const t of pending) {
+                if (qoldiq <= 0) break;
+                if (qoldiq >= t.amount) {
+                    await prisma.transaction.update({
+                        where: { id: t.id },
+                        data: { status: 'Paid', type: args.method, date: args.date },
+                    });
+                    qoldiq -= t.amount;
+                    yopilgan++;
+                } else {
+                    await prisma.transaction.create({
+                        data: {
+                            clinicId: ctx.clinicId,
+                            patientId: args.patientId,
+                            patientName: args.patientName,
+                            doctorId: t.doctorId || undefined,
+                            doctorName: t.doctorName || undefined,
+                            amount: qoldiq,
+                            status: 'Paid',
+                            type: args.method,
+                            service: `${t.service} (Qarzdorlik yopildi)`,
+                            date: args.date,
+                        },
+                    });
+                    await prisma.transaction.update({
+                        where: { id: t.id },
+                        data: { amount: t.amount - qoldiq },
+                    });
+                    qoldiq = 0;
+                }
+            }
+
+            // Qarzi bo'lmagan bemorning oddiy to'lovi.
+            if (qoldiq > 0) {
+                await prisma.transaction.create({
+                    data: {
+                        clinicId: ctx.clinicId,
+                        patientId: args.patientId,
+                        patientName: args.patientName,
+                        amount: qoldiq,
+                        status: 'Paid',
+                        type: args.method,
+                        service: 'To\'lov',
+                        date: args.date,
+                    },
+                });
+            }
+
+            invalidateToolCache(ctx.clinicId);
+            return {
+                ok: true,
+                message: yopilgan > 0
+                    ? `${som(args.amount)} so'm qabul qilindi, ${yopilgan} ta qarz yopildi.`
+                    : `${som(args.amount)} so'm to'lov yozildi.`,
+            };
+        }
+
+        if (name === 'pay_doctor') {
+            const doctor = await prisma.doctor.findFirst({
+                where: { id: args.doctorId, clinicId: ctx.clinicId },
+                select: { id: true },
+            });
+            if (!doctor) return { ok: false, message: 'Shifokor topilmadi.' };
+
+            const created = await prisma.expense.create({
+                data: {
+                    clinicId: ctx.clinicId,
+                    doctorId: args.doctorId,
+                    date: args.date,
+                    amount: args.amount,
+                    category: args.category,
+                    title: args.title,
+                    note: args.note || 'AI yordamchisi orqali qo\'shildi',
+                },
+                select: { id: true },
+            });
+
+            invalidateToolCache(ctx.clinicId);
+            return {
+                ok: true,
+                message: `${args.title}: ${som(args.amount)} so'm yozildi.`,
+                details: { expenseId: created.id },
+            };
+        }
+
+        if (name === 'update_doctor_pay') {
+            const res = await prisma.doctor.updateMany({
+                where: { id: args.doctorId, clinicId: ctx.clinicId },
+                data: args.data,
+            });
+            if (!res.count) return { ok: false, message: 'Shifokor topilmadi.' };
+
+            // Klinika profili keshida shifokorlar ro'yxati bor.
+            invalidateClinicContext(ctx.clinicId);
+            invalidateToolCache(ctx.clinicId);
+            return { ok: true, message: 'Ish haqi shartlari o\'zgartirildi.' };
         }
 
         if (name === 'create_expense') {

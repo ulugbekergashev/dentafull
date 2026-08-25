@@ -65,55 +65,6 @@ const RULES: { intent: Intent; re: RegExp }[] = [
 ];
 
 /**
- * Savol BUYRUQmi (ya'ni yozuvchi tool kerakmi)?
- *
- * Nega kerak: harakat tool'larining ta'rifi ~590 token. Ularni har bir
- * so'rovga qo'shish yo'naltirishdan olingan butun tejashni yeb qo'yardi —
- * o'lchov aniq ko'rsatdi: tor savolda 1217 -> 1475 token, ya'ni "tezlashtirish"
- * aslida sekinlashtirish edi. Groq bepul tierida daqiqasiga 8000 token
- * bo'lgani uchun bu nazariy emas, amaliy chegara.
- *
- * Chegara ATAYLAB kengroq qo'yilgan: noto'g'ri qo'shib yuborish faqat token
- * yeydi, noto'g'ri tushirib qoldirish esa foydalanuvchi so'ragan ishni
- * bajarib bo'lmasligiga olib keladi. Ikkinchisi ancha yomon.
- */
-const ACTION_PATTERNS: RegExp[] = [
-    // O'zbek tilida buyruq juda ko'p shaklda keladi va ularni sanab chiqish
-    // mumkin emas: "yoz", "yozing", "yozib qo'y", "yozib qo'ying", "yozvor",
-    // "yozib yubor". Shuning uchun O'ZAK bo'yicha qidiramiz va qo'shimchalarni
-    // erkin qoldiramiz.
-    //
-    // Muammo shundaki, o'zak savol shaklida ham uchraydi: "kim YOZILGAN edi?",
-    // "xabar YUBORILGANmi?". Bular buyruq emas. Ularni ajratish uchun majhul
-    // nisbat qo'shimchasi `-il-` va harakat nomi `-uv` inkor qilinadi. Bu
-    // grammatik belgi, so'zlar ro'yxati emas — shuning uchun yangi shakllar
-    // ham avtomatik to'g'ri ishlaydi.
-    //
-    // Naqshlar ATAYLAB regex literali sifatida yozilgan, satr sifatida emas:
-    // satrda har bir `\b` ni ikki marta ekranlash kerak bo'lardi va bitta
-    // unutilgan teskari chiziq regexni jimgina boshqaruv belgisiga
-    // aylantirib yuborardi.
-    /\b(yubor|jo'nat|jonat)(?!il)\w*/i,
-    /\byoz(?!il|uv|gi)\w*/i,
-    /\b(qo'sh|qosh)(?!il)\w*/i,
-    /\bkirit(?!il)\w*/i,
-    /\b(o'zgartir|ozgartir|almashtir)(?!il)\w*/i,
-    /\bbelgila(?!n)\w*/i,
-    /\b(band qil|bekor qil)\w*/i,
-    // Ot shaklidagi buyruqlar: "eslatma yuborish", "eslatib qo'y".
-    /\beslat\w*/i,
-    // Ruscha. `\b` va `\w` ATAYLAB ishlatilmagan: JavaScript'da ular faqat
-    // ASCII harflarni so'z belgisi deb biladi, ya'ni kirill so'z oldida
-    // chegara umuman hosil bo'lmaydi va "Отправь" hech qachon mos kelmasdi.
-    /отправ|напомн|запиш|добав|измен|назнач|перенес/i,
-];
-
-export const isActionIntent = (question: string): boolean => {
-    const q = String(question || '');
-    return ACTION_PATTERNS.some(re => re.test(q));
-};
-
-/**
  * Qaysi ANIQ harakat so'ralayotganini aniqlaydi.
  *
  * Nega kerak: harakat tool'lari ikkala raundda ham yuboriladi, ya'ni
@@ -132,10 +83,22 @@ export const isActionIntent = (question: string): boolean => {
 // esa OBYEKT nomi. "Qarzdorlarga eslatma yubor" da "qarz" so'zi bor, lekin
 // bu qarz yozish emas — eslatma yuborish. Shuning uchun `send_reminder`
 // `add_charge` dan oldin turadi: aks holda obyekt fe'ldan ustun kelardi.
-const ACTION_ROUTES: { name: string; re: RegExp }[] = [
-    { name: 'send_reminder', re: /(eslat|xabar|sms|telegram|напом|сообщ|уведом)/i },
-    { name: 'create_expense', re: /(xarajat|ijara|maosh|kommunal|elektr|arenda|расход|аренда|зарплат)/i },
-    { name: 'add_charge', re: /(qarz|hisob|to'?lamadi|долг|счёт|счет)/i },
+const ACTION_ROUTES: { name: string | string[]; re: RegExp }[] = [
+    // Shifokorga tegishlilar eng oldinda: "shifokor" so'zi bo'lsa, gap
+    // deyarli har doim u haqida, hatto "qarz" yoki "to'lov" so'zi bilan
+    // birga kelsa ham.
+    { name: 'update_doctor_pay', re: /(foiz|protsent|stavka|ish haqi|oyligini.*(qil|o'?zgart)|процент|ставк)/i },
+    // `oyli[gk]` — o'zbek tilida k undoshi qo'shimcha oldida g ga aylanadi:
+    // oylik -> oyligi -> oyligini. "oylik" deb yozsak, aynan tabiiy
+    // shakllar mos kelmasdi.
+    { name: 'pay_doctor', re: /(shifokorga|doktorga|vrachga|oyli[gk]|maosh|ulush|врачу|доктору|зарплат)/i },
+    // Xabar: bitta bemorga ham, guruhga ham bo'lishi mumkin. Ikkalasini
+    // beramiz — model gapda aniq ism bor-yo'qligiga qarab o'zi tanlaydi.
+    { name: ['send_message', 'send_reminder'], re: /(eslat|xabar|sms|telegram|напом|сообщ|уведом)/i },
+    { name: 'create_expense', re: /(xarajat|ijara|kommunal|elektr|arenda|расход|аренда)/i },
+    // To'lov va qarz bir-biriga yaqin — ikkalasini birga beramiz, model
+    // "to'ladi" bilan "qarzi bor" ni o'zi ajratadi.
+    { name: ['record_payment', 'add_charge'], re: /(to'?la|qarz|hisob|тўла|оплат|долг|счёт|счет)/i },
     { name: 'book_appointment', re: /(qabul|band|navbat|приём|прием|запис)/i },
     { name: 'update_lead_status', re: /(lid|lead|holatini|status|лид|статус)/i },
 ];
@@ -152,7 +115,8 @@ export const actionsForQuestion = (
 
     for (const r of ACTION_ROUTES) {
         if (!r.re.test(q)) continue;
-        const picked = allowed.filter((t: any) => t.function.name === r.name);
+        const names = Array.isArray(r.name) ? r.name : [r.name];
+        const picked = allowed.filter((t: any) => names.includes(t.function.name));
         if (picked.length) return picked;
     }
     return allowed;

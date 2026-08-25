@@ -689,8 +689,50 @@ export const chatWithTools = async (
         opts.onEvent?.({ type: 'round', n: round + 1 });
 
         // Oxirgi raundda tool bermaymiz — model matn bilan javob berishga majbur bo'ladi.
-        const active = round === maxRounds - 1 ? [] : tools;
-        const { data, provider } = await roundWithFallback(history, active, { ...opts, deadlineAt });
+        const isLast = round === maxRounds - 1;
+        const active = isLast ? [] : tools;
+
+        // Tool ro'yxatini olib tashlashning O'ZI yetarli emas.
+        //
+        // Groq (va OpenAI protokolining o'zi) tool'lar berilmagan so'rovni
+        // `tool_choice: none` deb qabul qiladi. Model esa baribir tool
+        // chaqirishga urinishi mumkin va u holda provayder 400 qaytaradi:
+        // "Tool choice is none, but model called a tool". 400 — qayta
+        // urinishga arzimaydigan xato, ya'ni butun so'rov yiqilardi va
+        // foydalanuvchi javob o'rniga xato ko'rardi.
+        //
+        // Shuning uchun modelga bu OCHIQ aytiladi. Ko'rsatma `user` rolida:
+        // ko'p modellar suhbat o'rtasidagi system xabarini e'tiborsiz
+        // qoldiradi, oxirgi user xabarini esa hech qachon.
+        const roundMessages = (isLast && trace.length)
+            ? [...history, {
+                role: 'user' as const,
+                content: 'Endi boshqa tool chaqirma — ularga ruxsat yo\'q. '
+                    + 'Yuqorida olingan ma\'lumot asosida yakuniy javobni MATN bilan yoz.',
+            }]
+            : history;
+
+        let data: any;
+        let provider: ProviderConfig;
+        try {
+            ({ data, provider } = await roundWithFallback(roundMessages, active, { ...opts, deadlineAt }));
+        } catch (e: any) {
+            // Yuqoridagi ko'rsatma ehtimolni kamaytiradi, lekin kafolatlamaydi.
+            // Model baribir tool chaqirsa — yana bir marta, qat'iyroq talab
+            // bilan urinamiz. Bu yerda yiqilib qolish eng yomon natija:
+            // ma'lumot allaqachon olingan, javob yozilishi kerak, xolos.
+            const toolRefused = /tool_use_failed|Tool choice is none/i.test(e?.message || '');
+            if (!isLast || !toolRefused) throw e;
+
+            ({ data, provider } = await roundWithFallback(
+                [...history, {
+                    role: 'user' as const,
+                    content: 'TOOL CHAQIRMA. Faqat oddiy matn yoz — boshqa hech narsa.',
+                }],
+                [],
+                { ...opts, deadlineAt }
+            ));
+        }
 
         tokensIn += data?.usage?.prompt_tokens || 0;
         tokensOut += data?.usage?.completion_tokens || 0;

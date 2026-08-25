@@ -5863,7 +5863,7 @@ const { chatMeta, chatWithTools, isAiConfigured } = require('./aiService');
 const { toolsForRole, runTool } = require('./ai/tools');
 const { askSystemPrompt, chatSystemPrompt } = require('./ai/prompts');
 const {
-    toolsForRequest, cachedTool, tryFastPath, invalidateToolCache, isActionIntent, actionsForQuestion,
+    toolsForRequest, cachedTool, tryFastPath, invalidateToolCache, actionsForQuestion,
 } = require('./ai/router');
 const { clinicContext } = require('./ai/context');
 const { applyGrounding, wrapToolResult } = require('./ai/guard');
@@ -6010,9 +6010,34 @@ const runAsk = async (
         .map(m => m.content)
         .join(' ');
 
-    const actionTools = isActionIntent(actionContext)
-        ? actionsForQuestion(role, actionContext, actionsForRole)
-        : [];
+    // Harakat tool'lari deyarli HAR DOIM beriladi.
+    //
+    // Ilgari bu yerda kalit so'z darvozasi turardi: gapda "yoz", "yubor"
+    // kabi fe'l bo'lmasa, AI ga bironta yozuvchi tool berilmasdi va u
+    // "bunday imkoniyat yo'q" derdi. Bu tugamaydigan poyga edi —
+    // foydalanuvchi har safar yangi shaklda gapiradi, biz esa har safar
+    // yangi kalit so'z qo'shamiz. Tabiiy nutqni ro'yxat bilan qamrab
+    // bo'lmaydi.
+    //
+    // Endi qaror MODELGA topshirilgan: u buyruqmi yoki savolmi ekanini
+    // ro'yxatdan ancha yaxshi ajratadi. Kalit so'zlar faqat RO'YXATNI
+    // QISQARTIRISH uchun qoldi (tokenni tejaydi), lekin hech qachon
+    // "hech narsa" ga tushirmaydi.
+    //
+    // Yagona istisno — keng tahliliy va "qanday qilaman" savollari:
+    // ular tabiatan buyruq emas va ularda 9 ta harakat ta'rifi ortiqcha
+    // yuk bo'lardi.
+    //
+    // DIQQAT: `route.fallback` tekshiruvi MAJBURIY. Yo'naltirgich tanimagan
+    // savolni ham 'keng' deb belgilaydi (u yerda barcha o'qish tool'lari
+    // kerak). Faqat intent'ga qarasak, tanilmagan HAR QANDAY buyruq
+    // harakatsiz qolardi — ya'ni olib tashlangan darvoza boshqa shaklda
+    // qaytib kelardi. `fallback: true` "tanilmadi" degani, "keng savol"
+    // degani emas.
+    const aniqKeng = !route.fallback && (route.intent === 'keng' || route.intent === 'tizim');
+    const actionTools = aniqKeng
+        ? []
+        : actionsForQuestion(role, actionContext, actionsForRole);
     const tools = [...readTools, ...actionTools];
 
     progress.stage = 'klinika-profili';
