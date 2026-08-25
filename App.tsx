@@ -1090,7 +1090,7 @@ const AppContent: React.FC = () => {
                        bg-gradient-to-br from-violet-500 to-indigo-600 shadow-sm active:scale-95 transition-transform"
           >
             <Sparkles className="w-3.5 h-3.5 opacity-90" />
-            DAI
+            DentaAI
           </button>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600 dark:text-gray-300">
             {isSidebarOpen ? <X /> : <Menu />}
@@ -1315,7 +1315,7 @@ const AppContent: React.FC = () => {
                            active:scale-[0.97] transition-all"
               >
                 <Sparkles className="w-4 h-4 opacity-90 group-hover:rotate-12 transition-transform" />
-                DAI
+                DentaAI
               </button>
 
               <span className="text-sm font-medium text-gray-500 dark:text-gray-400">

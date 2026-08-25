@@ -11,7 +11,7 @@ import { UserRole } from '../types';
 // kartasida turadi va aynan o'sha yerda savol beradi: "bu bemorning qarzi
 // qancha?". Har safar sahifa almashtirish kontekstni yo'qotardi.
 //
-// Endi panel sarlavhadagi DAI tugmasidan yoki hot key bilan HAR QANDAY
+// Endi panel sarlavhadagi DentaAI tugmasidan yoki hot key bilan HAR QANDAY
 // sahifa ustidan ochiladi. Ostidagi sahifa joyida qoladi — panel yopilgach
 // foydalanuvchi o'sha yerda davom etadi.
 

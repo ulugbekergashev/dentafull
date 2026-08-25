@@ -5889,6 +5889,29 @@ const reqLang = (req: any): 'uz' | 'ru' =>
 const clinicToday = (): string =>
     new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+/**
+ * Ichki xatolarni foydalanuvchiga ko'rsatilmaydigan qiladi.
+ *
+ * Productionda ekranga xom Prisma xatosi chiqdi: sxema maydonlari, fayl
+ * yo'llari va `select` obyektining to'liq nusxasi bilan. Foydalanuvchi
+ * uchun bu ma'nosiz, tashqi ko'z uchun esa ortiqcha ma'lumot.
+ *
+ * O'z xabarlarimiz qisqa va o'zbekcha — ular o'zgarishsiz o'tadi. Ichki
+ * xatolar naqsh bo'yicha ushlanadi va umumiy matnga almashtiriladi;
+ * to'liq matn serverda loglanadi, ya'ni diagnostika uchun yo'qolmaydi.
+ */
+const INTERNAL_ERROR_RE =
+    /prisma|invocation|Unknown (field|arg)|node_modules|ECONNREFUSED|ETIMEDOUT|PrismaClient|SyntaxError|TypeError/i;
+
+const safeAiError = (e: any): string => {
+    const msg = String(e?.message || '');
+    if (!msg) return 'Javob tayyorlanmadi. Qayta urinib ko\'ring.';
+    if (INTERNAL_ERROR_RE.test(msg) || msg.length > 300) {
+        return 'Javobni tayyorlashda ichki xatolik yuz berdi. Qayta urinib ko\'ring.';
+    }
+    return msg;
+};
+
 /** Jurnal uchun foydalanuvchi identifikatori. */
 const userKey = (u: any): string => u?.id || u?.username || u?.name || 'anon';
 
@@ -6049,7 +6072,18 @@ const runAsk = async (
         // Yozuvchi tool BAJARILMAYDI — faqat ko'rib chiqiladi va saqlanadi.
         // Bajarish /api/ai/act orqali, foydalanuvchi tasdiqlagandan keyin.
         if (isAction(name)) {
-            const p = await previewAction(name, args, ctx, today);
+            // Ko'rib chiqish yiqilsa, BUTUN javob yiqilmasligi kerak.
+            // Productionda aynan shunday bo'ldi: bemor qidiruvidagi xato
+            // to'g'ridan-to'g'ri foydalanuvchi ekraniga chiqdi. Tool
+            // xatosi modelga oddiy natija sifatida qaytishi kerak — u
+            // shunda aniqlashtirish so'raydi yoki boshqa yo'l tanlaydi.
+            let p: any;
+            try {
+                p = await previewAction(name, args, ctx, today);
+            } catch (err: any) {
+                console.error(`[AI:action] ${name} ko'rib chiqishda xatolik:`, err?.message);
+                return { xato: 'Bu harakatni tayyorlab bo\'lmadi. Ma\'lumotlarni tekshirib qayta ayting.' };
+            }
             if (p.xato) return { xato: p.xato };
             const id = storePending(name, p.args, p.preview, {
                 clinicId, userId: userKey(user), role,
@@ -6184,7 +6218,7 @@ app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
         });
     } catch (e: any) {
         console.error('[AI/ask]', e.message);
-        res.status(500).json({ success: false, message: e.message || 'AI so\'rovida xatolik.' });
+        res.status(500).json({ success: false, message: safeAiError(e) });
     }
 });
 
@@ -6254,7 +6288,7 @@ app.post('/api/ai/ask/stream', authenticateToken, async (req: any, res: any) => 
         });
     } catch (e: any) {
         console.error('[AI/ask/stream]', e.message);
-        send({ type: 'error', message: e.message || 'AI so\'rovida xatolik.' });
+        send({ type: 'error', message: safeAiError(e) });
     } finally {
         clearInterval(heartbeat);
         if (!closed) res.end();
@@ -6328,7 +6362,7 @@ app.post('/api/ai/act', authenticateToken, async (req: any, res: any) => {
         res.json({ success: result.ok, message: result.message, details: result.details });
     } catch (e: any) {
         console.error('[AI/act]', e.message);
-        res.status(500).json({ success: false, message: e.message || 'Harakat bajarilmadi.' });
+        res.status(500).json({ success: false, message: safeAiError(e) });
     }
 });
 
@@ -6454,7 +6488,7 @@ app.post('/api/ai/transcribe', authenticateToken, audioUpload.single('audio'), a
         res.json({ success: true, text: out.text });
     } catch (e: any) {
         console.error('[AI/transcribe]', e.message);
-        res.status(500).json({ success: false, message: e.message || 'Ovozni tanib bo\'lmadi.' });
+        res.status(500).json({ success: false, message: safeAiError(e) });
     }
 });
 
@@ -6643,7 +6677,7 @@ app.post('/api/ai/chat', authenticateToken, async (req: any, res: any) => {
         res.json({ success: true, reply: text, logId });
     } catch (e: any) {
         console.error('[AI/chat]', e.message);
-        res.status(500).json({ success: false, message: e.message || 'AI so\'rovida xatolik.' });
+        res.status(500).json({ success: false, message: safeAiError(e) });
     }
 });
 
@@ -6693,7 +6727,7 @@ app.post('/api/ai/report', authenticateToken, async (req: any, res: any) => {
         console.error('[AI/report]', e.message);
         // Ruxsat xatosi 403, qolgani 500 — UI ularni boshqacha ko'rsatadi.
         const denied = /ruxsat/i.test(e.message || '');
-        res.status(denied ? 403 : 500).json({ success: false, message: e.message || 'Hisobot tayyorlanmadi.' });
+        res.status(denied ? 403 : 500).json({ success: false, message: denied ? e.message : safeAiError(e) });
     }
 });
 
@@ -6790,7 +6824,7 @@ app.post('/api/ai/insights', authenticateToken, async (req: any, res: any) => {
         res.json({ success: true, insights: lines, raw: grounded.text, logId });
     } catch (e: any) {
         console.error('[AI/insights]', e.message);
-        res.status(500).json({ success: false, message: e.message || 'Tahlil xatoligi.' });
+        res.status(500).json({ success: false, message: safeAiError(e) });
     }
 });
 

@@ -315,7 +315,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* AI endi bu yerda emas: u sarlavhadagi DAI tugmasidan har qanday
+      {/* AI endi bu yerda emas: u sarlavhadagi DentaAI tugmasidan har qanday
           sahifa ustidan ochiladi. Ilgari bu yerda "Hisobot / DentaAI"
           almashtirgichi turardi va u AI ni bitta sahifaga bog'lab qo'ygan
           edi — shifokor Kalendarda turib savol bera olmasdi. */}

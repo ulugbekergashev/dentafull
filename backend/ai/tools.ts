@@ -221,7 +221,14 @@ export const searchPatients = async (
 
     const select = {
         id: true, firstName: true, lastName: true, phone: true, balance: true,
-        lastVisit: true, doctorName: true, status: true,
+        lastVisit: true, status: true,
+        // Patient jadvalida `doctorName` USTUNI YO'Q — faqat `doctorId` va
+        // bog'lanish bor. Ilgari bu yerda `doctorName: true` turardi va
+        // Prisma har bir chaqiruvda xato tashlardi. Xatoni runTool ushlab,
+        // "Ma'lumotni olishda xatolik" deb qaytarardi, AI esa uni
+        // "ma'lumot yo'q" deb talqin qilardi — ya'ni bemor qidiruvi
+        // BOSHIDAN ishlamagan, lekin buzilgani hech qayerda ko'rinmagan.
+        doctor: { select: { firstName: true, lastName: true } },
     };
 
     // Telefon bo'yicha — kamida 4 raqam bo'lsa.
@@ -487,7 +494,7 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
                 telefon: maskPhone(r.phone),
                 balans: fmt(r.balance || 0),
                 oxirgi_tashrif: r.lastVisit,
-                shifokor: r.doctorName || '-',
+                shifokor: r.doctor ? `${r.doctor.lastName} ${r.doctor.firstName}`.trim() : '-',
                 holat: r.status,
             })),
             izoh: rows.length === 0
