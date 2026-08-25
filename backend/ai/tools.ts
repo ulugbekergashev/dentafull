@@ -15,6 +15,7 @@
 
 const { prisma } = require('../db');
 import { sanitizeToolResult } from './guard';
+import { searchVariants } from './translit';
 
 export interface ToolContext {
     clinicId: string;
@@ -240,11 +241,16 @@ export const searchPatients = async (
         if (byPhone.length) return byPhone;
     }
 
+    // Har bir so'z ikkala alifboda ham qidiriladi. Foydalanuvchi
+    // "асроров" deb yozsa-yu, bazada "Asrorov" bo'lsa, `contains` hech
+    // qachon mos kelmasdi va javob "bemor topilmadi" bo'lardi — bemor
+    // esa ro'yxatda turardi. Ovoz kiritish bu holatni tez-tez qiladi:
+    // rus tanish rejimi har doim kirill qaytaradi.
     const byName = (t: string) => ({
-        OR: [
-            { firstName: { contains: t, mode: 'insensitive' } },
-            { lastName: { contains: t, mode: 'insensitive' } },
-        ],
+        OR: searchVariants(t).flatMap(v => [
+            { firstName: { contains: v, mode: 'insensitive' } },
+            { lastName: { contains: v, mode: 'insensitive' } },
+        ]),
     });
 
     const tokens = q.split(/\s+/).filter(t => t.length >= 2);

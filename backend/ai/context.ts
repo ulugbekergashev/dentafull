@@ -17,6 +17,7 @@
 // so'rovi ketardi va 1-punktdagi tezlik yutug'i yo'qqa chiqardi.
 
 const { prisma } = require('../db');
+import { searchVariants } from './translit';
 
 /** Profil qancha vaqt keshda turadi. Shifokor/narx kuniga bir marta o'zgaradi. */
 const TTL_MS = Number(process.env.AI_CONTEXT_TTL_MS || 30 * 60 * 1000);
@@ -141,10 +142,18 @@ export const resolveDoctor = async (
         ? hit.doctors
         : (await buildProfile(clinicId).then(p => { cache.set(clinicId, p); return p.doctors; }).catch(() => []));
 
-    const q = name.trim().toLowerCase();
-    const exact = list.find(d => d.name.toLowerCase() === q);
+    // Shifokor ismi ham ikkala alifboda kelishi mumkin ("Рахимов" /
+    // "Rahimov") — ayniqsa ovoz orqali. Batafsil: ai/translit.ts
+    const variants = searchVariants(name.trim());
+    if (!variants.length) return null;
+
+    const match = (d: { name: string }, fn: (n: string, v: string) => boolean) =>
+        variants.some(v => fn(d.name.toLowerCase(), v));
+
+    const exact = list.find(d => match(d, (n, v) => n === v));
     if (exact) return exact;
-    const partial = list.filter(d => d.name.toLowerCase().includes(q));
+
+    const partial = list.filter(d => match(d, (n, v) => n.includes(v)));
     // Bir nechta shifokorga mos kelsa — noaniq, tanlab bermaymiz.
     return partial.length === 1 ? partial[0] : null;
 };

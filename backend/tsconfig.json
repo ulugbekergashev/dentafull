@@ -32,7 +32,8 @@
         "ai/actions.ts",
         "ai/proactive.ts",
         "ai/keys.ts",
-        "ai/speech.ts"
+        "ai/speech.ts",
+        "ai/translit.ts"
     ],
     "exclude": [
         "node_modules",
