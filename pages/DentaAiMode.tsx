@@ -555,6 +555,28 @@ export const DentaAiMode: React.FC<Props> = ({ onExit, autoVoice }) => {
   // jarayon davom etayotganini ko'rsatib turadi.
   const [elapsed, setElapsed] = useState(0);
 
+  // Diktovka tili — interfeys tilidan MUSTAQIL va eslab qolinadi.
+  //
+  // Klinika ruscha interfeysda ishlashi mumkin, lekin bemorlar ismi
+  // o'zbekcha bo'ladi. Ruscha tanigich "Asrorov" ni "Осворов" deb
+  // eshitadi — bu uning aybi emas, shunchaki rus tilida bunday so'z yo'q.
+  // Shuning uchun tilni foydalanuvchi o'zi tanlaydi.
+  const [voiceLang, setVoiceLang] = useState<'uz' | 'ru'>(() => {
+    try {
+      const saved = localStorage.getItem('dentaai_voice_lang');
+      if (saved === 'uz' || saved === 'ru') return saved;
+    } catch { /* localStorage yopiq bo'lishi mumkin */ }
+    return 'uz';
+  });
+
+  const switchVoiceLang = useCallback(() => {
+    setVoiceLang(prev => {
+      const next = prev === 'uz' ? 'ru' : 'uz';
+      try { localStorage.setItem('dentaai_voice_lang', next); } catch { /* muhim emas */ }
+      return next;
+    });
+  }, []);
+
   // Saqlangan suhbatlar.
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -814,7 +836,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit, autoVoice }) => {
   // Shifokorning qo'li qo'lqopda va band bo'ladi. Shuning uchun tugma emas,
   // hot key: bosdi — gapirdi — javob keldi. Ekranga tegish shart emas.
   const voice = useVoiceInput({
-    lang: language,
+    lang: voiceLang,
     // Natija DARHOL yuboriladi: ovozli buyruqning butun ma'nosi shunda.
     // Xato eshitilsa ham xavf yo'q — o'zgartirish kiritadigan buyruq
     // tasdiqlash kartasiga tushadi va foydalanuvchi uni ko'radi.
@@ -904,7 +926,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit, autoVoice }) => {
             }}
             rows={1}
             placeholder={t('ai.placeholder')}
-            className="w-full rounded-2xl pl-14 pr-24 py-[18px] text-[15.5px] resize-none outline-none
+            className="w-full rounded-2xl pl-14 pr-32 py-[18px] text-[15.5px] resize-none outline-none
                        bg-white dark:bg-gray-800/60
                        ring-1 ring-gray-200 dark:ring-white/[0.08]
                        focus:ring-2 focus:ring-violet-500/60
@@ -912,6 +934,21 @@ export const DentaAiMode: React.FC<Props> = ({ onExit, autoVoice }) => {
                        placeholder:text-gray-400 dark:placeholder:text-gray-500
                        text-gray-900 dark:text-white transition-shadow shadow-sm"
           />
+          {/* Diktovka tili. Interfeys tilidan alohida turadi va eslab
+              qolinadi: ruscha interfeysda ishlaydigan klinika ham bemor
+              ismini o'zbekcha aytadi. */}
+          <button
+            onClick={switchVoiceLang}
+            title={voiceLang === 'uz' ? "Diktovka tili: o'zbek" : 'Язык диктовки: русский'}
+            className="absolute right-24 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-md
+                       text-[10.5px] font-bold tracking-wide
+                       text-gray-400 dark:text-gray-500
+                       hover:text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-500/10
+                       transition-colors"
+          >
+            {voiceLang.toUpperCase()}
+          </button>
+
           {/* Mikrofon holati. Tugma sifatida ham bosiladi — sichqoncha bilan
               ishlayotgan xodim uchun, lekin asosiy yo'l baribir hot key. */}
           <button
@@ -982,7 +1019,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit, autoVoice }) => {
                   {voice.partial || `${t('ai.listening')}…`}
                 </span>
                 <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-auto shrink-0">
-                  Esc
+                  {voiceLang.toUpperCase()} · Esc
                 </span>
               </>
             )}

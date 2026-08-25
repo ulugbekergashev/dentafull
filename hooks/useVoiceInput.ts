@@ -23,6 +23,14 @@ import { API_URL } from '../services/api';
 export type VoiceState = 'idle' | 'listening' | 'processing' | 'error';
 
 interface Options {
+    /**
+     * Diktovka tili — interfeys tilidan MUSTAQIL.
+     *
+     * Ilgari u interfeys tiliga bog'langan edi va bu tizimli xatoga olib
+     * keldi: klinika ruscha interfeysda ishlaydi, lekin bemorlar ismi
+     * o'zbekcha. Ruscha tanigich "Asrorov" ni "Осворов" deb eshitdi —
+     * chunki bu rus tilida so'z emas.
+     */
     lang: 'uz' | 'ru';
     /** Matn tayyor bo'lganda. */
     onResult: (text: string) => void;
