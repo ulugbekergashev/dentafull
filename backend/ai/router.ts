@@ -77,26 +77,41 @@ const RULES: { intent: Intent; re: RegExp }[] = [
  * yeydi, noto'g'ri tushirib qoldirish esa foydalanuvchi so'ragan ishni
  * bajarib bo'lmasligiga olib keladi. Ikkinchisi ancha yomon.
  */
-const ACTION_RE = new RegExp(
-    [
-        // O'zbekcha buyruq fe'llari (buyruq va hurmat shakllari).
-        "\\b(yubor|jo'nat|jonat)(ing|amiz|ib ber(ing)?)?\\b",
-        "\\b(yoz|qo'sh|qosh|kirit)(ing|amiz|ib ber(ing)?)?\\b",
-        "\\b(o'zgartir|ozgartir|belgila|almashtir)(ing|amiz)?\\b",
-        '\\b(band qil|bekor qil|qabulga yoz)\\w*',
-        // Ot shaklidagi buyruqlar: "eslatma yuborish", "xarajat qo'shish".
-        "\\b(eslatma|eslatib)\\b",
-        // Ruscha. `\b` va `\w` ATAYLAB ishlatilmagan: JavaScript'da ular faqat
-        // ASCII harflarni so'z belgisi deb biladi, ya'ni kirill so'z oldida
-        // chegara umuman hosil bo'lmaydi va "Отправь" hech qachon mos
-        // kelmasdi. O'zak bo'yicha to'g'ridan-to'g'ri qidiramiz.
-        '(отправ|напомн|запиш|добав|измен|назнач|перенес)',
-    ].join('|'),
-    'i'
-);
+const ACTION_PATTERNS: RegExp[] = [
+    // O'zbek tilida buyruq juda ko'p shaklda keladi va ularni sanab chiqish
+    // mumkin emas: "yoz", "yozing", "yozib qo'y", "yozib qo'ying", "yozvor",
+    // "yozib yubor". Shuning uchun O'ZAK bo'yicha qidiramiz va qo'shimchalarni
+    // erkin qoldiramiz.
+    //
+    // Muammo shundaki, o'zak savol shaklida ham uchraydi: "kim YOZILGAN edi?",
+    // "xabar YUBORILGANmi?". Bular buyruq emas. Ularni ajratish uchun majhul
+    // nisbat qo'shimchasi `-il-` va harakat nomi `-uv` inkor qilinadi. Bu
+    // grammatik belgi, so'zlar ro'yxati emas — shuning uchun yangi shakllar
+    // ham avtomatik to'g'ri ishlaydi.
+    //
+    // Naqshlar ATAYLAB regex literali sifatida yozilgan, satr sifatida emas:
+    // satrda har bir `\b` ni ikki marta ekranlash kerak bo'lardi va bitta
+    // unutilgan teskari chiziq regexni jimgina boshqaruv belgisiga
+    // aylantirib yuborardi.
+    /\b(yubor|jo'nat|jonat)(?!il)\w*/i,
+    /\byoz(?!il|uv|gi)\w*/i,
+    /\b(qo'sh|qosh)(?!il)\w*/i,
+    /\bkirit(?!il)\w*/i,
+    /\b(o'zgartir|ozgartir|almashtir)(?!il)\w*/i,
+    /\bbelgila(?!n)\w*/i,
+    /\b(band qil|bekor qil)\w*/i,
+    // Ot shaklidagi buyruqlar: "eslatma yuborish", "eslatib qo'y".
+    /\beslat\w*/i,
+    // Ruscha. `\b` va `\w` ATAYLAB ishlatilmagan: JavaScript'da ular faqat
+    // ASCII harflarni so'z belgisi deb biladi, ya'ni kirill so'z oldida
+    // chegara umuman hosil bo'lmaydi va "Отправь" hech qachon mos kelmasdi.
+    /отправ|напомн|запиш|добав|измен|назнач|перенес/i,
+];
 
-export const isActionIntent = (question: string): boolean =>
-    ACTION_RE.test(String(question || ''));
+export const isActionIntent = (question: string): boolean => {
+    const q = String(question || '');
+    return ACTION_PATTERNS.some(re => re.test(q));
+};
 
 export interface RouteResult {
     intent: Intent;
