@@ -21,6 +21,9 @@ const { prisma } = require('../db');
 /** Profil qancha vaqt keshda turadi. Shifokor/narx kuniga bir marta o'zgaradi. */
 const TTL_MS = Number(process.env.AI_CONTEXT_TTL_MS || 30 * 60 * 1000);
 
+/** Profil qurish shundan cho'zilsa — profilsiz davom etamiz. */
+const PROFILE_TIMEOUT_MS = Number(process.env.AI_CONTEXT_TIMEOUT_MS || 3000);
+
 interface CachedProfile {
     text: string;
     doctors: { id: string; name: string }[];
@@ -101,7 +104,24 @@ export const clinicContext = async (clinicId: string | null | undefined): Promis
     if (hit && hit.expiresAt > Date.now()) return hit.text;
 
     try {
-        const profile = await buildProfile(clinicId);
+        // Vaqt chegarasi MAJBURIY. Bu funksiya har bir AI so'rovidan OLDIN
+        // chaqiriladi va to'rtta DB so'rovi qiladi. Ilgari chegara yo'q edi:
+        // baza sekinlashsa, so'rov modelga umuman yetib bormasdan qotib
+        // qolardi — va AI qatlamidagi muddat chegarasi ham ishga tushmasdi,
+        // chunki u faqat model chaqiruvini o'raydi.
+        //
+        // Profil — QULAYLIK. Usiz javob biroz umumiyroq bo'ladi, xolos.
+        // Uning uchun foydalanuvchini kuttirish mumkin emas.
+        const profile = await Promise.race([
+            buildProfile(clinicId),
+            new Promise<null>(resolve => setTimeout(() => resolve(null), PROFILE_TIMEOUT_MS)),
+        ]);
+
+        if (!profile) {
+            console.warn(`[AI:context] profil ${PROFILE_TIMEOUT_MS}ms ichida qurilmadi — profilsiz davom etamiz.`);
+            return '';
+        }
+
         cache.set(clinicId, profile);
         return profile.text;
     } catch (e: any) {

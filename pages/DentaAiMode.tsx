@@ -54,6 +54,15 @@ type Result =
   | { kind: 'report'; report: Report; logId?: string | null }
   | { kind: 'error'; message: string };
 
+/**
+ * Mijoz shuncha kutadi va to'xtaydi.
+ *
+ * Serverning o'z chegarasi 55s. Bu undan biroz kattaroq: server o'z
+ * muddatida tushunarli xato qaytarishga ulgursin, bu esa faqat server
+ * umuman javob bermagan holat uchun ishlasin.
+ */
+const STREAM_TIMEOUT_MS = 65_000;
+
 /** Tasdiqlash kutayotgan harakat (backend: ai/actions.ts). */
 interface ActionPreview {
   title: string;
@@ -640,6 +649,22 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Mijoz tomonidagi qat'iy chegara.
+    //
+    // Serverda ham chegaralar bor, lekin ular serverning O'ZI javob
+    // berayotgan bo'lsagina ishlaydi. Agar server qotib qolsa, deploy
+    // o'rtasida bo'lsa yoki oraliqdagi proksi ulanishni ushlab tursa —
+    // mijoz cheksiz kutaverardi. Productionda aynan shunday bo'ldi:
+    // spinner 130 soniya aylandi va hech narsa kelmadi.
+    //
+    // Bu chegara faqat mijozga tegishli, ya'ni hech qanday tashqi
+    // holatga bog'liq emas.
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, STREAM_TIMEOUT_MS);
+
     /** Oqim va zaxira yo'lda bir xil ishlatiladigan yakunlovchi. */
     const finish = (
       reply: string,
@@ -698,11 +723,18 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
         finish(d.reply, d.sources || [], d.action || null, d.logId || null);
       }
     } catch (e: any) {
-      if (e?.name === 'AbortError') return;
       setDraft('');
       setPendingQ('');
-      setResult({ kind: 'error', message: e.message });
+      if (timedOut) {
+        setResult({ kind: 'error', message: t('ai.timeout') });
+      } else if (e?.name === 'AbortError') {
+        // Foydalanuvchi o'zi to'xtatdi (reset yoki sahifadan chiqish).
+        return;
+      } else {
+        setResult({ kind: 'error', message: e.message });
+      }
     } finally {
+      clearTimeout(timeoutId);
       setBusy(false);
       abortRef.current = null;
     }

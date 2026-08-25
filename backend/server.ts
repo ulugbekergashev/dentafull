@@ -12,7 +12,23 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // IMMEDIATE HEALTH CHECK
-app.get('/health', (req, res) => res.status(200).send('OK - v1.0.2'));
+//
+// Qaysi build ishlab turganini ko'rsatadi. Buni bilishning imkoni yo'q edi
+// va bu real muammo tug'dirdi: frontend (Vercel) bir daqiqada chiqadi,
+// backend (Railway) esa bir necha daqiqa quradi. Oradagi vaqtda yangi
+// interfeys eski server bilan gaplashadi va tuzatilgan xato hali ham
+// takrorlanaveradi — sabab esa noma'lum bo'lib qoladi.
+//
+// RAILWAY_GIT_COMMIT_SHA ni Railway o'zi beradi; mahalliyda bo'sh bo'ladi.
+const BUILD_SHA = (process.env.RAILWAY_GIT_COMMIT_SHA || 'local').slice(0, 7);
+const BOOTED_AT = new Date().toISOString();
+
+app.get('/health', (req, res) => res.status(200).json({
+    status: 'OK',
+    version: 'v1.0.2',
+    build: BUILD_SHA,
+    bootedAt: BOOTED_AT,
+}));
 app.get('/test-fb', (req, res) => res.status(200).send('FB-TEST-OK'));
 app.get('/', (req, res) => res.status(200).send('Dental CRM Backend is UP! - v1.0.2'));
 
@@ -5838,6 +5854,15 @@ const clinicToday = (): string =>
 /** Jurnal uchun foydalanuvchi identifikatori. */
 const userKey = (u: any): string => u?.id || u?.username || u?.name || 'anon';
 
+/**
+ * Butun so'rovga ajratilgan eng katta vaqt — oxirgi kafolat.
+ *
+ * AI qatlamidagi AI_DEADLINE_MS (45s) dan biroz kattaroq: model chaqiruvi
+ * o'z muddatida tugashi va tushunarli xato qaytarishi uchun joy qoldiriladi.
+ * Bu chegara esa AI dan TASHQARIDAGI qotishlarni ushlaydi.
+ */
+const AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 55_000);
+
 // AI holati — konfiguratsiya tekshiruvi
 app.get('/api/ai/status', authenticateToken, (req: any, res: any) => {
     const { aiStatus } = require('./aiService');
@@ -6020,7 +6045,16 @@ const guardAi = (req: any, res: any, bucket: string, limit: number): boolean => 
 app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
     try {
         if (!guardAi(req, res, 'ask', 40)) return;
-        const out = await runAsk(req);
+        // Oqimsiz yo'l ham bir xil kafolatga ega bo'lishi kerak — mijoz
+        // oqim ishlamaganda shu yerga tushadi.
+        const out = await Promise.race([
+            runAsk(req),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(
+                    'Javob belgilangan vaqtda tayyor bo\'lmadi. Qayta urinib ko\'ring.'
+                )), AI_REQUEST_TIMEOUT_MS)
+            ),
+        ]);
         res.json({
             success: true,
             reply: out.reply,
@@ -6073,7 +6107,22 @@ app.post('/api/ai/ask/stream', authenticateToken, async (req: any, res: any) => 
     }, 5000);
 
     try {
-        const out = await runAsk(req, send);
+        // Umumiy qo'riqchi. AI qatlamining o'z muddati bor (AI_DEADLINE_MS),
+        // lekin u FAQAT model chaqiruvini o'raydi. So'rov undan tashqarida
+        // ham qotib qolishi mumkin: baza sekinlashsa, tool so'rovi osilib
+        // qolsa. Productionda aynan shunday bo'ldi — foydalanuvchi 130
+        // soniya kutdi va hech narsa kelmadi.
+        //
+        // Bu yerdagi chegara oxirgi kafolat: nima bo'lishidan qat'i nazar,
+        // foydalanuvchi javob yoki tushunarli xato oladi.
+        const out = await Promise.race([
+            runAsk(req, send),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(
+                    'Javob belgilangan vaqtda tayyor bo\'lmadi. Qayta urinib ko\'ring.'
+                )), AI_REQUEST_TIMEOUT_MS)
+            ),
+        ]);
         send({
             type: 'done',
             reply: out.reply,
