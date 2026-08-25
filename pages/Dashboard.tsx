@@ -1,12 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { DentaAiMode } from './DentaAiMode';
 import { Card, Badge, Input, Modal, Button } from '../components/Common';
 import { StatCard } from '../components/StatCard';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
-  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot, Sparkles
+  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -60,7 +59,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const [debtPayMethod, setDebtPayMethod] = useState<PaymentMethod>('Cash');
   const [debtSaving, setDebtSaving] = useState(false);
   const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
-  const [activeTab, setActiveTab] = useState<'overview' | 'ai'>('overview');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -317,58 +315,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* Nom chapda, tanlov o'ng chekkada.
-          Pastki chiziqli indikator o'rniga segment switch: chetga chiqarilgan
-          chiziq uzilib qolgandek ko'rinardi, quti esa o'zi tugagan joyini
-          ko'rsatadi. Faol segment layoutId bilan silliq siljiydi. */}
+      {/* AI endi bu yerda emas: u sarlavhadagi DAI tugmasidan har qanday
+          sahifa ustidan ochiladi. Ilgari bu yerda "Hisobot / DentaAI"
+          almashtirgichi turardi va u AI ni bitta sahifaga bog'lab qo'ygan
+          edi — shifokor Kalendarda turib savol bera olmasdi. */}
       <div className="flex items-center justify-between gap-6 pb-4 border-b border-gray-200 dark:border-gray-700/60">
         <h1 className="text-[22px] font-bold text-gray-900 dark:text-white tracking-tight">
           Dashboard
         </h1>
-
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-gray-100 dark:bg-white/[0.04]">
-          {([
-            { id: 'overview' as const, label: t('ai.reportTab') },
-            { id: 'ai' as const, label: t('ai.tab') },
-          ]).map(tab => {
-            const on = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative px-4 py-1.5 rounded-lg text-[14.5px] font-semibold transition-colors ${
-                  on
-                    ? 'text-gray-900 dark:text-white'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                {on && (
-                  <motion.span
-                    layoutId="dashboard-tab-pill"
-                    transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-                    className="absolute inset-0 rounded-lg bg-white dark:bg-gray-800
-                               shadow-sm ring-1 ring-gray-200/70 dark:ring-white/[0.06]"
-                  />
-                )}
-                <span className="relative flex items-center gap-1.5 whitespace-nowrap">
-                  {tab.id === 'ai' && (
-                    <Sparkles className={`w-4 h-4 ${on ? 'text-violet-500' : 'text-violet-400/60'}`} />
-                  )}
-                  {tab.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
       </div>
 
-      {/* Boshqaruvlar — faqat Hisobot bo'limida.
-          AI da yashiriladi, chunki sana oralig'i AI hisobotlariga ta'sir
-          qilmaydi (har biri o'z davrini hisoblaydi) va ekranda ikkita
-          raqobatlashuvchi sana manbai ko'rinib qolardi. */}
-      <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-2 ${
-        activeTab === 'ai' ? 'hidden' : ''
-      }`}>
+      {/* Boshqaruvlar */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-2">
         {!isReceptionist && (
           <div className="flex items-center gap-3 p-1.5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-2 px-3">
@@ -427,10 +385,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </div>
       </div>
 
-      {activeTab === 'ai' && <DentaAiMode userRole={userRole} />}
-
       {/* UMUMIY */}
-      {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <StatCard
@@ -1163,7 +1118,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         );
       })()}
         </div>
-      )}
 
       {/* Tezkor amal modallari */}
       {onAddPatient && (

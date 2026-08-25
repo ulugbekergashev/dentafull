@@ -525,9 +525,17 @@ interface Props {
   userRole: UserRole;
   /** Sahifa ichida ishlagani uchun ixtiyoriy — tab bo'lsa kerak emas. */
   onExit?: () => void;
+  /**
+   * Ochilishi bilan mikrofonni yoqish.
+   *
+   * Hot key bilan chaqirilganda kerak: shifokor F2 bosdi — demak u
+   * gapirmoqchi, panel ochilib yana bir marta tugma kutib turishi
+   * mantiqsiz bo'lardi.
+   */
+  autoVoice?: boolean;
 }
 
-export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
+export const DentaAiMode: React.FC<Props> = ({ onExit, autoVoice }) => {
   const { t, language } = useLanguage();
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -824,13 +832,27 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
         return;
       }
       if (e.key === 'Escape' && voice.state === 'listening') {
+        // Panel ham Esc ni tinglaydi. Ovoz yozilayotganda birinchi Esc
+        // faqat mikrofonni to'xtatishi kerak, panelni yopmasligi —
+        // aks holda noto'g'ri aytilgan gapni to'xtatish uchun butun
+        // suhbatni yo'qotishga to'g'ri kelardi.
         e.preventDefault();
+        e.stopPropagation();
         voice.stop();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [voice]);
+
+  // Hot key bilan ochilganda mikrofon o'zi yonadi — bir marta.
+  const autoVoiceDone = useRef(false);
+  useEffect(() => {
+    if (!autoVoice || autoVoiceDone.current) return;
+    autoVoiceDone.current = true;
+    const id = setTimeout(() => voice.start(), 250);   // panel animatsiyasi tugasin
+    return () => clearTimeout(id);
+  }, [autoVoice, voice]);
 
   const reset = () => {
     abortRef.current?.abort();

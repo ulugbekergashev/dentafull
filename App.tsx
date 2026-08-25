@@ -4,9 +4,10 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
+import { AiOverlay } from './components/AiOverlay';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
 import { Calendar } from './pages/Calendar';
@@ -84,6 +85,30 @@ const AppContent: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>(UserRole.CLINIC_ADMIN);
+
+  // DentaAI paneli — har qanday sahifa ustidan ochiladi.
+  // Ilgari u Boshqaruv paneli ichidagi tab edi, ya'ni unga kirish uchun
+  // avval bosh sahifaga qaytish kerak edi. Shifokor esa Kalendar yoki
+  // Bemor kartasida turadi va savolni aynan o'sha yerda beradi.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiAutoVoice, setAiAutoVoice] = useState(false);
+
+  // Global hot key. Panel YOPIQ bo'lganda uni ochadi va darhol
+  // mikrofonni yoqadi — shifokor F2 bosdi, demak u gapirmoqchi.
+  // Panel ochiq bo'lsa aralashmaymiz: u yerda DentaAiMode o'zi
+  // mikrofonni boshqaradi.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const combo = (e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Space';
+      if (!combo && e.key !== 'F2') return;
+      if (aiOpen) return;
+      e.preventDefault();
+      setAiAutoVoice(true);
+      setAiOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [aiOpen]);
   const [userName, setUserName] = useState('');
   const [clinicId, setClinicId] = useState<string>('');
   const [doctorId, setDoctorId] = useState<string>('');
@@ -1053,9 +1078,24 @@ const AppContent: React.FC = () => {
           </div>
           DentaCRM
         </div>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600 dark:text-gray-300">
-          {isSidebarOpen ? <X /> : <Menu />}
-        </button>
+        {/* Mobilda ham AI kerak — sarlavha (lg:block) bu yerda ko'rinmaydi,
+            Boshqaruv panelidagi tab esa olib tashlandi. Bunisiz telefondan
+            ishlaydigan shifokor AI ga umuman kira olmasdi. */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
+            aria-label="DentaAI"
+            className="flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-xl
+                       text-white font-bold text-[12.5px] tracking-wide
+                       bg-gradient-to-br from-violet-500 to-indigo-600 shadow-sm active:scale-95 transition-transform"
+          >
+            <Sparkles className="w-3.5 h-3.5 opacity-90" />
+            DAI
+          </button>
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600 dark:text-gray-300">
+            {isSidebarOpen ? <X /> : <Menu />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Sidebar Drawer (Hidden on Desktop) */}
@@ -1261,6 +1301,23 @@ const AppContent: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-5">
+              {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
+                  Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
+                  lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
+              <button
+                onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
+                title="DentaAI — Ctrl+Shift+Space yoki F2 (ovoz bilan)"
+                aria-label="DentaAI"
+                className="group relative flex items-center gap-2 pl-2.5 pr-3.5 py-1.5 rounded-xl
+                           text-white font-bold text-[13px] tracking-wide
+                           bg-gradient-to-br from-violet-500 to-indigo-600
+                           shadow-sm hover:shadow-md hover:from-violet-500 hover:to-indigo-500
+                           active:scale-[0.97] transition-all"
+              >
+                <Sparkles className="w-4 h-4 opacity-90 group-hover:rotate-12 transition-transform" />
+                DAI
+              </button>
+
               <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 {new Date().toLocaleDateString('uz-UZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
               </span>
@@ -1351,6 +1408,15 @@ const AppContent: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* DentaAI paneli. Sahifadan tashqarida turadi, shuning uchun qaysi
+          bo'limda bo'lishingizdan qat'i nazar bir xil ishlaydi. */}
+      <AiOverlay
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        userRole={userRole}
+        autoVoice={aiAutoVoice}
+      />
 
       <main className="flex-1 lg:pt-28 min-h-screen flex flex-col items-center">
         <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 sm:py-6 lg:py-8 flex-1 overflow-x-hidden pb-24 lg:pb-8">
