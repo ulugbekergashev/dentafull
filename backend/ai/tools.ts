@@ -291,20 +291,36 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
     get_debtors: async (args, ctx) => {
         const limit = clampLimit(args.limit, 10, 50);
 
-        const [pending, plans, patients] = await Promise.all([
+        const [pending, plans] = await Promise.all([
             prisma.transaction.findMany({
                 where: { clinicId: ctx.clinicId, status: 'Pending' },
                 select: { patientId: true, patientName: true, amount: true, date: true },
+                take: 2000,
             }),
             prisma.installmentPlan.findMany({
                 where: { clinicId: ctx.clinicId, status: 'Active' },
                 select: { patientId: true, totalAmount: true, totalPaid: true },
-            }),
-            prisma.patient.findMany({
-                where: { clinicId: ctx.clinicId },
-                select: { id: true, firstName: true, lastName: true, phone: true, lastVisit: true },
+                take: 2000,
             }),
         ]);
+
+        // Bemorlar FAQAT qarzi borlari bo'yicha olinadi.
+        //
+        // Ilgari bu yerda klinikaning BARCHA bemorlari yuklanardi — bir necha
+        // ming yozuv, har bir "kim qarzdor?" savolida. Qarzdorlar esa odatda
+        // o'nlab. Bu tool AI so'rovining kritik yo'lida turgani uchun bunday
+        // so'rov butun javobni sekinlashtirardi.
+        const ids = Array.from(new Set([
+            ...pending.map((t: any) => t.patientId).filter(Boolean),
+            ...plans.map((p: any) => p.patientId).filter(Boolean),
+        ])) as string[];
+
+        const patients = ids.length
+            ? await prisma.patient.findMany({
+                where: { id: { in: ids }, clinicId: ctx.clinicId },
+                select: { id: true, firstName: true, lastName: true, phone: true, lastVisit: true },
+            })
+            : [];
 
         const byId = new Map<string, any>(patients.map((p: any) => [p.id, p]));
 

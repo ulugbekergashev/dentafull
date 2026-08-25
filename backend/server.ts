@@ -5902,9 +5902,21 @@ interface AskOutcome {
     logId: string | null;
 }
 
+/**
+ * So'rov qaysi bosqichda ekanini kuzatib boradi.
+ *
+ * Kerak, chunki "javob kelmadi" degan xabar sababni ko'rsatmaydi: so'rov
+ * bazada ham, model chaqiruvida ham, tool bajarilishida ham qotishi mumkin
+ * va ularning davosi butunlay boshqacha. Muddat tugaganda xato matniga
+ * OXIRGI bosqich qo'shiladi — shunda foydalanuvchi yuborgan bitta
+ * skrinshot ham diagnostika uchun yetarli bo'ladi.
+ */
+interface AskProgress { stage: string; }
+
 const runAsk = async (
     req: any,
-    onEvent?: (e: any) => void
+    onEvent?: (e: any) => void,
+    progress: AskProgress = { stage: 'boshlandi' }
 ): Promise<AskOutcome> => {
     const t0 = Date.now();
     const user = req.user;
@@ -5937,6 +5949,7 @@ const runAsk = async (
     };
 
     // ── 1-qatlam: tez yo'l. Shabloniy savol modelni umuman talab qilmaydi.
+    progress.stage = 'tez-yol';
     const fast = await tryFastPath(question, today, lang, readTool);
     if (fast) {
         const logId = await logAi({
@@ -5962,6 +5975,7 @@ const runAsk = async (
         : [];
     const tools = [...readTools, ...actionTools];
 
+    progress.stage = 'klinika-profili';
     const profile = await clinicContext(clinicId);
 
     let pendingAction: { id: string; name: string; preview: any } | null = null;
@@ -5990,12 +6004,14 @@ const runAsk = async (
             };
         }
 
+        progress.stage = `tool:${name}`;
         const value = await readTool(name, args);
         toolResults.push(value);
         // <data> blokiga o'rash — bazadagi matn ko'rsatma bo'lib ketmasligi uchun.
         return wrapToolResult(value);
     };
 
+    progress.stage = 'model';
     try {
         const { reply, toolCalls, meta } = await chatWithTools(
             [
@@ -6082,11 +6098,13 @@ app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
         if (!guardAi(req, res, 'ask', 40)) return;
         // Oqimsiz yo'l ham bir xil kafolatga ega bo'lishi kerak — mijoz
         // oqim ishlamaganda shu yerga tushadi.
+        const progress: any = { stage: 'boshlandi' };
         const out = await Promise.race([
-            runAsk(req),
+            runAsk(req, undefined, progress),
             new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error(
-                    'Javob belgilangan vaqtda tayyor bo\'lmadi. Qayta urinib ko\'ring.'
+                    `Javob belgilangan vaqtda tayyor bo'lmadi (bosqich: ${progress.stage}). `
+                    + 'Qayta urinib ko\'ring.'
                 )), AI_REQUEST_TIMEOUT_MS)
             ),
         ]);
@@ -6150,11 +6168,13 @@ app.post('/api/ai/ask/stream', authenticateToken, async (req: any, res: any) => 
         //
         // Bu yerdagi chegara oxirgi kafolat: nima bo'lishidan qat'i nazar,
         // foydalanuvchi javob yoki tushunarli xato oladi.
+        const progress: any = { stage: 'boshlandi' };
         const out = await Promise.race([
-            runAsk(req, send),
+            runAsk(req, send, progress),
             new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error(
-                    'Javob belgilangan vaqtda tayyor bo\'lmadi. Qayta urinib ko\'ring.'
+                    `Javob belgilangan vaqtda tayyor bo'lmadi (bosqich: ${progress.stage}). `
+                    + 'Qayta urinib ko\'ring.'
                 )), AI_REQUEST_TIMEOUT_MS)
             ),
         ]);
