@@ -35,7 +35,16 @@ export type AiEvent =
      * yaroqsiz — UI uni tozalashi kerak, aks holda javob oldiga tasodifiy
      * bo'lak yopishib qolardi.
      */
-    | { type: 'discard' };
+    | { type: 'discard' }
+    /**
+     * Provayder limitga urildi va kutish boshlandi.
+     *
+     * Bitta provayder bilan ishlaganda (zaxira zanjiri yo'q) 429 odatiy hol.
+     * Bunda foydalanuvchi 20 soniya sababsiz aylanayotgan spinnerga qarab
+     * turardi — bu "ilova qotib qoldi" degan taassurot beradi. Sababni ochiq
+     * aytish kutishni bir xil uzunlikda qoldiradi, lekin tushunarli qiladi.
+     */
+    | { type: 'wait'; seconds: number };
 
 export interface ChatOptions {
     /** Ish turi: qaysi model ishlatilishini belgilaydi. */
@@ -490,6 +499,7 @@ const roundWithFallback = async (
         if (attempt < AI_RETRY_MAX) {
             const sec = waitFor ?? Math.pow(2, attempt) * 3;
             console.warn(`[AI] Zanjir band. ${sec}s kutib qayta urinilmoqda (${attempt + 1}/${AI_RETRY_MAX})...`);
+            opts.onEvent?.({ type: 'wait', seconds: sec });
             await sleep(sec * 1000);
         }
     }

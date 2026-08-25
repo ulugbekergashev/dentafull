@@ -5814,7 +5814,7 @@ app.get('/api/superadmin/sales', authenticateToken, async (req, res) => {
 const { chatMeta, chatWithTools, isAiConfigured } = require('./aiService');
 const { toolsForRole, runTool } = require('./ai/tools');
 const { askSystemPrompt, chatSystemPrompt } = require('./ai/prompts');
-const { toolsForRequest, cachedTool, tryFastPath, invalidateToolCache } = require('./ai/router');
+const { toolsForRequest, cachedTool, tryFastPath, invalidateToolCache, isActionIntent } = require('./ai/router');
 const { clinicContext } = require('./ai/context');
 const { applyGrounding, wrapToolResult } = require('./ai/guard');
 const { logAi, rateAiLog, aiUsageStats, negativeFeedback } = require('./ai/log');
@@ -5907,7 +5907,11 @@ const runAsk = async (
 
     // ── 2-qatlam: yo'naltirish. Savol turiga qarab faqat kerakli tool'lar.
     const { tools: readTools, route } = toolsForRequest(role, question, isFollowUp);
-    const actionTools = actionsForRole(role);
+
+    // Yozuvchi tool'lar faqat BUYRUQ berilganda qo'shiladi. Ularning ta'rifi
+    // ~590 token va har so'rovga qo'shilsa, yo'naltirishdan olingan tejash
+    // yo'qqa chiqadi (o'lchangan: tor savolda 1217 -> 1475 token).
+    const actionTools = isActionIntent(question) ? actionsForRole(role) : [];
     const tools = [...readTools, ...actionTools];
 
     const profile = await clinicContext(clinicId);
@@ -5926,10 +5930,21 @@ const runAsk = async (
             pendingAction = { id, name, preview: p.preview };
             return {
                 tasdiq_kutilmoqda: true,
+                bajarildi: false,
                 tavsif: p.preview.summary,
-                izoh: 'Harakat foydalanuvchiga ko\'rsatildi va uning tasdig\'ini kutmoqda. '
-                    + 'Javobingda nima qilmoqchi ekaningni bir gapda ayt, "tasdiqlaysizmi?" '
-                    + 'deb so\'rama — tugma allaqachon ekranda.',
+                // Ohang ATAYLAB qattiq belgilangan. Sinovda model
+                // "Qarzdorlarga eslatma yuborildi" deb O'TGAN ZAMONDA javob
+                // berdi — hech narsa yuborilmagan holda. Foydalanuvchi buni
+                // o'qib, ish bajarilgan deb o'ylaydi va tasdiqlash tugmasini
+                // bosmaydi. Ya'ni butun tasdiqlash mexanizmi bir jumla
+                // tufayli teskari natija berardi.
+                izoh: 'DIQQAT: harakat HALI BAJARILMADI. U foydalanuvchiga '
+                    + 'ko\'rsatildi va tasdiqlash tugmasi ekranda turibdi. '
+                    + 'Javobingda "yuborildi", "yozildi", "qo\'shildi" kabi '
+                    + 'O\'TGAN ZAMON ISHLATMA. Kelasi zamonda, bir gapda nima '
+                    + 'bo\'lishini ayt (masalan: "12 ta qarzdorga eslatma '
+                    + 'yuborishga tayyor"). "Tasdiqlaysizmi?" deb so\'rama — '
+                    + 'tugma allaqachon ekranda.',
             };
         }
 

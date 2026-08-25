@@ -57,7 +57,7 @@ const buildProfile = async (clinicId: string): Promise<CachedProfile> => {
             where: { clinicId },
             select: { name: true, price: true },
             orderBy: { price: 'desc' },
-            take: 20,
+            take: 12,
         }),
         prisma.patient.count({ where: { clinicId, status: 'Active' } }),
     ]);

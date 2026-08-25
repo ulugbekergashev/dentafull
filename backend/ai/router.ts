@@ -64,6 +64,40 @@ const RULES: { intent: Intent; re: RegExp }[] = [
     { intent: 'bemor', re: /(bemor|mijoz|pasient|telefon raqam|kim keldi|пациент|клиент)/i },
 ];
 
+/**
+ * Savol BUYRUQmi (ya'ni yozuvchi tool kerakmi)?
+ *
+ * Nega kerak: harakat tool'larining ta'rifi ~590 token. Ularni har bir
+ * so'rovga qo'shish yo'naltirishdan olingan butun tejashni yeb qo'yardi —
+ * o'lchov aniq ko'rsatdi: tor savolda 1217 -> 1475 token, ya'ni "tezlashtirish"
+ * aslida sekinlashtirish edi. Groq bepul tierida daqiqasiga 8000 token
+ * bo'lgani uchun bu nazariy emas, amaliy chegara.
+ *
+ * Chegara ATAYLAB kengroq qo'yilgan: noto'g'ri qo'shib yuborish faqat token
+ * yeydi, noto'g'ri tushirib qoldirish esa foydalanuvchi so'ragan ishni
+ * bajarib bo'lmasligiga olib keladi. Ikkinchisi ancha yomon.
+ */
+const ACTION_RE = new RegExp(
+    [
+        // O'zbekcha buyruq fe'llari (buyruq va hurmat shakllari).
+        "\\b(yubor|jo'nat|jonat)(ing|amiz|ib ber(ing)?)?\\b",
+        "\\b(yoz|qo'sh|qosh|kirit)(ing|amiz|ib ber(ing)?)?\\b",
+        "\\b(o'zgartir|ozgartir|belgila|almashtir)(ing|amiz)?\\b",
+        '\\b(band qil|bekor qil|qabulga yoz)\\w*',
+        // Ot shaklidagi buyruqlar: "eslatma yuborish", "xarajat qo'shish".
+        "\\b(eslatma|eslatib)\\b",
+        // Ruscha. `\b` va `\w` ATAYLAB ishlatilmagan: JavaScript'da ular faqat
+        // ASCII harflarni so'z belgisi deb biladi, ya'ni kirill so'z oldida
+        // chegara umuman hosil bo'lmaydi va "Отправь" hech qachon mos
+        // kelmasdi. O'zak bo'yicha to'g'ridan-to'g'ri qidiramiz.
+        '(отправ|напомн|запиш|добав|измен|назнач|перенес)',
+    ].join('|'),
+    'i'
+);
+
+export const isActionIntent = (question: string): boolean =>
+    ACTION_RE.test(String(question || ''));
+
 export interface RouteResult {
     intent: Intent;
     /** Modelga beriladigan tool nomlari. */

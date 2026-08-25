@@ -126,6 +126,7 @@ type StreamEvent =
   | { type: 'tool_done'; name: string; ok: boolean }
   | { type: 'round'; n: number }
   | { type: 'discard' }
+  | { type: 'wait'; seconds: number }
   | { type: 'done'; reply: string; sources: string[]; action: PendingAction | null; logId: string | null }
   | { type: 'error'; message: string };
 
@@ -663,6 +664,11 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
           case 'discard':
             // Model tool chaqirishdan oldin yozgan bo'lagi endi yaroqsiz.
             setDraft('');
+            break;
+          case 'wait':
+            // Provayder limitga urildi. Sababni aytmasak, foydalanuvchi
+            // 20 soniyalik jimlikni "ilova qotdi" deb tushunadi.
+            setBusyLabel(`${t('ai.rateLimited')} — ${ev.seconds}s`);
             break;
           case 'done':
             done = true;
