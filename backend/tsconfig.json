@@ -31,7 +31,8 @@
         "ai/context.ts",
         "ai/actions.ts",
         "ai/proactive.ts",
-        "ai/keys.ts"
+        "ai/keys.ts",
+        "ai/speech.ts"
     ],
     "exclude": [
         "node_modules",

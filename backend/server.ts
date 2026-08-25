@@ -110,6 +110,22 @@ const storage = new CloudinaryStorage({
 });
 
 const upload = multer({ storage: storage });
+
+/**
+ * Ovoz yozuvlari uchun alohida multer — XOTIRADA.
+ *
+ * Rasm yuklagichdan ataylab ajratilgan: u Cloudinary'ga saqlaydi. Ovoz esa
+ * hech qayerga saqlanmasligi kerak. Shifokor mikrofonga gapirganda yozuvda
+ * bemor ismi, tashxis va summa bo'lishi mumkin — bu tibbiy ma'lumot. U
+ * faqat matnga aylantirish uchun bir marta o'tadi va darhol yo'qoladi:
+ * diskda ham, bulutda ham, jurnalda ham izi qolmaydi.
+ *
+ * Chegara 10 MB — bir daqiqalik nutq odatda 1 MB atrofida bo'ladi.
+ */
+const audioUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+});
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     console.error('🔥 KRITIK: JWT_SECRET muhit o\'zgaruvchisi o\'rnatilmagan! Server xavfsiz ishlay olmaydi.');
@@ -5855,6 +5871,7 @@ const { logAi, rateAiLog, aiUsageStats, negativeFeedback } = require('./ai/log')
 const {
     getClinicKey, invalidateClinicKey, verifyClinicKey, isSupportedProvider, SUPPORTED_PROVIDERS,
 } = require('./ai/keys');
+const { transcribe, sttKey } = require('./ai/speech');
 const {
     actionsForRole, isAction, previewAction, executeAction, storePending, takePending,
     PENDING_INSTRUCTION,
@@ -6352,6 +6369,51 @@ app.put('/api/clinics/:id/ai-settings', authenticateToken, async (req: any, res:
     } catch (error: any) {
         console.error('[AI/ai-settings]', error.message);
         res.status(500).json({ error: 'AI sozlamalarini saqlashda xatolik' });
+    }
+});
+
+/**
+ * POST /api/ai/transcribe
+ * Ovozni matnga aylantiradi. Brauzer o'zi taniy olmaganda ishlatiladi.
+ *
+ * Audio saqlanmaydi: xotiradan o'tadi va javob bilan birga yo'qoladi.
+ * Jurnalga ham faqat MATN tushadi, ovozning o'zi emas.
+ */
+app.post('/api/ai/transcribe', authenticateToken, audioUpload.single('audio'), async (req: any, res: any) => {
+    const t0 = Date.now();
+    try {
+        const user = req.user;
+        const file = req.file;
+        if (!file?.buffer?.length) {
+            return res.status(400).json({ success: false, message: 'Audio yuborilmadi.' });
+        }
+
+        // Ovoz arzon emas: har bir yozuv model chaqiruvini talab qiladi.
+        // Chegara savol-javobnikidan kengroq — bitta savol bir necha
+        // urinishdan iborat bo'lishi mumkin (noto'g'ri eshitildi, qaytardi).
+        if (!aiRateLimit(`stt:${userKey(user)}`, 120, 60 * 60 * 1000)) {
+            return res.status(429).json({ success: false, message: 'Soatlik chegaraga yetdingiz.' });
+        }
+
+        const key = sttKey(await getClinicKey(getScopedClinicId(req)));
+        if (!key) {
+            return res.status(503).json({ success: false, message: 'Ovoz xizmati sozlanmagan.' });
+        }
+
+        const lang = reqLang(req);
+        const out = await transcribe(file.buffer, file.mimetype || 'audio/webm', lang, key);
+
+        await logAi({
+            clinicId: getScopedClinicId(req), userId: userKey(user), userName: user?.name,
+            role: user?.role, endpoint: 'stt', lang,
+            question: `[ovoz ${Math.round(file.size / 1024)}KB]`, reply: out.text,
+            model: out.model, latencyMs: Date.now() - t0,
+        });
+
+        res.json({ success: true, text: out.text });
+    } catch (e: any) {
+        console.error('[AI/transcribe]', e.message);
+        res.status(500).json({ success: false, message: e.message || 'Ovozni tanib bo\'lmadi.' });
     }
 });
 

@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, ArrowUp, Loader2, AlertTriangle, Database, Inbox,
   CalendarCheck, TrendingUp, Wallet, Users, Package, Sparkles, RotateCcw,
-  ThumbsUp, ThumbsDown, Check, X, History, Send, Trash2,
+  ThumbsUp, ThumbsDown, Check, X, History, Send, Trash2, Mic, MicOff,
 } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { UserRole } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 
 // ─── DentaAI ─────────────────────────────────────────────────────────────────
 // Bu modal EMAS. Sahifa ichida, ilova navigatsiyasi joyida turgan holda
@@ -627,8 +628,10 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
     }
   }, [language]);
 
-  const ask = useCallback(async () => {
-    const q = query.trim();
+  // `override` — ovozdan kelgan matn. State orqali o'tkazib bo'lmaydi:
+  // setQuery asinxron va darhol keyin ask() chaqirilsa eski qiymat ketardi.
+  const ask = useCallback(async (override?: string) => {
+    const q = (override ?? query).trim();
     if (!q || busy) return;
 
     setBusy(true);
@@ -799,6 +802,36 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
     }
   }, [loadConversations]);
 
+  // ─── Ovozli kiritish ───────────────────────────────────────────────────
+  // Shifokorning qo'li qo'lqopda va band bo'ladi. Shuning uchun tugma emas,
+  // hot key: bosdi — gapirdi — javob keldi. Ekranga tegish shart emas.
+  const voice = useVoiceInput({
+    lang: language,
+    // Natija DARHOL yuboriladi: ovozli buyruqning butun ma'nosi shunda.
+    // Xato eshitilsa ham xavf yo'q — o'zgartirish kiritadigan buyruq
+    // tasdiqlash kartasiga tushadi va foydalanuvchi uni ko'radi.
+    onResult: text => { setQuery(text); ask(text); },
+  });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Ctrl+Shift+Space yoki F2. Ikkalasi ham matn kiritishga xalaqit
+      // bermaydi: birinchisi uch tugmali, ikkinchisi harf emas.
+      const combo = (e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Space';
+      if (combo || e.key === 'F2') {
+        e.preventDefault();
+        voice.toggle();
+        return;
+      }
+      if (e.key === 'Escape' && voice.state === 'listening') {
+        e.preventDefault();
+        voice.stop();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [voice]);
+
   const reset = () => {
     abortRef.current?.abort();
     setResult(null);
@@ -849,7 +882,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
             }}
             rows={1}
             placeholder={t('ai.placeholder')}
-            className="w-full rounded-2xl pl-14 pr-14 py-[18px] text-[15.5px] resize-none outline-none
+            className="w-full rounded-2xl pl-14 pr-24 py-[18px] text-[15.5px] resize-none outline-none
                        bg-white dark:bg-gray-800/60
                        ring-1 ring-gray-200 dark:ring-white/[0.08]
                        focus:ring-2 focus:ring-violet-500/60
@@ -857,8 +890,31 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
                        placeholder:text-gray-400 dark:placeholder:text-gray-500
                        text-gray-900 dark:text-white transition-shadow shadow-sm"
           />
+          {/* Mikrofon holati. Tugma sifatida ham bosiladi — sichqoncha bilan
+              ishlayotgan xodim uchun, lekin asosiy yo'l baribir hot key. */}
           <button
-            onClick={ask}
+            onClick={() => voice.toggle()}
+            disabled={busy}
+            aria-label={voice.state === 'listening' ? t('ai.voiceStop') : t('ai.voiceStart')}
+            title={`${t('ai.voiceHint')} (Ctrl+Shift+Space / F2)`}
+            className={`absolute right-14 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center
+                        rounded-xl transition-colors disabled:opacity-40 ${
+              voice.state === 'listening'
+                ? 'bg-rose-500 text-white'
+                : voice.state === 'processing'
+                  ? 'text-violet-500'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/[0.06]'
+            }`}
+          >
+            {voice.state === 'processing'
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : voice.state === 'listening'
+                ? <Mic className="w-4 h-4" />
+                : <MicOff className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={() => ask()}
             disabled={!query.trim() || busy}
             aria-label={t('ai.send')}
             className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center
@@ -870,6 +926,54 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
           </button>
         </div>
       </motion.div>
+
+      {/* Ovoz holati. Foydalanuvchi nima eshitilayotganini KO'RISHI kerak:
+          aks holda u gapiradi, hech narsa bo'lmaydi va nima noto'g'ri
+          ketganini bilmaydi. */}
+      <AnimatePresence>
+        {(voice.state === 'listening' || voice.state === 'processing' || voice.error) && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="max-w-2xl mx-auto mt-2.5 flex items-center gap-2.5 px-1"
+          >
+            {voice.error ? (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                <span className="text-[13px] text-rose-600 dark:text-rose-400">{voice.error}</span>
+              </>
+            ) : voice.state === 'processing' ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-500 shrink-0" />
+                <span className="text-[13px] text-gray-500 dark:text-gray-400">
+                  {t('ai.voiceHint')}…
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" />
+                </span>
+                <span className="text-[13px] text-gray-600 dark:text-gray-300 truncate">
+                  {voice.partial || `${t('ai.listening')}…`}
+                </span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-auto shrink-0">
+                  Esc
+                </span>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bosh ekranda hot key haqida bir marta eslatma. */}
+      {!hasResult && voice.state === 'idle' && !voice.error && (
+        <div className="max-w-2xl mx-auto mt-2.5 px-1 text-[12px] text-gray-400 dark:text-gray-500">
+          {t('ai.voiceReady')}
+        </div>
+      )}
 
       {/* Natija ochiq — hisobotlar chip qatoriga aylanadi va JOYIDA qoladi.
           Ilgari ular yo'qolardi va boshqasini ko'rish uchun qayta boshlash kerak edi. */}
