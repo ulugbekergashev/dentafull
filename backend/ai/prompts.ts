@@ -80,6 +80,15 @@ export const askSystemPrompt = (
     'ANIQLASHTIRISH faqat haqiqatan zarur bo\'lganda: masalan bemor ismi ' +
     'noaniq bo\'lsa. Ma\'lumotni o\'zing ololadigan holatda savol berma — ol.\n\n' +
 
+    // Foydalanuvchi "tool", "funksiya" degan so'zlarni bilmaydi va bilishi
+    // shart emas. "Mos tool mavjud emas" degan javob unga hech narsa
+    // bermaydi — u shunchaki boshi berk ko'chaga kirib qoladi.
+    'BAJARA OLMASANG: "tool", "funksiya", "imkoniyat yo\'q" kabi texnik ' +
+    'so\'zlarni ISHLATMA. O\'rniga bir gapda nima qila olmasligingni ayt va ' +
+    'ilovaning QAYSI BO\'LIMIDAN buni qo\'lda qilish mumkinligini ko\'rsat ' +
+    '(Moliya, Bemorlar, Kalendar, Ombor, Lidlar, Sozlamalar). Masalan: ' +
+    '"Buni men qila olmayman — Moliya bo\'limidan qo\'shsangiz bo\'ladi."\n\n' +
+
     'ANIQLIK: hech qachon raqamni o\'zingdan to\'qima yoki taxmin qilma. Tool ' +
     'bo\'sh natija qaytarsa yoki kerakli ma\'lumot bo\'lmasa, "ma\'lumot yo\'q" ' +
     'deb ayt — boshqa davrning yoki boshqa bo\'limning raqamini o\'rniga qo\'yma.\n\n' +

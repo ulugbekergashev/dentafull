@@ -5994,8 +5994,24 @@ const runAsk = async (
     // yo'qqa chiqadi (o'lchangan: tor savolda 1217 -> 1475 token).
     // Harakat tool'lari faqat buyruqda, va faqat SO'RALGANI. Ular ikkala
     // raundda ham yuboriladi, ya'ni hajmi ikki barobar hisoblanadi.
-    const actionTools = isActionIntent(question)
-        ? actionsForQuestion(role, question, actionsForRole)
+    //
+    // DIQQAT: buyruq konteksti OXIRGI BIR NECHA gapdan olinadi, faqat
+    // oxirgisidan emas. Sabab productionda ko'rindi:
+    //
+    //   1) "usmonovga 500 ming qarz yozib qo'y"   -> to'g'ri ishladi
+    //   2) "usmonovga tish tozalash uchun 50 ming" -> "mos tool yo'q"
+    //
+    // Ikkinchi gapda FE'L umuman yo'q — u oldingi gapdan davom etyapti.
+    // Tabiiy suhbatda odam fe'lni takrorlamaydi. Faqat oxirgi gapga
+    // qarasak, davomiy buyruq har safar yo'qolardi.
+    const actionContext = history
+        .filter(m => m.role === 'user')
+        .slice(-3)
+        .map(m => m.content)
+        .join(' ');
+
+    const actionTools = isActionIntent(actionContext)
+        ? actionsForQuestion(role, actionContext, actionsForRole)
         : [];
     const tools = [...readTools, ...actionTools];
 
