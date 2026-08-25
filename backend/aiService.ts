@@ -17,12 +17,51 @@ export interface ChatMessage {
     tool_call_id?: string;
 }
 
+/**
+ * Oqim hodisalari. UI shular orqali "nima bo'layotganini" ko'rsatadi —
+ * javob to'liq tayyor bo'lguncha kutish o'rniga.
+ */
+export type AiEvent =
+    | { type: 'tool_start'; name: string; args: any }
+    | { type: 'tool_done'; name: string; ok: boolean }
+    | { type: 'token'; text: string }
+    | { type: 'round'; n: number }
+    /**
+     * Uzatilgan matnni bekor qil.
+     *
+     * Model ba'zan tool chaqirishdan oldin bir necha so'z yozadi ("Hozir
+     * tekshiraman..."), yoki provayder javob o'rtasida yiqilib, zanjir
+     * keyingisiga o'tadi. Ikkala holatda ham ekrandagi yarim matn endi
+     * yaroqsiz — UI uni tozalashi kerak, aks holda javob oldiga tasodifiy
+     * bo'lak yopishib qolardi.
+     */
+    | { type: 'discard' };
+
 export interface ChatOptions {
     /** Ish turi: qaysi model ishlatilishini belgilaydi. */
     task?: 'chat' | 'cheap';
     maxTokens?: number;
     /** Kuzatuv uchun: qaysi endpoint chaqirdi. */
     label?: string;
+    /**
+     * Berilsa — javob token-token uzatiladi va bu funksiya har bo'lakda
+     * chaqiriladi. Berilmasa oddiy, to'liq javob rejimi ishlaydi.
+     */
+    onEvent?: (e: AiEvent) => void;
+    /**
+     * Javobda matn ham, tool chaqiruvi ham bo'lmasa — xato deb hisoblansin
+     * va zanjirdagi keyingi provayderga o'tilsin.
+     */
+    expectContent?: boolean;
+}
+
+/** Chaqiruv haqidagi ma'lumot — jurnal (ai/log.ts) uchun. */
+export interface CallMeta {
+    provider: string;
+    model: string;
+    tokensIn?: number;
+    tokensOut?: number;
+    rounds?: number;
 }
 
 interface ProviderConfig {
@@ -47,9 +86,16 @@ const providers = (): ProviderConfig[] => [
         name: 'gemini',
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
         apiKey: process.env.GEMINI_API_KEY,
+        // 2.0 -> 2.5: bir xil API, bir xil narx darajasi, lekin ko'rsatma
+        // bajarish va o'zbek tilida sezilarli kuchliroq.
+        //
+        // Model almashtirish ilgari qo'rqinchli amal edi — regressiyani sezmay
+        // qolish mumkin edi. Endi `ai/evals/run.ts --model <nom>` bor: nomzodni
+        // bir xil 54 savolda o'tkazib, ballni oldingisi bilan solishtirsa
+        // bo'ladi. Ya'ni bu qator endi o'lchov bilan tasdiqlanadigan qaror.
         models: {
-            chat: process.env.GEMINI_MODEL_CHAT || 'gemini-2.0-flash',
-            cheap: process.env.GEMINI_MODEL_CHEAP || 'gemini-2.0-flash-lite',
+            chat: process.env.GEMINI_MODEL_CHAT || 'gemini-2.5-flash',
+            cheap: process.env.GEMINI_MODEL_CHEAP || 'gemini-2.5-flash-lite',
         },
     },
     {
@@ -133,6 +179,156 @@ const stripMarkdown = (text: string): string =>
 
 const cleanReply = (text: string): string => stripMarkdown(stripReasoning(text)).trim();
 
+// ─── Oqim (streaming) ────────────────────────────────────────────────────────
+//
+// Ilgari tool-calling tsikli to'liq tugagach bitta JSON qaytardi va
+// foydalanuvchi 5–12 soniya spinnerga qarab turardi. Endi har bir bo'lak
+// darhol uzatiladi.
+//
+// Muammo: `stripReasoning` to'liq matn ustida ishlaydi, oqimda esa matn
+// bo'lak-bo'lak keladi va `<think>` tegi ikki bo'lak orasida bo'linib
+// qolishi mumkin. Shuning uchun oqim uchun alohida, holatni eslab
+// qoladigan filtr kerak — aks holda model ichki fikrlashi foydalanuvchi
+// ekraniga chiqib ketardi.
+
+/** Matn oxiri `tag` ning boshlanishiga o'xshasa — nechta belgi ushlab qolinsin. */
+const holdBack = (s: string, tag: string): number => {
+    const max = Math.min(tag.length - 1, s.length);
+    for (let n = max; n > 0; n--) {
+        if (s.slice(s.length - n) === tag.slice(0, n)) return n;
+    }
+    return 0;
+};
+
+const OPEN = '<think>';
+const CLOSE = '</think>';
+
+/** Oqim davomida `<think>` bloklarini kesib tashlaydigan filtr. */
+class ThinkFilter {
+    private buf = '';
+    private inThink = false;
+
+    feed(chunk: string): string {
+        this.buf += chunk;
+        let out = '';
+
+        for (;;) {
+            if (this.inThink) {
+                const end = this.buf.indexOf(CLOSE);
+                if (end === -1) {
+                    // Blok ichidamiz — hech narsa chiqarmaymiz. Yopuvchi teg
+                    // bo'linib qolishi mumkin, shuning uchun oxirini saqlaymiz.
+                    const keep = holdBack(this.buf, CLOSE);
+                    this.buf = keep ? this.buf.slice(this.buf.length - keep) : '';
+                    return out;
+                }
+                this.buf = this.buf.slice(end + CLOSE.length);
+                this.inThink = false;
+                continue;
+            }
+
+            const start = this.buf.indexOf(OPEN);
+            if (start === -1) {
+                const keep = holdBack(this.buf, OPEN);
+                out += this.buf.slice(0, this.buf.length - keep);
+                this.buf = keep ? this.buf.slice(this.buf.length - keep) : '';
+                return out;
+            }
+
+            out += this.buf.slice(0, start);
+            this.buf = this.buf.slice(start + OPEN.length);
+            this.inThink = true;
+        }
+    }
+
+    /** Oqim tugagach qolgan qismini qaytaradi. */
+    flush(): string {
+        const rest = this.inThink ? '' : this.buf;
+        this.buf = '';
+        return rest;
+    }
+}
+
+/**
+ * SSE oqimini o'qib, oddiy (oqimsiz) javob shakliga yig'adi.
+ *
+ * Qaytariladigan obyekt `chat/completions` javobining aynan o'zi bo'ladi —
+ * shu sababli chaqiruvchi kod oqim ishlatilgan-ishlatilmaganini bilishi
+ * shart emas va tool-calling mantiqi ikki nusxada yozilmaydi.
+ */
+const readStream = async (res: Response, onEvent?: (e: AiEvent) => void): Promise<any> => {
+    const reader = (res.body as any)?.getReader?.();
+    if (!reader) throw new Error('oqim o\'qilmadi');
+
+    const decoder = new TextDecoder();
+    const filter = new ThinkFilter();
+
+    let buffer = '';
+    let content = '';
+    let usage: any = undefined;
+    let finishReason: string | undefined;
+    // tool_call'lar bo'lak-bo'lak keladi va `index` bo'yicha yig'iladi.
+    const toolCalls: any[] = [];
+
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE: xabarlar bo'sh qator bilan ajratiladi, har biri "data: ..." qatori.
+        const parts = buffer.split('\n');
+        buffer = parts.pop() || '';
+
+        for (const line of parts) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const payload = trimmed.slice(5).trim();
+            if (!payload || payload === '[DONE]') continue;
+
+            let data: any;
+            try { data = JSON.parse(payload); } catch { continue; }
+
+            if (data.usage) usage = data.usage;
+            const choice = data.choices?.[0];
+            if (!choice) continue;
+            if (choice.finish_reason) finishReason = choice.finish_reason;
+
+            const delta = choice.delta || {};
+
+            if (typeof delta.content === 'string' && delta.content) {
+                content += delta.content;
+                const visible = filter.feed(delta.content);
+                if (visible && onEvent) onEvent({ type: 'token', text: visible });
+            }
+
+            for (const tc of delta.tool_calls || []) {
+                const i = tc.index ?? 0;
+                if (!toolCalls[i]) {
+                    toolCalls[i] = { id: tc.id || '', type: 'function', function: { name: '', arguments: '' } };
+                }
+                if (tc.id) toolCalls[i].id = tc.id;
+                if (tc.function?.name) toolCalls[i].function.name += tc.function.name;
+                if (tc.function?.arguments) toolCalls[i].function.arguments += tc.function.arguments;
+            }
+        }
+    }
+
+    const tail = filter.flush();
+    if (tail && onEvent) onEvent({ type: 'token', text: tail });
+
+    const calls = toolCalls.filter(Boolean);
+    return {
+        choices: [{
+            message: {
+                content: content || null,
+                ...(calls.length ? { tool_calls: calls } : {}),
+            },
+            finish_reason: finishReason,
+        }],
+        usage,
+    };
+};
+
 interface ProviderError extends Error {
     status?: number;
     provider?: string;
@@ -164,127 +360,6 @@ const parseRetryAfter = (res: Response, body: string): number | undefined => {
     return undefined;
 };
 
-/** Bitta provayderga so'rov. Xatolikda ProviderError tashlaydi. */
-const callProvider = async (
-    p: ProviderConfig,
-    messages: ChatMessage[],
-    opts: ChatOptions
-): Promise<string> => {
-    const model = p.models[opts.task === 'cheap' ? 'cheap' : 'chat'];
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
-
-    try {
-        const res = await fetch(`${p.baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${p.apiKey}`,
-            },
-            body: JSON.stringify({
-                model,
-                messages,
-                max_tokens: opts.maxTokens ?? 1024,
-            }),
-            signal: controller.signal,
-        });
-
-        if (!res.ok) {
-            const body = await res.text().catch(() => '');
-            const err: ProviderError = new Error(
-                `${p.name} ${res.status}: ${body.slice(0, 300)}`
-            );
-            err.status = res.status;
-            err.provider = p.name;
-            err.retryAfter = parseRetryAfter(res, body);
-            throw err;
-        }
-
-        const data: any = await res.json();
-        const raw = data?.choices?.[0]?.message?.content;
-        const text = typeof raw === 'string' ? cleanReply(raw) : raw;
-        if (!text) {
-            const err: ProviderError = new Error(`${p.name}: bo'sh javob qaytdi`);
-            err.status = 502;
-            err.provider = p.name;
-            throw err;
-        }
-
-        const usage = data?.usage;
-        console.log(
-            `[AI] ${opts.label || 'chat'} · ${p.name}/${model} · ` +
-            `in=${usage?.prompt_tokens ?? '?'} out=${usage?.completion_tokens ?? '?'}`
-        );
-
-        return text.trim();
-    } catch (e: any) {
-        if (e?.name === 'AbortError') {
-            const err: ProviderError = new Error(`${p.name}: vaqt tugadi (${AI_TIMEOUT_MS}ms)`);
-            err.status = 408;
-            err.provider = p.name;
-            throw err;
-        }
-        if (e?.status) throw e;
-        // Tarmoq xatosi — fallback qilishga arziydi.
-        const err: ProviderError = new Error(`${p.name}: ${e?.message || 'tarmoq xatosi'}`);
-        err.status = 503;
-        err.provider = p.name;
-        throw err;
-    } finally {
-        clearTimeout(timer);
-    }
-};
-
-/**
- * AI dan javob oladi. Birinchi provayder limitga urilsa yoki tushib qolsa —
- * avtomatik keyingisiga o'tadi.
- *
- * @throws Barcha provayderlar ishlamasa yoki hech biri sozlanmagan bo'lsa.
- */
-export const chat = async (
-    messages: ChatMessage[],
-    opts: ChatOptions = {}
-): Promise<string> => {
-    const chain = providerChain();
-    if (chain.length === 0) {
-        throw new Error(
-            'AI sozlanmagan: GEMINI_API_KEY, GROQ_API_KEY yoki OPENROUTER_API_KEY dan ' +
-            'kamida bittasini .env ga qo\'shing.'
-        );
-    }
-
-    const errors: string[] = [];
-    for (let attempt = 0; attempt <= AI_RETRY_MAX; attempt++) {
-        let waitFor: number | undefined;
-
-        for (const p of chain) {
-            try {
-                return await callProvider(p, messages, opts);
-            } catch (e: any) {
-                errors.push(e.message);
-                const status = e?.status ?? 500;
-                if (!isRetryable(status)) {
-                    // Konfiguratsiya xatosi — zanjirni davom ettirish ma'nosiz.
-                    console.error(`[AI] ${p.name} qaytarib bo'lmaydigan xatolik:`, e.message);
-                    throw e;
-                }
-                if (status === 429 && e.retryAfter) {
-                    waitFor = Math.min(waitFor ?? Infinity, e.retryAfter);
-                }
-                console.warn(`[AI] ${p.name} ishlamadi (${status}), keyingi provayderga o'tilmoqda...`);
-            }
-        }
-
-        // Butun zanjir limitga urildi. Zaxira provayder yo'q — kutamiz.
-        if (attempt < AI_RETRY_MAX) {
-            const sec = waitFor ?? Math.pow(2, attempt) * 3;
-            console.warn(`[AI] Zanjir band. ${sec}s kutib qayta urinilmoqda (${attempt + 1}/${AI_RETRY_MAX})...`);
-            await sleep(sec * 1000);
-        }
-    }
-
-    throw new Error(`Barcha AI provayderlari ishlamadi. ${errors.slice(-3).join(' | ')}`);
-};
 
 // ─── Tool calling (2-bosqich) ────────────────────────────────────────────────
 
@@ -301,6 +376,7 @@ const callProviderRaw = async (
     opts: ChatOptions
 ): Promise<any> => {
     const model = p.models[opts.task === 'cheap' ? 'cheap' : 'chat'];
+    const stream = !!opts.onEvent;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
     try {
@@ -312,6 +388,11 @@ const callProviderRaw = async (
                 messages,
                 max_tokens: opts.maxTokens ?? 1024,
                 ...(tools.length ? { tools, tool_choice: 'auto' } : {}),
+                // include_usage — oqim rejimida token hisobini oxirgi bo'lakda
+                // beradi. Usiz jurnal (ai/log.ts) token ustunlari bo'sh qolardi
+                // va sarfni o'lchab bo'lmasdi. Qo'llab-quvvatlamaydigan
+                // provayder buni jimgina e'tiborsiz qoldiradi.
+                ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
             }),
             signal: controller.signal,
         });
@@ -323,7 +404,21 @@ const callProviderRaw = async (
             err.retryAfter = parseRetryAfter(res, body);
             throw err;
         }
-        return await res.json();
+        const data = stream ? await readStream(res, opts.onEvent) : await res.json();
+
+        // Bo'sh javob — provayder tomonidagi vaqtinchalik nosozlik. Uni
+        // qaytarib bo'lmaydigan xato deb hisoblash noto'g'ri: zanjirdagi
+        // keyingi provayder odatda normal javob beradi.
+        if (opts.expectContent) {
+            const m = data?.choices?.[0]?.message;
+            if (!m?.content && !(m?.tool_calls?.length)) {
+                const err: ProviderError = new Error(`${p.name}: bo'sh javob qaytdi`);
+                err.status = 502;
+                err.provider = p.name;
+                throw err;
+            }
+        }
+        return data;
     } catch (e: any) {
         if (e?.status) throw e;
         const err: ProviderError = new Error(`${p.name}: ${e?.message || 'tarmoq xatosi'}`);
@@ -334,6 +429,27 @@ const callProviderRaw = async (
     }
 };
 
+/**
+ * Oqim hodisalarini kuzatib boruvchi darvoza.
+ *
+ * Kerak, chunki uzatish boshlangandan keyin urinish yiqilishi mumkin —
+ * bunday holatda UI ga "uzatilganini bekor qil" deb aytish shart.
+ */
+const makeStreamGate = (onEvent?: (e: AiEvent) => void) => {
+    let emitted = false;
+    return {
+        handler: onEvent
+            ? (e: AiEvent) => { if (e.type === 'token') emitted = true; onEvent(e); }
+            : undefined,
+        /** Shu urinishda matn uzatilgan bo'lsa — bekor qilishni buyuradi. */
+        rollback: () => {
+            if (emitted && onEvent) onEvent({ type: 'discard' });
+            emitted = false;
+        },
+        reset: () => { emitted = false; },
+    };
+};
+
 /** Fallback zanjiri bilan bitta raund. */
 const roundWithFallback = async (
     messages: ChatMessage[],
@@ -341,15 +457,27 @@ const roundWithFallback = async (
     opts: ChatOptions
 ): Promise<{ data: any; provider: ProviderConfig }> => {
     const chain = providerChain();
-    if (chain.length === 0) throw new Error('AI sozlanmagan: hech qanday provayder kaliti yo\'q.');
+    if (chain.length === 0) {
+        throw new Error(
+            'AI sozlanmagan: GEMINI_API_KEY, GROQ_API_KEY yoki OPENROUTER_API_KEY dan ' +
+            'kamida bittasini .env ga qo\'shing.'
+        );
+    }
     const errors: string[] = [];
+    const gate = makeStreamGate(opts.onEvent);
+
     for (let attempt = 0; attempt <= AI_RETRY_MAX; attempt++) {
         let waitFor: number | undefined;
 
         for (const p of chain) {
             try {
-                return { data: await callProviderRaw(p, messages, tools, opts), provider: p };
+                gate.reset();
+                const data = await callProviderRaw(p, messages, tools, { ...opts, onEvent: gate.handler });
+                return { data, provider: p };
             } catch (e: any) {
+                // Yarim uzatilgan matnni tozalaymiz — keyingi provayder
+                // javobni noldan yozadi.
+                gate.rollback();
                 errors.push(e.message);
                 if (!isRetryable(e?.status ?? 500)) throw e;
                 if (e?.status === 429 && e.retryAfter) {
@@ -369,6 +497,53 @@ const roundWithFallback = async (
 };
 
 /**
+ * Tool'siz oddiy so'rov — chaqiruv haqidagi ma'lumot bilan birga.
+ *
+ * Ilgari bu funksiya (`chat`) o'zining alohida provayder aylanishi va qayta
+ * urinish siklini olib yurardi — `roundWithFallback` bilan deyarli bir xil
+ * 45 qator kod. Ikkitasi vaqt o'tib bir-biridan uzoqlashardi: oqim
+ * qo'llab-quvvatlashi faqat bittasiga qo'shilardi, `retry-after` mantig'i
+ * faqat boshqasida tuzatilardi. Endi bitta manba.
+ */
+export const chatMeta = async (
+    messages: ChatMessage[],
+    opts: ChatOptions = {}
+): Promise<{ text: string; meta: CallMeta }> => {
+    const { data, provider } = await roundWithFallback(messages, [], { ...opts, expectContent: true });
+    const raw = data?.choices?.[0]?.message?.content;
+    const text = typeof raw === 'string' ? cleanReply(raw) : '';
+    if (!text) throw new Error('Model bo\'sh javob qaytardi.');
+
+    const model = provider.models[opts.task === 'cheap' ? 'cheap' : 'chat'];
+    console.log(
+        `[AI] ${opts.label || 'chat'} · ${provider.name}/${model} · ` +
+        `in=${data?.usage?.prompt_tokens ?? '?'} out=${data?.usage?.completion_tokens ?? '?'}`
+    );
+
+    return {
+        text,
+        meta: {
+            provider: provider.name,
+            model,
+            tokensIn: data?.usage?.prompt_tokens,
+            tokensOut: data?.usage?.completion_tokens,
+            rounds: 1,
+        },
+    };
+};
+
+/**
+ * AI dan javob oladi. Birinchi provayder limitga urilsa yoki tushib qolsa —
+ * avtomatik keyingisiga o'tadi.
+ *
+ * @throws Barcha provayderlar ishlamasa yoki hech biri sozlanmagan bo'lsa.
+ */
+export const chat = async (
+    messages: ChatMessage[],
+    opts: ChatOptions = {}
+): Promise<string> => (await chatMeta(messages, opts)).text;
+
+/**
  * Tool'lar bilan suhbat. Model tool chaqirsa — `execute` orqali bajariladi va
  * natija modelga qaytariladi. Model javob yozgunicha yoki `maxRounds` ga
  * yetgunicha takrorlanadi.
@@ -382,29 +557,50 @@ export const chatWithTools = async (
     tools: any[],
     execute: (name: string, args: any) => Promise<any>,
     opts: ChatOptions & { maxRounds?: number } = {}
-): Promise<{ reply: string; toolCalls: ToolCallTrace[] }> => {
+): Promise<{ reply: string; toolCalls: ToolCallTrace[]; results: any[]; meta: CallMeta }> => {
     const maxRounds = opts.maxRounds ?? 5;
     const history: ChatMessage[] = [...messages];
     const trace: ToolCallTrace[] = [];
+    // Xom tool natijalari — grounding tekshiruvi (ai/guard.ts) aynan shularga
+    // tayanadi, shuning uchun ular chaqiruvchiga qaytarilishi shart.
+    const results: any[] = [];
+    let tokensIn = 0;
+    let tokensOut = 0;
 
     for (let round = 0; round < maxRounds; round++) {
+        opts.onEvent?.({ type: 'round', n: round + 1 });
+
         // Oxirgi raundda tool bermaymiz — model matn bilan javob berishga majbur bo'ladi.
         const active = round === maxRounds - 1 ? [] : tools;
         const { data, provider } = await roundWithFallback(history, active, opts);
 
+        tokensIn += data?.usage?.prompt_tokens || 0;
+        tokensOut += data?.usage?.completion_tokens || 0;
+
         const msg = data?.choices?.[0]?.message;
         const calls = msg?.tool_calls;
+        const model = provider.models[opts.task === 'cheap' ? 'cheap' : 'chat'];
 
         if (!calls || calls.length === 0) {
             const raw = msg?.content;
             const reply = typeof raw === 'string' ? cleanReply(raw) : '';
             console.log(
                 `[AI] ${opts.label || 'ask'} · ${provider.name} · raund=${round + 1} · ` +
-                `tool=${trace.length} · in=${data?.usage?.prompt_tokens ?? '?'} out=${data?.usage?.completion_tokens ?? '?'}`
+                `tool=${trace.length} · in=${tokensIn || '?'} out=${tokensOut || '?'}`
             );
             if (!reply) throw new Error('Model bo\'sh javob qaytardi.');
-            return { reply, toolCalls: trace };
+            return {
+                reply,
+                toolCalls: trace,
+                results,
+                meta: { provider: provider.name, model, tokensIn, tokensOut, rounds: round + 1 },
+            };
         }
+
+        // Bu raund tool chaqiruvi bilan tugadi. Model matn ham yozgan bo'lsa,
+        // u allaqachon ekranga uzatilgan — uni tozalashni buyuramiz, aks holda
+        // "Hozir tekshiraman..." javobning oldiga yopishib qolardi.
+        if (msg?.content) opts.onEvent?.({ type: 'discard' });
 
         // Assistant'ning tool chaqiruvini tarixga qo'shamiz (protokol talabi).
         history.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls });
@@ -419,12 +615,16 @@ export const chatWithTools = async (
             const name = c.function?.name;
             trace.push({ name, args });
             console.log(`[AI:tool] ${name}(${JSON.stringify(args).slice(0, 160)})`);
+            opts.onEvent?.({ type: 'tool_start', name, args });
 
             const result = await execute(name, args);
+            results.push(result);
+            opts.onEvent?.({ type: 'tool_done', name, ok: !result?.xato });
+
             history.push({
                 role: 'tool',
                 tool_call_id: c.id,
-                content: JSON.stringify(result).slice(0, 12_000),
+                content: typeof result === 'string' ? result.slice(0, 12_000) : JSON.stringify(result).slice(0, 12_000),
             });
         }
     }

@@ -667,3 +667,62 @@ model LabOrder {
   @@index([technicianId])
   @@index([status])
 }
+
+/// AI so'rovlari jurnali. Har bir chaqiruv shu yerga tushadi — savol, javob,
+/// qaysi tool'lar ishlatilgani, token sarfi, kechikish va foydalanuvchi bahosi.
+///
+/// Clinic bilan RELATION ATAYLAB YO'Q. Ikki sabab: (1) SUPER_ADMIN so'rovlarida
+/// clinicId bo'sh bo'ladi; (2) klinika o'chirilganda uning jurnali ham
+/// yo'qolib ketmasligi kerak — sarf va sifat statistikasi tarixiy ma'lumot.
+model AiLog {
+  id             String   @id @default(uuid())
+  clinicId       String?
+  userId         String?
+  userName       String?
+  role           String?
+  /// 'ask' | 'report' | 'chat' | 'insights' | 'advisor' | 'digest' | 'anomaly' | 'action'
+  endpoint       String
+  lang           String?
+  question       String?
+  reply          String?
+  /// Chaqirilgan tool'lar, JSON matn ko'rinishida.
+  toolCalls      String?
+  provider       String?
+  model          String?
+  tokensIn       Int?
+  tokensOut      Int?
+  latencyMs      Int?
+  rounds         Int?
+  cached         Boolean  @default(false)
+  /// Grounding tekshiruvi natijasi. false — javobdan tasdiqlanmagan raqam olib tashlangan.
+  groundingOk    Boolean?
+  groundingInfo  String?
+  error          String?
+  /// 1 = foydali, -1 = foydasiz. Etalon to'plamni to'ldirishning asosiy manbasi.
+  rating         Int?
+  ratingNote     String?
+  conversationId String?
+  createdAt      DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+  @@index([endpoint])
+  @@index([rating])
+}
+
+/// Saqlangan suhbat. Ilgari tarix faqat brauzer xotirasida edi va sahifa
+/// yopilishi bilan yo'qolardi — foydalanuvchi ertasi kuni o'z savolini ham,
+/// javobini ham topa olmasdi.
+model AiConversation {
+  id        String   @id @default(uuid())
+  clinicId  String
+  userId    String?
+  title     String
+  /// Eski almashinuvlar xulosasi — suhbat uzayganda tokenni tejash uchun.
+  summary   String?
+  /// [{ q, a, sources }] JSON matn ko'rinishida.
+  messages  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, userId, updatedAt])
+}

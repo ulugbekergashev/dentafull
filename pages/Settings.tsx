@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
 import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review, LabTechnician, AccessControl, RoleAccess, LeadApiKeyInfo } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw, FlaskConical, Shield, KeyRound, Copy, Eye, EyeOff, Link2 } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw, FlaskConical, Shield, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { parseAccessControl } from '../utils/accessControl';
@@ -56,6 +56,7 @@ export const Settings: React.FC<SettingsProps> = ({
    const [leadApiLoading, setLeadApiLoading] = useState(false);
    const [leadKeyVisible, setLeadKeyVisible] = useState(false);
    const [leadCopied, setLeadCopied] = useState<string | null>(null);
+   const [leadDocsOpen, setLeadDocsOpen] = useState(false);
 
    React.useEffect(() => {
       if (activeTab !== 'leadApi' || !currentClinic?.id) return;
@@ -1187,14 +1188,25 @@ export const Settings: React.FC<SettingsProps> = ({
                         )}
                      </Card>
 
-                     {/* Hamkorga beriladigan qo'llanma */}
+                     {/* Texnik ma'lumot — odatda kerak emas, shuning uchun yig'ib qo'yilgan.
+                         yuboraman.uz'da DentaCRM allaqachon ulangan, kalitni kiritish yetarli.
+                         Bu bo'lim klinikaning o'z dasturchisi yoki boshqa xizmat uchun qoldirilgan. */}
                      <Card className="p-6">
-                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Hamkorga beriladigan ma'lumot</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                           Quyidagini yuboraman.uz jamoasiga uzating.
-                        </p>
+                        <button
+                           onClick={() => setLeadDocsOpen(v => !v)}
+                           className="w-full flex items-center justify-between gap-3 text-left"
+                        >
+                           <div>
+                              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Texnik ma'lumot</h4>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                 Odatda kerak emas — kalitni kiritish yetarli. Boshqa xizmat ulanmoqchi bo'lsa kerak bo'ladi.
+                              </p>
+                           </div>
+                           <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${leadDocsOpen ? 'rotate-180' : ''}`} />
+                        </button>
 
-                        <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto leading-relaxed">
+                        {leadDocsOpen && (<>
+                        <pre className="mt-4 p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto leading-relaxed">
 {`POST ${leadApiInfo?.endpoint || 'https://<server>/api/public/leads'}
 Content-Type: application/json
 X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizga berilgan kalit>'}
@@ -1224,6 +1236,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                               15 daqiqa ichida shu raqamdan takroriy lid kelsa, <code className="px-1 bg-gray-100 dark:bg-gray-800 rounded">duplicate: true</code> qaytadi va yangi yozuv yaratilmaydi.
                            </p>
                         </div>
+                        </>)}
                      </Card>
                   </div>
                )}

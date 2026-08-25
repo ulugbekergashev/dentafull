@@ -22,11 +22,46 @@ const langLine = (lang: Lang): string =>
         ? 'Отвечай на русском языке.'
         : 'Tilingiz: o\'zbek.';
 
-export const askSystemPrompt = (today: string, lang: Lang = 'uz'): string =>
+/**
+ * @param today   klinika mintaqasidagi bugungi sana (UTC+5)
+ * @param lang    javob tili
+ * @param profile klinika profili — nom, shifokorlar, narxlar, ish vaqti.
+ *                Bo'sh bo'lishi mumkin: profil qulaylik, majburiyat emas.
+ * @param canAct  foydalanuvchining roli yozuvchi tool'larga ruxsat beradimi
+ */
+export const askSystemPrompt = (
+    today: string,
+    lang: Lang = 'uz',
+    profile = '',
+    canAct = false
+): string =>
     'Sen DentaCRM tizimining yordamchisisan — stomatologiya klinikasi uchun.\n\n' +
 
     `Bugungi sana: ${today}. "Bugun", "kecha", "shu oy" kabi iboralarni shu ` +
     'sanadan kelib chiqib hisobla.\n\n' +
+
+    // Klinika profili — AI shu klinikaning shifokorlarini, narxlarini va ish
+    // vaqtini bilib turishi uchun. Ilgari prompt hamma klinika uchun bir xil
+    // edi va "Rahimovga nechta bemor yozilgan?" savolida model shifokor
+    // ismini taxmin qilib, tool argumentini noto'g'ri to'ldirardi.
+    (profile
+        ? 'SHU KLINIKA HAQIDA:\n' + profile + '\n\n' +
+          'Yuqoridagi ma\'lumot doimiy — narx va shifokor haqidagi savolga ' +
+          'tool chaqirmasdan shundan javob berishing mumkin. Lekin qabul, ' +
+          'to\'lov, qarz va boshqa O\'ZGARUVCHAN ma\'lumot uchun tool MAJBURIY.\n\n'
+        : '') +
+
+    // Yozuvchi tool'lar. Model ularni chaqirsa, natija darhol bajarilmaydi —
+    // foydalanuvchiga tasdiqlash kartasi ko'rsatiladi (ai/actions.ts).
+    (canAct
+        ? 'HARAKAT QILISH: send_reminder, book_appointment, update_lead_status ' +
+          'va create_expense — bular ma\'lumotni O\'ZGARTIRADI. Foydalanuvchi ' +
+          'aniq buyruq bergandagina chaqir ("eslatma yubor", "qabulga yoz", ' +
+          '"xarajat qo\'sh"). Oddiy savolga javob berish uchun ularni ISHLATMA. ' +
+          'Bu tool\'lar darhol bajarilmaydi — foydalanuvchi tasdiqlaydi, ' +
+          'shuning uchun undan "tasdiqlaysizmi?" deb so\'rashning hojati yo\'q, ' +
+          'shunchaki chaqiraver.\n\n'
+        : '') +
 
     'TOOL MAJBURIY: klinikaga oid har qanday savolda AVVAL tegishli tool\'ni ' +
     'chaqir. Xotirangdan yoki suhbatning oldingi qismidan javob berma. Bu qoida ' +

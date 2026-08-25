@@ -24,7 +24,13 @@
         "aiService.ts",
         "ai/tools.ts",
         "ai/prompts.ts",
-        "ai/reports.ts"
+        "ai/reports.ts",
+        "ai/guard.ts",
+        "ai/log.ts",
+        "ai/router.ts",
+        "ai/context.ts",
+        "ai/actions.ts",
+        "ai/proactive.ts"
     ],
     "exclude": [
         "node_modules",

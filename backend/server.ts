@@ -214,6 +214,29 @@ const getScopedClinicId = (req: any): string | null => {
     return (u?.clinicId || null) as string | null;
 };
 
+// AI klinika profili keshini bekor qiladi (ai/context.ts): AI shifokorlar
+// ro'yxatini va xizmat narxlarini 30 daqiqa keshda ushlaydi, ya'ni yangi
+// shifokor qo'shilgandan keyin u AI uchun yarim soat "mavjud emas" bo'lib
+// turardi.
+//
+// Ataylab middleware, har bir endpointga qo'lda qo'shish emas: oltita joyni
+// yangilash o'rniga bitta joy, va ettinchi endpoint qo'shilganda uni unutib
+// qo'yish mumkin emas.
+//
+// `finish` da ishlaydi, kirishda emas: shu paytgacha authenticateToken
+// req.user ni to'ldirgan bo'ladi va yozuv haqiqatan saqlangani ma'lum bo'ladi.
+const { invalidateClinicContext } = require('./ai/context');
+
+app.use((req: any, res: any, next: any) => {
+    if (req.method === 'GET' || !/^\/api\/(doctors|services)/.test(req.path)) return next();
+    res.on('finish', () => {
+        if (res.statusCode >= 400) return;
+        const cid = getScopedClinicId(req);
+        if (cid) invalidateClinicContext(cid);
+    });
+    next();
+});
+
 // Faqat ko'rsatilgan rollar uchun ruxsat beruvchi middleware.
 const requireRole = (...roles: string[]) => {
     return (req: any, res: any, next: any) => {
@@ -3224,25 +3247,85 @@ app.post('/api/public/demo-request', async (req, res) => {
     }
 });
 
-app.get('/api/admin/demo-requests', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+// Lid taqsimoti mavjud PlatformSetting jadvalida bitta JSON qatori sifatida saqlanadi:
+// { "<demoRequestId>": "<salesAgentId>" }. Shu tufayli DemoRequest jadvaliga yangi ustun
+// qo'shish (migratsiya) kerak emas — lid ma'lumotlarining o'ziga umuman tegilmaydi.
+const LEAD_ASSIGNMENTS_KEY = 'demo_request_assignments';
+
+const getLeadAssignments = async (): Promise<Record<string, string>> => {
     try {
-        const rows = await prisma.$queryRawUnsafe(`SELECT * FROM "DemoRequest" ORDER BY "createdAt" DESC`);
-        res.json(rows);
+        const raw = await getPlatformSetting(LEAD_ASSIGNMENTS_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+};
+
+// SUPER_ADMIN barcha lidlarni, SALES_AGENT esa faqat o'ziga biriktirilganini ko'radi.
+app.get('/api/admin/demo-requests', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
+    try {
+        const user = (req as any).user;
+        const rows: any[] = await prisma.$queryRawUnsafe(`SELECT * FROM "DemoRequest" ORDER BY "createdAt" DESC`);
+        const assignments = await getLeadAssignments();
+        const withAgent = rows.map(r => ({ ...r, salesAgentId: assignments[r.id] || null }));
+        res.json(user.role === 'SALES_AGENT'
+            ? withAgent.filter(r => r.salesAgentId === user.salesAgentId)
+            : withAgent);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch demo requests' });
     }
 });
 
-app.put('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+// Holat/izohni yangilash. Sotuvchi faqat o'ziga biriktirilgan lidni tahrirlaydi.
+app.put('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
     try {
+        const user = (req as any).user;
         const { status, notes } = req.body;
+
+        if (user.role === 'SALES_AGENT') {
+            const assignments = await getLeadAssignments();
+            if (assignments[req.params.id] !== user.salesAgentId) {
+                return res.status(403).json({ error: 'Bu lid sizga biriktirilmagan' });
+            }
+        }
+
+        // Faqat yuborilgan maydonlar yangilanadi — aks holda holatni o'zgartirish
+        // Facebook lidining izohini o'chirib yuborardi.
+        const sets: string[] = [];
+        const params: any[] = [];
+        if (status !== undefined) { params.push(status); sets.push(`"status"=$${params.length}`); }
+        if (notes !== undefined) { params.push(notes); sets.push(`"notes"=$${params.length}`); }
+        if (sets.length === 0) return res.json({ success: true });
+
+        params.push(req.params.id);
         await prisma.$executeRawUnsafe(
-            `UPDATE "DemoRequest" SET "status"=$1,"notes"=$2,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=$3`,
-            status, notes ?? null, req.params.id
+            `UPDATE "DemoRequest" SET ${sets.join(',')},"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=$${params.length}`,
+            ...params
         );
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update demo request' });
+    }
+});
+
+// Lidni sotuvchiga biriktirish (salesAgentId=null bo'lsa — biriktirish bekor qilinadi).
+// Faqat SUPER_ADMIN taqsimlaydi; sotuvchi lidni o'ziga ololmaydi va boshqaga o'tkaza olmaydi.
+app.put('/api/admin/demo-requests/:id/assign', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const salesAgentId: string | null = req.body?.salesAgentId || null;
+        if (salesAgentId) {
+            const agent = await prisma.salesAgent.findUnique({ where: { id: salesAgentId } });
+            if (!agent) return res.status(404).json({ error: 'Sotuvchi topilmadi' });
+        }
+        // Faqat taqsimot ro'yxati yangilanadi; lidning o'ziga (DemoRequest) tegilmaydi.
+        const assignments = await getLeadAssignments();
+        if (salesAgentId) assignments[req.params.id] = salesAgentId;
+        else delete assignments[req.params.id];
+        await setPlatformSetting(LEAD_ASSIGNMENTS_KEY, JSON.stringify(assignments));
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: 'Lidni biriktirishda xatolik: ' + error.message });
     }
 });
 
@@ -5728,9 +5811,16 @@ app.get('/api/superadmin/sales', authenticateToken, async (req, res) => {
 // AI ENDPOINTS
 // ============================================
 
-const { chat: aiChat, chatWithTools, isAiConfigured } = require('./aiService');
+const { chatMeta, chatWithTools, isAiConfigured } = require('./aiService');
 const { toolsForRole, runTool } = require('./ai/tools');
 const { askSystemPrompt, chatSystemPrompt } = require('./ai/prompts');
+const { toolsForRequest, cachedTool, tryFastPath, invalidateToolCache } = require('./ai/router');
+const { clinicContext } = require('./ai/context');
+const { applyGrounding, wrapToolResult } = require('./ai/guard');
+const { logAi, rateAiLog, aiUsageStats, negativeFeedback } = require('./ai/log');
+const {
+    actionsForRole, isAction, previewAction, executeAction, storePending, takePending,
+} = require('./ai/actions');
 
 // Klinikalar O'zbekistonda — sana UTC+5 bo'yicha hisoblanadi. Server UTC'da
 // ishlaydi, shuning uchun oddiy toISOString() kechqurun soat 19:00 dan keyin
@@ -5744,11 +5834,173 @@ const reqLang = (req: any): 'uz' | 'ru' =>
 const clinicToday = (): string =>
     new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+/** Jurnal uchun foydalanuvchi identifikatori. */
+const userKey = (u: any): string => u?.id || u?.username || u?.name || 'anon';
+
 // AI holati — konfiguratsiya tekshiruvi
 app.get('/api/ai/status', authenticateToken, (req: any, res: any) => {
     const { aiStatus } = require('./aiService');
     res.json({ success: true, ...aiStatus() });
 });
+
+// ─── Umumiy savol-javob mantiqi ──────────────────────────────────────────────
+//
+// /ai/ask va /ai/ask/stream AYNAN bir xil ishlashi shart. Ilgari bunday
+// juftliklar vaqt o'tib bir-biridan uzoqlashardi: yangi himoya bittasiga
+// qo'shilib, ikkinchisida unutilardi. Shuning uchun butun mantiq shu yagona
+// funksiyada, endpointlar esa faqat natijani qanday uzatishda farq qiladi.
+
+interface AskOutcome {
+    reply: string;
+    sources: string[];
+    /** Tasdiqlash kutayotgan harakat, bo'lsa. */
+    action: { id: string; name: string; preview: any } | null;
+    logId: string | null;
+}
+
+const runAsk = async (
+    req: any,
+    onEvent?: (e: any) => void
+): Promise<AskOutcome> => {
+    const t0 = Date.now();
+    const user = req.user;
+    const clinicId = getScopedClinicId(req) || '';
+    const role = user?.role || 'CLINIC_ADMIN';
+    const lang = reqLang(req);
+    const today = clinicToday();
+
+    const raw = (req.body?.messages || []) as { role: string; content: string }[];
+
+    // Faqat user/assistant qabul qilinadi. Mijoz yuborgan `system` roliga
+    // ishonib bo'lmaydi: u orqali rol cheklovi va maxfiylik qoidalarini
+    // chetlab o'tish mumkin edi. System prompt'ni faqat server belgilaydi.
+    const history = raw
+        .filter(m => m?.role === 'user' || m?.role === 'assistant')
+        .slice(-10)
+        .map(m => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
+
+    const question = [...history].reverse().find(m => m.role === 'user')?.content || '';
+    const isFollowUp = history.filter(m => m.role === 'user').length > 1;
+
+    const ctx = { clinicId, role, doctorId: user?.doctorId };
+
+    // Kesh orqali o'qish — bir xil tool + argument 60 soniya ichida bazaga
+    // qayta bormaydi.
+    const toolResults: any[] = [];
+    const readTool = async (name: string, args: any) => {
+        const { value } = await cachedTool(clinicId, role, name, args, () => runTool(name, args, ctx));
+        return value;
+    };
+
+    // ── 1-qatlam: tez yo'l. Shabloniy savol modelni umuman talab qilmaydi.
+    const fast = await tryFastPath(question, today, lang, readTool);
+    if (fast) {
+        const logId = await logAi({
+            clinicId, userId: userKey(user), userName: user?.name, role,
+            endpoint: 'ask', lang, question, reply: fast.reply,
+            toolCalls: fast.sources.map((s: string) => ({ name: s })),
+            latencyMs: Date.now() - t0, cached: true, groundingOk: true,
+        });
+        onEvent?.({ type: 'token', text: fast.reply });
+        return { reply: fast.reply, sources: fast.sources, action: null, logId };
+    }
+
+    // ── 2-qatlam: yo'naltirish. Savol turiga qarab faqat kerakli tool'lar.
+    const { tools: readTools, route } = toolsForRequest(role, question, isFollowUp);
+    const actionTools = actionsForRole(role);
+    const tools = [...readTools, ...actionTools];
+
+    const profile = await clinicContext(clinicId);
+
+    let pendingAction: { id: string; name: string; preview: any } | null = null;
+
+    const execute = async (name: string, args: any) => {
+        // Yozuvchi tool BAJARILMAYDI — faqat ko'rib chiqiladi va saqlanadi.
+        // Bajarish /api/ai/act orqali, foydalanuvchi tasdiqlagandan keyin.
+        if (isAction(name)) {
+            const p = await previewAction(name, args, ctx, today);
+            if (p.xato) return { xato: p.xato };
+            const id = storePending(name, p.args, p.preview, {
+                clinicId, userId: userKey(user), role,
+            });
+            pendingAction = { id, name, preview: p.preview };
+            return {
+                tasdiq_kutilmoqda: true,
+                tavsif: p.preview.summary,
+                izoh: 'Harakat foydalanuvchiga ko\'rsatildi va uning tasdig\'ini kutmoqda. '
+                    + 'Javobingda nima qilmoqchi ekaningni bir gapda ayt, "tasdiqlaysizmi?" '
+                    + 'deb so\'rama — tugma allaqachon ekranda.',
+            };
+        }
+
+        const value = await readTool(name, args);
+        toolResults.push(value);
+        // <data> blokiga o'rash — bazadagi matn ko'rsatma bo'lib ketmasligi uchun.
+        return wrapToolResult(value);
+    };
+
+    try {
+        const { reply, toolCalls, meta } = await chatWithTools(
+            [
+                { role: 'system', content: askSystemPrompt(today, lang, profile, actionTools.length > 0) },
+                ...history,
+            ],
+            tools,
+            execute,
+            { label: `ask:${role}`, maxRounds: 5, maxTokens: 1200, onEvent }
+        );
+
+        // ── Grounding: javobdagi yirik raqamlar ma'lumotdan kelib chiqadimi?
+        const { text, result } = applyGrounding(reply, toolResults, lang);
+        if (!result.ok && result.stripped.length) {
+            console.warn(`[AI/ask] tasdiqlanmagan raqam olib tashlandi: ${result.stripped.join(', ')}`);
+        }
+
+        const sources = toolCalls.map((t: any) => t.name);
+        const logId = await logAi({
+            clinicId, userId: userKey(user), userName: user?.name, role,
+            endpoint: 'ask', lang, question, reply: text, toolCalls,
+            provider: meta?.provider, model: meta?.model,
+            tokensIn: meta?.tokensIn, tokensOut: meta?.tokensOut, rounds: meta?.rounds,
+            latencyMs: Date.now() - t0,
+            groundingOk: result.ok,
+            groundingInfo: result.stripped.length ? `stripped: ${result.stripped.join(',')}` : null,
+        });
+
+        console.log(`[AI/ask] yo'nalish=${route.intent} tool=${tools.length} ta`);
+        return { reply: text, sources, action: pendingAction, logId };
+    } catch (e: any) {
+        await logAi({
+            clinicId, userId: userKey(user), userName: user?.name, role,
+            endpoint: 'ask', lang, question, error: e?.message,
+            latencyMs: Date.now() - t0,
+        });
+        throw e;
+    }
+};
+
+/** Barcha AI endpointlari uchun umumiy kirish tekshiruvi. */
+const guardAi = (req: any, res: any, bucket: string, limit: number): boolean => {
+    if (!isAiConfigured()) {
+        res.status(503).json({ success: false, message: 'AI sozlanmagan: server .env da API kalit yo\'q.' });
+        return false;
+    }
+    const user = req.user;
+    const clinicId = getScopedClinicId(req);
+    if (!clinicId && user?.role !== 'SUPER_ADMIN') {
+        res.status(400).json({ success: false, message: 'clinicId aniqlanmadi.' });
+        return false;
+    }
+    if (!aiRateLimit(`${bucket}:${userKey(user)}`, limit, 60 * 60 * 1000)) {
+        res.status(429).json({ success: false, message: 'Soatlik so\'rovlar chegarasiga yetdingiz. Biroz kutib turing.' });
+        return false;
+    }
+    if (!Array.isArray(req.body?.messages) || req.body.messages.length === 0) {
+        res.status(400).json({ success: false, message: '`messages` massivi kerak.' });
+        return false;
+    }
+    return true;
+};
 
 /**
  * POST /api/ai/ask
@@ -5757,52 +6009,266 @@ app.get('/api/ai/status', authenticateToken, (req: any, res: any) => {
  */
 app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
     try {
-        if (!isAiConfigured()) {
-            return res.status(503).json({ success: false, message: 'AI sozlanmagan: server .env da API kalit yo\'q.' });
-        }
-        const user = req.user;
-        const clinicId = getScopedClinicId(req);
-        if (!clinicId && user?.role !== 'SUPER_ADMIN') {
-            return res.status(400).json({ success: false, message: 'clinicId aniqlanmadi.' });
-        }
-
-        if (!aiRateLimit(`ask:${user?.id || user?.username || user?.name}`, 40, 60 * 60 * 1000)) {
-            return res.status(429).json({ success: false, message: 'Soatlik so\'rovlar chegarasiga yetdingiz. Biroz kutib turing.' });
-        }
-
-        const { messages } = req.body as { messages?: { role: string; content: string }[] };
-        if (!Array.isArray(messages) || messages.length === 0) {
-            return res.status(400).json({ success: false, message: '`messages` massivi kerak.' });
-        }
-
-        // Faqat user/assistant qabul qilinadi. Mijoz yuborgan `system` roliga
-        // ishonib bo'lmaydi: u orqali rol cheklovi va maxfiylik qoidalarini
-        // chetlab o'tish mumkin edi. System prompt'ni faqat server belgilaydi.
-        const history = messages
-            .filter(m => m?.role === 'user' || m?.role === 'assistant')
-            .slice(-10)
-            .map(m => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
-
-        if (history.length === 0) {
-            return res.status(400).json({ success: false, message: 'Xabar matni bo\'sh.' });
-        }
-
-        const ctx = { clinicId: clinicId || '', role: user?.role || 'CLINIC_ADMIN', doctorId: user?.doctorId };
-        const tools = toolsForRole(user?.role || 'CLINIC_ADMIN');
-
-        const { reply, toolCalls } = await chatWithTools(
-            [{ role: 'system', content: askSystemPrompt(clinicToday(), reqLang(req)) }, ...history],
-            tools,
-            (name: string, args: any) => runTool(name, args, ctx),
-            { label: `ask:${user?.role}`, maxRounds: 5, maxTokens: 1200 }
-        );
-
-        // sources — shaffoflik uchun: javob qaysi ma'lumotga tayanganini
-        // foydalanuvchi ko'rsin.
-        res.json({ success: true, reply, sources: toolCalls.map((t: any) => t.name) });
+        if (!guardAi(req, res, 'ask', 40)) return;
+        const out = await runAsk(req);
+        res.json({
+            success: true,
+            reply: out.reply,
+            sources: out.sources,
+            action: out.action,
+            logId: out.logId,
+        });
     } catch (e: any) {
         console.error('[AI/ask]', e.message);
         res.status(500).json({ success: false, message: e.message || 'AI so\'rovida xatolik.' });
+    }
+});
+
+/**
+ * POST /api/ai/ask/stream
+ * Yuqoridagining aynan o'zi, lekin javob token-token uzatiladi.
+ *
+ * Nega SSE va EventSource emas: EventSource sarlavha qo'sha olmaydi, ya'ni
+ * Authorization tokenini URL ga yozishga to'g'ri kelardi — u esa server
+ * loglariga va brauzer tarixiga tushadi. Shuning uchun mijoz oddiy fetch
+ * bilan o'qiydi.
+ */
+app.post('/api/ai/ask/stream', authenticateToken, async (req: any, res: any) => {
+    if (!guardAi(req, res, 'ask', 40)) return;
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    // Nginx/Railway proksisi oqimni buferlab qo'ymasligi uchun.
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    let closed = false;
+    req.on('close', () => { closed = true; });
+
+    const send = (payload: any) => {
+        if (closed) return;
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    try {
+        const out = await runAsk(req, send);
+        send({
+            type: 'done',
+            reply: out.reply,
+            sources: out.sources,
+            action: out.action,
+            logId: out.logId,
+        });
+    } catch (e: any) {
+        console.error('[AI/ask/stream]', e.message);
+        send({ type: 'error', message: e.message || 'AI so\'rovida xatolik.' });
+    } finally {
+        if (!closed) res.end();
+    }
+});
+
+/**
+ * POST /api/ai/act
+ * Tasdiqlangan harakatni bajaradi.
+ *
+ * Mijozdan FAQAT id keladi. Argumentlar serverda, ko'rib chiqish paytida
+ * saqlangan nusxadan olinadi — ya'ni bajariladigan narsa ekranda
+ * ko'rsatilganining aynan o'zi bo'ladi.
+ */
+app.post('/api/ai/act', authenticateToken, async (req: any, res: any) => {
+    try {
+        const user = req.user;
+        const clinicId = getScopedClinicId(req) || '';
+        const { id } = req.body || {};
+        if (!id) return res.status(400).json({ success: false, message: 'Tasdiqlash id si kerak.' });
+
+        if (!aiRateLimit(`act:${userKey(user)}`, 30, 60 * 60 * 1000)) {
+            return res.status(429).json({ success: false, message: 'Soatlik chegaraga yetdingiz.' });
+        }
+
+        const taken = takePending(String(id), { clinicId, userId: userKey(user) });
+        if (taken.xato) return res.status(400).json({ success: false, message: taken.xato });
+
+        const p = taken.pending;
+        const t0 = Date.now();
+
+        const result = await executeAction(
+            p.name,
+            p.args,
+            { clinicId: p.clinicId, role: p.role, doctorId: user?.doctorId },
+            {
+                // Xabar yuborish server.ts dagi mavjud yagona kanalga topshiriladi:
+                // Telegram/SMS tanlash, chastota chegarasi va TelegramLog yozuvi
+                // allaqachon o'sha yerda hal qilingan.
+                sendToPatient: async (patientId: string, message: string) => {
+                    try {
+                        const patient = await prisma.patient.findFirst({
+                            where: { id: patientId, clinicId: p.clinicId },
+                            select: { id: true, firstName: true, lastName: true, phone: true, telegramChatId: true },
+                        });
+                        if (!patient) return { success: false, error: 'bemor topilmadi' };
+                        const clinic = await prisma.clinic.findUnique({ where: { id: p.clinicId } });
+                        if (!clinic) return { success: false, error: 'klinika topilmadi' };
+                        return await sendUnified(clinic, patient, message, {
+                            channel: 'auto', source: 'ai', type: 'Reminder', respectCooldown: true,
+                        });
+                    } catch (err: any) {
+                        return { success: false, error: err?.message || 'xato' };
+                    }
+                },
+            }
+        );
+
+        invalidateToolCache(p.clinicId);
+
+        await logAi({
+            clinicId: p.clinicId, userId: userKey(user), userName: user?.name, role: p.role,
+            endpoint: 'action', lang: reqLang(req),
+            question: `${p.name}: ${p.preview?.summary || ''}`,
+            reply: result.message,
+            toolCalls: [{ name: p.name, args: p.args }],
+            latencyMs: Date.now() - t0,
+            error: result.ok ? null : result.message,
+        });
+
+        res.json({ success: result.ok, message: result.message, details: result.details });
+    } catch (e: any) {
+        console.error('[AI/act]', e.message);
+        res.status(500).json({ success: false, message: e.message || 'Harakat bajarilmadi.' });
+    }
+});
+
+/**
+ * POST /api/ai/feedback
+ * Javobga 👍 / 👎. Bu — etalon to'plamni to'ldirishning asosiy manbasi.
+ */
+app.post('/api/ai/feedback', authenticateToken, async (req: any, res: any) => {
+    try {
+        const { logId, rating, note } = req.body || {};
+        if (!logId || ![1, -1].includes(Number(rating))) {
+            return res.status(400).json({ success: false, message: 'logId va rating (1 yoki -1) kerak.' });
+        }
+        const ok = await rateAiLog(
+            String(logId),
+            Number(rating),
+            note ? String(note) : null,
+            { clinicId: getScopedClinicId(req), role: req.user?.role }
+        );
+        if (!ok) return res.status(404).json({ success: false, message: 'Yozuv topilmadi.' });
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+/**
+ * GET /api/ai/usage — token sarfi va sifat ko'rsatkichlari.
+ * CLINIC_ADMIN o'z klinikasini, SUPER_ADMIN butun platformani ko'radi.
+ */
+app.get('/api/ai/usage', authenticateToken, async (req: any, res: any) => {
+    try {
+        const user = req.user;
+        if (!['CLINIC_ADMIN', 'SUPER_ADMIN'].includes(user?.role)) {
+            return res.status(403).json({ success: false, message: 'Ruxsat yo\'q.' });
+        }
+        const days = Math.min(Math.max(Number(req.query?.days) || 30, 1), 365);
+        const clinicId = user.role === 'SUPER_ADMIN'
+            ? (req.query?.clinicId ? String(req.query.clinicId) : null)
+            : getScopedClinicId(req);
+        res.json({ success: true, usage: await aiUsageStats(clinicId, days) });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+/** GET /api/ai/feedback/negative — 👎 olgan savollar (etalon to'plam uchun). */
+app.get('/api/ai/feedback/negative', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (req.user?.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ success: false, message: 'Ruxsat yo\'q.' });
+        }
+        res.json({ success: true, items: await negativeFeedback(Number(req.query?.limit) || 50) });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// ─── Suhbatlar ───────────────────────────────────────────────────────────────
+// Ilgari tarix faqat brauzer xotirasida edi: sahifa yopilsa, foydalanuvchi
+// o'z savolini ham, javobini ham qayta topa olmasdi.
+
+app.get('/api/ai/conversations', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.json({ success: true, items: [] });
+        const items = await prisma.aiConversation.findMany({
+            where: { clinicId, userId: userKey(req.user) },
+            orderBy: { updatedAt: 'desc' },
+            take: 30,
+            select: { id: true, title: true, updatedAt: true },
+        });
+        res.json({ success: true, items });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+app.get('/api/ai/conversations/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        const row = await prisma.aiConversation.findFirst({
+            where: { id: req.params.id, clinicId, userId: userKey(req.user) },
+        });
+        if (!row) return res.status(404).json({ success: false, message: 'Suhbat topilmadi.' });
+        res.json({ success: true, conversation: { ...row, messages: JSON.parse(row.messages || '[]') } });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+app.post('/api/ai/conversations', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ success: false, message: 'Klinika aniqlanmadi.' });
+
+        const { id, messages } = req.body || {};
+        if (!Array.isArray(messages) || !messages.length) {
+            return res.status(400).json({ success: false, message: 'messages kerak.' });
+        }
+        // Sarlavha — birinchi savolning qisqartmasi.
+        const title = String(messages[0]?.q || 'Suhbat').slice(0, 90);
+        const payload = JSON.stringify(messages).slice(0, 100_000);
+
+        // Mavjudini yangilaymiz, lekin faqat EGASINIKINI: id ni boshqa
+        // foydalanuvchinikiga almashtirib yuborish mumkin bo'lmasligi kerak.
+        if (id) {
+            const updated = await prisma.aiConversation.updateMany({
+                where: { id: String(id), clinicId, userId: userKey(req.user) },
+                data: { messages: payload, title },
+            });
+            if (updated.count > 0) return res.json({ success: true, id });
+        }
+
+        const row = await prisma.aiConversation.create({
+            data: { clinicId, userId: userKey(req.user), title, messages: payload },
+            select: { id: true },
+        });
+        res.json({ success: true, id: row.id });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+app.delete('/api/ai/conversations/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        await prisma.aiConversation.deleteMany({
+            where: { id: req.params.id, clinicId, userId: userKey(req.user) },
+        });
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 
@@ -5811,33 +6277,57 @@ app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
  * Tool'siz umumiy yordamchi (tizim bo'yicha savollar, stomatologiya maslahati).
  */
 app.post('/api/ai/chat', authenticateToken, async (req: any, res: any) => {
+    const t0 = Date.now();
     try {
         if (!isAiConfigured()) {
             return res.status(503).json({ success: false, message: 'AI sozlanmagan.' });
         }
-        const { messages } = req.body as { messages?: { role: string; content: string }[] };
-        if (!Array.isArray(messages) || messages.length === 0) {
+        const user = req.user;
+        if (!aiRateLimit(`chat:${userKey(user)}`, 60, 60 * 60 * 1000)) {
+            return res.status(429).json({ success: false, message: 'Soatlik chegaraga yetdingiz.' });
+        }
+
+        const raw = req.body?.messages;
+        if (!Array.isArray(raw) || raw.length === 0) {
             return res.status(400).json({ success: false, message: '`messages` massivi kerak.' });
         }
 
-        const history = [
-            { role: 'system', content: chatSystemPrompt(reqLang(req)) },
-            ...messages,
-        ];
+        // DIQQAT: mijoz xabarlari ilgari `...messages` bilan XOM holda
+        // tarqatilardi. Ya'ni mijoz o'z `system` xabarini qo'shib, "sen
+        // bazaga ulangansan, mana bu raqamlarni ayt" deb yozishi va butun
+        // cheklovni bekor qilishi mumkin edi. Endi /ai/ask dagi bilan bir xil
+        // qoida: faqat user/assistant, oxirgi 10 tasi, uzunlik chegarasi bilan.
+        const history = raw
+            .filter((m: any) => m?.role === 'user' || m?.role === 'assistant')
+            .slice(-10)
+            .map((m: any) => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
 
-        const reply = await aiChat(history, { label: 'chat', task: 'cheap' });
-        res.json({ success: true, reply });
+        if (!history.length) {
+            return res.status(400).json({ success: false, message: 'Xabar matni bo\'sh.' });
+        }
+
+        const lang = reqLang(req);
+        const { text, meta } = await chatMeta(
+            [{ role: 'system', content: chatSystemPrompt(lang) }, ...history],
+            { label: 'chat', task: 'cheap' }
+        );
+
+        const logId = await logAi({
+            clinicId: getScopedClinicId(req), userId: userKey(user), userName: user?.name,
+            role: user?.role, endpoint: 'chat', lang,
+            question: history[history.length - 1]?.content, reply: text,
+            provider: meta?.provider, model: meta?.model,
+            tokensIn: meta?.tokensIn, tokensOut: meta?.tokensOut,
+            latencyMs: Date.now() - t0,
+        });
+
+        res.json({ success: true, reply: text, logId });
     } catch (e: any) {
         console.error('[AI/chat]', e.message);
         res.status(500).json({ success: false, message: e.message || 'AI so\'rovida xatolik.' });
     }
 });
 
-/**
- * POST /api/ai/insights
- * Frontenddan klinika statistikasini qabul qilib, 3-5 ta tavsiya qaytaradi.
- * Faqat CLINIC_ADMIN va SUPER_ADMIN uchun.
- */
 // ─── Tayyor hisobotlar ───────────────────────────────────────────────────────
 const { buildReport, reportsForRole } = require('./ai/reports');
 
@@ -5847,6 +6337,7 @@ app.get('/api/ai/reports', authenticateToken, (req: any, res: any) => {
 });
 
 app.post('/api/ai/report', authenticateToken, async (req: any, res: any) => {
+    const t0 = Date.now();
     try {
         if (!isAiConfigured()) {
             return res.status(503).json({ success: false, message: 'AI sozlanmagan: server .env da API kalit yo\'q.' });
@@ -5856,20 +6347,29 @@ app.post('/api/ai/report', authenticateToken, async (req: any, res: any) => {
         if (!clinicId) {
             return res.status(400).json({ success: false, message: 'Klinika aniqlanmadi.' });
         }
-        if (!aiRateLimit(`report:${user?.id || user?.username || user?.name}`, 30, 60 * 60 * 1000)) {
+        if (!aiRateLimit(`report:${userKey(user)}`, 30, 60 * 60 * 1000)) {
             return res.status(429).json({ success: false, message: 'Soatlik chegaraga yetdingiz. Biroz kutib turing.' });
         }
 
         const { type } = req.body || {};
         if (!type) return res.status(400).json({ success: false, message: 'Hisobot turi ko\'rsatilmagan.' });
 
+        const lang = reqLang(req);
         const report = await buildReport(
             type,
             { clinicId, role: user?.role, doctorId: user?.doctorId },
             clinicToday(),
-            reqLang(req)
+            lang
         );
-        res.json({ success: true, report });
+
+        const logId = await logAi({
+            clinicId, userId: userKey(user), userName: user?.name, role: user?.role,
+            endpoint: 'report', lang, question: `hisobot: ${type}`,
+            reply: report.narrative, toolCalls: report.sources.map((s: string) => ({ name: s })),
+            latencyMs: Date.now() - t0,
+        });
+
+        res.json({ success: true, report, logId });
     } catch (e: any) {
         console.error('[AI/report]', e.message);
         // Ruxsat xatosi 403, qolgani 500 — UI ularni boshqacha ko'rsatadi.
@@ -5878,7 +6378,12 @@ app.post('/api/ai/report', authenticateToken, async (req: any, res: any) => {
     }
 });
 
+/**
+ * POST /api/ai/insights
+ * Boshqaruv panelidagi 3-5 ta tavsiya. Faqat CLINIC_ADMIN va SUPER_ADMIN uchun.
+ */
 app.post('/api/ai/insights', authenticateToken, async (req: any, res: any) => {
+    const t0 = Date.now();
     try {
         if (!isAiConfigured()) {
             return res.status(503).json({ success: false, message: 'AI sozlanmagan.' });
@@ -5887,46 +6392,136 @@ app.post('/api/ai/insights', authenticateToken, async (req: any, res: any) => {
         if (!['CLINIC_ADMIN', 'SUPER_ADMIN'].includes(user?.role)) {
             return res.status(403).json({ success: false, message: 'Ruxsat yo\'q.' });
         }
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ success: false, message: 'Klinika aniqlanmadi.' });
 
-        const stats = req.body?.stats || {};
-        const today = new Date().toISOString().split('T')[0];
+        if (!aiRateLimit(`insights:${userKey(user)}`, 30, 60 * 60 * 1000)) {
+            return res.status(429).json({ success: false, message: 'Soatlik chegaraga yetdingiz.' });
+        }
+
+        // DIQQAT: statistika ilgari `req.body.stats` dan, ya'ni MIJOZDAN
+        // olinardi. Bu tahlilni ishonchsiz qilardi — yuborilgan raqamlarni
+        // hech kim tekshirmasdi va tavsiyalar soxta ma'lumot ustida
+        // qurilishi mumkin edi. Endi hammasi serverda, mavjud tool'lar
+        // orqali hisoblanadi: ular allaqachon clinicId ni tokendan oladi.
+        const today = clinicToday();
+        const ctx = { clinicId, role: user.role, doctorId: user?.doctorId };
+        const monthFrom = `${today.slice(0, 7)}-01`;
+
+        const [todayAppts, monthAppts, revenue, debtors, leads, totalPatients] = await Promise.all([
+            runTool('get_appointments', { dateFrom: today, dateTo: today }, ctx),
+            runTool('get_appointments', { dateFrom: monthFrom, dateTo: today }, ctx),
+            runTool('get_revenue', { dateFrom: monthFrom, dateTo: today }, ctx),
+            runTool('get_debtors', { limit: 50 }, ctx),
+            runTool('get_leads', { days: 30 }, ctx),
+            prisma.patient.count({ where: { clinicId, status: 'Active' } }),
+        ]);
+
+        const monthRevenue = revenue?.kassaga_kirgan || 0;
+        const payments = revenue?.tolovlar_soni || 0;
+        const avgCheck = payments ? Math.round(monthRevenue / payments) : 0;
+
+        const facts = [
+            `Bugungi qabullar: ${todayAppts?.jami ?? 0} ta`,
+            `Oy boshidan qabullar: ${monthAppts?.jami ?? 0} ta`,
+            `Oylik tushum: ${monthRevenue} so'm`,
+            `Oylik xarajat: ${revenue?.xarajat || 0} so'm`,
+            `O'rtacha chek: ${avgCheck} so'm`,
+            `Qarzdorlar: ${debtors?.topildi ?? 0} ta, jami ${debtors?.jami_qarz || 0} so'm`,
+            `Oxirgi 30 kunda lidlar: ${leads?.jami ?? 0} ta, javobsiz ${leads?.javobsiz_eski_lidlar ?? 0} ta`,
+            `Faol bemorlar: ${totalPatients} ta`,
+            `Kelmaganlar (oy): ${monthAppts?.status_kesimida?.['No-Show'] ?? 0} ta`,
+        ].join('\n');
 
         const systemPrompt =
-            `Sen stomatologiya klinikasi boshqaruv tizimining tahlilchisisisan. ` +
+            `Sen stomatologiya klinikasi boshqaruv tizimining tahlilchisisan. ` +
             `Bugungi sana: ${today}. ` +
             `Quyidagi klinika statistikasini tahlil qilib, 3-5 ta ANIQ va AMALIY tavsiya ber. ` +
             `Har bir tavsiyani quyidagi formatda yoz: ` +
             `EMOJI SARLAVHA: izoh (1-2 gap). ` +
+            `Berilgan raqamlardan boshqa raqam ISHLATMA va ularni qayta hisoblama. ` +
             `Markdown ishlatma. Faqat oddiy matn. Tavsiyalar o'zbek tilida bo'lsin.`;
 
-        const userMsg =
-            `Klinika statistikasi:\n` +
-            `- Bugungi qabullar: ${stats.todayAppointments ?? '?'}\n` +
-            `- Oy davomida jami qabullar: ${stats.monthAppointments ?? '?'}\n` +
-            `- Oy davomida tushum: ${stats.monthRevenue ?? '?'} so'm\n` +
-            `- Yangi lidlar: ${stats.newLeads ?? '?'}\n` +
-            `- Qarzdorlar soni: ${stats.debtorsCount ?? '?'}\n` +
-            `- Kutilayotgan to'lovlar: ${stats.pendingRevenue ?? '?'} so'm\n` +
-            `- Bemorlar soni: ${stats.totalPatients ?? '?'}\n` +
-            `- O'rtacha chek: ${stats.avgCheck ?? '?'} so'm\n` +
-            `- Bugun to'lanmagan yakunlangan qabullar: ${stats.unpaidCompleted ?? '?'}\n` +
-            `Tavsiyalar ber.`;
-
-        const reply = await aiChat(
-            [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
+        const { text, meta } = await chatMeta(
+            [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Klinika statistikasi:\n${facts}\nTavsiyalar ber.` },
+            ],
             { label: 'insights', task: 'cheap', maxTokens: 600 }
         );
 
-        // Tavsiyalarni massivga ajratamiz
-        const lines = reply
+        // Grounding: tavsiyalarda faqat yuqoridagi raqamlar bo'lishi mumkin.
+        const grounded = applyGrounding(text, [{ facts, monthRevenue, avgCheck, totalPatients }, revenue, debtors, leads, todayAppts, monthAppts], 'uz');
+
+        const lines = grounded.text
             .split('\n')
             .map((l: string) => l.trim())
             .filter((l: string) => l.length > 10);
 
-        res.json({ success: true, insights: lines, raw: reply });
+        const logId = await logAi({
+            clinicId, userId: userKey(user), userName: user?.name, role: user?.role,
+            endpoint: 'insights', lang: 'uz', question: 'boshqaruv tavsiyalari',
+            reply: grounded.text,
+            provider: meta?.provider, model: meta?.model,
+            tokensIn: meta?.tokensIn, tokensOut: meta?.tokensOut,
+            latencyMs: Date.now() - t0,
+            groundingOk: grounded.result.ok,
+        });
+
+        res.json({ success: true, insights: lines, raw: grounded.text, logId });
     } catch (e: any) {
         console.error('[AI/insights]', e.message);
         res.status(500).json({ success: false, message: e.message || 'Tahlil xatoligi.' });
+    }
+});
+
+// ─── Proaktiv AI ─────────────────────────────────────────────────────────────
+// Kunlik xulosa va anomaliya signali. Batafsil: ai/proactive.ts
+
+const { runDailyDigest, runAnomalyScan, detectAnomalies } = require('./ai/proactive');
+
+const proactiveDeps = {
+    notifyClinic: (clinicId: string, chatId: string, text: string) =>
+        botManager.notifyClinicUser(clinicId, chatId, text),
+};
+
+// Kunlik AI xulosasi — soat 21:00 da.
+// Mavjud 22:00 dagi hisobotdan bir soat oldin: ikkitasi ketma-ket kelib,
+// bittasi ikkinchisini "shovqin" ga aylantirmasligi uchun.
+cron.schedule('0 21 * * *', () => {
+    console.log('⏰ Cron: AI kunlik xulosa');
+    runDailyDigest(clinicToday(), proactiveDeps).catch((e: any) =>
+        console.error('[AI:digest] cron xatolik:', e?.message));
+}, { timezone: 'Asia/Tashkent' });
+
+// Anomaliya tekshiruvi — ish vaqtida har ikki soatda.
+// Kechasi tekshirishning ma'nosi yo'q: yangi ma'lumot kelmaydi, xabar esa
+// uyqudagi odamga boradi.
+cron.schedule('0 10-19/2 * * *', () => {
+    runAnomalyScan(clinicToday(), proactiveDeps).catch((e: any) =>
+        console.error('[AI:anomaly] cron xatolik:', e?.message));
+}, { timezone: 'Asia/Tashkent' });
+
+/** Qo'lda sinash uchun — cron kutmasdan. */
+app.post('/api/ai/test/digest', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (req.user?.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ success: false, message: 'Ruxsat yo\'q.' });
+        }
+        res.json({ success: true, ...await runDailyDigest(clinicToday(), proactiveDeps) });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+/** Klinika o'z anomaliyalarini ko'rishi uchun (xabarsiz, faqat o'qish). */
+app.get('/api/ai/anomalies', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.json({ success: true, anomalies: [] });
+        res.json({ success: true, anomalies: await detectAnomalies(clinicId, clinicToday()) });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 
@@ -6118,6 +6713,64 @@ async function runStartupMigrations() {
             "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
             "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
+    `);
+
+    // --- AI jurnali va suhbatlar ---
+    // Jadval bo'lmasa AI baribir ishlaydi (ai/log.ts xatolikni yutadi), lekin
+    // token sarfi, sifat va foydalanuvchi bahosi haqidagi ma'lumot yig'ilmaydi.
+    await migrationStep('AiLog table', `
+        CREATE TABLE IF NOT EXISTS "AiLog" (
+            "id"             TEXT NOT NULL PRIMARY KEY,
+            "clinicId"       TEXT,
+            "userId"         TEXT,
+            "userName"       TEXT,
+            "role"           TEXT,
+            "endpoint"       TEXT NOT NULL,
+            "lang"           TEXT,
+            "question"       TEXT,
+            "reply"          TEXT,
+            "toolCalls"      TEXT,
+            "provider"       TEXT,
+            "model"          TEXT,
+            "tokensIn"       INTEGER,
+            "tokensOut"      INTEGER,
+            "latencyMs"      INTEGER,
+            "rounds"         INTEGER,
+            "cached"         BOOLEAN NOT NULL DEFAULT false,
+            "groundingOk"    BOOLEAN,
+            "groundingInfo"  TEXT,
+            "error"          TEXT,
+            "rating"         INTEGER,
+            "ratingNote"     TEXT,
+            "conversationId" TEXT,
+            "createdAt"      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('AiLog clinic index', `
+        CREATE INDEX IF NOT EXISTS "AiLog_clinicId_createdAt_idx" ON "AiLog" ("clinicId", "createdAt")
+    `);
+    await migrationStep('AiLog endpoint index', `
+        CREATE INDEX IF NOT EXISTS "AiLog_endpoint_idx" ON "AiLog" ("endpoint")
+    `);
+    await migrationStep('AiLog rating index', `
+        CREATE INDEX IF NOT EXISTS "AiLog_rating_idx" ON "AiLog" ("rating")
+    `);
+
+    await migrationStep('AiConversation table', `
+        CREATE TABLE IF NOT EXISTS "AiConversation" (
+            "id"        TEXT NOT NULL PRIMARY KEY,
+            "clinicId"  TEXT NOT NULL,
+            "userId"    TEXT,
+            "title"     TEXT NOT NULL,
+            "summary"   TEXT,
+            "messages"  TEXT NOT NULL,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('AiConversation index', `
+        CREATE INDEX IF NOT EXISTS "AiConversation_clinicId_userId_updatedAt_idx"
+        ON "AiConversation" ("clinicId", "userId", "updatedAt")
     `);
 
     console.log('✅ Startup migrations applied');

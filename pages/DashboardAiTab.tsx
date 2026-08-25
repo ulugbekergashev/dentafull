@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Bot, Send, Sparkles, RefreshCw, MessageSquare,
-  Lightbulb, AlertCircle, Loader2, ChevronRight, Zap
+  Lightbulb, AlertCircle, Loader2, ChevronRight, Zap,
+  Volume2, VolumeX, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { API_URL, isDemoMode } from '../services/api';
@@ -14,6 +15,10 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   loading?: boolean;
+  /** Serverdagi AiLog yozuvi — 👍/👎 shu id bilan yuboriladi. */
+  logId?: string | null;
+  /** 1 = foydali, -1 = foydasiz. */
+  rating?: number;
 }
 
 interface InsightStats {
@@ -112,6 +117,46 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState('');
 
+  // Audio holati
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const playAiResponse = useCallback((text: string) => {
+    if (!isAudioEnabled) return;
+
+    try {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+
+      // Tozalash: markdown va keraksiz belgilarni olib tashlaymiz
+      const cleanText = text.replace(/[\*\#\`]/g, '');
+      const googleTtsUrl = `${API_URL}/tts?text=${encodeURIComponent(cleanText)}&lang=uz`;
+      const audio = new Audio(googleTtsUrl);
+      currentAudioRef.current = audio;
+      
+      const playOfflineFallback = () => {
+        if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = 'uz-UZ';
+        const voices = window.speechSynthesis.getVoices();
+        const uzVoice = voices.find(v => v.lang.toLowerCase().includes('uz'));
+        if (uzVoice) utterance.voice = uzVoice;
+        window.speechSynthesis.speak(utterance);
+      };
+
+      audio.play().catch(err => {
+        console.warn("Google TTS failed, using offline fallback:", err);
+        playOfflineFallback();
+      });
+    } catch (e) {
+      console.error("Audio playback error:", e);
+    }
+  }, [isAudioEnabled]);
+
   // Auto-scroll
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -127,7 +172,11 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
         await new Promise(r => setTimeout(r, 1200));
         setInsights(DEMO_INSIGHTS);
       } else {
-        const data = await apiPost<{ insights: string[] }>('/ai/insights', { stats });
+        // Statistika ATAYLAB yuborilmaydi. Ilgari u shu yerdan, ya'ni
+        // mijozdan borardi va serverda tekshirilmasdi — tavsiyalar soxta
+        // raqamlar ustida qurilishi mumkin edi. Endi server hammasini
+        // o'zi hisoblaydi (ai/tools.ts orqali, clinicId tokendan).
+        const data = await apiPost<{ insights: string[] }>('/ai/insights', {});
         setInsights(data.insights || []);
       }
     } catch (e: any) {
@@ -135,7 +184,11 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
     } finally {
       setInsightsLoading(false);
     }
-  }, [isAdmin, stats]);
+    // `stats` bog'liqliklardan ATAYLAB olib tashlandi. U endi ishlatilmaydi
+    // (server o'zi hisoblaydi), lekin bog'liqlikda qolsa — ota-komponent
+    // har render'da yangi obyekt bergani uchun bu useEffect qayta-qayta
+    // ishlab, har safar AI chaqiruvini yuborardi.
+  }, [isAdmin]);
 
   useEffect(() => {
     loadInsights();
@@ -158,6 +211,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
 
     try {
       let reply = '';
+      let logId: string | null = null;
 
       if (isDemoMode()) {
         await new Promise(r => setTimeout(r, 1500));
@@ -174,14 +228,18 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
           .map(m => ({ role: m.role, content: m.content }));
 
         const endpoint = isAdmin ? '/ai/ask' : '/ai/chat';
-        const data = await apiPost<{ reply: string }>(endpoint, { messages: history });
+        const data = await apiPost<{ reply: string; logId?: string }>(endpoint, { messages: history });
         reply = data.reply;
+        logId = data.logId || null;
       }
 
       setMessages(prev => [
         ...prev.filter(m => m.id !== loadingMsgId),
-        { id: Date.now().toString(), role: 'assistant', content: reply },
+        { id: Date.now().toString(), role: 'assistant', content: reply, logId },
       ]);
+
+      // Javobni ovozli o'qish
+      playAiResponse(reply);
     } catch (e: any) {
       setMessages(prev => [
         ...prev.filter(m => m.id !== loadingMsgId),
@@ -196,6 +254,18 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   };
+
+  /**
+   * 👍 / 👎. Optimistik: tugma darhol javob beradi, so'rov fonda ketadi.
+   * Baho yetib bormasa foydalanuvchini bezovta qilmaymiz — bu ikkilamchi
+   * ma'lumot, uning yo'qolishi suhbatni buzmaydi.
+   */
+  const rateMessage = useCallback((id: string, rating: number) => {
+    setMessages(prev => prev.map(m => (m.id === id ? { ...m, rating } : m)));
+    const msg = messages.find(m => m.id === id);
+    if (!msg?.logId) return;
+    apiPost('/ai/feedback', { logId: msg.logId, rating }).catch(() => { });
+  }, [messages]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -251,6 +321,24 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
               {isAdmin ? 'Ma\'lumotlar bazasi bilan bog\'langan' : 'Umumiy stomatologiya maslahatlari'}
             </p>
           </div>
+          
+          <button
+            onClick={() => {
+              setIsAudioEnabled(!isAudioEnabled);
+              if (isAudioEnabled) {
+                currentAudioRef.current?.pause();
+                window.speechSynthesis?.cancel();
+              }
+            }}
+            className={`ml-auto flex items-center justify-center w-10 h-10 rounded-xl transition-all ${
+              isAudioEnabled 
+                ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-900/50' 
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+            }`}
+            title={isAudioEnabled ? "Ovozli o'qishni o'chirish" : "Ovozli o'qishni yoqish"}
+          >
+            {isAudioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+          </button>
         </div>
 
         {/* Xabarlar */}
@@ -284,6 +372,37 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
                     </div>
                   ) : (
                     <span className="whitespace-pre-wrap">{msg.content}</span>
+                  )}
+
+                  {/* Baho. 👎 olgan savollar etalon to'plamni to'ldirishning
+                      asosiy manbasi — batafsil: backend/ai/log.ts */}
+                  {msg.role === 'assistant' && msg.logId && !msg.loading && (
+                    <div className="flex items-center gap-1 mt-2 -mb-1">
+                      {msg.rating ? (
+                        <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                          Rahmat, hisobga olindi
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => rateMessage(msg.id, 1)}
+                            aria-label="Foydali"
+                            className="p-1 rounded-md text-gray-300 dark:text-gray-600
+                                       hover:text-emerald-500 transition-colors"
+                          >
+                            <ThumbsUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => rateMessage(msg.id, -1)}
+                            aria-label="Foydasiz"
+                            className="p-1 rounded-md text-gray-300 dark:text-gray-600
+                                       hover:text-rose-500 transition-colors"
+                          >
+                            <ThumbsDown className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               </motion.div>

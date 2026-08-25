@@ -1000,6 +1000,13 @@ export const api = {
             }),
         remove: (id: string) =>
             fetchJson<any>(`/admin/demo-requests/${id}`, { method: 'DELETE' }),
+        // Lidni sotuvchiga biriktirish; null — biriktirishni bekor qiladi (faqat SUPER_ADMIN)
+        assign: (id: string, salesAgentId: string | null) =>
+            fetchJson<{ success: boolean }>(`/admin/demo-requests/${id}/assign`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ salesAgentId }),
+            }),
     },
     // Platforma (SuperAdmin) uchun tashqi lid manbasi kaliti (yuboraman.uz va h.k.).
     // Bu kalit bilan kelgan lidlar klinikaga emas, DemoRequest ro'yxatiga tushadi.

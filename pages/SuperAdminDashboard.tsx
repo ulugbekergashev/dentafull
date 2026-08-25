@@ -199,6 +199,31 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const [leadKeyVisible, setLeadKeyVisible] = useState(false);
    const [leadCopied, setLeadCopied] = useState<string | null>(null);
 
+   // Lidlarni sotuvchilarga taqsimlash: filtr ('All' | 'Unassigned' | agentId) va saqlanayotgan lid id'si
+   const [leadAgentFilter, setLeadAgentFilter] = useState<string>('All');
+   const [assigningLeadId, setAssigningLeadId] = useState<string | null>(null);
+
+   // Sotuvchi rejimida backend allaqachon faqat o'ziga biriktirilgan lidlarni qaytaradi,
+   // shuning uchun filtr faqat superadmin uchun ishlaydi.
+   const visibleDemoRequests = (salesAgentMode || leadAgentFilter === 'All')
+      ? demoRequests
+      : leadAgentFilter === 'Unassigned'
+         ? demoRequests.filter((r: any) => !r.salesAgentId)
+         : demoRequests.filter((r: any) => r.salesAgentId === leadAgentFilter);
+
+   // Lidni sotuvchiga biriktirish / bekor qilish (superadmin)
+   const handleAssignLead = async (leadId: string, salesAgentId: string | null) => {
+      setAssigningLeadId(leadId);
+      try {
+         await api.demoRequests.assign(leadId, salesAgentId);
+         setDemoRequests(prev => prev.map((r: any) => r.id === leadId ? { ...r, salesAgentId } : r));
+      } catch (err: any) {
+         alert(err?.message || 'Lidni biriktirishda xatolik');
+      } finally {
+         setAssigningLeadId(null);
+      }
+   };
+
    useEffect(() => {
       if (activeTab === 'leads') {
          setDemoLoading(true);
@@ -666,35 +691,34 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                >
                   {t('superAdmin.tabs.clinics')}
                </button>
+               <button
+                  onClick={() => handleTabChange('plans')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
+               >
+                  {t('superAdmin.tabs.plans')}
+               </button>
+               {/* Sotuvchilarni boshqarish — faqat superadmin */}
                {!salesAgentMode && (
-                  <>
-                     <button
-                        onClick={() => handleTabChange('plans')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
-                     >
-                        {t('superAdmin.tabs.plans')}
-                     </button>
-                     <button
-                        onClick={() => handleTabChange('sales')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'sales' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
-                     >
-                        Sotuvchilar
-                     </button>
-                     <button
-                        onClick={() => handleTabChange('blocked')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
-                     >
-                        {t('superAdmin.tabs.blocked')} ({blockedCount})
-                     </button>
-                     <button
-                        onClick={() => handleTabChange('leads')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${activeTab === 'leads' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'}`}
-                     >
-                        <Inbox className="w-3.5 h-3.5" />
-                        Lidlar
-                     </button>
-                  </>
+                  <button
+                     onClick={() => handleTabChange('sales')}
+                     className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'sales' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
+                  >
+                     Sotuvchilar
+                  </button>
                )}
+               <button
+                  onClick={() => handleTabChange('blocked')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
+               >
+                  {t('superAdmin.tabs.blocked')} ({blockedCount})
+               </button>
+               <button
+                  onClick={() => handleTabChange('leads')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${activeTab === 'leads' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'}`}
+               >
+                  <Inbox className="w-3.5 h-3.5" />
+                  Lidlar
+               </button>
             </div>
          </div>
 
@@ -1161,9 +1185,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            )}
                         </div>
 
-                        <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-                           <Button variant="secondary" className="w-full" onClick={() => alert('Tarifni tahrirlash hozircha mavjud emas')}>{t('common.edit')}</Button>
-                        </div>
+                        {/* Tarif narxini faqat superadmin o'zgartiradi; sotuvchi uchun ro'yxat ko'rish uchun */}
+                        {!salesAgentMode && (
+                           <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+                              <Button variant="secondary" className="w-full" onClick={() => alert('Tarifni tahrirlash hozircha mavjud emas')}>{t('common.edit')}</Button>
+                           </div>
+                        )}
                      </Card>
                   );
                })}
@@ -1241,11 +1268,31 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                      <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Inbox className="w-5 h-5 text-emerald-500" /> Lidlar
+                        <Inbox className="w-5 h-5 text-emerald-500" /> {salesAgentMode ? 'Mening lidlarim' : 'Lidlar'}
                      </h3>
-                     <p className="text-sm text-gray-500">Landing sahifa, Facebook va tashqi manbalar (yuboraman.uz) orqali kelgan lidlar</p>
+                     <p className="text-sm text-gray-500">
+                        {salesAgentMode
+                           ? "Superadmin sizga biriktirgan lidlar. Bog'lanib, holatini yangilab boring."
+                           : 'Landing sahifa, Facebook va tashqi manbalar (yuboraman.uz) orqali kelgan lidlar'}
+                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                     {/* Taqsimotni ko'rish uchun filtr — faqat superadmin */}
+                     {!salesAgentMode && (
+                        <select
+                           value={leadAgentFilter}
+                           onChange={e => setLeadAgentFilter(e.target.value)}
+                           className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-700 dark:text-gray-200"
+                        >
+                           <option value="All">Barcha lidlar ({demoRequests.length})</option>
+                           <option value="Unassigned">Taqsimlanmagan ({demoRequests.filter((r: any) => !r.salesAgentId).length})</option>
+                           {salesAgents.map((a: any) => (
+                              <option key={a.id} value={a.id}>
+                                 {a.name} ({demoRequests.filter((r: any) => r.salesAgentId === a.id).length})
+                              </option>
+                           ))}
+                        </select>
+                     )}
                      {!salesAgentMode && (
                         fbStatus?.connected ? (
                            <div className="flex items-center gap-2">
@@ -1347,15 +1394,19 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
                {demoLoading ? (
                   <Card className="p-10 text-center text-gray-400">Yuklanmoqda...</Card>
-               ) : demoRequests.length === 0 ? (
+               ) : visibleDemoRequests.length === 0 ? (
                   <Card className="p-10 text-center">
                      <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                     <p className="text-gray-500">Hali so'rovlar yo'q</p>
-                     <p className="text-xs text-gray-400 mt-1">Landing sahifadan demo so'rov yuborilganda bu yerda ko'rinadi</p>
+                     <p className="text-gray-500">{salesAgentMode ? 'Sizga hali lid biriktirilmagan' : "Hali so'rovlar yo'q"}</p>
+                     <p className="text-xs text-gray-400 mt-1">
+                        {salesAgentMode
+                           ? "Superadmin lid biriktirganda shu yerda paydo bo'ladi"
+                           : "Landing sahifadan demo so'rov yuborilganda bu yerda ko'rinadi"}
+                     </p>
                   </Card>
                ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                     {demoRequests.map((req: any) => (
+                     {visibleDemoRequests.map((req: any) => (
                         <Card key={req.id} className="p-5 hover:shadow-md transition-shadow">
                            <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-3">
@@ -1370,12 +1421,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     <p className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleDateString('uz-UZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
                                  </div>
                               </div>
-                              <button
-                                 onClick={() => { if (window.confirm('O\'chirishni tasdiqlaysizmi?')) { api.demoRequests.remove(req.id).then(() => setDemoRequests(prev => prev.filter(r => r.id !== req.id))); } }}
-                                 className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                              >
-                                 <Trash2 className="w-4 h-4" />
-                              </button>
+                              {/* Lidni o'chirish — faqat superadmin */}
+                              {!salesAgentMode && (
+                                 <button
+                                    onClick={() => { if (window.confirm('O\'chirishni tasdiqlaysizmi?')) { api.demoRequests.remove(req.id).then(() => setDemoRequests(prev => prev.filter(r => r.id !== req.id))); } }}
+                                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                 >
+                                    <Trash2 className="w-4 h-4" />
+                                 </button>
+                              )}
                            </div>
                            <div className="space-y-1.5 mb-3">
                               <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
@@ -1398,6 +1452,30 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  <p className="text-xs text-gray-400 whitespace-pre-line max-h-20 overflow-y-auto border-t border-gray-100 dark:border-gray-700 pt-1.5 mt-1.5" title={req.notes}>{req.notes}</p>
                               )}
                            </div>
+
+                           {/* Lidni sotuvchiga taqsimlash. Superadmin o'zgartiradi, sotuvchi faqat
+                               o'ziga biriktirilganini ko'radi (backend baribir tekshiradi). */}
+                           {!salesAgentMode && (
+                              <div className="flex items-center gap-2 mb-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                 <Users className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                 <select
+                                    value={req.salesAgentId || ''}
+                                    disabled={assigningLeadId === req.id}
+                                    onChange={e => handleAssignLead(req.id, e.target.value || null)}
+                                    className={`flex-1 text-xs font-medium px-2 py-1.5 rounded-lg border cursor-pointer disabled:opacity-50 ${
+                                       req.salesAgentId
+                                          ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300'
+                                          : 'border-dashed border-gray-300 bg-transparent text-gray-500 dark:border-gray-600'
+                                    }`}
+                                 >
+                                    <option value="">Taqsimlanmagan</option>
+                                    {salesAgents.map((a: any) => (
+                                       <option key={a.id} value={a.id}>{a.name}</option>
+                                    ))}
+                                 </select>
+                              </div>
+                           )}
+
                            <div className="flex items-center justify-between">
                               <select
                                  value={req.status}

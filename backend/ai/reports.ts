@@ -15,6 +15,7 @@
 
 const { runTool } = require('./tools');
 const { chat } = require('../aiService');
+import { applyGrounding } from './guard';
 
 export type ReportType = 'today' | 'performance' | 'finance' | 'debtors' | 'inventory' | 'leads';
 
@@ -312,7 +313,7 @@ const narrativeFor = async (r: Omit<Report, 'type' | 'narrative'>, lang: Lang): 
         .join('; ');
 
     try {
-        return await chat(
+        const raw = await chat(
             [
                 {
                     role: 'system',
@@ -327,6 +328,20 @@ const narrativeFor = async (r: Omit<Report, 'type' | 'narrative'>, lang: Lang): 
             ],
             { task: 'chat', maxTokens: 220, label: 'report-narrative' }
         );
+
+        // Grounding: xulosadagi har bir yirik raqam metrikalarda bormi?
+        //
+        // Bu qism ilgari umuman tekshirilmasdi va eng nozik joy edi: model
+        // tayyor raqamlar ustiga izoh yozadi, lekin izohga o'zidan raqam
+        // qo'shib yuborsa — foydalanuvchi uni hisobotning bir qismi deb
+        // qabul qiladi, chunki u aniq raqamlar yonida turadi.
+        const { text, result } = applyGrounding(raw, [r.metrics], lang);
+        if (!result.ok && result.stripped.length) {
+            console.warn(
+                `[AI:report] xulosadan tasdiqlanmagan raqam olib tashlandi: ${result.stripped.join(', ')}`
+            );
+        }
+        return text;
     } catch (e: any) {
         // Xulosa bo'lmasa ham hisobot o'zi qimmatli — raqamlar allaqachon tayyor.
         console.warn('[AI:report] xulosa yozilmadi:', e.message);

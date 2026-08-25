@@ -14,6 +14,7 @@
 //     modelga umuman ko'rsatilmaydi va bajarilishda ham qayta tekshiriladi.
 
 const { prisma } = require('../db');
+import { sanitizeToolResult } from './guard';
 
 export interface ToolContext {
     clinicId: string;
@@ -449,7 +450,10 @@ export const runTool = async (
         return { xato: 'Klinika aniqlanmadi.' };
     }
     try {
-        return await IMPL[name](args || {}, ctx);
+        const raw = await IMPL[name](args || {}, ctx);
+        // Bazadagi matn modelga ko'rsatma bo'lib yetib bormasligi uchun
+        // tozalanadi. Batafsil sabab: ai/guard.ts, 2-qism.
+        return sanitizeToolResult(raw);
     } catch (e: any) {
         console.error(`[AI:tool] ${name} xatolik:`, e.message);
         return { xato: 'Ma\'lumotni olishda xatolik yuz berdi.' };
