@@ -3252,7 +3252,7 @@ app.post('/api/public/demo-request', async (req, res) => {
         const id = require('crypto').randomUUID();
         await prisma.$executeRawUnsafe(
             `INSERT INTO "DemoRequest" ("id","name","clinicName","phone","city","doctorsCount","source","status","createdAt","updatedAt")
-             VALUES ($1,$2,$3,$4,$5,$6,$7,'New',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,'Inbox',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
             id, name || 'Noma\'lum', clinicName || null, phone || '', city || null,
             doctorsCount ? parseInt(doctorsCount) : null, source || 'landing'
         );
@@ -3285,8 +3285,9 @@ app.get('/api/admin/demo-requests', authenticateToken, requireRole('SUPER_ADMIN'
         const rows: any[] = await prisma.$queryRawUnsafe(`SELECT * FROM "DemoRequest" ORDER BY "createdAt" DESC`);
         const assignments = await getLeadAssignments();
         const withAgent = rows.map(r => ({ ...r, salesAgentId: assignments[r.id] || null }));
+        // "Inbox" — superadminning taqsimlash ustuni; sotuvchi uni ko'rmaydi
         res.json(user.role === 'SALES_AGENT'
-            ? withAgent.filter(r => r.salesAgentId === user.salesAgentId)
+            ? withAgent.filter(r => r.salesAgentId === user.salesAgentId && r.status !== 'Inbox')
             : withAgent);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch demo requests' });
@@ -3310,6 +3311,10 @@ app.put('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_AD
         // Facebook lidining izohini o'chirib yuborardi.
         const sets: string[] = [];
         const params: any[] = [];
+        // Sotuvchi lidni superadminning taqsimlash ustuniga qaytara olmaydi
+        if (status === 'Inbox' && user.role === 'SALES_AGENT') {
+            return res.status(403).json({ error: 'Bu ustun faqat superadmin uchun' });
+        }
         if (status !== undefined) { params.push(status); sets.push(`"status"=$${params.length}`); }
         if (notes !== undefined) { params.push(notes); sets.push(`"notes"=$${params.length}`); }
         if (sets.length === 0) return res.json({ success: true });
@@ -3339,6 +3344,16 @@ app.put('/api/admin/demo-requests/:id/assign', authenticateToken, requireRole('S
         if (salesAgentId) assignments[req.params.id] = salesAgentId;
         else delete assignments[req.params.id];
         await setPlatformSetting(LEAD_ASSIGNMENTS_KEY, JSON.stringify(assignments));
+
+        // Taqsimlash — "Tushgan lid" ustunidan chiqarishning o'zi. Sotuvchi lidni
+        // ko'rishi uchun u "Yangi lidlar" ustuniga o'tishi kerak.
+        if (salesAgentId) {
+            await prisma.$executeRawUnsafe(
+                `UPDATE "DemoRequest" SET "status"='New',"updatedAt"=CURRENT_TIMESTAMP
+                 WHERE "id"=$1 AND "status"='Inbox'`,
+                req.params.id
+            );
+        }
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ error: 'Lidni biriktirishda xatolik: ' + error.message });
@@ -3745,7 +3760,8 @@ const handlePlatformLead = async (payload: any, res: any) => {
             doctorsCount: Number.isFinite(parsedDoctors) ? parsedDoctors : null,
             source: fields.source || 'yuboraman',
             notes,
-            status: 'New'
+            // Yangi lid avval superadminning "Tushgan lid" ustuniga tushadi
+            status: 'Inbox'
         }
     });
 
@@ -4865,7 +4881,7 @@ app.post('/api/facebook/webhook', async (req, res) => {
 
                                 await prisma.$executeRawUnsafe(
                                     `INSERT INTO "DemoRequest" ("id","name","phone","source","status","notes","createdAt","updatedAt")
-                                     VALUES ($1,$2,$3,$4,'New',$5,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+                                     VALUES ($1,$2,$3,$4,'Inbox',$5,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
                                     require('crypto').randomUUID(),
                                     pFieldData.full_name || 'Facebook User',
                                     pFieldData.phone_number || 'N/A',

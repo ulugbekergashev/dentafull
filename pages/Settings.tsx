@@ -49,7 +49,17 @@ export const Settings: React.FC<SettingsProps> = ({
    userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, currentClinic, plans, reviews
 }) => {
    const { t } = useLanguage();
-   const [activeTab, setActiveTab] = useState<'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed' | 'access' | 'leadApi'>('services');
+   type SettingsTab = 'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed' | 'access' | 'leadApi';
+   // Boshqa sahifadan aniq bo'limga yo'naltirish uchun: /settings?tab=leadApi
+   const initialTab = ((): SettingsTab => {
+      try {
+         const t = new URLSearchParams(window.location.search).get('tab');
+         const allowed: SettingsTab[] = ['general', 'services', 'doctors', 'receptionists', 'labTechnicians', 'messaging', 'facebook', 'dmed', 'access', 'leadApi'];
+         if (t && (allowed as string[]).includes(t)) return t as SettingsTab;
+      } catch { /* manzilni o'qib bo'lmasa — odatdagi bo'lim */ }
+      return 'services';
+   })();
+   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
 
    // Tashqi lid manbalari (yuboraman.uz va h.k.) uchun integratsiya kaliti
    const [leadApiInfo, setLeadApiInfo] = useState<LeadApiKeyInfo | null>(null);

@@ -340,14 +340,44 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       }
    };
 
-   const DEMO_STAGES = ['New', 'Contacted', 'Thinking', 'Booked', 'Cancelled'];
+   // "Inbox" — barcha yangi lidlar shu yerga tushadi va superadmin taqsimlaydi.
+   // Sotuvchiga bu ustun ko'rinmaydi (backend ham bermaydi).
+   const DEMO_STAGES = ['Inbox', 'New', 'Contacted', 'Thinking', 'Booked', 'Cancelled'];
+   const ADMIN_ONLY_STAGES = ['Inbox'];
    const DEMO_STAGE_LABELS: Record<string, string> = {
-      New: 'Yangi', Contacted: 'Bog\'lashildi', Thinking: 'O\'ylamoqda', Booked: 'Oldi', Cancelled: 'Bekor'
+      Inbox: 'Tushgan lid', New: 'Yangi lidlar', Contacted: "Bog'lashildi",
+      Thinking: "O'ylamoqda", Booked: 'Oldi', Cancelled: 'Bekor'
    };
    const DEMO_STAGE_COLORS: Record<string, string> = {
+      Inbox: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
       New: 'bg-primary-100 text-primary-700', Contacted: 'bg-amber-100 text-amber-700',
       Thinking: 'bg-purple-100 text-purple-700', Booked: 'bg-emerald-100 text-emerald-700',
       Cancelled: 'bg-red-100 text-red-700'
+   };
+   // Ustun sarlavhasidagi rang chizig'i
+   const DEMO_STAGE_BAR: Record<string, string> = {
+      Inbox: 'bg-slate-400', New: 'bg-primary-500', Contacted: 'bg-amber-500',
+      Thinking: 'bg-purple-500', Booked: 'bg-emerald-500', Cancelled: 'bg-red-500'
+   };
+
+   // Sotuvchi "Tushgan lid" ustunini ko'rmaydi
+   const visibleStages = salesAgentMode
+      ? DEMO_STAGES.filter(st => !ADMIN_ONLY_STAGES.includes(st))
+      : DEMO_STAGES;
+
+   // Kanban: kartochkani boshqa ustunga sudrash
+   const [draggingLeadId, setDraggingLeadId] = useState<string | null>(null);
+   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+
+   const moveLeadToStage = (leadId: string, stage: string) => {
+      const lead = demoRequests.find((r: any) => r.id === leadId);
+      if (!lead || lead.status === stage) return;
+      if (salesAgentMode && ADMIN_ONLY_STAGES.includes(stage)) return;
+      setDemoRequests(prev => prev.map((r: any) => r.id === leadId ? { ...r, status: stage } : r));
+      api.demoRequests.update(leadId, { status: stage }).catch(() => {
+         // Saqlanmasa eski holatga qaytaramiz — ekranda yolg'on raqam turmasin
+         setDemoRequests(prev => prev.map((r: any) => r.id === leadId ? { ...r, status: lead.status } : r));
+      });
    };
 
    // Sales Agents State
@@ -1405,9 +1435,50 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </p>
                   </Card>
                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                     {visibleDemoRequests.map((req: any) => (
-                        <Card key={req.id} className="p-5 hover:shadow-md transition-shadow">
+                  <div className="flex gap-4 overflow-x-auto pb-2">
+                     {visibleStages.map(stage => {
+                        const stageLeads = visibleDemoRequests.filter((r: any) => (r.status || 'Inbox') === stage);
+                        const isTarget = dragOverStage === stage;
+                        return (
+                           <div
+                              key={stage}
+                              onDragOver={e => { e.preventDefault(); setDragOverStage(stage); }}
+                              onDragLeave={() => setDragOverStage(prev => prev === stage ? null : prev)}
+                              onDrop={e => {
+                                 e.preventDefault();
+                                 if (draggingLeadId) moveLeadToStage(draggingLeadId, stage);
+                                 setDraggingLeadId(null);
+                                 setDragOverStage(null);
+                              }}
+                              className={`w-[320px] shrink-0 rounded-2xl p-2 transition-colors ${isTarget
+                                 ? 'bg-primary-50 dark:bg-primary-900/20 ring-2 ring-primary-400'
+                                 : 'bg-gray-50 dark:bg-gray-800/50'}`}
+                           >
+                              <div className="flex items-center gap-2 px-2 py-2.5">
+                                 <span className={`w-1.5 h-4 rounded-full ${DEMO_STAGE_BAR[stage]}`} />
+                                 <h4 className="text-sm font-bold text-gray-900 dark:text-white">{DEMO_STAGE_LABELS[stage]}</h4>
+                                 <span className="text-xs font-bold text-gray-400">{stageLeads.length}</span>
+                                 {stage === 'Inbox' && (
+                                    <span className="ml-auto text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                                       faqat siz
+                                    </span>
+                                 )}
+                              </div>
+
+                              {stageLeads.length === 0 ? (
+                                 <div className="px-3 py-8 text-center text-xs text-gray-400 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
+                                    {stage === 'Inbox' ? "Yangi lid yo'q" : "Bo'sh"}
+                                 </div>
+                              ) : (
+                                 <div className="space-y-3">
+                                    {stageLeads.map((req: any) => (
+                        <Card
+                           key={req.id}
+                           draggable
+                           onDragStart={() => setDraggingLeadId(req.id)}
+                           onDragEnd={() => { setDraggingLeadId(null); setDragOverStage(null); }}
+                           className={`p-4 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${draggingLeadId === req.id ? 'opacity-40' : ''}`}
+                        >
                            <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-3">
                                  <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold text-sm">
@@ -1477,17 +1548,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            )}
 
                            <div className="flex items-center justify-between">
+                              {/* Ustunning o'zi holatni bildiradi; tanlagich sudrab bo'lmaydigan
+                                  holatlar (telefon, tor ekran) uchun qoladi */}
                               <select
-                                 value={req.status}
-                                 onChange={e => {
-                                    const newStatus = e.target.value;
-                                    api.demoRequests.update(req.id, { status: newStatus });
-                                    setDemoRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: newStatus } : r));
-                                 }}
+                                 value={req.status || 'Inbox'}
+                                 onChange={e => moveLeadToStage(req.id, e.target.value)}
                                  className={`text-xs font-bold px-2.5 py-1 rounded-full border-0 cursor-pointer ${DEMO_STAGE_COLORS[req.status] || 'bg-gray-100 text-gray-700'}`}
                               >
-                                 {DEMO_STAGES.map(s => (
-                                    <option key={s} value={s}>{DEMO_STAGE_LABELS[s]}</option>
+                                 {visibleStages.map(st => (
+                                    <option key={st} value={st}>{DEMO_STAGE_LABELS[st]}</option>
                                  ))}
                               </select>
                               <a
@@ -1498,7 +1567,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               </a>
                            </div>
                         </Card>
-                     ))}
+                                    ))}
+                                 </div>
+                              )}
+                           </div>
+                        );
+                     })}
                   </div>
                )}
             </div>

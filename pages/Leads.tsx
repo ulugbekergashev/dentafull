@@ -8,6 +8,7 @@ import {
 import { Lead, Doctor, Appointment, ServiceCategory, Service, Clinic } from '../types';
 import { api, isDemoMode } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { useNavigate } from 'react-router-dom';
 
 interface LeadsProps {
     leads: Lead[];
@@ -113,6 +114,7 @@ export const Leads: React.FC<LeadsProps> = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
     const [isFBLoading, setIsFBLoading] = useState(false);
+    const navigate = useNavigate();
     const [facebookPages, setFacebookPages] = useState<any[]>([]);
     const [isFBPageModalOpen, setIsFBPageModalOpen] = useState(false);
     const [selectedLeadForDetail, setSelectedLeadForDetail] = useState<Lead | null>(null);
@@ -394,13 +396,16 @@ export const Leads: React.FC<LeadsProps> = ({
                                 </button>
                             </div>
                         ) : (
+                            /* Facebook endi to'g'ridan-to'g'ri emas, yuboraman.uz orqali ulanadi —
+                               shuning uchun tugma Sozlamalardagi lid integratsiyasiga olib boradi. */
                             <button
-                                onClick={handleConnectFB}
-                                disabled={isFBLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-[#1877F2] hover:bg-primary-600 text-white rounded-xl text-sm font-bold shadow-md transition-all disabled:opacity-50 active:scale-95"
+                                onClick={() => navigate('/settings?tab=leadApi')}
+                                className="flex items-center gap-2 px-4 py-2 bg-[#1877F2] hover:bg-primary-600 text-white rounded-xl text-sm font-bold shadow-md transition-all active:scale-95"
+                                title="Lid manbalarini Sozlamalar > Lid integratsiyasi bo'limida ulaysiz"
                             >
-                                {isFBLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Facebook className="w-4 h-4 fill-current" />}
+                                <Facebook className="w-4 h-4 fill-current" />
                                 <span>{t('leads.connectFb')}</span>
+                                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
                             </button>
                         )}
                     </div>
