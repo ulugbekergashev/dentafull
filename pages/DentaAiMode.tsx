@@ -532,6 +532,10 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
   const [draft, setDraft] = useState('');
   const [pendingQ, setPendingQ] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
+  // Kutish sekundlari. Model uzoq o'ylaganda (yoki limit kutuvida) jim
+  // spinner "ilova qotdi" degan taassurot beradi — hisoblagich esa
+  // jarayon davom etayotganini ko'rsatib turadi.
+  const [elapsed, setElapsed] = useState(0);
 
   // Saqlangan suhbatlar.
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
@@ -575,6 +579,12 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
 
   // Oqim yarim yo'lda qolsa (sahifa yopildi) — so'rovni bekor qilamiz.
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return; }
+    const id = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
 
   /** Suhbatni saqlaydi. Muvaffaqiyatsizlik jimgina o'tadi — bu qulaylik. */
   const persist = useCallback(async (turns: Turn[]) => {
@@ -1039,6 +1049,11 @@ export const DentaAiMode: React.FC<Props> = ({ onExit }) => {
                 <div className="pl-4 flex items-center gap-2.5 text-[13px] text-gray-500 dark:text-gray-400">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-500" />
                   {busyLabel}…
+                  {/* Sekundlar faqat kutish sezilarli bo'lgandan keyin
+                      chiqadi — tez javoblarda hisoblagich shovqin bo'lardi. */}
+                  {elapsed > 4 && (
+                    <span className="tabular-nums text-gray-400 dark:text-gray-500">{elapsed}s</span>
+                  )}
                 </div>
               )}
             </motion.div>

@@ -277,25 +277,84 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
         };
     },
 
+    // Qarzdorlar ILOVANING O'Z mantiqi bo'yicha hisoblanadi (pages/Finance.tsx):
+    // qarz = to'lanmagan ("Pending") to'lovlar + bo'lib-bo'lib to'lashning
+    // qolgan qismi.
+    //
+    // Ilgari bu yerda `Patient.balance < 0` ishlatilardi va bu XATO edi:
+    // `balance` — bu avans (oldindan to'lov) qoldig'i, qarz daftari emas.
+    // U faqat 'Avans' kiritmalar va 'Balance' turidagi to'lovlardan
+    // hosil bo'ladi (server.ts, recalculate-balances), ya'ni oddiy
+    // to'lanmagan xizmat unga umuman ta'sir qilmaydi. Natijada AI Moliya
+    // sahifasidagidan BOSHQA ro'yxat ko'rsatardi — va ikkalasi ham
+    // ishonchli ohangda.
     get_debtors: async (args, ctx) => {
         const limit = clampLimit(args.limit, 10, 50);
-        const rows = await prisma.patient.findMany({
-            where: { clinicId: ctx.clinicId, balance: { lt: 0 }, status: 'Active' },
-            orderBy: { balance: 'asc' },
-            take: limit,
-            select: { firstName: true, lastName: true, phone: true, balance: true, lastVisit: true },
-        });
-        const jami = rows.reduce((s: number, r: any) => s + Math.abs(r.balance || 0), 0);
+
+        const [pending, plans, patients] = await Promise.all([
+            prisma.transaction.findMany({
+                where: { clinicId: ctx.clinicId, status: 'Pending' },
+                select: { patientId: true, patientName: true, amount: true, date: true },
+            }),
+            prisma.installmentPlan.findMany({
+                where: { clinicId: ctx.clinicId, status: 'Active' },
+                select: { patientId: true, totalAmount: true, totalPaid: true },
+            }),
+            prisma.patient.findMany({
+                where: { clinicId: ctx.clinicId },
+                select: { id: true, firstName: true, lastName: true, phone: true, lastVisit: true },
+            }),
+        ]);
+
+        const byId = new Map<string, any>(patients.map((p: any) => [p.id, p]));
+
+        // Guruhlash kaliti — patientId. Eski yozuvlarda u bo'lmasligi mumkin,
+        // shunda ismga qaytamiz (Finance.tsx ham shunday qiladi).
+        const debts = new Map<string, { ism: string; summa: number; sana: string; p?: any }>();
+
+        const add = (key: string, ism: string, summa: number, sana: string, p?: any) => {
+            const cur = debts.get(key);
+            if (cur) {
+                cur.summa += summa;
+                if (sana && sana < cur.sana) cur.sana = sana;
+            } else {
+                debts.set(key, { ism, summa, sana, p });
+            }
+        };
+
+        for (const t of pending) {
+            const p = t.patientId ? byId.get(t.patientId) : undefined;
+            add(t.patientId || `nom:${t.patientName}`,
+                p ? maskName(p.firstName, p.lastName) : maskName(t.patientName, ''),
+                t.amount || 0, t.date || '', p);
+        }
+
+        for (const pl of plans) {
+            const qoldiq = (pl.totalAmount || 0) - (pl.totalPaid || 0);
+            if (qoldiq <= 0) continue;
+            const p = byId.get(pl.patientId);
+            add(pl.patientId, p ? maskName(p.firstName, p.lastName) : 'Noma\'lum', qoldiq, '', p);
+        }
+
+        const list = Array.from(debts.values())
+            .filter(d => d.summa > 0)
+            .sort((a, b) => b.summa - a.summa);
+
+        const jami = list.reduce((s, d) => s + d.summa, 0);
+
         return {
-            topildi: rows.length,
+            topildi: list.length,
             jami_qarz: fmt(jami),
-            bemorlar: rows.map((r: any) => ({
-                bemor: maskName(r.firstName, r.lastName),
-                telefon: maskPhone(r.phone),
-                qarz: fmt(Math.abs(r.balance || 0)),
-                oxirgi_tashrif: r.lastVisit,
+            bemorlar: list.slice(0, limit).map(d => ({
+                bemor: d.ism,
+                telefon: maskPhone(d.p?.phone),
+                qarz: fmt(d.summa),
+                eng_eski_qarz_sanasi: d.sana || undefined,
+                oxirgi_tashrif: d.p?.lastVisit,
             })),
-            izoh: 'Summalar so\'mda. Faqat faol bemorlar.',
+            izoh: list.length > limit
+                ? `Summalar so'mda. Jami ${list.length} ta qarzdordan eng kattalari ko'rsatildi.`
+                : 'Summalar so\'mda. Qarz = to\'lanmagan to\'lovlar va bo\'lib-bo\'lib to\'lashning qolgan qismi.',
         };
     },
 

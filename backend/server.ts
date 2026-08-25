@@ -5820,6 +5820,7 @@ const { applyGrounding, wrapToolResult } = require('./ai/guard');
 const { logAi, rateAiLog, aiUsageStats, negativeFeedback } = require('./ai/log');
 const {
     actionsForRole, isAction, previewAction, executeAction, storePending, takePending,
+    PENDING_INSTRUCTION,
 } = require('./ai/actions');
 
 // Klinikalar O'zbekistonda — sana UTC+5 bo'yicha hisoblanadi. Server UTC'da
@@ -5938,13 +5939,7 @@ const runAsk = async (
                 // o'qib, ish bajarilgan deb o'ylaydi va tasdiqlash tugmasini
                 // bosmaydi. Ya'ni butun tasdiqlash mexanizmi bir jumla
                 // tufayli teskari natija berardi.
-                izoh: 'DIQQAT: harakat HALI BAJARILMADI. U foydalanuvchiga '
-                    + 'ko\'rsatildi va tasdiqlash tugmasi ekranda turibdi. '
-                    + 'Javobingda "yuborildi", "yozildi", "qo\'shildi" kabi '
-                    + 'O\'TGAN ZAMON ISHLATMA. Kelasi zamonda, bir gapda nima '
-                    + 'bo\'lishini ayt (masalan: "12 ta qarzdorga eslatma '
-                    + 'yuborishga tayyor"). "Tasdiqlaysizmi?" deb so\'rama — '
-                    + 'tugma allaqachon ekranda.',
+                izoh: PENDING_INSTRUCTION,
             };
         }
 
@@ -6066,6 +6061,17 @@ app.post('/api/ai/ask/stream', authenticateToken, async (req: any, res: any) => 
         res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
+    // Puls signali. Ikki vazifasi bor:
+    //   1. Oraliqdagi proksi (Railway/Cloudflare) uzoq jim turgan ulanishni
+    //      yopib qo'ymasligi va javobni buferlamasligi uchun bayt oqib turadi.
+    //   2. Model uzoq o'ylayotganda UI o'tgan vaqtni ko'rsata oladi — jim
+    //      spinner "ilova qotdi" degan taassurot beradi.
+    // SSE izoh qatori (`:` bilan boshlanadi) mijoz tomonida hodisa sifatida
+    // ko'rinmaydi, shuning uchun parsing mantig'iga tegmaydi.
+    const heartbeat = setInterval(() => {
+        if (!closed) res.write(': ping\n\n');
+    }, 5000);
+
     try {
         const out = await runAsk(req, send);
         send({
@@ -6079,6 +6085,7 @@ app.post('/api/ai/ask/stream', authenticateToken, async (req: any, res: any) => 
         console.error('[AI/ask/stream]', e.message);
         send({ type: 'error', message: e.message || 'AI so\'rovida xatolik.' });
     } finally {
+        clearInterval(heartbeat);
         if (!closed) res.end();
     }
 });

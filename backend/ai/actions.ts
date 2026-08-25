@@ -101,6 +101,26 @@ export const ACTION_DEFS: ActionDef[] = [
         roles: FRONT_DESK,
     },
     {
+        name: 'add_charge',
+        description:
+            'Bemorga to\'lanmagan hisob (qarz) yozadi. "Falonchiga 500 ming qarz ' +
+            'yozib qo\'y", "Aliyevga koronka uchun 1 million yozib qo\'y" kabi ' +
+            'buyruqlar uchun. Bu XARAJAT EMAS — xarajat klinikaning o\'z puli, ' +
+            'bu esa bemorning klinikaga qarzi. ' +
+            'DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
+        parameters: {
+            type: 'object',
+            properties: {
+                patientQuery: { type: 'string', description: 'Bemor ismi yoki telefoni' },
+                amount: { type: 'number', description: 'Summa, so\'mda' },
+                service: { type: 'string', description: 'Nima uchun (masalan "Koronka"). Berilmasa "Xizmat".' },
+                date: { type: 'string', description: 'Sana, YYYY-MM-DD. Berilmasa bugungi.' },
+            },
+            required: ['patientQuery', 'amount'],
+        },
+        roles: FRONT_DESK,
+    },
+    {
         name: 'create_expense',
         description:
             'Xarajat yozuvini qo\'shadi. "Bugun 200 ming ijara to\'ladik" kabi ' +
@@ -129,6 +149,30 @@ export const actionsForRole = (role: string) =>
         }));
 
 export const isAction = (name: string): boolean => ACTION_DEFS.some(a => a.name === name);
+
+/**
+ * Tasdiq kutayotgan harakat uchun modelga beriladigan ko'rsatma.
+ *
+ * Shu yerda turibdi, endpoint ichida emas — chunki uni sinovda ham AYNAN
+ * shu ko'rinishda ishlatish shart. Nusxa ko'chirilganda test productionda
+ * o'zgargan matnni emas, o'zining eski nusxasini tekshirib "hammasi joyida"
+ * deb ko'rsataverardi (ai/prompts.ts dagi bilan bir xil sabab).
+ *
+ * Ohang qat'iy belgilangan: sinovda model "Qarz yozib QO'YILDI" deb o'tgan
+ * zamonda javob berdi — hech narsa yozilmagan holda. Foydalanuvchi buni
+ * o'qib, ish bajarilgan deb o'ylaydi va tasdiqlash tugmasini bosmaydi.
+ * Ya'ni butun tasdiqlash mexanizmi bitta jumla tufayli teskari natija
+ * berardi.
+ */
+export const PENDING_INSTRUCTION =
+    'DIQQAT: harakat HALI BAJARILMADI va sen uni bajara olmaysan. '
+    + 'Tasdiqlash tugmasi foydalanuvchi ekranida turibdi.\n'
+    + 'Javobing ANIQ shu qolipda bo\'lsin: "<nima bo\'lishi> — tasdiqlashingizni kutmoqda."\n'
+    + 'Masalan: "12 ta qarzdorga eslatma yuborish — tasdiqlashingizni kutmoqda."\n'
+    + 'Quyidagi so\'zlarni ISHLATMA: yuborildi, yozildi, qo\'shildi, qo\'yildi, '
+    + 'bajarildi, o\'zgartirildi, tayyor bo\'ldi. Ular ish bajarilgan degan '
+    + 'ma\'noni beradi — bu noto\'g\'ri.\n'
+    + '"Tasdiqlaysizmi?" deb ham so\'rama — tugma allaqachon ekranda.';
 
 // ─── Ko'rib chiqish (preview) ────────────────────────────────────────────────
 
@@ -231,6 +275,44 @@ const reminderRecipients = async (
 };
 
 /**
+ * Bitta bemorni aniq topadi.
+ *
+ * Bir nechta mos kelsa ATAYLAB tanlab bermaydi: noto'g'ri bemorga qarz
+ * yozib qo'yish yoki noto'g'ri odamga qabul ochish — jimgina yuz beradigan
+ * va keyin topish qiyin bo'lgan xato. Model aniqlashtirishni so'raydi.
+ */
+const findOnePatient = async (
+    query: string,
+    ctx: ToolContext
+): Promise<{ patient?: any; xato?: string }> => {
+    const q = String(query || '').trim();
+    if (q.length < 2) return { xato: 'Bemor ismi juda qisqa.' };
+
+    const rows = await prisma.patient.findMany({
+        where: {
+            clinicId: ctx.clinicId,
+            OR: [
+                { firstName: { contains: q, mode: 'insensitive' } },
+                { lastName: { contains: q, mode: 'insensitive' } },
+                { phone: { contains: q } },
+            ],
+        },
+        take: 5,
+        select: { id: true, firstName: true, lastName: true, phone: true },
+    });
+
+    if (!rows.length) return { xato: `"${q}" bo'yicha bemor topilmadi.` };
+    if (rows.length > 1) {
+        return {
+            xato: `"${q}" bo'yicha ${rows.length} ta bemor topildi: `
+                + rows.map((p: any) => maskName(p.firstName, p.lastName)).join(', ')
+                + '. Qaysi biri ekanini aniqlashtiring.',
+        };
+    }
+    return { patient: rows[0] };
+};
+
+/**
  * Harakatni BAJARMASDAN, nima bo'lishini tayyorlaydi.
  * Xatolik bo'lsa `{ xato }` qaytaradi — model buni ko'rib, foydalanuvchidan
  * aniqlashtirish so'raydi.
@@ -283,30 +365,9 @@ export const previewAction = async (
     }
 
     if (name === 'book_appointment') {
-        const q = String(args.patientQuery || '').trim();
-        if (q.length < 2) return { xato: 'Bemor ismi juda qisqa.' };
-
-        const patients = await prisma.patient.findMany({
-            where: {
-                clinicId: ctx.clinicId,
-                OR: [
-                    { firstName: { contains: q, mode: 'insensitive' } },
-                    { lastName: { contains: q, mode: 'insensitive' } },
-                    { phone: { contains: q } },
-                ],
-            },
-            take: 5,
-            select: { id: true, firstName: true, lastName: true, phone: true },
-        });
-        if (!patients.length) return { xato: `"${q}" bo'yicha bemor topilmadi.` };
-        if (patients.length > 1) {
-            return {
-                xato: `"${q}" bo'yicha ${patients.length} ta bemor topildi: `
-                    + patients.map((p: any) => maskName(p.firstName, p.lastName)).join(', ')
-                    + '. Qaysi biri ekanini aniqlashtiring.',
-            };
-        }
-        const patient = patients[0];
+        const found = await findOnePatient(args.patientQuery, ctx);
+        if (found.xato) return { xato: found.xato };
+        const patient = found.patient;
 
         const doctor = await resolveDoctor(ctx.clinicId, String(args.doctorName || ''));
         if (!doctor) return { xato: `"${args.doctorName}" shifokori aniqlanmadi.` };
@@ -394,6 +455,54 @@ export const previewAction = async (
                     { label: 'Yangi holat', detail: status },
                 ],
                 confirmLabel: 'O\'zgartirish',
+            },
+        };
+    }
+
+    if (name === 'add_charge') {
+        const amount = Number(args.amount);
+        if (!Number.isFinite(amount) || amount <= 0) return { xato: 'Summa noto\'g\'ri.' };
+        if (amount > 1_000_000_000) return { xato: 'Summa juda katta — tekshirib qayta ayting.' };
+
+        const found = await findOnePatient(args.patientQuery, ctx);
+        if (found.xato) return { xato: found.xato };
+        const patient = found.patient;
+
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : today;
+        const service = String(args.service || 'Xizmat').slice(0, 120);
+
+        // Mavjud qarzni ham ko'rsatamiz: foydalanuvchi tasdiqlashdan oldin
+        // "bu bemorda allaqachon 2 mln qarz bor ekan" degan kontekstni
+        // ko'rgani yaxshi — bu ko'pincha xatoni shu yerda to'xtatadi.
+        const oldingi = await prisma.transaction.findMany({
+            where: { clinicId: ctx.clinicId, patientId: patient.id, status: 'Pending' },
+            select: { amount: true },
+        });
+        const mavjudQarz = oldingi.reduce((s: number, t: any) => s + (t.amount || 0), 0);
+
+        return {
+            args: {
+                patientId: patient.id,
+                patientName: `${patient.firstName} ${patient.lastName || ''}`.trim(),
+                amount, service, date,
+            },
+            preview: {
+                title: 'Qarz yozish',
+                summary: `${maskName(patient.firstName, patient.lastName)} — ${som(amount)} so'm`,
+                items: [
+                    { label: 'Bemor', detail: `${maskName(patient.firstName, patient.lastName)} · ${maskPhone(patient.phone)}` },
+                    { label: 'Summa', detail: `${som(amount)} so'm` },
+                    { label: 'Nima uchun', detail: service },
+                    { label: 'Sana', detail: date },
+                    ...(mavjudQarz > 0
+                        ? [{ label: 'Mavjud qarzi', detail: `${som(mavjudQarz)} so'm` }]
+                        : []),
+                ],
+                warning: mavjudQarz > 0
+                    ? `Bu bemorda allaqachon ${som(mavjudQarz)} so'm to'lanmagan hisob bor. `
+                      + `Yangisi qo'shilgach jami ${som(mavjudQarz + amount)} so'm bo'ladi.`
+                    : undefined,
+                confirmLabel: 'Qarzni yozish',
             },
         };
     }
@@ -549,6 +658,42 @@ export const executeAction = async (
 
             invalidateToolCache(ctx.clinicId);
             return { ok: true, message: `${lead.name} holati "${args.status}" ga o'zgartirildi.` };
+        }
+
+        if (name === 'add_charge') {
+            const patient = await prisma.patient.findFirst({
+                where: { id: args.patientId, clinicId: ctx.clinicId },
+                select: { id: true },
+            });
+            if (!patient) return { ok: false, message: 'Bemor topilmadi.' };
+
+            // status 'Pending' — ilovaning to'lanmagan hisob uchun ishlatadigan
+            // qiymati (types.ts: 'Paid' | 'Pending' | 'Overdue'). Aynan shu
+            // qiymat Moliya sahifasidagi qarzdorlar ro'yxatiga tushadi.
+            //
+            // `Patient.balance` ga TEGILMAYDI: u avans qoldig'i va uni
+            // recalculate-balances to'lovlardan qayta hisoblaydi, ya'ni
+            // qo'lda yozilgan qarz birinchi qayta hisoblashda yo'qolardi.
+            const created = await prisma.transaction.create({
+                data: {
+                    clinicId: ctx.clinicId,
+                    patientId: args.patientId,
+                    patientName: args.patientName,
+                    date: args.date,
+                    amount: args.amount,
+                    type: 'Cash',
+                    service: args.service,
+                    status: 'Pending',
+                },
+                select: { id: true },
+            });
+
+            invalidateToolCache(ctx.clinicId);
+            return {
+                ok: true,
+                message: `Qarz yozildi: ${args.patientName} — ${som(args.amount)} so'm (${args.service}).`,
+                details: { transactionId: created.id },
+            };
         }
 
         if (name === 'create_expense') {

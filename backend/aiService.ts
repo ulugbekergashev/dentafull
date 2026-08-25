@@ -62,6 +62,12 @@ export interface ChatOptions {
      * va zanjirdagi keyingi provayderga o'tilsin.
      */
     expectContent?: boolean;
+    /**
+     * So'rov tugashi kerak bo'lgan absolut vaqt (Date.now() shkalasida).
+     * Qayta urinishlar va provayderlar bo'ylab uzatiladi, ya'ni umumiy
+     * kutish vaqti barcha urinishlar yig'indisi bilan cheklanadi.
+     */
+    deadlineAt?: number;
 }
 
 /** Chaqiruv haqidagi ma'lumot — jurnal (ai/log.ts) uchun. */
@@ -348,6 +354,34 @@ interface ProviderError extends Error {
 /** Zanjir to'liq 429 bergandan keyin necha marta qayta urinish. */
 const AI_RETRY_MAX = Number(process.env.AI_RETRY_MAX || 2);
 
+/**
+ * Bitta so'rovga ajratilgan UMUMIY vaqt.
+ *
+ * Nega kerak: qayta urinishlar mustaqil chegaralarga ega edi — bitta
+ * chaqiruv 60s, 429 dan keyin kutish 120s gacha, urinishlar 3 ta. Ya'ni
+ * eng yomon holatda foydalanuvchi 7 DAQIQA jimlikda kutardi va javob
+ * o'rniga xato olardi. Bu productionda aynan shunday yuz berdi.
+ *
+ * Ikkita provayder bo'lganda muammo yashiringan edi: birinchisi 429
+ * bersa, ikkinchisi darhol javob berardi. Bitta provayder bilan
+ * (zaxira zanjiri yo'q) yashiradigan narsa qolmadi.
+ *
+ * Chegara qat'iy: undan oshadigan kutishning ma'nosi yo'q, chunki
+ * foydalanuvchi allaqachon ketgan bo'ladi. Tushunarli xato yaxshiroq.
+ */
+const AI_DEADLINE_MS = Number(process.env.AI_DEADLINE_MS || 45_000);
+
+/** Limitga urilganda foydalanuvchi ko'radigan xato. */
+const busyError = (errors: string[]): Error => {
+    const err: any = new Error(
+        'AI xizmati hozir band — so\'rovlar chegarasiga yetildi. '
+        + 'Bir daqiqadan keyin qayta urinib ko\'ring.'
+    );
+    err.status = 429;
+    err.detail = errors.slice(-2).join(' | ');
+    return err;
+};
+
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /**
@@ -387,7 +421,12 @@ const callProviderRaw = async (
     const model = p.models[opts.task === 'cheap' ? 'cheap' : 'chat'];
     const stream = !!opts.onEvent;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+    // Bitta chaqiruv umumiy muddatdan oshib keta olmaydi: aks holda 60s lik
+    // timeout 45s lik muddatni bosib o'tardi va cheklovning ma'nosi qolmasdi.
+    const budget = opts.deadlineAt
+        ? Math.max(1000, Math.min(AI_TIMEOUT_MS, opts.deadlineAt - Date.now()))
+        : AI_TIMEOUT_MS;
+    const timer = setTimeout(() => controller.abort(), budget);
     try {
         const res = await fetch(`${p.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -474,14 +513,19 @@ const roundWithFallback = async (
     }
     const errors: string[] = [];
     const gate = makeStreamGate(opts.onEvent);
+    const deadlineAt = opts.deadlineAt ?? Date.now() + AI_DEADLINE_MS;
 
     for (let attempt = 0; attempt <= AI_RETRY_MAX; attempt++) {
         let waitFor: number | undefined;
 
+        if (Date.now() >= deadlineAt) throw busyError(errors);
+
         for (const p of chain) {
             try {
                 gate.reset();
-                const data = await callProviderRaw(p, messages, tools, { ...opts, onEvent: gate.handler });
+                const data = await callProviderRaw(
+                    p, messages, tools, { ...opts, onEvent: gate.handler, deadlineAt }
+                );
                 return { data, provider: p };
             } catch (e: any) {
                 // Yarim uzatilgan matnni tozalaymiz — keyingi provayder
@@ -498,12 +542,16 @@ const roundWithFallback = async (
 
         if (attempt < AI_RETRY_MAX) {
             const sec = waitFor ?? Math.pow(2, attempt) * 3;
+            // Kutish muddatdan oshib ketsa — kutishning ma'nosi yo'q: baribir
+            // javob bera olmaymiz. Darhol tushunarli xato qaytargan ma'qul.
+            if (Date.now() + sec * 1000 >= deadlineAt) throw busyError(errors);
+
             console.warn(`[AI] Zanjir band. ${sec}s kutib qayta urinilmoqda (${attempt + 1}/${AI_RETRY_MAX})...`);
             opts.onEvent?.({ type: 'wait', seconds: sec });
             await sleep(sec * 1000);
         }
     }
-    throw new Error(`Barcha AI provayderlari ishlamadi. ${errors.slice(-3).join(' | ')}`);
+    throw busyError(errors);
 };
 
 /**
@@ -569,6 +617,9 @@ export const chatWithTools = async (
     opts: ChatOptions & { maxRounds?: number } = {}
 ): Promise<{ reply: string; toolCalls: ToolCallTrace[]; results: any[]; meta: CallMeta }> => {
     const maxRounds = opts.maxRounds ?? 5;
+    // Muddat BUTUN suhbat uchun bir marta belgilanadi, har raund uchun emas:
+    // aks holda 5 ta raund 5 x 45s = 225 soniyagacha cho'zilishi mumkin edi.
+    const deadlineAt = opts.deadlineAt ?? Date.now() + AI_DEADLINE_MS;
     const history: ChatMessage[] = [...messages];
     const trace: ToolCallTrace[] = [];
     // Xom tool natijalari — grounding tekshiruvi (ai/guard.ts) aynan shularga
@@ -582,7 +633,7 @@ export const chatWithTools = async (
 
         // Oxirgi raundda tool bermaymiz — model matn bilan javob berishga majbur bo'ladi.
         const active = round === maxRounds - 1 ? [] : tools;
-        const { data, provider } = await roundWithFallback(history, active, opts);
+        const { data, provider } = await roundWithFallback(history, active, { ...opts, deadlineAt });
 
         tokensIn += data?.usage?.prompt_tokens || 0;
         tokensOut += data?.usage?.completion_tokens || 0;
