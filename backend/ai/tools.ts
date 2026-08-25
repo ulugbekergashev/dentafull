@@ -16,6 +16,7 @@
 const { prisma } = require('../db');
 import { sanitizeToolResult } from './guard';
 import { searchVariants } from './translit';
+import { fuzzyFind } from './fuzzy';
 
 export interface ToolContext {
     clinicId: string;
@@ -51,6 +52,15 @@ const isMoneyIn = (method?: string | null): boolean =>
     !method ? true : MONEY_IN_METHODS.has(method);
 
 const fmt = (n: number): number => Math.round(n);
+
+/**
+ * Xatolarga chidamli qidiruvda nechta bemor xotiraga olinadi.
+ *
+ * Faqat id, ism va familiya olinadi — bitta yozuv ~60 bayt, ya'ni 5000
+ * bemor ham 300 KB atrofida. Bu bosqich aniq qidiruv natija bermaganda
+ * ishlaydi, ya'ni kam uchraydi.
+ */
+const FUZZY_POOL_LIMIT = 5000;
 
 // ─── Tool ta'riflari (OpenAI-compatible) ─────────────────────────────────────
 
@@ -260,12 +270,46 @@ export const searchPatients = async (
     const strict = await prisma.patient.findMany({
         where: { ...scope, AND: tokens.map(byName) }, take, select,
     });
-    if (strict.length || tokens.length === 1) return strict;
+    if (strict.length) return strict;
 
     // 2-bosqich: kamida bittasi mos kelsa ham bo'ladi.
-    return prisma.patient.findMany({
-        where: { ...scope, OR: tokens.map(byName) }, take, select,
+    if (tokens.length > 1) {
+        const loose = await prisma.patient.findMany({
+            where: { ...scope, OR: tokens.map(byName) }, take, select,
+        });
+        if (loose.length) return loose;
+    }
+
+    // 3-bosqich: XATOLARGA CHIDAMLI qidiruv.
+    //
+    // Yuqoridagi ikkala bosqich ham ANIQ moslikni talab qiladi: bitta
+    // harf tushib qolsa yoki almashsa, natija bo'sh bo'ladi. Shifokor va
+    // administrator esa kuniga o'nlab ism yozadi, ovoz tanish ham yaqin
+    // eshitilgan harfni beradi ("Asrorov" -> "Osvorov"). Har bir harfni
+    // to'g'ri yozishni talab qilish — yordamchining ishini foydalanuvchiga
+    // yuklash demakdir.
+    //
+    // Bu bosqich faqat shu yerda, oxirida turadi: aniq moslik topilganda
+    // u umuman ishga tushmaydi va odatiy qidiruvga sekinlik qo'shmaydi.
+    const pool = await prisma.patient.findMany({
+        where: scope,
+        select: { id: true, firstName: true, lastName: true },
+        take: FUZZY_POOL_LIMIT,
     });
+
+    const hits = fuzzyFind(q, pool, take);
+    if (!hits.length) return [];
+
+    // Faqat mos kelganlarning to'liq yozuvi olinadi — ro'yxatning o'zi
+    // yengil maydonlar bilan yuklangan edi.
+    const found = await prisma.patient.findMany({
+        where: { ...scope, id: { in: hits.map(h => h.item.id) } },
+        select,
+    });
+
+    // Tartib yaqinlik bo'yicha saqlanadi: eng yaqini birinchi bo'lsin.
+    const order = new Map(hits.map((h, i) => [h.item.id, i]));
+    return found.sort((a: any, b: any) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
 };
 
 const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {

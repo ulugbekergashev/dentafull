@@ -33,7 +33,8 @@
         "ai/proactive.ts",
         "ai/keys.ts",
         "ai/speech.ts",
-        "ai/translit.ts"
+        "ai/translit.ts",
+        "ai/fuzzy.ts"
     ],
     "exclude": [
         "node_modules",

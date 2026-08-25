@@ -18,6 +18,7 @@
 
 const { prisma } = require('../db');
 import { searchVariants } from './translit';
+import { fuzzyFind, confidentPick } from './fuzzy';
 
 /** Profil qancha vaqt keshda turadi. Shifokor/narx kuniga bir marta o'zgaradi. */
 const TTL_MS = Number(process.env.AI_CONTEXT_TTL_MS || 30 * 60 * 1000);
@@ -154,6 +155,20 @@ export const resolveDoctor = async (
     if (exact) return exact;
 
     const partial = list.filter(d => match(d, (n, v) => n.includes(v)));
+    if (partial.length === 1) return partial[0];
     // Bir nechta shifokorga mos kelsa — noaniq, tanlab bermaymiz.
-    return partial.length === 1 ? partial[0] : null;
+    if (partial.length > 1) return null;
+
+    // Aniq moslik yo'q — xatolarga chidamli qidiruv. "Рахимов" o'rniga
+    // "Raximov" yozilgan yoki ovoz bir harfni buzgan bo'lishi mumkin.
+    // Batafsil: ai/fuzzy.ts
+    const hits = fuzzyFind(
+        name,
+        list.map(d => {
+            const parts = d.name.split(' ');
+            return { id: d.id, lastName: parts[0] || d.name, firstName: parts.slice(1).join(' ') };
+        })
+    );
+    const pick = confidentPick(hits);
+    return pick ? list.find(d => d.id === pick.id) || null : null;
 };
