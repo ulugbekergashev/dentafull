@@ -193,6 +193,68 @@ const clampLimit = (n: any, def: number, max: number): number => {
     return Math.min(Math.floor(v), max);
 };
 
+/**
+ * Bemorni ism yoki telefon bo'yicha qidiradi.
+ *
+ * NEGA ALOHIDA FUNKSIYA: ilgari qidiruv `firstName contains q OR lastName
+ * contains q` edi va bu KO'P SO'ZLI so'rovda hech qachon ishlamasdi. Ism va
+ * familiya alohida ustunlarda — "asror kamolov" satri ikkalasining ham
+ * ichida yo'q. Foydalanuvchi esa odatda to'liq ism aytadi, ayniqsa ovoz
+ * bilan. Natijada AI "bemor topilmadi" derdi, bemor esa bazada turardi.
+ *
+ * Endi so'rov so'zlarga bo'linadi va HAR BIR so'z ism yoki familiyada
+ * bo'lishi talab qilinadi. Hech narsa topilmasa — yumshoqroq qidiruv:
+ * kamida bitta so'z mos kelsa yetarli. Ikkinchi bosqich ayni ovoz uchun
+ * muhim: u ba'zan bitta so'zni buzadi ("Asror" -> "Asrar"), ikkinchisi
+ * esa to'g'ri qoladi.
+ */
+export const searchPatients = async (
+    query: string,
+    ctx: ToolContext,
+    take = 10
+): Promise<any[]> => {
+    const q = String(query || '').trim();
+    if (q.length < 2) return [];
+
+    const scope: any = { clinicId: ctx.clinicId };
+    if (ctx.role === 'DOCTOR' && ctx.doctorId) scope.doctorId = ctx.doctorId;
+
+    const select = {
+        id: true, firstName: true, lastName: true, phone: true, balance: true,
+        lastVisit: true, doctorName: true, status: true,
+    };
+
+    // Telefon bo'yicha — kamida 4 raqam bo'lsa.
+    const digits = q.replace(/\D/g, '');
+    if (digits.length >= 4) {
+        const byPhone = await prisma.patient.findMany({
+            where: { ...scope, phone: { contains: digits } }, take, select,
+        });
+        if (byPhone.length) return byPhone;
+    }
+
+    const byName = (t: string) => ({
+        OR: [
+            { firstName: { contains: t, mode: 'insensitive' } },
+            { lastName: { contains: t, mode: 'insensitive' } },
+        ],
+    });
+
+    const tokens = q.split(/\s+/).filter(t => t.length >= 2);
+    if (!tokens.length) return [];
+
+    // 1-bosqich: barcha so'zlar mos kelsin.
+    const strict = await prisma.patient.findMany({
+        where: { ...scope, AND: tokens.map(byName) }, take, select,
+    });
+    if (strict.length || tokens.length === 1) return strict;
+
+    // 2-bosqich: kamida bittasi mos kelsa ham bo'ladi.
+    return prisma.patient.findMany({
+        where: { ...scope, OR: tokens.map(byName) }, take, select,
+    });
+};
+
 const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
 
     get_appointments: async (args, ctx) => {
@@ -416,24 +478,7 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
         const q = String(args.query || '').trim();
         if (q.length < 2) return { xato: 'Qidiruv so\'rovi juda qisqa (kamida 2 belgi).' };
 
-        const where: any = {
-            clinicId: ctx.clinicId,
-            OR: [
-                { firstName: { contains: q, mode: 'insensitive' } },
-                { lastName: { contains: q, mode: 'insensitive' } },
-                { phone: { contains: q } },
-            ],
-        };
-        if (ctx.role === 'DOCTOR' && ctx.doctorId) where.doctorId = ctx.doctorId;
-
-        const rows = await prisma.patient.findMany({
-            where,
-            take: 10,
-            select: {
-                firstName: true, lastName: true, phone: true, balance: true,
-                lastVisit: true, doctorName: true, status: true,
-            },
-        });
+        const rows = await searchPatients(q, ctx, 10);
 
         return {
             topildi: rows.length,

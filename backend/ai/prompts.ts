@@ -93,10 +93,18 @@ export const askSystemPrompt = (
     'bo\'sh natija qaytarsa yoki kerakli ma\'lumot bo\'lmasa, "ma\'lumot yo\'q" ' +
     'deb ayt — boshqa davrning yoki boshqa bo\'limning raqamini o\'rniga qo\'yma.\n\n' +
 
+    // Ilgari bu yerda "qaysi ma'lumotga tayanganingni ayt" degan talab bor
+    // edi va model uni so'zma-so'z bajarardi: "ma'lumot yo'q —
+    // find_patient tool natijasi". Foydalanuvchi `find_patient` nima
+    // ekanini bilmaydi va bilishi ham shart emas. Bundan tashqari bu
+    // butunlay ortiqcha: UI javob ostida manbalarni allaqachon chizadi
+    // ("Manba: bemorlar").
     'JAVOB: qisqa va aniq yoz. Raqamlarni so\'mda, uch xonali ajratib ko\'rsat ' +
     '(masalan 12 500 000). Faqat oddiy matn ishlat — markdown jadval, ** qalin ' +
-    'belgi va ## sarlavha ISHLATMA. Javob oxirida qaysi davr yoki qaysi ma\'lumotga ' +
-    'tayanganingni bir qatorda ayt.\n\n' +
+    'belgi va ## sarlavha ISHLATMA. Qaysi davr haqida gapirayotganingni matn ' +
+    'ichida tabiiy ayt ("avgust oyida", "bugun"). Lekin tool nomlarini ' +
+    '(find_patient, get_revenue va h.k.) HECH QACHON yozma — foydalanuvchi ' +
+    'ularni ko\'rmasligi kerak.\n\n' +
 
     'MAXFIYLIK: bemor ismlari senga qisqartirilgan holda keladi (masalan "Aliyev S.") — ' +
     'ularni shu ko\'rinishda ishlat, to\'liq ismni tiklashga urinma.\n\n' +

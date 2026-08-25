@@ -222,7 +222,34 @@ const stripMarkdown = (text: string): string =>
         .replace(/^\s*[-*]\s+/gm, '• ')        // ro'yxat belgisi -> nuqta
         .replace(/`([^`]+)`/g, '$1');          // `kod`
 
-const cleanReply = (text: string): string => stripMarkdown(stripReasoning(text)).trim();
+/**
+ * Tool nomlarini javobdan olib tashlaydi.
+ *
+ * Model "ma'lumot yo'q — find_patient tool natijasi." deb javob berardi.
+ * Foydalanuvchi `find_patient` nima ekanini bilmaydi va bilishi shart emas;
+ * UI esa manbalarni javob ostida allaqachon chiroyli ko'rsatadi
+ * ("Manba: bemorlar").
+ *
+ * Prompt buni taqiqlaydi, lekin prompt ehtimoliy — bu esa kafolat.
+ * `snake_case` identifikator o'zbek yoki rus tilidagi jonli matnda
+ * uchramaydi, shuning uchun uni olib tashlash xavfsiz.
+ */
+const stripToolNames = (text: string): string =>
+    text
+        // "— find_patient tool natijasi", "(get_revenue orqali)"
+        .replace(
+            /[\s—–-]*\(?\s*\b[a-z]+(?:_[a-z]+)+\b(?:\s+tool)?(?:\s+(?:natijasi|orqali|asosida|dan|bo'yicha))?\s*\)?/gi,
+            ''
+        )
+        // Identifikator olib tashlangach qolgan osilib qolgan tinish belgilari.
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\s+([.,!?])/g, '$1')
+        .replace(/[—–-]\s*\./g, '.')
+        .replace(/^[\s—–-]+/gm, '')
+        .trim();
+
+const cleanReply = (text: string): string =>
+    stripToolNames(stripMarkdown(stripReasoning(text))).trim();
 
 // ─── Oqim (streaming) ────────────────────────────────────────────────────────
 //

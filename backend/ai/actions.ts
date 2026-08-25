@@ -20,7 +20,7 @@
 // ishlatadi, mijozdan faqat id oladi.
 
 const { prisma } = require('../db');
-import { ToolContext } from './tools';
+import { ToolContext, searchPatients } from './tools';
 import { invalidateToolCache } from './router';
 import { resolveDoctor } from './context';
 
@@ -288,18 +288,11 @@ const findOnePatient = async (
     const q = String(query || '').trim();
     if (q.length < 2) return { xato: 'Bemor ismi juda qisqa.' };
 
-    const rows = await prisma.patient.findMany({
-        where: {
-            clinicId: ctx.clinicId,
-            OR: [
-                { firstName: { contains: q, mode: 'insensitive' } },
-                { lastName: { contains: q, mode: 'insensitive' } },
-                { phone: { contains: q } },
-            ],
-        },
-        take: 5,
-        select: { id: true, firstName: true, lastName: true, phone: true },
-    });
+    // Qidiruv ai/tools.ts dagi bilan AYNAN bir xil bo'lishi shart.
+    // Ilgari bu yerda o'z nusxasi bor edi va u ham ko'p so'zli ismni
+    // topa olmasdi. Ikkita nusxa bo'lganda bittasini tuzatib, ikkinchisini
+    // unutish oson — shuning uchun endi bitta manba.
+    const rows = await searchPatients(q, ctx, 5);
 
     if (!rows.length) return { xato: `"${q}" bo'yicha bemor topilmadi.` };
     if (rows.length > 1) {
