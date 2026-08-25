@@ -113,6 +113,51 @@ export const isActionIntent = (question: string): boolean => {
     return ACTION_PATTERNS.some(re => re.test(q));
 };
 
+/**
+ * Qaysi ANIQ harakat so'ralayotganini aniqlaydi.
+ *
+ * Nega kerak: harakat tool'lari ikkala raundda ham yuboriladi, ya'ni
+ * ularning hajmi ikki barobar hisoblanadi. Beshtasini berish o'rniga
+ * bittasini berish buyruq narxini sezilarli tushiradi. Groq bepul
+ * tierida chegara daqiqasiga 8000 token (o'lchangan), bitta buyruq esa
+ * ~3800 token yeydi — ya'ni har bir yuz token sanaladi.
+ *
+ * Aniqlab bo'lmasa — hammasi beriladi. Noto'g'ri cheklash foydalanuvchi
+ * so'ragan ishni bajarib bo'lmasligiga olib keladi, bu esa token
+ * tejashdan ancha qimmatga tushadi.
+ */
+// Tartib MUHIM va u ATAYLAB shunday: birinchi mos kelgani yutadi.
+//
+// Eng aniq signal — HARAKAT nomi ("eslatma", "xarajat"), eng chalg'ituvchisi
+// esa OBYEKT nomi. "Qarzdorlarga eslatma yubor" da "qarz" so'zi bor, lekin
+// bu qarz yozish emas — eslatma yuborish. Shuning uchun `send_reminder`
+// `add_charge` dan oldin turadi: aks holda obyekt fe'ldan ustun kelardi.
+const ACTION_ROUTES: { name: string; re: RegExp }[] = [
+    { name: 'send_reminder', re: /(eslat|xabar|sms|telegram|напом|сообщ|уведом)/i },
+    { name: 'create_expense', re: /(xarajat|ijara|maosh|kommunal|elektr|arenda|расход|аренда|зарплат)/i },
+    { name: 'add_charge', re: /(qarz|hisob|to'?lamadi|долг|счёт|счет)/i },
+    { name: 'book_appointment', re: /(qabul|band|navbat|приём|прием|запис)/i },
+    { name: 'update_lead_status', re: /(lid|lead|holatini|status|лид|статус)/i },
+];
+
+/** Rol va savolga mos harakat tool'lari (OpenAI formatida). */
+export const actionsForQuestion = (
+    role: string,
+    question: string,
+    all: (role: string) => any[]
+): any[] => {
+    const q = String(question || '');
+    const allowed = all(role);
+    if (!allowed.length) return [];
+
+    for (const r of ACTION_ROUTES) {
+        if (!r.re.test(q)) continue;
+        const picked = allowed.filter((t: any) => t.function.name === r.name);
+        if (picked.length) return picked;
+    }
+    return allowed;
+};
+
 export interface RouteResult {
     intent: Intent;
     /** Modelga beriladigan tool nomlari. */

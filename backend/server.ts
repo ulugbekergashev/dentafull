@@ -5830,7 +5830,9 @@ app.get('/api/superadmin/sales', authenticateToken, async (req, res) => {
 const { chatMeta, chatWithTools, isAiConfigured } = require('./aiService');
 const { toolsForRole, runTool } = require('./ai/tools');
 const { askSystemPrompt, chatSystemPrompt } = require('./ai/prompts');
-const { toolsForRequest, cachedTool, tryFastPath, invalidateToolCache, isActionIntent } = require('./ai/router');
+const {
+    toolsForRequest, cachedTool, tryFastPath, invalidateToolCache, isActionIntent, actionsForQuestion,
+} = require('./ai/router');
 const { clinicContext } = require('./ai/context');
 const { applyGrounding, wrapToolResult } = require('./ai/guard');
 const { logAi, rateAiLog, aiUsageStats, negativeFeedback } = require('./ai/log');
@@ -5937,7 +5939,11 @@ const runAsk = async (
     // Yozuvchi tool'lar faqat BUYRUQ berilganda qo'shiladi. Ularning ta'rifi
     // ~590 token va har so'rovga qo'shilsa, yo'naltirishdan olingan tejash
     // yo'qqa chiqadi (o'lchangan: tor savolda 1217 -> 1475 token).
-    const actionTools = isActionIntent(question) ? actionsForRole(role) : [];
+    // Harakat tool'lari faqat buyruqda, va faqat SO'RALGANI. Ular ikkala
+    // raundda ham yuboriladi, ya'ni hajmi ikki barobar hisoblanadi.
+    const actionTools = isActionIntent(question)
+        ? actionsForQuestion(role, question, actionsForRole)
+        : [];
     const tools = [...readTools, ...actionTools];
 
     const profile = await clinicContext(clinicId);
@@ -5982,7 +5988,20 @@ const runAsk = async (
             ],
             tools,
             execute,
-            { label: `ask:${role}`, maxRounds: 5, maxTokens: 1200, onEvent }
+            {
+                label: `ask:${role}`,
+                // Tor savolga ikki raund yetadi: birinchisida model tool
+                // chaqiradi, ikkinchisida javob yozadi. Ikkinchi raundda
+                // tool ta'riflari umuman yuborilmaydi (chatWithTools oxirgi
+                // raundda ularni olib tashlaydi) — bu buyruq narxining
+                // sezilarli qismini tejaydi.
+                //
+                // Keng savol istisno: unda model bir nechta manbadan
+                // ketma-ket ma'lumot yig'ishi kerak.
+                maxRounds: route.intent === 'keng' ? 4 : 2,
+                maxTokens: 1200,
+                onEvent,
+            }
         );
 
         // ── Grounding: javobdagi yirik raqamlar ma'lumotdan kelib chiqadimi?
