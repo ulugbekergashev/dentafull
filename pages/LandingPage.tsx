@@ -11,6 +11,7 @@ import Pricing from './landing-components/Pricing';
 import Testimonials from './landing-components/Testimonials';
 import DemoRequestModal from './landing-components/DemoRequestModal';
 import { Phone } from 'lucide-react';
+import { LogoMark } from '../components/Logo';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -53,7 +54,7 @@ export const LandingPage: React.FC = () => {
       <section className="py-24 bg-gradient-to-tr from-primary-50 via-white to-slate-100 relative border-t border-slate-200 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary-500/5 via-transparent to-transparent pointer-events-none" />
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8 relative z-10">
-          <img src="/logo-icon.png" alt="DentaCRM" className="w-16 h-16 object-contain mx-auto" />
+          <LogoMark className="w-16 h-16 mx-auto" />
           <div className="space-y-3">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">Klinikangizni Ertagayoq Avtomatlashtiring</h2>
             <p className="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
@@ -88,7 +89,7 @@ export const LandingPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
             <div className="md:col-span-4 space-y-4">
               <div className="flex items-center space-x-2">
-                <img src="/logo-icon.png" alt="DentaCRM" className="w-9 h-9 object-contain" />
+                <LogoMark className="w-9 h-9" />
                 <span className="text-lg font-bold text-slate-900">Denta<span className="text-primary-600">CRM</span></span>
               </div>
               <p className="text-[11px] text-slate-500 leading-relaxed">

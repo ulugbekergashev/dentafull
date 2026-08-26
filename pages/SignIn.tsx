@@ -4,6 +4,7 @@ import { UserRole } from '../types';
 import { AlertCircle, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { LogoMark } from '../components/Logo';
 
 interface SignInProps {
   onLogin: (role: UserRole, name: string, clinicId?: string, doctorId?: string) => void;
@@ -79,10 +80,8 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-4 font-sans">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-4 transform rotate-3">
-            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+          <div className="mx-auto w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-600/25 mb-4">
+            <LogoMark tone="onBlue" className="w-9 h-9" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">{t('auth.title')}</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2">{t('auth.subtitle')}</p>

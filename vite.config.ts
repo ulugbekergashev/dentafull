@@ -13,27 +13,33 @@ export default defineConfig(() => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['logo-icon.png'],
+        includeAssets: ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png', 'logo.svg'],
         manifestFilename: 'manifest.json',
         manifest: {
           name: 'DentaCRM',
           short_name: 'DentaCRM',
           description: 'Dental Clinic Management System',
-          theme_color: '#ffffff',
+          theme_color: '#2563EB',
           background_color: '#ffffff',
           display: 'standalone',
           start_url: '/',
           scope: '/',
           icons: [
             {
-              src: '/logo-icon.png',
+              src: '/icon-192.png',
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: '/logo-icon.png',
+              src: '/icon-512.png',
               sizes: '512x512',
               type: 'image/png'
+            },
+            {
+              src: '/icon-maskable-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ]
         },

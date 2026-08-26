@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Building2, TrendingUp, CheckCircle, Clock, LogOut, Plus, X, Lock, CreditCard, Calendar, ArrowRight, RefreshCw, Search } from 'lucide-react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
 import { api } from '../services/api';
+import { LogoMark } from '../components/Logo';
 
 interface SalesClinic {
   id: string;
@@ -273,11 +274,11 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl overflow-hidden">
-            <img src="/logo-icon.png" alt="DentaCRM" className="w-full h-full object-cover" />
-          </div>
+          <LogoMark className="w-9 h-9" />
           <div>
-            <span className="text-lg font-bold text-primary-600">DentaCRM</span>
+            <span className="text-lg font-bold tracking-tight">
+              <span className="text-slate-900 dark:text-white">Denta</span><span className="text-primary-600 dark:text-primary-400">CRM</span>
+            </span>
             <p className="text-[11px] text-gray-400 -mt-0.5">Sotuvchi paneli</p>
           </div>
         </div>

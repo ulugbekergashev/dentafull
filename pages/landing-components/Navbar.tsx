@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Menu, X, Phone } from "lucide-react";
+import { LogoMark } from "../../components/Logo";
 
 interface NavbarProps {
   onOpenDemoModal: () => void;
@@ -43,11 +44,7 @@ export default function Navbar({ onOpenDemoModal, scrollToSection }: NavbarProps
             className="flex items-center gap-2 cursor-pointer group shrink-0"
             onClick={() => scrollToSection("hero")}
           >
-            <img
-              src="/logo-icon.png"
-              alt="DentaCRM"
-              className="w-9 h-9 object-contain group-hover:scale-105 transition-transform"
-            />
+            <LogoMark className="w-9 h-9 group-hover:scale-105 transition-transform" />
             <div>
               <span className={`text-lg font-bold tracking-tight transition-colors ${isScrolled ? "text-primary-900" : "text-slate-900"}`}>
                 Denta<span className="text-primary-600">CRM</span>

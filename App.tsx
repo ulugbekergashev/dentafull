@@ -28,6 +28,7 @@ import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Reception
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
+import { Logo } from './components/Logo';
 import { api } from './services/api';
 import type { CashCloseInput } from './services/api';
 import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone } from './utils/accessControl';
@@ -1072,12 +1073,7 @@ const AppContent: React.FC = () => {
 
       {/* Mobile Header (Hidden on Desktop) */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
-        <div className="flex items-center gap-2 font-bold text-xl text-primary dark:text-primary-400">
-          <div className="w-8 h-8 rounded-[8px] overflow-hidden shadow-sm">
-            <img src="/logo-icon.png" alt="Logo" className="w-full h-full object-cover" />
-          </div>
-          DentaCRM
-        </div>
+        <Logo size="md" />
         {/* Mobilda ham AI kerak — sarlavha (lg:block) bu yerda ko'rinmaydi,
             Boshqaruv panelidagi tab esa olib tashlandi. Bunisiz telefondan
             ishlaydigan shifokor AI ga umuman kira olmasdi. */}
@@ -1102,12 +1098,7 @@ const AppContent: React.FC = () => {
       <aside className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex flex-col h-full pb-16">
           <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2 font-bold text-xl text-primary dark:text-primary-400">
-              <div className="w-8 h-8 rounded-[8px] overflow-hidden shadow-sm">
-                <img src="/logo-icon.png" alt="Logo" className="w-full h-full object-cover" />
-              </div>
-              DentaCRM
-            </div>
+            <Logo size="md" />
             <button onClick={() => setIsSidebarOpen(false)} className="ml-auto p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
               <X className="w-5 h-5" />
             </button>
@@ -1186,12 +1177,7 @@ const AppContent: React.FC = () => {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-6">
               {/* Logo */}
-              <div className="flex items-center gap-3 font-extrabold text-primary dark:text-primary-400 text-2xl tracking-tight">
-                <div className="w-10 h-10 rounded-[10px] overflow-hidden shadow-md">
-                  <img src="/logo-icon.png" alt="DentaCRM" className="w-full h-full object-cover" />
-                </div>
-                DentaCRM
-              </div>
+              <Logo size="lg" />
 
               {clinicId === 'demo-clinic-1' && (
                 <span className="px-2 py-1 text-xs font-bold bg-primary-100 dark:bg-primary-900/40 text-primary dark:text-primary-400 rounded-full border border-primary-200 dark:border-primary-800">
@@ -1200,16 +1186,16 @@ const AppContent: React.FC = () => {
               )}
 
               {/* Search and Branch Control */}
-              <div className="flex items-center gap-3 ml-4 bg-gray-50 dark:bg-gray-800/50 p-1 rounded-xl border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-3 ml-4">
                 <div className="relative group">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                   <input
                     type="text"
                     placeholder={t('header.search')}
                     value={searchBarTerm}
                     onChange={(e) => setSearchBarTerm(e.target.value)}
                     onFocus={() => setIsSearchFocused(true)}
-                    className="pl-9 pr-4 py-2 w-72 bg-white dark:bg-gray-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary-500/20 placeholder-gray-400 transition-all outline-none"
+                    className="pl-11 pr-5 py-2.5 w-80 bg-gray-100 dark:bg-gray-900/60 border border-transparent rounded-full text-sm text-gray-900 dark:text-white focus:bg-white dark:focus:bg-gray-900 focus:border-primary-200 dark:focus:border-primary-900 focus:ring-4 focus:ring-primary-500/10 placeholder-gray-400 dark:placeholder-gray-500 transition-all outline-none"
                   />
 
                   {/* Search Results Dropdown */}
