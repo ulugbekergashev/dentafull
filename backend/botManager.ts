@@ -9,6 +9,21 @@ class BotManager {
     private pendingPayments: Map<string, { appointmentId: string; clinicId: string }> = new Map(); // chatId -> payment info
 
     constructor() {
+        // DISABLE_BOTS=1 — botlar ishga tushirilmaydi.
+        //
+        // NEGA KERAK: server mahalliy mashinada ko'tarilganda ham barcha
+        // klinikalarning HAQIQIY Telegram botlari ulanadi. Telegram esa
+        // bitta botga kelgan xabarni faqat BITTA tinglovchiga beradi —
+        // ya'ni dasturchi kompyuteridagi server mijozlarning xabarlarini
+        // productiondan tortib oladi va ularga javob bermaydi.
+        //
+        // Bu jimgina yuz beradi: loglarda "Bot instance started" deb
+        // yoziladi, xolos. Productionda bu o'zgaruvchi o'rnatilmaydi.
+        if (process.env.DISABLE_BOTS === '1') {
+            console.log('⏸️  DISABLE_BOTS=1 — Telegram botlari ishga tushmaydi.');
+            return;
+        }
+
         // Start loading bots without blocking the main thread or crashing
         this.loadBots().catch(err => {
             console.error("⚠️ Initial bot loading failed (likely DB issue). Server starting without bots.", err.message);

@@ -67,7 +67,33 @@ app.get('/api/tts', async (req: any, res: any) => {
 });
 
 // Load everything else
-const cron = require('node-cron');
+const nodeCron = require('node-cron');
+
+/**
+ * Rejalashtirilgan vazifalar o'chirilganmi.
+ *
+ * NEGA KERAK: bu server mahalliy mashinada ishga tushirilganda ham
+ * cron'lar yonadi va ular HAQIQIY klinikalarga Telegram xabar yuboradi
+ * — kunlik xulosa, anomaliya signali, bemorlarga eslatma. Mahalliy
+ * `.env` esa production bazasiga qarab turadi, ya'ni dasturchi
+ * kompyuterida server ko'targanining o'zi mijozlarga xabar
+ * jo'natilishiga olib keladi.
+ *
+ * `DISABLE_CRON=1` — sinov va ishlab chiqish uchun. Productionda
+ * o'rnatilmaydi, ya'ni hech narsa o'zgarmaydi.
+ */
+const CRON_DISABLED = process.env.DISABLE_CRON === '1';
+
+const cron = {
+    schedule: (expr: string, fn: any, opts?: any) => {
+        if (CRON_DISABLED) return { stop: () => {} };
+        return nodeCron.schedule(expr, fn, opts);
+    },
+};
+
+if (CRON_DISABLED) {
+    console.log('⏸️  DISABLE_CRON=1 — rejalashtirilgan vazifalar ishga tushmaydi.');
+}
 const { botManager } = require('./botManager');
 const { smsService, normalizeUzPhone } = require('./smsService');
 const { dmedService } = require('./dmedService');
@@ -5912,6 +5938,40 @@ const safeAiError = (e: any): string => {
     return msg;
 };
 
+/**
+ * Tasdiq kutayotgan harakat uchun javob ohangini KAFOLATLAYDI.
+ *
+ * Promptda taqiqlangan so'zlar ro'yxati bor, lekin ro'yxat tugamaydi:
+ * "yuborildi", "yozildi", "qo'shildi" taqiqlangach, model "kiritildi"
+ * deb yozdi. Har safar yangi so'z qo'shish — yutqaziladigan poyga.
+ *
+ * O'rniga GRAMMATIK belgi ishlatiladi. O'zbek tilida majhul nisbatning
+ * o'tgan zamoni deyarli har doim `-ildi` bilan tugaydi: yuborildi,
+ * yozildi, kiritildi, qo'shildi, o'zgartirildi, bajarildi. Bu qo'shimcha
+ * oddiy fe'llarda uchramaydi ("keldi", "bo'ldi" — `-ldi`, `-ildi` emas),
+ * ya'ni tekshiruv aniq.
+ *
+ * Topilsa — javob kartadagi xulosadan qayta quriladi. Karta baribir
+ * ekranda turadi, ya'ni ma'lumot yo'qolmaydi.
+ *
+ * Nega muhim: "qarz kiritildi" deb o'qigan odam ish bajarilgan deb
+ * o'ylaydi va tasdiqlash tugmasini bosmaydi. Butun tasdiqlash mexanizmi
+ * bitta so'z tufayli teskari natija beradi.
+ */
+const PAST_PASSIVE_RE = /\b\w+ildi\b/i;
+
+const enforcePendingTone = (reply: string, preview: any): string => {
+    if (!PAST_PASSIVE_RE.test(reply)) return reply;
+    console.warn('[AI/ask] javob ohangi to\'g\'rilandi:', reply.slice(0, 80));
+
+    // Tanlash kartasida "tasdiqlash" so'zi o'rinsiz — hali tanlanmagan.
+    if (preview?.choices?.length) {
+        return 'Bir nechta bemor mos keldi — quyidagidan tanlang.';
+    }
+    const summary = preview?.summary || preview?.title || 'Harakat';
+    return `${summary} — tasdiqlashingizni kutmoqda.`;
+};
+
 /** Jurnal uchun foydalanuvchi identifikatori. */
 const userKey = (u: any): string => u?.id || u?.username || u?.name || 'anon';
 
@@ -6154,7 +6214,13 @@ const runAsk = async (
         });
 
         console.log(`[AI/ask] yo'nalish=${route.intent} tool=${tools.length} ta`);
-        return { reply: text, sources, action: pendingAction, logId };
+        // `pendingAction` closure ichida to'ldiriladi, shuning uchun TS uni
+        // shu nuqtada hali `null` deb hisoblaydi.
+        const pa = pendingAction as { id: string; name: string; preview: any } | null;
+        return {
+            reply: pa ? enforcePendingTone(text, pa.preview) : text,
+            sources, action: pa, logId,
+        };
     } catch (e: any) {
         await logAi({
             clinicId, userId: userKey(user), userName: user?.name, role,
