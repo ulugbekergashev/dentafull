@@ -34,7 +34,8 @@
         "ai/keys.ts",
         "ai/speech.ts",
         "ai/translit.ts",
-        "ai/fuzzy.ts"
+        "ai/fuzzy.ts",
+        "ai/evals/smoke.ts"
     ],
     "exclude": [
         "node_modules",
