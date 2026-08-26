@@ -20,7 +20,7 @@
 // ishlatadi, mijozdan faqat id oladi.
 
 const { prisma } = require('../db');
-import { ToolContext, searchPatients } from './tools';
+import { ToolContext, searchPatients, findDebtors } from './tools';
 import { invalidateToolCache } from './router';
 import { resolveDoctor, invalidateClinicContext } from './context';
 
@@ -335,12 +335,17 @@ const reminderRecipients = async (
     today: string
 ): Promise<any[]> => {
     if (target === 'debtors') {
-        return prisma.patient.findMany({
-            where: { clinicId: ctx.clinicId, balance: { lt: 0 }, status: 'Active' },
-            orderBy: { balance: 'asc' },
-            take: limit,
-            select: { id: true, firstName: true, lastName: true, phone: true, balance: true, telegramChatId: true },
-        });
+        // Qarzdorlar ai/tools.ts dagi AYNAN bir xil mantiq bo'yicha
+        // aniqlanadi. Ilgari bu yerda o'z nusxasi bor edi va u `balance < 0`
+        // ni ishlatardi — `balance` esa avans qoldig'i, qarz daftari emas,
+        // va u deyarli har doim nol. Natijada "qarzdorlarga xabar yubor"
+        // buyrug'iga "qarzdor topilmadi" javobi kelardi, Moliya sahifasida
+        // esa qarzdorlar ro'yxati turardi.
+        const debtors = await findDebtors(ctx);
+        return debtors
+            .filter(d => d.patient)
+            .slice(0, limit)
+            .map(d => ({ ...d.patient, _qarz: d.summa }));
     }
 
     if (target === 'tomorrow') {
@@ -452,8 +457,8 @@ export const previewAction = async (
                 summary: `${people.length} ta bemorga xabar yuboriladi`,
                 items: people.map((p: any) => ({
                     label: maskName(p.firstName, p.lastName),
-                    detail: target === 'debtors' && p.balance < 0
-                        ? `${som(Math.abs(p.balance))} so'm qarz · ${maskPhone(p.phone)}`
+                    detail: target === 'debtors' && p._qarz
+                        ? `${som(p._qarz)} so'm qarz · ${maskPhone(p.phone)}`
                         : maskPhone(p.phone),
                 })),
                 message,

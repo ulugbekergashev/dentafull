@@ -57,7 +57,7 @@ export const AiOverlay: React.FC<Props> = ({ open, onClose, userRole, autoVoice 
                     transition={{ duration: 0.18 }}
                     className="fixed inset-0 z-[60] flex items-start justify-center
                                bg-gray-900/40 dark:bg-black/60 backdrop-blur-sm
-                               px-4 py-6 sm:py-10 overflow-y-auto"
+                               px-4 py-4 sm:py-6 overflow-y-auto"
                     onMouseDown={e => {
                         // Faqat fonning O'ZIGA bosilganda yopamiz. Panel ichida
                         // matn belgilab, sichqonchani tashqarida qo'yib yuborish
@@ -71,7 +71,7 @@ export const AiOverlay: React.FC<Props> = ({ open, onClose, userRole, autoVoice 
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 8, scale: 0.99 }}
                         transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                        className="w-full max-w-4xl rounded-3xl shadow-2xl
+                        className="w-full max-w-6xl rounded-3xl shadow-2xl
                                    bg-white dark:bg-[#0F1216]
                                    ring-1 ring-gray-200 dark:ring-white/[0.08]
                                    overflow-hidden"
@@ -107,7 +107,7 @@ export const AiOverlay: React.FC<Props> = ({ open, onClose, userRole, autoVoice 
                         </div>
 
                         {/* Mazmun */}
-                        <div className="px-5 sm:px-8 pb-8 pt-2 max-h-[75vh] overflow-y-auto">
+                        <div className="px-5 sm:px-10 pb-8 pt-2 max-h-[82vh] overflow-y-auto">
                             <DentaAiMode userRole={userRole} autoVoice={autoVoice} />
                         </div>
                     </motion.div>

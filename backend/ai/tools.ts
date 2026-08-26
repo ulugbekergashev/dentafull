@@ -117,7 +117,8 @@ export const TOOL_DEFS: ToolDef[] = [
     {
         name: 'get_debtors',
         description:
-            'Qarzdor bemorlar (balansi manfiy) — eng katta qarzdan boshlab. ' +
+            "Qarzdor bemorlar — eng katta qarzdan boshlab. Qarz = to'lanmagan " +
+            "hisoblar va bo'lib-bo'lib to'lashning qolgan qismi. " +
             '"Kim qarzdor?" savoli uchun.',
         parameters: {
             type: 'object',
@@ -202,6 +203,100 @@ const clampLimit = (n: any, def: number, max: number): number => {
     const v = Number(n);
     if (!Number.isFinite(v) || v <= 0) return def;
     return Math.min(Math.floor(v), max);
+};
+
+/**
+ * Qarzdor bemorlar ro'yxati.
+ *
+ * ILOVANING O'Z mantiqi (pages/Finance.tsx): qarz = to'lanmagan
+ * ("Pending") to'lovlar + bo'lib-bo'lib to'lashning qolgan qismi.
+ *
+ * NEGA ALOHIDA FUNKSIYA: bu mantiq ikki joyda kerak — "kim qarzdor?"
+ * savolida va "qarzdorlarga eslatma yubor" buyrug'ida. Ilgari ular
+ * alohida yozilgan edi va aynan shu narsa productionda bilinmay
+ * qoldi: get_debtors to'g'rilangan, send_reminder esa eskicha
+ * `balance < 0` bo'yicha qidiraverdi. `balance` — bu avans qoldig'i,
+ * qarz daftari emas; u deyarli har doim nol. Natijada "qarzdorlarga
+ * xabar yubor" buyrug'iga "qarzdor topilmadi" javobi kelardi,
+ * Moliya sahifasida esa qarzdorlar ro'yxati turardi.
+ *
+ * Endi bitta manba: ikkalasi ham shu funksiyani chaqiradi.
+ */
+export interface Debtor {
+    patientId: string | null;
+    ism: string;
+    summa: number;
+    /** Eng eski qarz sanasi. */
+    sana: string;
+    patient?: any;
+}
+
+export const findDebtors = async (ctx: ToolContext): Promise<Debtor[]> => {
+    const [pending, plans] = await Promise.all([
+        prisma.transaction.findMany({
+            where: { clinicId: ctx.clinicId, status: 'Pending' },
+            select: { patientId: true, patientName: true, amount: true, date: true },
+            take: 2000,
+        }),
+        prisma.installmentPlan.findMany({
+            where: { clinicId: ctx.clinicId, status: 'Active' },
+            select: { patientId: true, totalAmount: true, totalPaid: true },
+            take: 2000,
+        }),
+    ]);
+
+    // Bemorlar FAQAT qarzi borlari bo'yicha olinadi. Ilgari bu yerda
+    // klinikaning BARCHA bemorlari yuklanardi — bir necha ming yozuv, har
+    // bir savolda, AI so'rovining kritik yo'lida.
+    const ids = Array.from(new Set([
+        ...pending.map((t: any) => t.patientId).filter(Boolean),
+        ...plans.map((p: any) => p.patientId).filter(Boolean),
+    ])) as string[];
+
+    const patients = ids.length
+        ? await prisma.patient.findMany({
+            where: { id: { in: ids }, clinicId: ctx.clinicId },
+            select: {
+                id: true, firstName: true, lastName: true, phone: true,
+                lastVisit: true, telegramChatId: true,
+            },
+        })
+        : [];
+
+    const byId = new Map<string, any>(patients.map((p: any) => [p.id, p]));
+    const debts = new Map<string, Debtor>();
+
+    const add = (key: string, patientId: string | null, ism: string, summa: number, sana: string, patient?: any) => {
+        const cur = debts.get(key);
+        if (cur) {
+            cur.summa += summa;
+            if (sana && (!cur.sana || sana < cur.sana)) cur.sana = sana;
+        } else {
+            debts.set(key, { patientId, ism, summa, sana, patient });
+        }
+    };
+
+    for (const t of pending) {
+        const p = t.patientId ? byId.get(t.patientId) : undefined;
+        add(
+            t.patientId || `nom:${t.patientName}`,
+            t.patientId || null,
+            p ? maskName(p.firstName, p.lastName) : maskName(t.patientName, ''),
+            t.amount || 0, t.date || '', p
+        );
+    }
+
+    for (const pl of plans) {
+        const qoldiq = (pl.totalAmount || 0) - (pl.totalPaid || 0);
+        if (qoldiq <= 0) continue;
+        const p = byId.get(pl.patientId);
+        add(pl.patientId, pl.patientId,
+            p ? maskName(p.firstName, p.lastName) : 'Noma\'lum', qoldiq, '', p);
+    }
+
+    return Array.from(debts.values())
+        .filter(d => d.summa > 0)
+        .sort((a, b) => b.summa - a.summa);
 };
 
 /**
@@ -409,72 +504,7 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
     // ishonchli ohangda.
     get_debtors: async (args, ctx) => {
         const limit = clampLimit(args.limit, 10, 50);
-
-        const [pending, plans] = await Promise.all([
-            prisma.transaction.findMany({
-                where: { clinicId: ctx.clinicId, status: 'Pending' },
-                select: { patientId: true, patientName: true, amount: true, date: true },
-                take: 2000,
-            }),
-            prisma.installmentPlan.findMany({
-                where: { clinicId: ctx.clinicId, status: 'Active' },
-                select: { patientId: true, totalAmount: true, totalPaid: true },
-                take: 2000,
-            }),
-        ]);
-
-        // Bemorlar FAQAT qarzi borlari bo'yicha olinadi.
-        //
-        // Ilgari bu yerda klinikaning BARCHA bemorlari yuklanardi — bir necha
-        // ming yozuv, har bir "kim qarzdor?" savolida. Qarzdorlar esa odatda
-        // o'nlab. Bu tool AI so'rovining kritik yo'lida turgani uchun bunday
-        // so'rov butun javobni sekinlashtirardi.
-        const ids = Array.from(new Set([
-            ...pending.map((t: any) => t.patientId).filter(Boolean),
-            ...plans.map((p: any) => p.patientId).filter(Boolean),
-        ])) as string[];
-
-        const patients = ids.length
-            ? await prisma.patient.findMany({
-                where: { id: { in: ids }, clinicId: ctx.clinicId },
-                select: { id: true, firstName: true, lastName: true, phone: true, lastVisit: true },
-            })
-            : [];
-
-        const byId = new Map<string, any>(patients.map((p: any) => [p.id, p]));
-
-        // Guruhlash kaliti — patientId. Eski yozuvlarda u bo'lmasligi mumkin,
-        // shunda ismga qaytamiz (Finance.tsx ham shunday qiladi).
-        const debts = new Map<string, { ism: string; summa: number; sana: string; p?: any }>();
-
-        const add = (key: string, ism: string, summa: number, sana: string, p?: any) => {
-            const cur = debts.get(key);
-            if (cur) {
-                cur.summa += summa;
-                if (sana && sana < cur.sana) cur.sana = sana;
-            } else {
-                debts.set(key, { ism, summa, sana, p });
-            }
-        };
-
-        for (const t of pending) {
-            const p = t.patientId ? byId.get(t.patientId) : undefined;
-            add(t.patientId || `nom:${t.patientName}`,
-                p ? maskName(p.firstName, p.lastName) : maskName(t.patientName, ''),
-                t.amount || 0, t.date || '', p);
-        }
-
-        for (const pl of plans) {
-            const qoldiq = (pl.totalAmount || 0) - (pl.totalPaid || 0);
-            if (qoldiq <= 0) continue;
-            const p = byId.get(pl.patientId);
-            add(pl.patientId, p ? maskName(p.firstName, p.lastName) : 'Noma\'lum', qoldiq, '', p);
-        }
-
-        const list = Array.from(debts.values())
-            .filter(d => d.summa > 0)
-            .sort((a, b) => b.summa - a.summa);
-
+        const list = await findDebtors(ctx);
         const jami = list.reduce((s, d) => s + d.summa, 0);
 
         return {
@@ -482,10 +512,10 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
             jami_qarz: fmt(jami),
             bemorlar: list.slice(0, limit).map(d => ({
                 bemor: d.ism,
-                telefon: maskPhone(d.p?.phone),
+                telefon: maskPhone(d.patient?.phone),
                 qarz: fmt(d.summa),
                 eng_eski_qarz_sanasi: d.sana || undefined,
-                oxirgi_tashrif: d.p?.lastVisit,
+                oxirgi_tashrif: d.patient?.lastVisit,
             })),
             izoh: list.length > limit
                 ? `Summalar so'mda. Jami ${list.length} ta qarzdordan eng kattalari ko'rsatildi.`
