@@ -16,7 +16,7 @@
 const { prisma } = require('../db');
 import { sanitizeToolResult } from './guard';
 import { searchVariants } from './translit';
-import { fuzzyFind } from './fuzzy';
+import { fuzzyFind, confidentPick } from './fuzzy';
 
 export interface ToolContext {
     clinicId: string;
@@ -367,25 +367,19 @@ export const searchPatients = async (
     });
     if (strict.length) return strict;
 
-    // 2-bosqich: kamida bittasi mos kelsa ham bo'ladi.
-    if (tokens.length > 1) {
-        const loose = await prisma.patient.findMany({
-            where: { ...scope, OR: tokens.map(byName) }, take, select,
-        });
-        if (loose.length) return loose;
-    }
-
-    // 3-bosqich: XATOLARGA CHIDAMLI qidiruv.
+    // 2-bosqich: XATOLARGA CHIDAMLI qidiruv.
     //
-    // Yuqoridagi ikkala bosqich ham ANIQ moslikni talab qiladi: bitta
-    // harf tushib qolsa yoki almashsa, natija bo'sh bo'ladi. Shifokor va
-    // administrator esa kuniga o'nlab ism yozadi, ovoz tanish ham yaqin
-    // eshitilgan harfni beradi ("Asrorov" -> "Osvorov"). Har bir harfni
-    // to'g'ri yozishni talab qilish — yordamchining ishini foydalanuvchiga
-    // yuklash demakdir.
+    // Bu bosqich "kamida bitta so'z mos keladi" dan OLDIN turadi va bu
+    // tartib ataylab shunday.
     //
-    // Bu bosqich faqat shu yerda, oxirida turadi: aniq moslik topilganda
-    // u umuman ishga tushmaydi va odatiy qidiruvga sekinlik qo'shmaydi.
+    // Sabab productionda ko'rindi: "asror kamolov" so'roviga ikkita bemor
+    // chiqdi — "Asror Kamol" (to'g'ri) va "Asrorov Samandar" (faqat
+    // birinchi so'z mos kelgani uchun). Foydalanuvchiga esa keraksiz
+    // tanlash kartasi ko'rsatildi.
+    //
+    // Xatolarga chidamli qidiruv ANIQROQ: u HAR BIR so'z mos kelishini
+    // talab qiladi, faqat xatolarga yon beradi. "Kamida bittasi" esa eng
+    // keng va eng shovqinli — u haqiqatan oxirgi chora bo'lishi kerak.
     const pool = await prisma.patient.findMany({
         where: scope,
         select: { id: true, firstName: true, lastName: true },
@@ -393,18 +387,31 @@ export const searchPatients = async (
     });
 
     const hits = fuzzyFind(q, pool, take);
-    if (!hits.length) return [];
 
-    // Faqat mos kelganlarning to'liq yozuvi olinadi — ro'yxatning o'zi
-    // yengil maydonlar bilan yuklangan edi.
-    const found = await prisma.patient.findMany({
-        where: { ...scope, id: { in: hits.map(h => h.item.id) } },
-        select,
-    });
+    if (hits.length) {
+        // Eng yaqini boshqalardan sezilarli aniqroq bo'lsa — tanlash
+        // kartasini ko'rsatishning hojati yo'q, javob allaqachon aniq.
+        const sure = confidentPick(hits);
+        const chosen = sure ? [sure] : hits.map(h => h.item);
 
-    // Tartib yaqinlik bo'yicha saqlanadi: eng yaqini birinchi bo'lsin.
-    const order = new Map(hits.map((h, i) => [h.item.id, i]));
-    return found.sort((a: any, b: any) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
+        const found = await prisma.patient.findMany({
+            where: { ...scope, id: { in: chosen.map(c => c.id) } },
+            select,
+        });
+        const order = new Map(chosen.map((c, i) => [c.id, i]));
+        return found.sort((a: any, b: any) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
+    }
+
+    // 3-bosqich: kamida bitta so'z mos kelsa ham bo'ladi. Eng keng va eng
+    // shovqinli, shuning uchun oxirgi.
+    if (tokens.length > 1) {
+        return prisma.patient.findMany({
+            where: { ...scope, OR: tokens.map(byName) }, take, select,
+        });
+    }
+
+    return [];
+
 };
 
 const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
