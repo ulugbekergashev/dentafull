@@ -276,6 +276,21 @@ export interface ActionPreview {
     message?: string;
     /** Bajarish tugmasi matni. */
     confirmLabel: string;
+    /**
+     * Bir nechta bemor mos kelganda — tanlash uchun ro'yxat.
+     *
+     * NEGA KARTA, SAVOL EMAS: ilgari model matn bilan "qaysi biri?" deb
+     * so'rardi va bu boshi berk ko'cha edi. Foydalanuvchi "ikkinchisi"
+     * deb javob bersa, model o'zi ko'rsatgan ro'yxatni eslay olmasdi —
+     * yangi qidiruv esa yana bir xil ikkitasini topardi. Bundan tashqari
+     * ismlar modelga MASKALANGAN holda boradi ("Asror K."), ya'ni ular
+     * o'zi ham ajratib bo'lmaydigan.
+     *
+     * Karta bu tugunni butunlay yechadi: tanlov serverda saqlanadi,
+     * foydalanuvchi bosadi va model umuman qatnashmaydi — bu bitta
+     * to'liq AI so'rovini ham tejaydi.
+     */
+    choices?: { id: string; label: string; detail?: string }[];
 }
 
 const maskPhone = (phone?: string | null): string => {
@@ -396,8 +411,18 @@ const reminderRecipients = async (
  */
 const findOnePatient = async (
     query: string,
-    ctx: ToolContext
-): Promise<{ patient?: any; xato?: string }> => {
+    ctx: ToolContext,
+    forcedId?: string
+): Promise<{ patient?: any; candidates?: any[]; xato?: string }> => {
+    // Foydalanuvchi tanlash kartasidan bemorni tanlagan — qidiruv shart emas.
+    if (forcedId) {
+        const p = await prisma.patient.findFirst({
+            where: { id: forcedId, clinicId: ctx.clinicId },
+            select: { id: true, firstName: true, lastName: true, phone: true, lastVisit: true },
+        });
+        return p ? { patient: p } : { xato: 'Tanlangan bemor topilmadi.' };
+    }
+
     const q = String(query || '').trim();
     if (q.length < 2) return { xato: 'Bemor ismi juda qisqa.' };
 
@@ -408,15 +433,31 @@ const findOnePatient = async (
     const rows = await searchPatients(q, ctx, 5);
 
     if (!rows.length) return { xato: `"${q}" bo'yicha bemor topilmadi.` };
-    if (rows.length > 1) {
-        return {
-            xato: `"${q}" bo'yicha ${rows.length} ta bemor topildi: `
-                + rows.map((p: any) => maskName(p.firstName, p.lastName)).join(', ')
-                + '. Qaysi biri ekanini aniqlashtiring.',
-        };
-    }
+    if (rows.length > 1) return { candidates: rows };
     return { patient: rows[0] };
 };
+
+/**
+ * Bemorni tanlash kartasi.
+ *
+ * Ismlar bu yerda TO'LIQ ko'rsatiladi. Maskalash modelga yuboriladigan
+ * ma'lumot uchun (bepul tier so'rovlarni o'qitishga ishlatishi mumkin),
+ * bu karta esa serverdan to'g'ridan-to'g'ri UI ga boradi — model uni
+ * ko'rmaydi. Foydalanuvchi esa klinika xodimi va bemorlar ro'yxatini
+ * baribir ko'radi. Maskalangan ro'yxatdan tanlab bo'lmaydi.
+ */
+const patientChoice = (candidates: any[], title: string): ActionPreview => ({
+    title,
+    summary: `${candidates.length} ta bemor mos keldi — qaysi biri?`,
+    items: [],
+    choices: candidates.map((p: any) => ({
+        id: p.id,
+        label: `${p.lastName || ''} ${p.firstName || ''}`.trim() || "Noma'lum",
+        detail: [maskPhone(p.phone), p.lastVisit ? `oxirgi tashrif: ${p.lastVisit}` : null]
+            .filter(Boolean).join(' · '),
+    })),
+    confirmLabel: 'Tanlash',
+});
 
 /**
  * Harakatni BAJARMASDAN, nima bo'lishini tayyorlaydi.
@@ -471,8 +512,17 @@ export const previewAction = async (
     }
 
     if (name === 'book_appointment') {
-        const found = await findOnePatient(args.patientQuery, ctx);
+        const found = await findOnePatient(args.patientQuery, ctx, args._patientId);
         if (found.xato) return { xato: found.xato };
+        // Bir nechta bemor mos keldi — model savol bermaydi, foydalanuvchi
+        // kartadan tanlaydi. Argumentlar saqlanadi va tanlovdan keyin
+        // ayni shu harakat qayta tayyorlanadi.
+        if (found.candidates) {
+            return {
+                args: { ...args, _candidates: found.candidates.map((c: any) => c.id) },
+                preview: patientChoice(found.candidates, 'Qabulga yozish — bemorni tanlang'),
+            };
+        }
         const patient = found.patient;
 
         const doctor = await resolveDoctor(ctx.clinicId, String(args.doctorName || ''));
@@ -570,8 +620,17 @@ export const previewAction = async (
         if (!Number.isFinite(amount) || amount <= 0) return { xato: 'Summa noto\'g\'ri.' };
         if (amount > 1_000_000_000) return { xato: 'Summa juda katta — tekshirib qayta ayting.' };
 
-        const found = await findOnePatient(args.patientQuery, ctx);
+        const found = await findOnePatient(args.patientQuery, ctx, args._patientId);
         if (found.xato) return { xato: found.xato };
+        // Bir nechta bemor mos keldi — model savol bermaydi, foydalanuvchi
+        // kartadan tanlaydi. Argumentlar saqlanadi va tanlovdan keyin
+        // ayni shu harakat qayta tayyorlanadi.
+        if (found.candidates) {
+            return {
+                args: { ...args, _candidates: found.candidates.map((c: any) => c.id) },
+                preview: patientChoice(found.candidates, 'Qarz yozish — bemorni tanlang'),
+            };
+        }
         const patient = found.patient;
 
         const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : today;
@@ -617,8 +676,17 @@ export const previewAction = async (
         const text = String(args.message || '').trim();
         if (text.length < 3) return { xato: 'Xabar matni juda qisqa.' };
 
-        const found = await findOnePatient(args.patientQuery, ctx);
+        const found = await findOnePatient(args.patientQuery, ctx, args._patientId);
         if (found.xato) return { xato: found.xato };
+        // Bir nechta bemor mos keldi — model savol bermaydi, foydalanuvchi
+        // kartadan tanlaydi. Argumentlar saqlanadi va tanlovdan keyin
+        // ayni shu harakat qayta tayyorlanadi.
+        if (found.candidates) {
+            return {
+                args: { ...args, _candidates: found.candidates.map((c: any) => c.id) },
+                preview: patientChoice(found.candidates, 'Xabar yuborish — bemorni tanlang'),
+            };
+        }
         const p = found.patient;
 
         if (!p.phone && !p.telegramChatId) {
@@ -641,8 +709,17 @@ export const previewAction = async (
         const amount = Number(args.amount);
         if (!Number.isFinite(amount) || amount <= 0) return { xato: 'Summa noto\'g\'ri.' };
 
-        const found = await findOnePatient(args.patientQuery, ctx);
+        const found = await findOnePatient(args.patientQuery, ctx, args._patientId);
         if (found.xato) return { xato: found.xato };
+        // Bir nechta bemor mos keldi — model savol bermaydi, foydalanuvchi
+        // kartadan tanlaydi. Argumentlar saqlanadi va tanlovdan keyin
+        // ayni shu harakat qayta tayyorlanadi.
+        if (found.candidates) {
+            return {
+                args: { ...args, _candidates: found.candidates.map((c: any) => c.id) },
+                preview: patientChoice(found.candidates, "To'lov — bemorni tanlang"),
+            };
+        }
         const p = found.patient;
 
         const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : today;

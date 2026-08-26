@@ -6320,6 +6320,41 @@ app.post('/api/ai/act', authenticateToken, async (req: any, res: any) => {
         const p = taken.pending;
         const t0 = Date.now();
 
+        // ── Bemor tanlandi ──────────────────────────────────────────────
+        //
+        // Bir nechta bemor mos kelganda harakat bajarilmaydi: avval
+        // foydalanuvchi kartadan kimni nazarda tutganini bosadi. Bu yerda
+        // harakat AYNI o'sha argumentlar bilan, endi aniq bemor uchun
+        // qayta tayyorlanadi va oddiy tasdiqlash kartasi qaytadi.
+        //
+        // Model bu almashinuvda umuman qatnashmaydi — ya'ni bitta to'liq
+        // AI so'rovi tejaladi va "ikkinchisi" degan javobni tushunish
+        // muammosi butunlay yo'qoladi.
+        if (p.preview?.choices?.length) {
+            const choiceId = String(req.body?.choiceId || '');
+            const allowed: string[] = p.args?._candidates || [];
+            if (!choiceId || !allowed.includes(choiceId)) {
+                return res.status(400).json({ success: false, message: 'Bemor tanlanmadi.' });
+            }
+
+            const ctx = { clinicId: p.clinicId, role: p.role, doctorId: user?.doctorId };
+            const again = await previewAction(
+                p.name,
+                { ...p.args, _patientId: choiceId, _candidates: undefined },
+                ctx,
+                clinicToday()
+            );
+            if (again.xato) return res.json({ success: false, message: again.xato });
+
+            const newId = storePending(p.name, again.args, again.preview!, {
+                clinicId: p.clinicId, userId: userKey(user), role: p.role,
+            });
+            return res.json({
+                success: true,
+                action: { id: newId, name: p.name, preview: again.preview },
+            });
+        }
+
         const result = await executeAction(
             p.name,
             p.args,

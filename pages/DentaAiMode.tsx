@@ -72,6 +72,8 @@ interface ActionPreview {
   warning?: string;
   message?: string;
   confirmLabel: string;
+  /** Bir nechta bemor mos kelganda — tanlash ro'yxati. */
+  choices?: { id: string; label: string; detail?: string }[];
 }
 
 interface PendingAction {
@@ -328,7 +330,8 @@ const ActionCard: React.FC<{
   onConfirm: () => void;
   onCancel: () => void;
   t: (k: string) => string;
-}> = ({ action, result, busy, onConfirm, onCancel, t }) => {
+  onChoose?: (choiceId: string) => void;
+}> = ({ action, result, busy, onConfirm, onCancel, onChoose, t }) => {
   const [expanded, setExpanded] = useState(false);
   const { preview } = action;
   const shown = expanded ? preview.items : preview.items.slice(0, 5);
@@ -417,17 +420,50 @@ const ActionCard: React.FC<{
         </div>
       )}
 
+      {/* Bemorni tanlash.
+          Ilgari bu yerda model matn bilan "qaysi biri?" deb so'rardi va
+          javob berib bo'lmasdi: "ikkinchisi" deganda u o'zi ko'rsatgan
+          ro'yxatni eslay olmasdi. Bosiladigan ro'yxat bu tugunni
+          butunlay yechadi va bitta AI so'rovini ham tejaydi. */}
+      {preview.choices?.length ? (
+        <div className="px-5 pb-4 space-y-1.5">
+          {preview.choices.map(c => (
+            <button
+              key={c.id}
+              onClick={() => onChoose?.(c.id)}
+              disabled={busy}
+              className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl
+                         text-left transition-colors disabled:opacity-50
+                         bg-white/70 dark:bg-white/[0.04]
+                         ring-1 ring-violet-200/70 dark:ring-white/[0.07]
+                         hover:ring-violet-400 dark:hover:ring-violet-400/40"
+            >
+              <span className="text-[13.5px] font-medium text-gray-900 dark:text-white truncate">
+                {c.label}
+              </span>
+              {c.detail && (
+                <span className="text-[12px] text-gray-500 dark:text-gray-400 shrink-0">
+                  {c.detail}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <div className="px-5 py-3 flex items-center gap-2 border-t border-violet-200/60 dark:border-white/[0.06]">
-        <button
-          onClick={onConfirm}
-          disabled={busy}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium
-                     bg-violet-600 text-white hover:bg-violet-700 transition-colors
-                     disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-          {preview.confirmLabel || t('ai.confirm')}
-        </button>
+        {!preview.choices?.length && (
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium
+                       bg-violet-600 text-white hover:bg-violet-700 transition-colors
+                       disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            {preview.confirmLabel || t('ai.confirm')}
+          </button>
+        )}
         <button
           onClick={onCancel}
           disabled={busy}
@@ -784,14 +820,23 @@ export const DentaAiMode: React.FC<Props> = ({ onExit, autoVoice }) => {
   }, [thread]);
 
   /** Tasdiqlangan harakatni bajaradi. */
-  const confirmAction = useCallback(async (index: number) => {
+  const confirmAction = useCallback(async (index: number, choiceId?: string) => {
     const turn = thread[index];
     if (!turn?.action) return;
     setActionBusy(true);
     try {
-      const d = await api<{ message: string }>('/ai/act', { id: turn.action.id });
+      const d = await api<{ message?: string; action?: PendingAction }>(
+        '/ai/act',
+        { id: turn.action.id, ...(choiceId ? { choiceId } : {}) }
+      );
+      // Bemor tanlandi — server harakatni qayta tayyorlab, endi oddiy
+      // tasdiqlash kartasini qaytardi. Model bu qadamda qatnashmaydi.
+      if (d.action) {
+        setThread(prev => prev.map((x, i) => (i === index ? { ...x, action: d.action! } : x)));
+        return;
+      }
       setThread(prev => prev.map((x, i) =>
-        i === index ? { ...x, actionResult: { ok: true, message: d.message } } : x));
+        i === index ? { ...x, actionResult: { ok: true, message: d.message || '' } } : x));
     } catch (e: any) {
       setThread(prev => prev.map((x, i) =>
         i === index ? { ...x, actionResult: { ok: false, message: e.message } } : x));
@@ -1207,6 +1252,7 @@ export const DentaAiMode: React.FC<Props> = ({ onExit, autoVoice }) => {
                     result={turn.actionResult}
                     busy={actionBusy}
                     onConfirm={() => confirmAction(i)}
+                    onChoose={cid => confirmAction(i, cid)}
                     onCancel={() => cancelAction(i)}
                     t={t}
                   />
