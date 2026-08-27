@@ -6197,7 +6197,23 @@ const runAsk = async (
         );
 
         // ── Grounding: javobdagi yirik raqamlar ma'lumotdan kelib chiqadimi?
-        const { text, result } = applyGrounding(reply, toolResults, lang);
+        //
+        // HARAKAT KARTASI bo'lganda grounding O'TKAZIB YUBORILADI.
+        //
+        // Kartadagi raqamlar foydalanuvchining O'Z buyrug'idan keladi
+        // ("12 000 so'm"), tool natijasidan emas. Grounding ularni tasdiqlay
+        // olmasdi va butun gapni olib tashlardi — natijada foydalanuvchi
+        // to'g'ri tayyorlangan karta YONIDA "Javobni ma'lumot bilan tasdiqlay
+        // olmadim" degan matnni ko'rardi. Harakat aslida joyida edi, lekin
+        // javob uni buzilgandek ko'rsatardi.
+        //
+        // Karta o'zi ishonchli manba: nima bo'lishi to'liq yozilgan va u
+        // serverda tayyorlangan. Ohang esa enforcePendingTone bilan
+        // kafolatlanadi.
+        const paCard = pendingAction as { id: string; name: string; preview: any } | null;
+        const { text, result } = paCard
+            ? { text: reply, result: { ok: true, unknown: [], stripped: [] as string[], text: reply } }
+            : applyGrounding(reply, toolResults, lang);
         if (!result.ok && result.stripped.length) {
             console.warn(`[AI/ask] tasdiqlanmagan raqam olib tashlandi: ${result.stripped.join(', ')}`);
         }
@@ -6214,9 +6230,7 @@ const runAsk = async (
         });
 
         console.log(`[AI/ask] yo'nalish=${route.intent} tool=${tools.length} ta`);
-        // `pendingAction` closure ichida to'ldiriladi, shuning uchun TS uni
-        // shu nuqtada hali `null` deb hisoblaydi.
-        const pa = pendingAction as { id: string; name: string; preview: any } | null;
+        const pa = paCard;
         return {
             reply: pa ? enforcePendingTone(text, pa.preview) : text,
             sources, action: pa, logId,

@@ -23,6 +23,7 @@ const { prisma } = require('../db');
 import { ToolContext, searchPatients, findDebtors } from './tools';
 import { invalidateToolCache } from './router';
 import { resolveDoctor, invalidateClinicContext } from './context';
+import { fuzzyFind, confidentPick } from './fuzzy';
 
 // ─── Ta'riflar ───────────────────────────────────────────────────────────────
 
@@ -774,11 +775,84 @@ export const previewAction = async (
         if (procedure.length < 2) return { xato: 'Qanday ish bajarilgani aytilmadi.' };
 
         // Summa ixtiyoriy: "plomba qo'ydik" — narxsiz ham to'liq ma'noli buyruq.
-        const amount = args.amount === undefined || args.amount === null || args.amount === ''
+        let amount = args.amount === undefined || args.amount === null || args.amount === ''
             ? 0
             : Number(args.amount);
         if (!Number.isFinite(amount) || amount < 0) return { xato: 'Summa noto\'g\'ri.' };
         if (amount > 1_000_000_000) return { xato: 'Summa juda katta — tekshirib qayta ayting.' };
+
+        // Xizmat nomini klinikaning O'Z ro'yxati bilan solishtiramiz.
+        //
+        // Sabab productionda ko'rindi: foydalanuvchi "qlondi" deb yozdi — ovozdan
+        // yoki tez yozishdan chiqqan buzuq so'z — va u protsedura nomi sifatida
+        // o'sha holicha bemor kartasiga tushishi mumkin edi. Bunday yozuvni
+        // keyinchalik topib tuzatish deyarli imkonsiz: u hech qaysi hisobotga
+        // to'g'ri tushmaydi va shifokor nima qilganini eslay olmaydi.
+        //
+        // Qidiruv bemor qidiruvi bilan bir xil mantiqda: aniq moslik ustun,
+        // topilmasa xatolarga chidamli qidiruv (ai/fuzzy.ts).
+        const xizmatlar = await prisma.service.findMany({
+            where: { clinicId: ctx.clinicId },
+            select: { name: true, price: true },
+        });
+
+        let xizmatNomi = procedure;
+        let narxRoyxatdan = false;
+
+        // Ro'yxat bo'sh bo'lsa solishtiradigan narsa yo'q — erkin matn qoladi.
+        // Aks holda xizmatlarini hali kiritmagan klinikada protsedura yozish
+        // umuman ishlamay qolardi.
+        if (xizmatlar.length) {
+            const past = procedure.toLowerCase().trim();
+
+            // 1-bosqich: aynan bir xil nom. Bu har doim ustun turadi.
+            let topilgan: any = xizmatlar.find((s: any) => s.name.toLowerCase().trim() === past) || null;
+
+            // 2-bosqich: nomning bir qismi. "plomba" -> "Denfil plomba. karea".
+            //
+            // Bir nechta xizmat mos kelsa — BIRINCHISINI OLMAYMIZ. Bu jimgina
+            // noto'g'ri xizmat yozib qo'yishning eng oson yo'li bo'lardi: klinikada
+            // "plomba" so'zi bilan bir nechta xizmat bo'lishi odatiy hol.
+            if (!topilgan) {
+                const qismiy = xizmatlar.filter((s: any) => {
+                    const nom = s.name.toLowerCase();
+                    return nom.includes(past) || past.includes(nom);
+                });
+                if (qismiy.length === 1) topilgan = qismiy[0];
+                else if (qismiy.length > 1) {
+                    return {
+                        xato: `"${procedure}" bir nechta xizmatga mos keldi: `
+                            + `${qismiy.map((s: any) => s.name).join(', ')}. Qaysi biri?`,
+                    };
+                }
+            }
+
+            // 3-bosqich: xatolarga chidamli qidiruv (harf tushib qolgan yoki
+            // almashgan). confidentPick noaniq natijani ataylab rad etadi.
+            if (!topilgan) {
+                topilgan = confidentPick(fuzzyFind(
+                    procedure,
+                    xizmatlar.map((s: any) => ({ ...s, firstName: s.name, lastName: '' })),
+                    5,
+                ));
+            }
+
+            if (!topilgan) {
+                const namuna = xizmatlar.slice(0, 8).map((s: any) => s.name).join(', ');
+                return {
+                    xato: `"${procedure}" — bunday xizmat klinika ro'yxatida yo'q. `
+                        + `Mavjudlari: ${namuna}${xizmatlar.length > 8 ? ' va boshqalar' : ''}.`,
+                };
+            }
+
+            xizmatNomi = topilgan.name;
+            // Narx aytilmagan bo'lsa — ro'yxatdagisi olinadi. Shifokor har safar
+            // narxni takrorlashi shart emas, u allaqachon tizimda turibdi.
+            if (amount === 0 && topilgan.price > 0) {
+                amount = topilgan.price;
+                narxRoyxatdan = true;
+            }
+        }
 
         const found = await findOnePatient(args.patientQuery, ctx, args._patientId);
         if (found.xato) return { xato: found.xato };
@@ -845,7 +919,7 @@ export const previewAction = async (
 
         // Ilovaning qabul izohidagi formati bilan bir xil — bitta bemor
         // kartasida AI yozgan ish qo'lda yozilganidan ajralib turmasin.
-        const line = `- ${procedure}${tooth ? ` (Tish #${tooth})` : ' (Umumiy)'}`
+        const line = `- ${xizmatNomi}${tooth ? ` (Tish #${tooth})` : ' (Umumiy)'}`
             + (amount > 0 ? ` [${som(amount)} UZS]` : '');
 
         const qabulHolati = !existing
@@ -858,15 +932,22 @@ export const previewAction = async (
             args: {
                 patientId: patient.id,
                 patientName: `${patient.firstName} ${patient.lastName || ''}`.trim(),
-                procedure, amount, tooth, date, doctorId, doctorName, line,
+                procedure: xizmatNomi, amount, tooth, date, doctorId, doctorName, line,
             },
             preview: {
                 title: 'Protsedura yozish',
-                summary: `${maskName(patient.firstName, patient.lastName)} — ${procedure}`,
+                summary: `${maskName(patient.firstName, patient.lastName)} — ${xizmatNomi}`,
                 items: [
                     { label: 'Bemor', detail: `${maskName(patient.firstName, patient.lastName)} · ${maskPhone(patient.phone)}` },
-                    { label: 'Ish', detail: procedure + (tooth ? ` · tish #${tooth}` : '') },
-                    ...(amount > 0 ? [{ label: 'Summa', detail: `${som(amount)} so'm` }] : []),
+                    { label: 'Ish', detail: xizmatNomi + (tooth ? ` · tish #${tooth}` : '')
+                        // Nom tuzatilgan bo'lsa buni yashirmaymiz — foydalanuvchi
+                        // noto'g'ri xizmat tanlanganini shu yerda ko'rib qolishi kerak.
+                        + (xizmatNomi.toLowerCase() !== procedure.toLowerCase()
+                            ? ` (siz: "${procedure}")` : '') },
+                    ...(amount > 0
+                        ? [{ label: 'Summa', detail: `${som(amount)} so'm`
+                            + (narxRoyxatdan ? ' · narxlar ro\'yxatidan' : '') }]
+                        : []),
                     { label: 'Shifokor', detail: doctorName || '-' },
                     { label: 'Sana', detail: date },
                     { label: 'Qabul', detail: qabulHolati },
