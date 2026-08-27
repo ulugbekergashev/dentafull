@@ -27,13 +27,21 @@ const langLine = (lang: Lang): string =>
  * @param lang    javob tili
  * @param profile klinika profili — nom, shifokorlar, narxlar, ish vaqti.
  *                Bo'sh bo'lishi mumkin: profil qulaylik, majburiyat emas.
- * @param canAct  foydalanuvchining roli yozuvchi tool'larga ruxsat beradimi
+ * @param canAct  ruxsat etilgan yozuvchi tool nomlari (yoki oddiy ha/yo'q).
+ *
+ *   Ilgari bu oddiy `boolean` edi va harakat nomlari prompt ichida QO'LDA
+ *   sanab o'tilardi. Ro'yxat o'sdi, prompt esa orqada qoldi: modelga faqat
+ *   to'rtta harakat borligi aytilardi, holbuki tool'lar orasida to'lov,
+ *   qarz yozish va shifokorga to'lov ham bor edi. Model promptga ishonib
+ *   "buni qila olmayman" deb javob berardi — kerakli tool aynan o'sha
+ *   so'rovda unga berilgan bo'lgan taqdirda ham. Endi manba bitta:
+ *   haqiqatda yuborilgan tool'lar ro'yxati.
  */
 export const askSystemPrompt = (
     today: string,
     lang: Lang = 'uz',
     profile = '',
-    canAct = false
+    canAct: boolean | string[] = false
 ): string =>
     'Sen DentaCRM tizimining yordamchisisan — stomatologiya klinikasi uchun.\n\n' +
 
@@ -53,9 +61,12 @@ export const askSystemPrompt = (
 
     // Yozuvchi tool'lar. Model ularni chaqirsa, natija darhol bajarilmaydi —
     // foydalanuvchiga tasdiqlash kartasi ko'rsatiladi (ai/actions.ts).
-    (canAct
-        ? 'HARAKAT QILISH: send_reminder, book_appointment, update_lead_status ' +
-          'va create_expense — bular ma\'lumotni O\'ZGARTIRADI. Foydalanuvchi ' +
+    ((Array.isArray(canAct) ? canAct.length > 0 : canAct)
+        ? 'HARAKAT QILISH: ' +
+          (Array.isArray(canAct)
+              ? canAct.join(', ')
+              : 'send_reminder, book_appointment, update_lead_status, create_expense') +
+          ' — bular ma\'lumotni O\'ZGARTIRADI. Foydalanuvchi ' +
           'aniq buyruq bergandagina chaqir ("eslatma yubor", "qabulga yoz", ' +
           '"xarajat qo\'sh"). Oddiy savolga javob berish uchun ularni ISHLATMA. ' +
           'Bu tool\'lar darhol bajarilmaydi — foydalanuvchi tasdiqlaydi, ' +

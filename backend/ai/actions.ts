@@ -35,6 +35,8 @@ export interface ActionDef {
 
 const ADMIN = ['SUPER_ADMIN', 'CLINIC_ADMIN'];
 const FRONT_DESK = ['SUPER_ADMIN', 'CLINIC_ADMIN', 'RECEPTIONIST'];
+// Protsedurani ko'pincha shifokorning o'zi aytadi — u ro'yxatda bo'lishi shart.
+const CLINICAL = ['SUPER_ADMIN', 'CLINIC_ADMIN', 'RECEPTIONIST', 'DOCTOR'];
 
 export const ACTION_DEFS: ActionDef[] = [
     {
@@ -117,6 +119,70 @@ export const ACTION_DEFS: ActionDef[] = [
                 date: { type: 'string', description: 'Sana, YYYY-MM-DD. Berilmasa bugungi.' },
             },
             required: ['patientQuery', 'amount'],
+        },
+        roles: FRONT_DESK,
+    },
+    {
+        name: 'add_procedure',
+        description:
+            'Bemorga BAJARILGAN ishni (protsedurani) yozadi: plomba, tozalash, ' +
+            'koronka, kanal davolash va hokazo. "Aliyevga plomba qo\'ydik", ' +
+            '"Karimovaga 26-tishga koronka 800 ming" kabi buyruqlar uchun. ' +
+            'Ish o\'sha kundagi qabulga yoziladi — qabul bo\'lmasa, yangisi ' +
+            'yaratiladi. Summa berilsa, u TO\'LANMAGAN hisob sifatida ham ' +
+            'yoziladi (bemor to\'lagan bo\'lsa record_payment ishlatiladi). ' +
+            'DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
+        parameters: {
+            type: 'object',
+            properties: {
+                patientQuery: { type: 'string', description: 'Bemor ismi yoki telefoni' },
+                procedure: {
+                    type: 'string',
+                    description: 'Bajarilgan ish nomi, masalan "Plomba" yoki "Professional tozalash"',
+                },
+                amount: {
+                    type: 'number',
+                    description: 'Narxi so\'mda. Berilmasa — faqat ish yoziladi, hisob yozilmaydi.',
+                },
+                toothNumber: {
+                    type: 'integer',
+                    description: 'Tish raqami FDI tizimida (11-18, 21-28, 31-38, 41-48; sut tishlari 51-85). Umumiy ish bo\'lsa berilmaydi.',
+                },
+                doctorName: {
+                    type: 'string',
+                    description: 'Shifokor familiyasi. Berilmasa — o\'sha kundagi qabul shifokori yoki bemorga biriktirilgani olinadi.',
+                },
+                date: { type: 'string', description: 'Sana, YYYY-MM-DD. Berilmasa bugungi.' },
+            },
+            required: ['patientQuery', 'procedure'],
+        },
+        roles: CLINICAL,
+    },
+    {
+        name: 'add_cash',
+        description:
+            'Kassaga pul kiritadi yoki kassadan chiqaradi. Uch turi bor: ' +
+            'CashIn — kassaga pul solindi (masalan qaytim uchun mayda pul); ' +
+            'Encashment — kassadan olib ketildi (inkassatsiya); ' +
+            'Refund — bemorga pul qaytarildi. ' +
+            '"Kassaga 200 ming soldim", "kassadan 1 million olib ketishdi", ' +
+            '"bemorga 300 ming qaytardik" kabi buyruqlar uchun. ' +
+            'Bu XARAJAT EMAS (xarajat uchun create_expense) va bemor to\'lovi ' +
+            'ham emas (buning uchun record_payment). ' +
+            'DIQQAT: foydalanuvchi tasdiqlagandan keyin bajariladi.',
+        parameters: {
+            type: 'object',
+            properties: {
+                type: {
+                    type: 'string',
+                    enum: ['CashIn', 'Encashment', 'Refund'],
+                    description: 'CashIn — kassaga solindi; Encashment — kassadan olindi; Refund — bemorga qaytarildi',
+                },
+                amount: { type: 'number', description: 'Summa, so\'mda' },
+                note: { type: 'string', description: 'Izoh — nima uchun' },
+                date: { type: 'string', description: 'Sana, YYYY-MM-DD. Berilmasa bugungi.' },
+            },
+            required: ['type', 'amount'],
         },
         roles: FRONT_DESK,
     },
@@ -306,6 +372,37 @@ const maskName = (first?: string | null, last?: string | null): string => {
 };
 
 const som = (n: number): string => Math.round(n).toLocaleString('ru-RU');
+
+/**
+ * FDI tish raqami: doimiy tishlar 11-18, 21-28, 31-38, 41-48;
+ * sut tishlari 51-55, 61-65, 71-75, 81-85.
+ */
+const isFdiTooth = (t: number): boolean => {
+    const kvadrant = Math.floor(t / 10);
+    const raqam = t % 10;
+    if (kvadrant >= 1 && kvadrant <= 4) return raqam >= 1 && raqam <= 8;
+    if (kvadrant >= 5 && kvadrant <= 8) return raqam >= 1 && raqam <= 5;
+    return false;
+};
+
+// server.ts dagi CASH_MOVEMENT_TYPES bilan bir xil bo'lishi shart.
+const CASH_TYPES = ['CashIn', 'Encashment', 'Refund'];
+
+const CASH_LABELS: Record<string, string> = {
+    CashIn: 'Kassaga pul solish',
+    Encashment: 'Inkassatsiya (kassadan olish)',
+    Refund: 'Bemorga pul qaytarish',
+};
+
+/**
+ * Klinika vaqti, HH:MM (UTC+5).
+ *
+ * Server UTC'da ishlaydi. Oddiy toISOString() dan olingan soat kechqurun
+ * 19:00 dan keyin allaqachon ertangi kunni ko'rsatadi — qabul vaqti esa
+ * klinika soati bo'yicha yozilishi kerak.
+ */
+const clinicTime = (): string =>
+    new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(11, 16);
 
 /**
  * Xarajat toifalari — ilovaning O'Z ro'yxati (types.ts,
@@ -668,6 +765,161 @@ export const previewAction = async (
                       + `Yangisi qo'shilgach jami ${som(mavjudQarz + amount)} so'm bo'ladi.`
                     : undefined,
                 confirmLabel: 'Qarzni yozish',
+            },
+        };
+    }
+
+    if (name === 'add_procedure') {
+        const procedure = String(args.procedure || '').trim().slice(0, 160);
+        if (procedure.length < 2) return { xato: 'Qanday ish bajarilgani aytilmadi.' };
+
+        // Summa ixtiyoriy: "plomba qo'ydik" — narxsiz ham to'liq ma'noli buyruq.
+        const amount = args.amount === undefined || args.amount === null || args.amount === ''
+            ? 0
+            : Number(args.amount);
+        if (!Number.isFinite(amount) || amount < 0) return { xato: 'Summa noto\'g\'ri.' };
+        if (amount > 1_000_000_000) return { xato: 'Summa juda katta — tekshirib qayta ayting.' };
+
+        const found = await findOnePatient(args.patientQuery, ctx, args._patientId);
+        if (found.xato) return { xato: found.xato };
+        if (found.candidates) {
+            return {
+                args: { ...args, _candidates: found.candidates.map((c: any) => c.id) },
+                preview: patientChoice(found.candidates, 'Protsedura yozish — bemorni tanlang'),
+            };
+        }
+        const patient = found.patient;
+
+        let tooth: number | null = null;
+        if (args.toothNumber !== undefined && args.toothNumber !== null && args.toothNumber !== '') {
+            const t = Number(args.toothNumber);
+            if (!Number.isInteger(t) || !isFdiTooth(t)) {
+                return { xato: 'Tish raqami noto\'g\'ri. FDI tizimida: 11-18, 21-28, 31-38, 41-48 (sut tishlari 51-85).' };
+            }
+            tooth = t;
+        }
+
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : today;
+
+        // Appointment jadvalida @@unique([patientId, date]) bor — bemorda bir
+        // kunda BITTA qabul bo'ladi. Shuning uchun bekor qilinganini ham
+        // qidiramiz: uni hisobga olmasdan yangisini yaratsak, baza noyoblik
+        // xatosini qaytarardi va harakat "sababsiz" ishlamay qolardi.
+        const existing = await prisma.appointment.findFirst({
+            where: { clinicId: ctx.clinicId, patientId: patient.id, date },
+            select: { id: true, doctorId: true, doctorName: true, status: true },
+        });
+
+        // Shifokor ustuvorligi ilovadagi bilan bir xil: aniq aytilgan →
+        // o'sha kungi qabulniki → bemorga biriktirilgan → birinchi faol.
+        let doctorId = '';
+        let doctorName = '';
+        if (args.doctorName) {
+            const d = await resolveDoctor(ctx.clinicId, String(args.doctorName));
+            if (!d) return { xato: `"${args.doctorName}" shifokori topilmadi yoki bir nechtasiga mos keldi.` };
+            doctorId = d.id;
+            doctorName = d.name;
+        } else if (existing?.doctorId) {
+            doctorId = existing.doctorId;
+            doctorName = existing.doctorName || '';
+        } else {
+            const p = await prisma.patient.findFirst({
+                where: { id: patient.id, clinicId: ctx.clinicId },
+                select: { doctorId: true },
+            });
+            const pick = p?.doctorId
+                ? await prisma.doctor.findFirst({
+                    where: { id: p.doctorId, clinicId: ctx.clinicId },
+                    select: { id: true, firstName: true, lastName: true },
+                })
+                : await prisma.doctor.findFirst({
+                    where: { clinicId: ctx.clinicId, status: 'Active' },
+                    select: { id: true, firstName: true, lastName: true },
+                });
+            if (!pick) {
+                return { xato: 'Klinikada shifokor topilmadi. Avval Sozlamalar bo\'limida shifokor qo\'shing.' };
+            }
+            doctorId = pick.id;
+            doctorName = `${pick.lastName} ${pick.firstName}`.trim();
+        }
+
+        // Ilovaning qabul izohidagi formati bilan bir xil — bitta bemor
+        // kartasida AI yozgan ish qo'lda yozilganidan ajralib turmasin.
+        const line = `- ${procedure}${tooth ? ` (Tish #${tooth})` : ' (Umumiy)'}`
+            + (amount > 0 ? ` [${som(amount)} UZS]` : '');
+
+        const qabulHolati = !existing
+            ? 'yangi qabul yaratiladi'
+            : existing.status === 'Cancelled'
+                ? 'bu sanadagi BEKOR QILINGAN qabul qayta ochiladi'
+                : 'shu sanadagi mavjud qabulga qo\'shiladi';
+
+        return {
+            args: {
+                patientId: patient.id,
+                patientName: `${patient.firstName} ${patient.lastName || ''}`.trim(),
+                procedure, amount, tooth, date, doctorId, doctorName, line,
+            },
+            preview: {
+                title: 'Protsedura yozish',
+                summary: `${maskName(patient.firstName, patient.lastName)} — ${procedure}`,
+                items: [
+                    { label: 'Bemor', detail: `${maskName(patient.firstName, patient.lastName)} · ${maskPhone(patient.phone)}` },
+                    { label: 'Ish', detail: procedure + (tooth ? ` · tish #${tooth}` : '') },
+                    ...(amount > 0 ? [{ label: 'Summa', detail: `${som(amount)} so'm` }] : []),
+                    { label: 'Shifokor', detail: doctorName || '-' },
+                    { label: 'Sana', detail: date },
+                    { label: 'Qabul', detail: qabulHolati },
+                ],
+                warning: [
+                    amount > 0
+                        ? `${som(amount)} so'm TO'LANMAGAN hisob sifatida yoziladi. Bemor pulni bergan bo'lsa, to'lovni alohida qayd eting.`
+                        : null,
+                    existing?.status === 'Cancelled'
+                        ? 'Bu sanada bekor qilingan qabul bor edi — bir bemorga bir kunda bitta qabul bo\'lgani uchun aynan o\'sha qayta ochiladi.'
+                        : null,
+                ].filter(Boolean).join(' ') || undefined,
+                confirmLabel: 'Yozish',
+            },
+        };
+    }
+
+    if (name === 'add_cash') {
+        const type = String(args.type || '');
+        if (!CASH_TYPES.includes(type)) {
+            return { xato: 'Kassa harakati turi noto\'g\'ri: CashIn, Encashment yoki Refund bo\'lishi kerak.' };
+        }
+
+        const amount = Number(args.amount);
+        if (!Number.isFinite(amount) || amount <= 0) return { xato: 'Summa noto\'g\'ri.' };
+        if (amount > 1_000_000_000) return { xato: 'Summa juda katta — tekshirib qayta ayting.' };
+
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args.date || '')) ? String(args.date) : today;
+        const note = String(args.note || '').slice(0, 300);
+
+        // Yopilgan kunga yozish kassa hisobini o'zgartiradi. Taqiqlamaymiz —
+        // xatoni tuzatish uchun kerak bo'ladi — lekin foydalanuvchi buni
+        // tasdiqlashdan OLDIN bilishi kerak.
+        const closed = await prisma.cashRegisterDay.findFirst({
+            where: { clinicId: ctx.clinicId, date },
+            select: { id: true },
+        });
+
+        return {
+            args: { type, amount, date, note },
+            preview: {
+                title: CASH_LABELS[type],
+                summary: `${som(amount)} so'm — ${date}`,
+                items: [
+                    { label: 'Turi', detail: CASH_LABELS[type] },
+                    { label: 'Summa', detail: `${som(amount)} so'm` },
+                    { label: 'Sana', detail: date },
+                    ...(note ? [{ label: 'Izoh', detail: note }] : []),
+                ],
+                warning: closed
+                    ? `${date} kassa kuni allaqachon yopilgan. Yozuv yopilgandan keyin qo'shiladi va o'zgarishlar iziga tushadi.`
+                    : undefined,
+                confirmLabel: 'Yozish',
             },
         };
     }
@@ -1056,6 +1308,138 @@ export const executeAction = async (
             };
         }
 
+        if (name === 'add_procedure') {
+            const patient = await prisma.patient.findFirst({
+                where: { id: args.patientId, clinicId: ctx.clinicId },
+                select: { id: true },
+            });
+            if (!patient) return { ok: false, message: 'Bemor topilmadi.' };
+
+            // Qabul QAYTA o'qiladi: ko'rib chiqish bilan tasdiqlash orasida
+            // boshqa xodim qabul yaratgan yoki bekor qilgan bo'lishi mumkin.
+            // Status bo'yicha filtr YO'Q — @@unique([patientId, date]) tufayli
+            // bu sanada qanday statusda bo'lsa ham faqat bitta yozuv bo'ladi.
+            const existing = await prisma.appointment.findFirst({
+                where: { clinicId: ctx.clinicId, patientId: args.patientId, date: args.date },
+                select: { id: true, notes: true },
+            });
+
+            let appointmentId: string;
+            if (existing) {
+                const notes = existing.notes || '';
+                // Ayni shu satr allaqachon bo'lsa, ikkinchi marta yozilmaydi.
+                const updated = notes.includes(args.line)
+                    ? notes
+                    : (notes ? `${notes}\n${args.line}` : `Bajarilgan ishlar:\n${args.line}`);
+                await prisma.appointment.update({
+                    where: { id: existing.id },
+                    data: { notes: updated.slice(0, 4000), status: 'Completed' },
+                });
+                appointmentId = existing.id;
+            } else {
+                const created = await prisma.appointment.create({
+                    data: {
+                        patientId: args.patientId,
+                        patientName: args.patientName,
+                        doctorId: args.doctorId,
+                        doctorName: args.doctorName,
+                        type: 'Davolash',
+                        date: args.date,
+                        time: clinicTime(),
+                        duration: 60,
+                        status: 'Completed',
+                        notes: `Bajarilgan ishlar:\n${args.line}`,
+                        clinicId: ctx.clinicId,
+                    },
+                    select: { id: true },
+                });
+                appointmentId = created.id;
+            }
+
+            // Summa berilgan bo'lsa — to'lanmagan hisob. add_charge bilan
+            // AYNAN bir xil yoziladi (status 'Pending'), ya'ni Moliya
+            // sahifasidagi qarzdorlar ro'yxatiga o'zi tushadi.
+            let transactionId: string | null = null;
+            if (args.amount > 0) {
+                const created = await prisma.transaction.create({
+                    data: {
+                        clinicId: ctx.clinicId,
+                        patientId: args.patientId,
+                        patientName: args.patientName,
+                        date: args.date,
+                        amount: args.amount,
+                        type: 'Cash',
+                        service: args.procedure,
+                        status: 'Pending',
+                        doctorId: args.doctorId || null,
+                        doctorName: args.doctorName || null,
+                    },
+                    select: { id: true },
+                });
+                transactionId = created.id;
+            }
+
+            invalidateToolCache(ctx.clinicId);
+            return {
+                ok: true,
+                message: args.amount > 0
+                    ? `Yozildi: ${args.patientName} — ${args.procedure}, ${som(args.amount)} so'm to'lanmagan hisob sifatida.`
+                    : `Yozildi: ${args.patientName} — ${args.procedure}.`,
+                details: { appointmentId, transactionId },
+            };
+        }
+
+        if (name === 'add_cash') {
+            const movement = await prisma.cashMovement.create({
+                data: {
+                    clinicId: ctx.clinicId,
+                    date: args.date,
+                    type: args.type,
+                    amount: args.amount,
+                    method: 'Cash',
+                    note: args.note || null,
+                    createdByName: 'DentaAI',
+                },
+                select: { id: true },
+            });
+
+            // Kassa izi server.ts dagi writeCashAudit bilan bir xil yoziladi:
+            // kassaga tegadigan har qanday yozuv, manbasidan qat'i nazar,
+            // o'zgarishlar izida ko'rinishi kerak — aks holda AI orqali
+            // kiritilgan pul auditda "yo'qdan paydo bo'lgan" bo'lib qolardi.
+            try {
+                const closed = await prisma.cashRegisterDay.findFirst({
+                    where: { clinicId: ctx.clinicId, date: args.date },
+                    select: { id: true },
+                });
+                await prisma.cashAuditLog.create({
+                    data: {
+                        clinicId: ctx.clinicId,
+                        date: args.date,
+                        action: 'Create',
+                        entityType: 'CashMovement',
+                        entityId: movement.id,
+                        summary: `${args.type} — ${som(args.amount)} (Cash)`
+                            + (args.note ? `: ${args.note}` : ''),
+                        afterClose: !!closed,
+                        byName: 'DentaAI',
+                        byRole: ctx.role,
+                    },
+                });
+            } catch (err: any) {
+                // Iz yozilmasa ham asosiy yozuv saqlanib qolgan — harakatni
+                // muvaffaqiyatsiz deb e'lon qilish noto'g'ri bo'lardi.
+                console.error('[AI:action] kassa izini yozib bo\'lmadi:', err?.message);
+            }
+
+            invalidateToolCache(ctx.clinicId);
+            return {
+                ok: true,
+                message: `${CASH_LABELS[args.type]}: ${som(args.amount)} so'm (${args.date}).`,
+                details: { movementId: movement.id },
+            };
+        }
+
         if (name === 'send_message') {
             const r = await deps.sendToPatient(args.patientId, args.message);
             return r.success
@@ -1212,78 +1596,9 @@ export const executeAction = async (
 
 // ─── Kutilayotgan harakatlar ─────────────────────────────────────────────────
 //
-// Preview va tasdiqlash orasida saqlanadi. Xotirada — bu qisqa muddatli
-// holat va server qayta ishga tushganda yo'qolgani ma'qul: eski, unutilgan
-// tasdiqlash keyinroq bosilib, kutilmagan xabar yuborilishidan yaxshiroq.
+// Preview va tasdiqlash orasidagi holat. Ilgari shu yerda xotiradagi Map
+// turardi va server har qayta ishga tushganda tasdiqlashlar yo'qolardi —
+// batafsil sabab va yangi yechim izohi ./pending.ts da.
 
-interface Pending {
-    name: string;
-    args: any;
-    preview: ActionPreview;
-    clinicId: string;
-    userId: string;
-    role: string;
-    expiresAt: number;
-}
-
-const PENDING_TTL_MS = 10 * 60 * 1000;
-const pending = new Map<string, Pending>();
-
-let counter = 0;
-const newId = (): string => `act_${Date.now().toString(36)}_${(counter++).toString(36)}`;
-
-export const storePending = (
-    name: string,
-    args: any,
-    preview: ActionPreview,
-    ctx: { clinicId: string; userId: string; role: string }
-): string => {
-    const id = newId();
-    pending.set(id, {
-        name, args, preview,
-        clinicId: ctx.clinicId, userId: ctx.userId, role: ctx.role,
-        expiresAt: Date.now() + PENDING_TTL_MS,
-    });
-    return id;
-};
-
-/**
- * Tasdiqlangan harakatni oladi va ro'yxatdan O'CHIRADI.
- *
- * O'chirish muhim: bir marta tasdiqlangan harakat ikki marta bajarilmasligi
- * kerak. Tugmani ikki marta bosish yoki so'rovni takrorlash 40 ta bemorga
- * ikkita bir xil SMS yuborardi.
- */
-export const takePending = (
-    id: string,
-    ctx: { clinicId: string; userId: string }
-): { pending?: Pending; xato?: string } => {
-    const p = pending.get(id);
-    if (!p) return { xato: 'Bu tasdiqlash topilmadi yoki muddati o\'tgan. Iltimos, qaytadan so\'rang.' };
-    if (p.expiresAt < Date.now()) {
-        pending.delete(id);
-        return { xato: 'Tasdiqlash muddati tugagan (10 daqiqa). Iltimos, qaytadan so\'rang.' };
-    }
-    // Boshqa foydalanuvchi tasdiqlay olmaydi. Bu asosiy tekshiruv: yozuvni
-    // server o'zi yaratgan va aynan shu foydalanuvchiga bog'lagan.
-    if (p.userId !== ctx.userId) {
-        return { xato: 'Bu tasdiqlash sizga tegishli emas.' };
-    }
-
-    // Klinika tekshiruvi — qo'shimcha himoya, lekin faqat chaqiruvda klinika
-    // aniq bo'lganda. SUPER_ADMIN da clinicId so'rov tanasidan keladi va
-    // tasdiqlashda u yuborilmasligi mumkin; bunday holatda harakat baribir
-    // saqlangan yozuvdagi klinikada bajariladi, ya'ni chegara buzilmaydi.
-    if (ctx.clinicId && p.clinicId !== ctx.clinicId) {
-        return { xato: 'Bu tasdiqlash boshqa klinikaga tegishli.' };
-    }
-    pending.delete(id);
-    return { pending: p };
-};
-
-setInterval(() => {
-    const now = Date.now();
-    for (const [k, v] of Array.from(pending.entries())) {
-        if (now > v.expiresAt) pending.delete(k);
-    }
-}, 5 * 60 * 1000).unref?.();
+export { storePending, takePending } from './pending';
+export type { Pending } from './pending';

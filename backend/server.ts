@@ -6174,7 +6174,7 @@ const runAsk = async (
     try {
         const { reply, toolCalls, meta } = await chatWithTools(
             [
-                { role: 'system', content: askSystemPrompt(today, lang, profile, actionTools.length > 0) },
+                { role: 'system', content: askSystemPrompt(today, lang, profile, actionTools.map((t: any) => t.function.name)) },
                 ...history,
             ],
             tools,

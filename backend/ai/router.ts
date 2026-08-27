@@ -98,6 +98,17 @@ const ACTION_ROUTES: { name: string | string[]; re: RegExp }[] = [
     { name: 'create_expense', re: /(xarajat|ijara|kommunal|elektr|arenda|расход|аренда)/i },
     // To'lov va qarz bir-biriga yaqin — ikkalasini birga beramiz, model
     // "to'ladi" bilan "qarzi bor" ni o'zi ajratadi.
+    // Kassa harakati XARAJATDAN KEYIN turadi va bu ataylab: "kassadan
+    // ijara to'ladik" — bu xarajat, kassa harakati emas. Xarajat so'zlari
+    // aniqroq signal, shuning uchun ular birinchi tekshiriladi.
+    //
+    // To'lovdan esa OLDIN turadi: "bemorga 300 ming qaytardik" da "qaytar"
+    // bor, lekin bu to'lov qabul qilish emas — kassadan pul chiqishi.
+    { name: 'add_cash', re: /(kassaga|kassadan|kassa\s*(ga|dan)|inkassa|pul qaytar|qaytarib berdik|касс|инкассац|вернул|возврат|сдач)/i },
+    // Protsedura: faqat ANIQ klinik so'zlar. "qo'ydik" kabi umumiy fe'l
+    // ataylab yo'q — "qarz yozib qo'ydik" ham unga mos kelardi va pul
+    // buyrug'i protsedura deb talqin qilinardi.
+    { name: 'add_procedure', re: /(plomba|plomb|koronka|kanal davola|tozalash|protsedura|implant|ekstraksiya|davolad|пломб|коронк|канал|чистк|процедур|имплант|удалил|удален|лечил|лечен)/i },
     { name: ['record_payment', 'add_charge'], re: /(to'?la|qarz|hisob|тўла|оплат|долг|счёт|счет)/i },
     { name: 'book_appointment', re: /(qabul|band|navbat|приём|прием|запис)/i },
     { name: 'update_lead_status', re: /(lid|lead|holatini|status|лид|статус)/i },
