@@ -319,38 +319,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           sahifa ustidan ochiladi. Ilgari bu yerda "Hisobot / DentaAI"
           almashtirgichi turardi va u AI ni bitta sahifaga bog'lab qo'ygan
           edi — shifokor Kalendarda turib savol bera olmasdi. */}
-      <div className="flex items-center justify-between gap-6 pb-4 border-b border-gray-200 dark:border-gray-700/60">
+      {/* Sarlavha va boshqaruvlar bitta qatorda — ilgari ular ikki blokka
+          bo'lingan edi va orada keraksiz bo'sh band qolib ketardi. */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-700/60">
         <h1 className="text-[22px] font-bold text-gray-900 dark:text-white tracking-tight">
-          Dashboard
+          {t('nav.dashboard')}
         </h1>
-      </div>
 
-      {/* Boshqaruvlar */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-2">
+        <div className="flex flex-wrap items-center gap-3">
         {!isReceptionist && (
-          <div className="flex items-center gap-3 p-1.5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            <div className="flex items-center gap-2 px-3">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
-              />
-            </div>
-            <div className="w-px h-8 bg-gray-100 dark:bg-gray-700" />
-            <div className="flex items-center gap-2 px-3">
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-32"
-              />
-            </div>
+          <div className="flex items-center gap-1 p-1.5 pl-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-1.5">Davr</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 px-1 cursor-pointer w-[118px]"
+            />
+            <span className="text-gray-300 dark:text-gray-600 select-none">—</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 px-1 cursor-pointer w-[118px]"
+            />
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-3">
           {/* Quick Actions — dashboarddan turib bajariladi */}
           <div className="flex items-center gap-2">
             <button
