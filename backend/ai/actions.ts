@@ -387,6 +387,30 @@ const isFdiTooth = (t: number): boolean => {
 };
 
 // server.ts dagi CASH_MOVEMENT_TYPES bilan bir xil bo'lishi shart.
+
+/**
+ * Xizmat nomidan tish kartasidagi holatni aniqlaydi.
+ *
+ * Faqat SHUBHASIZ holatlar qaytariladi. Tish kartasi — klinik hujjat;
+ * unga taxmin bilan belgi qo'yish keyingi shifokorni chalg'itadi. Aniqlab
+ * bo'lmasa null qaytadi va kartada faqat izoh yangilanadi — bu har doim
+ * xavfsiz: izoh hech qanday belgini almashtirmaydi.
+ */
+const toothStatusFor = (xizmat: string): string | null => {
+    const s = xizmat.toLowerCase();
+    if (/(implant|имплант)/.test(s)) return 'Implant';
+    if (/(koronka|коронк|crown)/.test(s)) return 'Crown';
+    if (/(olib tashla|ekstraksiya|sug'ur|удал|экстракц)/.test(s)) return 'Missing';
+    if (/(plomba|пломб|filling)/.test(s)) return 'Filled';
+    return null;
+};
+
+const TOOTH_LABELS: Record<string, string> = {
+    Filled: 'plomba qo\'yilgan',
+    Crown: 'koronka',
+    Implant: 'implant',
+    Missing: 'olib tashlangan',
+};
 const CASH_TYPES = ['CashIn', 'Encashment', 'Refund'];
 
 const CASH_LABELS: Record<string, string> = {
@@ -919,6 +943,11 @@ export const previewAction = async (
 
         // Ilovaning qabul izohidagi formati bilan bir xil — bitta bemor
         // kartasida AI yozgan ish qo'lda yozilganidan ajralib turmasin.
+        // Tish raqami aytilgan bo'lsa, tish kartasi ham yangilanadi. Ilgari
+        // bu qilinmasdi va shifokor "16-tishga plomba" deb yozdirgach kartani
+        // ochib hech narsa ko'rmasdi — ish esa aslida yozilgan bo'lardi.
+        const tishStatus = tooth ? toothStatusFor(xizmatNomi) : null;
+
         const line = `- ${xizmatNomi}${tooth ? ` (Tish #${tooth})` : ' (Umumiy)'}`
             + (amount > 0 ? ` [${som(amount)} UZS]` : '');
 
@@ -932,7 +961,7 @@ export const previewAction = async (
             args: {
                 patientId: patient.id,
                 patientName: `${patient.firstName} ${patient.lastName || ''}`.trim(),
-                procedure: xizmatNomi, amount, tooth, date, doctorId, doctorName, line,
+                procedure: xizmatNomi, amount, tooth, tishStatus, date, doctorId, doctorName, line,
             },
             preview: {
                 title: 'Protsedura yozish',
@@ -951,6 +980,14 @@ export const previewAction = async (
                     { label: 'Shifokor', detail: doctorName || '-' },
                     { label: 'Sana', detail: date },
                     { label: 'Qabul', detail: qabulHolati },
+                    ...(tooth
+                        ? [{
+                            label: 'Tish kartasi',
+                            detail: tishStatus
+                                ? `#${tooth} → ${TOOTH_LABELS[tishStatus] || tishStatus}`
+                                : `#${tooth} — izohga yoziladi (belgi o\'zgarmaydi)`,
+                        }]
+                        : []),
                 ],
                 warning: [
                     amount > 0
@@ -1437,6 +1474,56 @@ export const executeAction = async (
                 appointmentId = created.id;
             }
 
+            // Tish kartasi — shifokor birinchi navbatda shu yerga qaraydi.
+            //
+            // Qabul izohiga yozish yetarli emas edi: "16-tishga plomba" deb
+            // yozdirgan shifokor kartani ochib bo'sh tish ko'rardi va ish
+            // bajarilmagan deb o'ylardi.
+            if (args.tooth) {
+                const kalit = { patientId_number: { patientId: args.patientId, number: args.tooth } };
+                const mavjud = await prisma.toothData.findUnique({
+                    where: kalit,
+                    select: { conditions: true, notes: true },
+                });
+
+                let holatlar: string[] = [];
+                try {
+                    const o = mavjud ? JSON.parse(mavjud.conditions) : [];
+                    if (Array.isArray(o)) holatlar = o.filter((x: any) => typeof x === 'string');
+                } catch {
+                    // Buzuq JSON bo'lsa bo'sh ro'yxatdan boshlaymiz — yiqilmaymiz.
+                    holatlar = [];
+                }
+
+                if (args.tishStatus === 'Missing') {
+                    // Tish olib tashlangan — qolgan belgilar ma'nosini yo'qotadi.
+                    holatlar = ['Missing'];
+                } else if (args.tishStatus) {
+                    // Davolangan tishda "karies" belgisi qolmasligi kerak, aks holda
+                    // karta davolangan tishni kasal ko'rsataverardi.
+                    if (args.tishStatus === 'Filled' || args.tishStatus === 'Crown') {
+                        holatlar = holatlar.filter(h => h !== 'Cavity');
+                    }
+                    if (!holatlar.includes(args.tishStatus)) holatlar.push(args.tishStatus);
+                }
+
+                const [, oy, kun] = String(args.date).split('-');
+                const satr = `${kun}.${oy}: ${args.procedure}`;
+                const eski = (mavjud?.notes || '').trim();
+                const izoh = eski.includes(satr) ? eski : (eski ? `${eski}\n${satr}` : satr);
+
+                await prisma.toothData.upsert({
+                    where: kalit,
+                    update: { conditions: JSON.stringify(holatlar), notes: izoh.slice(0, 1000) },
+                    create: {
+                        patientId: args.patientId,
+                        number: args.tooth,
+                        conditions: JSON.stringify(holatlar),
+                        notes: izoh.slice(0, 1000),
+                    },
+                });
+            }
+
             // Summa berilgan bo'lsa — to'lanmagan hisob. add_charge bilan
             // AYNAN bir xil yoziladi (status 'Pending'), ya'ni Moliya
             // sahifasidagi qarzdorlar ro'yxatiga o'zi tushadi.
@@ -1463,9 +1550,16 @@ export const executeAction = async (
             invalidateToolCache(ctx.clinicId);
             return {
                 ok: true,
-                message: args.amount > 0
-                    ? `Yozildi: ${args.patientName} — ${args.procedure}, ${som(args.amount)} so'm to'lanmagan hisob sifatida.`
-                    : `Yozildi: ${args.patientName} — ${args.procedure}.`,
+                message: [
+                    `Yozildi: ${args.patientName} — ${args.procedure}`,
+                    args.amount > 0
+                        ? `, ${som(args.amount)} so'm to'lanmagan hisob sifatida`
+                        : '',
+                    // Tish kartasi yangilangani ALOHIDA aytiladi: shifokor
+                    // birinchi navbatda aynan shuni tekshirgani boradi.
+                    args.tooth ? `. Tish kartasi (#${args.tooth}) ham yangilandi` : '',
+                    '.',
+                ].join(''),
                 details: { appointmentId, transactionId },
             };
         }
