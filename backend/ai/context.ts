@@ -29,6 +29,8 @@ const PROFILE_TIMEOUT_MS = Number(process.env.AI_CONTEXT_TIMEOUT_MS || 3000);
 interface CachedProfile {
     text: string;
     doctors: { id: string; name: string }[];
+    /** Ovoz tanish uchun lug'at: xizmat nomlari va shifokor familiyalari. */
+    vocab: string;
     expiresAt: number;
 }
 
@@ -58,11 +60,13 @@ const buildProfile = async (clinicId: string): Promise<CachedProfile> => {
             select: { id: true, firstName: true, lastName: true, specialty: true },
             take: 40,
         }),
+        // 12 tasi prompt uchun, qolgani ovoz lug'ati uchun. Ikkalasiga
+        // alohida so'rov yuborish shu bitta so'rovdan qimmatroq bo'lardi.
         prisma.service.findMany({
             where: { clinicId },
             select: { name: true, price: true },
             orderBy: { price: 'desc' },
-            take: 12,
+            take: 40,
         }),
         prisma.patient.count({ where: { clinicId, status: 'Active' } }),
     ]);
@@ -83,13 +87,25 @@ const buildProfile = async (clinicId: string): Promise<CachedProfile> => {
     }
 
     if (services.length) {
-        const list = services.map((s: any) => `${s.name} — ${som(s.price)}`).join('; ');
+        const list = services.slice(0, 12).map((s: any) => `${s.name} — ${som(s.price)}`).join('; ');
         lines.push(`Xizmat narxlari (so'mda): ${list}.`);
     }
+
+    // Ovoz lug'ati: model aynan SHU so'zlarga moyil bo'lishi kerak.
+    // Narx va qavslar olib tashlanadi — Whisper prompt'i uslub namunasi,
+    // ya'ni ortiqcha belgi foydali so'zlar uchun joyni yeydi.
+    // Ism va familiya IKKALASI olinadi: bazada ular joyi almashgan
+    // yozuvlar bor (familiya "M", ism "Karimov"). Bir harfli qoldiqlar
+    // esa lug'atga foyda bermaydi — faqat joy egallaydi.
+    const vocab = Array.from(new Set([
+        ...services.map((x: any) => String(x.name).trim()),
+        ...doctors.flatMap((d: any) => [d.lastName, d.firstName]).map((x: any) => String(x || '').trim()),
+    ].filter((x: string) => x.length >= 3))).join(', ');
 
     return {
         text: lines.join('\n'),
         doctors: doctors.map((d: any) => ({ id: d.id, name: `${d.lastName} ${d.firstName}` })),
+        vocab,
         expiresAt: Date.now() + TTL_MS,
     };
 };
@@ -130,6 +146,25 @@ export const clinicContext = async (clinicId: string | null | undefined): Promis
         console.warn('[AI:context] profil qurilmadi:', e?.message);
         return '';
     }
+};
+
+/**
+ * Ovoz tanish uchun klinika lug'ati.
+ *
+ * Whisper `prompt` ni uslub namunasi sifatida o'qiydi va undagi so'zlarga
+ * moyil bo'ladi. Umumiy podskazka ("stomatologiya, bemor, shifokor")
+ * aynan MUHIM so'zlarga — xizmat nomi va shifokor familiyasiga — yordam
+ * bermasdi. Aynan shular esa eng ko'p buziladigan qism edi.
+ *
+ * Profil keshidan olinadi, ya'ni qo'shimcha DB so'rovi qilinmaydi.
+ */
+export const clinicVocab = async (clinicId: string | null | undefined): Promise<string> => {
+    if (!clinicId) return '';
+    const hit = cache.get(clinicId);
+    if (hit && hit.expiresAt > Date.now()) return hit.vocab;
+    // Kesh bo'sh — profilni qurdiramiz va keyin lug'atni olamiz.
+    await clinicContext(clinicId);
+    return cache.get(clinicId)?.vocab || '';
 };
 
 /** Shifokor ismini id ga aylantiradi — yozuvchi tool'lar uchun kerak. */

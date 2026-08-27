@@ -5898,6 +5898,7 @@ const {
     getClinicKey, invalidateClinicKey, verifyClinicKey, isSupportedProvider, SUPPORTED_PROVIDERS,
 } = require('./ai/keys');
 const { transcribe, sttKey } = require('./ai/speech');
+const { clinicVocab } = require('./ai/context');
 const {
     actionsForRole, isAction, previewAction, executeAction, storePending, takePending,
     PENDING_INSTRUCTION,
@@ -6600,7 +6601,9 @@ app.post('/api/ai/transcribe', authenticateToken, audioUpload.single('audio'), a
         }
 
         const lang = reqLang(req);
-        const out = await transcribe(file.buffer, file.mimetype || 'audio/webm', lang, key);
+        // Klinika lug'ati keshdan keladi — qo'shimcha DB so'rovi yo'q.
+        const vocab = await clinicVocab(getScopedClinicId(req)).catch(() => '');
+        const out = await transcribe(file.buffer, file.mimetype || 'audio/webm', lang, key, vocab);
 
         await logAi({
             clinicId: getScopedClinicId(req), userId: userKey(user), userName: user?.name,

@@ -44,7 +44,8 @@ export const transcribe = async (
     audio: Buffer,
     mimeType: string,
     lang: 'uz' | 'ru',
-    apiKey: string
+    apiKey: string,
+    vocab = ''
 ): Promise<TranscribeResult> => {
     if (!audio?.length) throw new Error('Audio bo\'sh.');
 
@@ -60,9 +61,22 @@ export const transcribe = async (
     // Kontekst ishorasi: model klinika atamalarini va lotin o'zbek imlosini
     // to'g'riroq tanlashi uchun. Whisper `prompt` ni uslub namunasi sifatida
     // ishlatadi, buyruq sifatida emas.
-    form.append('prompt', lang === 'uz'
+    const asos = lang === 'uz'
         ? 'Stomatologiya klinikasi. Bemor, shifokor, qabul, qarz, eslatma, xarajat, so\'m.'
-        : 'Стоматологическая клиника. Пациент, врач, приём, долг, напоминание, расход, сум.');
+        : 'Стоматологическая клиника. Пациент, врач, приём, долг, напоминание, расход, сум.';
+
+    // Klinikaning O'Z lug'ati — xizmat nomlari va shifokor familiyalari.
+    // Aynan shular eng ko'p buzilardi: "plomba" -> "qlondi".
+    //
+    // Prompt uzunligi cheklangan (Whisper ~224 token). Shuning uchun
+    // lug'at qirqiladi: to'lib ketgan podskazka modelni chalg'itadi va
+    // oxiridagi so'zlar baribir e'tiborga olinmaydi.
+    const VOCAB_MAX = 600;
+    const qirqilgan = vocab.length > VOCAB_MAX
+        ? vocab.slice(0, vocab.lastIndexOf(',', VOCAB_MAX) + 1 || VOCAB_MAX)
+        : vocab;
+
+    form.append('prompt', qirqilgan ? `${asos} ${qirqilgan}` : asos);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
