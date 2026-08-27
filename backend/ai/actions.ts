@@ -582,6 +582,29 @@ const patientChoice = (candidates: any[], title: string): ActionPreview => ({
 });
 
 /**
+ * Xizmatni tanlash kartasi.
+ *
+ * Ovozli kiritish o'zbekcha stomatologiya atamalarini tez-tez buzadi:
+ * "plomba" -> "qlondi". Bunday so'zni hech qanday qidiruv tiklay olmaydi
+ * (olti harfdan to'rttasi almashgan), va ilgari javob quruq xato bo'lardi —
+ * shifokor esa qo'lqopda turib butun buyruqni qaytadan aytishi kerak edi.
+ *
+ * Endi ro'yxat karta bo'lib chiqadi: bitta bosish va ish davom etadi.
+ * Bemorni tanlash allaqachon shunday ishlaydi — o'sha mexanizm.
+ */
+const serviceChoice = (services: any[], title: string, summary: string): ActionPreview => ({
+    title,
+    summary,
+    items: [],
+    choices: services.map((s: any) => ({
+        id: String(s.id),
+        label: s.name,
+        detail: s.price > 0 ? `${som(s.price)} so'm` : '',
+    })),
+    confirmLabel: 'Tanlash',
+});
+
+/**
  * Harakatni BAJARMASDAN, nima bo'lishini tayyorlaydi.
  * Xatolik bo'lsa `{ xato }` qaytaradi — model buni ko'rib, foydalanuvchidan
  * aniqlashtirish so'raydi.
@@ -817,7 +840,7 @@ export const previewAction = async (
         // topilmasa xatolarga chidamli qidiruv (ai/fuzzy.ts).
         const xizmatlar = await prisma.service.findMany({
             where: { clinicId: ctx.clinicId },
-            select: { name: true, price: true },
+            select: { id: true, name: true, price: true },
         });
 
         let xizmatNomi = procedure;
@@ -829,15 +852,22 @@ export const previewAction = async (
         if (xizmatlar.length) {
             const past = procedure.toLowerCase().trim();
 
+            // Foydalanuvchi kartadan tanlagan — qidiruv umuman shart emas.
+            let topilgan: any = args._serviceId
+                ? xizmatlar.find((s: any) => String(s.id) === String(args._serviceId)) || null
+                : null;
+
             // 1-bosqich: aynan bir xil nom. Bu har doim ustun turadi.
-            let topilgan: any = xizmatlar.find((s: any) => s.name.toLowerCase().trim() === past) || null;
+            if (!topilgan && !args._serviceId) {
+                topilgan = xizmatlar.find((s: any) => s.name.toLowerCase().trim() === past) || null;
+            }
 
             // 2-bosqich: nomning bir qismi. "plomba" -> "Denfil plomba. karea".
             //
             // Bir nechta xizmat mos kelsa — BIRINCHISINI OLMAYMIZ. Bu jimgina
             // noto'g'ri xizmat yozib qo'yishning eng oson yo'li bo'lardi: klinikada
             // "plomba" so'zi bilan bir nechta xizmat bo'lishi odatiy hol.
-            if (!topilgan) {
+            if (!topilgan && !args._serviceId) {
                 const qismiy = xizmatlar.filter((s: any) => {
                     const nom = s.name.toLowerCase();
                     return nom.includes(past) || past.includes(nom);
@@ -845,20 +875,35 @@ export const previewAction = async (
                 if (qismiy.length === 1) topilgan = qismiy[0];
                 else if (qismiy.length > 1) {
                     return {
-                        xato: `"${procedure}" bir nechta xizmatga mos keldi: `
-                            + `${qismiy.map((s: any) => s.name).join(', ')}. Qaysi biri?`,
+                        args: { ...args, _choice: { kind: 'service', ids: qismiy.map((s: any) => String(s.id)) } },
+                        preview: serviceChoice(qismiy, 'Qaysi xizmat?',
+                            `"${procedure}" bir nechta xizmatga mos keldi`),
                     };
                 }
             }
 
             // 3-bosqich: xatolarga chidamli qidiruv (harf tushib qolgan yoki
             // almashgan). confidentPick noaniq natijani ataylab rad etadi.
-            if (!topilgan) {
+            if (!topilgan && !args._serviceId) {
                 topilgan = confidentPick(fuzzyFind(
                     procedure,
                     xizmatlar.map((s: any) => ({ ...s, firstName: s.name, lastName: '' })),
                     5,
                 ));
+            }
+
+            if (!topilgan) {
+                // Hech narsa mos kelmadi — butun ro'yxatni karta qilib beramiz.
+                // Ro'yxat uzun bo'lishi mumkin, lekin bosish yozishdan tez.
+                return {
+                    args: {
+                        ...args,
+                        _serviceId: undefined,
+                        _choice: { kind: 'service', ids: xizmatlar.map((s: any) => String(s.id)) },
+                    },
+                    preview: serviceChoice(xizmatlar, 'Qaysi xizmat?',
+                        `"${procedure}" ro'yxatda topilmadi — quyidagidan tanlang`),
+                };
             }
 
             if (!topilgan) {

@@ -6412,15 +6412,24 @@ app.post('/api/ai/act', authenticateToken, async (req: any, res: any) => {
         // muammosi butunlay yo'qoladi.
         if (p.preview?.choices?.length) {
             const choiceId = String(req.body?.choiceId || '');
-            const allowed: string[] = p.args?._candidates || [];
+            // Tanlov bemor ham, xizmat ham bo'lishi mumkin. Tur argumentlarda
+            // saqlanadi va u ham imzolangan — mijoz uni almashtira olmaydi.
+            const kind: string = p.args?._choice?.kind || 'patient';
+            const allowed: string[] = p.args?._choice?.ids || p.args?._candidates || [];
             if (!choiceId || !allowed.includes(choiceId)) {
-                return res.status(400).json({ success: false, message: 'Bemor tanlanmadi.' });
+                return res.status(400).json({
+                    success: false,
+                    message: kind === 'service' ? 'Xizmat tanlanmadi.' : 'Bemor tanlanmadi.',
+                });
             }
 
             const ctx = { clinicId: p.clinicId, role: p.role, doctorId: user?.doctorId };
+            const tanlov = kind === 'service'
+                ? { _serviceId: choiceId, _choice: undefined }
+                : { _patientId: choiceId, _candidates: undefined, _choice: undefined };
             const again = await previewAction(
                 p.name,
-                { ...p.args, _patientId: choiceId, _candidates: undefined },
+                { ...p.args, ...tanlov },
                 ctx,
                 clinicToday()
             );
