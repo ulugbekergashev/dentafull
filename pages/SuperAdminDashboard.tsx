@@ -217,6 +217,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       try {
          await api.demoRequests.assign(leadId, salesAgentId);
          setDemoRequests(prev => prev.map((r: any) => r.id === leadId ? { ...r, salesAgentId } : r));
+
+         // Biriktirilgan lid endi "Yangi lidlar" da turadi. Eski 'Inbox'
+         // statusi bazada qolib ketmasin — u endi ishlatilmaydi va keyin
+         // hisobotlarda tushunarsiz qiymat bo'lib chiqardi.
+         const lead = demoRequests.find((r: any) => r.id === leadId);
+         if (salesAgentId && (!lead?.status || lead.status === 'Inbox')) {
+            setDemoRequests(prev => prev.map((r: any) => r.id === leadId ? { ...r, status: 'New' } : r));
+            api.demoRequests.update(leadId, { status: 'New' }).catch(() => { /* ko'rinish o'zgarmaydi */ });
+         }
       } catch (err: any) {
          alert(err?.message || 'Lidni biriktirishda xatolik');
       } finally {
@@ -340,12 +349,22 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       }
    };
 
-   // "Inbox" — barcha yangi lidlar shu yerga tushadi va superadmin taqsimlaydi.
-   // Sotuvchiga bu ustun ko'rinmaydi (backend ham bermaydi).
+   // "Taqsimlanmagan" — barcha yangi lidlar SHU YERGA tushadi va superadmin
+   // ularni sotuvchiga biriktiradi. Biriktirilgach karta o'zi "Yangi lidlar"
+   // ustuniga o'tadi.
+   //
+   // Ustun STATUSGA emas, BIRIKTIRISHGA bog'langan. Sabab: "taqsimlanganmi"
+   // degan savolning javobi allaqachon `salesAgentId` da turibdi va uni
+   // alohida statusda takrorlash ikkita haqiqat manbai yaratardi — biri
+   // ikkinchisidan orqada qolib, karta noto'g'ri ustunda turib qolishi
+   // mumkin edi.
+   //
+   // Sotuvchiga bu ustun ko'rinmaydi (backend ham unga faqat o'ziga
+   // biriktirilgan lidlarni beradi).
    const DEMO_STAGES = ['Inbox', 'New', 'Contacted', 'Thinking', 'Booked', 'Cancelled'];
    const ADMIN_ONLY_STAGES = ['Inbox'];
    const DEMO_STAGE_LABELS: Record<string, string> = {
-      Inbox: 'Tushgan lid', New: 'Yangi lidlar', Contacted: "Bog'lashildi",
+      Inbox: 'Taqsimlanmagan', New: 'Yangi lidlar', Contacted: "Bog'lashildi",
       Thinking: "O'ylamoqda", Booked: 'Oldi', Cancelled: 'Bekor'
    };
    const DEMO_STAGE_COLORS: Record<string, string> = {
@@ -360,19 +379,56 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       Thinking: 'bg-purple-500', Booked: 'bg-emerald-500', Cancelled: 'bg-red-500'
    };
 
-   // Sotuvchi "Tushgan lid" ustunini ko'rmaydi
+   /**
+    * Lid qaysi ustunda turishini aniqlaydi.
+    *
+    * Biriktirilmagan lid — har doim "Taqsimlanmagan" ustunida, statusidan
+    * qat'i nazar. Biriktirilgach o'z statusiga ko'ra o'tadi: yangi lid
+    * "Yangi lidlar" ga tushadi, keyingi bosqichlar esa o'zgarmaydi.
+    */
+   const leadStage = (r: any): string => {
+      if (!r.salesAgentId) return 'Inbox';
+      const st = r.status || 'New';
+      // 'Inbox' endi status sifatida ishlatilmaydi: biriktirilgan lid u
+      // yerda qola olmaydi.
+      return st === 'Inbox' ? 'New' : st;
+   };
+
+   // Sotuvchi "Taqsimlanmagan" ustunini ko'rmaydi
    const visibleStages = salesAgentMode
       ? DEMO_STAGES.filter(st => !ADMIN_ONLY_STAGES.includes(st))
       : DEMO_STAGES;
 
    // Kanban: kartochkani boshqa ustunga sudrash
    const [draggingLeadId, setDraggingLeadId] = useState<string | null>(null);
+   /** Biriktirilmagan lidni surishga urinilganda ko'rsatiladigan izoh. */
+   const [leadHint, setLeadHint] = useState<string | null>(null);
+   /** Integratsiya kaliti paneli ochiqmi. Standart: yopiq. */
+   const [leadApiOpen, setLeadApiOpen] = useState(false);
    const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
    const moveLeadToStage = (leadId: string, stage: string) => {
       const lead = demoRequests.find((r: any) => r.id === leadId);
-      if (!lead || lead.status === stage) return;
+      if (!lead || leadStage(lead) === stage) return;
       if (salesAgentMode && ADMIN_ONLY_STAGES.includes(stage)) return;
+
+      // "Taqsimlanmagan" ga sudrash — biriktirishni BEKOR QILISH.
+      // Ustun biriktirishga bog'langani uchun boshqacha bo'lishi mumkin
+      // emas: statusni o'zgartirish kartani bu ustunga qaytarmasdi.
+      if (stage === 'Inbox') {
+         handleAssignLead(leadId, null);
+         return;
+      }
+
+      // Biriktirilmagan lidni oldinga surib bo'lmaydi: u kimning ishi
+      // ekani noma'lum. Sudrash o'rniga kartadagi ro'yxatdan sotuvchi
+      // tanlanadi va karta o'zi keyingi ustunga o'tadi.
+      if (!lead.salesAgentId) {
+         setLeadHint(leadId);
+         setTimeout(() => setLeadHint(prev => (prev === leadId ? null : prev)), 3000);
+         return;
+      }
+
       setDemoRequests(prev => prev.map((r: any) => r.id === leadId ? { ...r, status: stage } : r));
       api.demoRequests.update(leadId, { status: stage }).catch(() => {
          // Saqlanmasa eski holatga qaytaramiz — ekranda yolg'on raqam turmasin
@@ -1357,7 +1413,32 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                {/* Tashqi lid manbasi uchun platforma kaliti.
                    Klinika kalitlaridan farqi: bu kalit bilan kelgan lid klinikaning
                    doskasiga emas, shu ro'yxatga (DemoRequest) tushadi. */}
-               {!salesAgentMode && (
+               {/* Integratsiya kaliti amalda bir marta sozlanadi va keyin
+                   deyarli ochilmaydi. Lekin u ekran yuqorisidan katta joy
+                   egallab, asosiy ish maydonini — lidlar taxtasini — pastga
+                   surib yuborardi. Endi yig'ilgan holda turadi. */}
+               {!salesAgentMode && !leadApiOpen && (
+                  <button
+                     onClick={() => setLeadApiOpen(true)}
+                     className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-left
+                                bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800
+                                border border-gray-200 dark:border-gray-700 transition-colors"
+                  >
+                     <Link2 className="w-4 h-4 text-primary-500 shrink-0" />
+                     <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                        Tashqi lid manbasi
+                     </span>
+                     {leadApiInfo?.apiKey && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700
+                                         dark:bg-emerald-900/40 dark:text-emerald-300">
+                           ulangan
+                        </span>
+                     )}
+                     <span className="ml-auto text-xs text-gray-400">ochish</span>
+                  </button>
+               )}
+
+               {!salesAgentMode && leadApiOpen && (
                   <Card className="p-5">
                      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                         <div className="flex items-center gap-2">
@@ -1366,6 +1447,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               <h4 className="font-bold text-gray-900 dark:text-white">Tashqi lid manbasi (yuboraman.uz)</h4>
                               <p className="text-xs text-gray-500">Bu kalit orqali kelgan lidlar shu ro'yxatga tushadi</p>
                            </div>
+                           <button
+                              onClick={() => setLeadApiOpen(false)}
+                              className="ml-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
+                           >
+                              yopish
+                           </button>
                         </div>
                         {leadApiInfo?.apiKey ? (
                            <div className="flex flex-wrap gap-2">
@@ -1437,7 +1524,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                ) : (
                   <div className="flex gap-4 overflow-x-auto pb-2">
                      {visibleStages.map(stage => {
-                        const stageLeads = visibleDemoRequests.filter((r: any) => (r.status || 'Inbox') === stage);
+                        const stageLeads = visibleDemoRequests.filter((r: any) => leadStage(r) === stage);
                         const isTarget = dragOverStage === stage;
                         return (
                            <div
@@ -1477,7 +1564,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            draggable
                            onDragStart={() => setDraggingLeadId(req.id)}
                            onDragEnd={() => { setDraggingLeadId(null); setDragOverStage(null); }}
-                           className={`p-4 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${draggingLeadId === req.id ? 'opacity-40' : ''}`}
+                           className={`relative p-4 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${draggingLeadId === req.id ? 'opacity-40' : ''}`}
                         >
                            <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-3">
@@ -1528,6 +1615,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                o'ziga biriktirilganini ko'radi (backend baribir tekshiradi). */}
                            {!salesAgentMode && (
                               <div className="flex items-center gap-2 mb-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                 {/* Biriktirilmagan lidni sudrashga urinilganda: sabab shu
+                                     yerda, tanlagichning yonida ko'rsatiladi — foydalanuvchi
+                                     nima qilish kerakligini o'sha zahoti ko'radi. */}
+                                 {leadHint === req.id && (
+                                    <span className="absolute -mt-9 text-[11px] px-2 py-1 rounded-lg
+                                                     bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                                       Avval sotuvchi tanlang
+                                    </span>
+                                 )}
                                  <Users className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                                  <select
                                     value={req.salesAgentId || ''}
@@ -1551,7 +1647,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               {/* Ustunning o'zi holatni bildiradi; tanlagich sudrab bo'lmaydigan
                                   holatlar (telefon, tor ekran) uchun qoladi */}
                               <select
-                                 value={req.status || 'Inbox'}
+                                 value={leadStage(req)}
                                  onChange={e => moveLeadToStage(req.id, e.target.value)}
                                  className={`text-xs font-bold px-2.5 py-1 rounded-full border-0 cursor-pointer ${DEMO_STAGE_COLORS[req.status] || 'bg-gray-100 text-gray-700'}`}
                               >
