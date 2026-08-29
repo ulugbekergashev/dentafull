@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -51,12 +51,27 @@ const CLINIC_NAVIGATION = [
   { id: 'settings', labelKey: 'nav.settings', icon: SettingsIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
 ];
 
+// SUPER_ADMIN va sotuvchida bu qatorda ILGARI BITTA element turardi —
+// "SaaS Dashboard". Butun bir qator bitta yorliq uchun sarflanardi, bo'lim
+// tanlagichi esa undan pastda, sahifa sarlavhasi yonida edi.
+//
+// Endi bo'limlar shu yerga chiqdi. Ular URL bilan bog'langan (`?tab=`),
+// ya'ni har bir bo'lim havola: brauzerning "orqaga" tugmasi ishlaydi va
+// aniq bo'limga havola yuborsa bo'ladi.
 const SUPER_ADMIN_NAVIGATION = [
-  { id: 'admin', labelKey: 'nav.saas', icon: Building2, roles: [UserRole.SUPER_ADMIN] },
+  { id: 'overview', labelKey: 'superAdmin.tabs.overview', icon: TrendingUp, to: '/admin?tab=overview', roles: [UserRole.SUPER_ADMIN] },
+  { id: 'clinics', labelKey: 'superAdmin.tabs.clinics', icon: Building2, to: '/admin?tab=clinics', roles: [UserRole.SUPER_ADMIN] },
+  { id: 'plans', labelKey: 'superAdmin.tabs.plans', icon: CreditCard, to: '/admin?tab=plans', roles: [UserRole.SUPER_ADMIN] },
+  { id: 'sales', labelKey: 'nav.salesAgents', icon: UserCheck, to: '/admin?tab=sales', roles: [UserRole.SUPER_ADMIN] },
+  { id: 'blocked', labelKey: 'superAdmin.tabs.blocked', icon: Shield, to: '/admin?tab=blocked', roles: [UserRole.SUPER_ADMIN] },
+  { id: 'leads', labelKey: 'nav.leads', icon: MessageSquare, to: '/admin?tab=leads', roles: [UserRole.SUPER_ADMIN] },
 ];
 
 const SALES_NAVIGATION = [
-  { id: 'sales', labelKey: 'nav.saas', icon: Building2, roles: [UserRole.SALES_AGENT] },
+  { id: 'clinics', labelKey: 'superAdmin.tabs.clinics', icon: Building2, to: '/sales?tab=clinics', roles: [UserRole.SALES_AGENT] },
+  { id: 'plans', labelKey: 'superAdmin.tabs.plans', icon: CreditCard, to: '/sales?tab=plans', roles: [UserRole.SALES_AGENT] },
+  { id: 'blocked', labelKey: 'superAdmin.tabs.blocked', icon: Shield, to: '/sales?tab=blocked', roles: [UserRole.SALES_AGENT] },
+  { id: 'leads', labelKey: 'nav.leads', icon: MessageSquare, to: '/sales?tab=leads', roles: [UserRole.SALES_AGENT] },
 ];
 
 // Helper: get page label key from path
@@ -993,6 +1008,11 @@ const AppContent: React.FC = () => {
   // Ruxsatlar (Sozlamalar в†’ Ruxsatlar): rol bo'yicha modul/moliya/telefon ko'rinishi
   const accessControl = parseAccessControl(currentClinic);
   const showFinanceForRole = canSeeFinance(accessControl, userRole);
+  // Bo'lim ko'rsatilmagan bo'lsa qaysi biri ochiladi — SuperAdminDashboard
+  // dagi standart bilan bir xil bo'lishi shart, aks holda birinchi kirishda
+  // yuqorida bir bo'lim, sahifada boshqasi faol ko'rinardi.
+  const defaultAdminTab = userRole === UserRole.SALES_AGENT ? 'clinics' : 'overview';
+
   const visibleNavigation = CURRENT_NAVIGATION.filter(nav =>
     nav.roles.includes(userRole)
     && !isModuleHidden(accessControl, userRole, nav.id)
@@ -1361,14 +1381,22 @@ const AppContent: React.FC = () => {
           <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14">
             <div className="h-12 flex items-center gap-2 overflow-x-auto no-scrollbar">
               {visibleNavigation.map((item) => {
-                const to = item.id === 'dashboard' ? '/' : `/${item.id}`;
+                const to = (item as any).to || (item.id === 'dashboard' ? '/' : `/${item.id}`);
+                // `?tab=` li havolalarda NavLink faol holatni o'zi aniqlay
+                // olmaydi — u faqat yo'lni solishtiradi, so'rov qatorini emas.
+                const tabOf = (item as any).to
+                  ? new URLSearchParams(String((item as any).to).split('?')[1] || '').get('tab')
+                  : null;
+                const tabActive = tabOf !== null
+                  && (new URLSearchParams(location.search).get('tab') || defaultAdminTab) === tabOf;
                 return (
                   <NavLink
                     key={item.id}
                     to={to}
                     end={item.id === 'dashboard'}
                     className={({ isActive }) => {
-                      const active = isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
+                      const active = tabOf !== null ? tabActive
+                        : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
                       return `relative flex items-center h-12 px-4 text-sm font-medium transition-colors whitespace-nowrap group ${active
                         ? 'text-primary dark:text-primary-400 bg-primary-50/60 dark:bg-primary-900/20'
                         : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -1376,7 +1404,8 @@ const AppContent: React.FC = () => {
                     }}
                   >
                     {({ isActive }) => {
-                      const active = isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
+                      const active = tabOf !== null ? tabActive
+                        : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
                       return (
                         <>
                           <item.icon className={`w-4 h-4 mr-2 ${active ? 'text-primary dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />

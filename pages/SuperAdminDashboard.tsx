@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan, LeadApiKeyInfo } from '../types';
-import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 
@@ -174,14 +175,32 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    clinics, plans, onAddClinic, onUpdateClinic, onUpdatePlan, onDeleteClinic, salesAgentMode = false
 }) => {
    const { t } = useLanguage();
-   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'plans' | 'blocked' | 'sales' | 'leads'>(salesAgentMode ? 'clinics' : 'overview');
+   // Bo'lim URL da turadi (`?tab=`), komponent holatida emas.
+   //
+   // Sabab: tanlagich endi yuqoridagi navigatsiya qatorida — boshqa
+   // komponentda. Holatni ikkalasida saqlash ularni sinxronlashtirishni
+   // talab qilardi. URL esa ikkalasi uchun ham yagona manba, ustiga
+   // brauzerning "orqaga" tugmasi ishlaydi va bo'limga havola yuborsa
+   // bo'ladi.
+   const [searchParams, setSearchParams] = useSearchParams();
+   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads'] as const;
+   type TabId = typeof TABS[number];
 
-   const handleTabChange = (tab: 'overview' | 'clinics' | 'plans' | 'blocked' | 'sales' | 'leads') => {
-      setActiveTab(tab);
+   const fallbackTab: TabId = salesAgentMode ? 'clinics' : 'overview';
+   const urlTab = searchParams.get('tab') as TabId | null;
+   const activeTab: TabId = urlTab && TABS.includes(urlTab) ? urlTab : fallbackTab;
+
+   // Bo'lim almashganda qidiruv, filtr va sahifa raqami tozalanadi.
+   //
+   // Ilgari buni tanlagich bosilganda bajaradigan funksiya qilardi. Endi
+   // bo'lim URL dan keladi va u yuqoridagi navigatsiyadan ham, "orqaga"
+   // tugmasidan ham o'zgarishi mumkin — ya'ni bitta bosish nuqtasi yo'q.
+   // Shuning uchun tozalash bo'limning O'ZGARISHIGA bog'landi.
+   useEffect(() => {
       setCurrentPage(1);
       setFilterStatus('All');
       setSearchQuery('');
-   };
+   }, [activeTab]);
 
    // Demo Requests State
    const [demoRequests, setDemoRequests] = useState<any[]>([]);
@@ -761,50 +780,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             <div>
                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('superAdmin.title')}</h1>
                <p className="text-sm text-gray-500 dark:text-gray-400">{t('superAdmin.subtitle')}</p>
-            </div>
-            <div className="flex bg-white dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
-               {!salesAgentMode && (
-                  <button
-                     onClick={() => handleTabChange('overview')}
-                     className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'overview' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
-                  >
-                     {t('superAdmin.tabs.overview')}
-                  </button>
-               )}
-               <button
-                  onClick={() => handleTabChange('clinics')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'clinics' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
-               >
-                  {t('superAdmin.tabs.clinics')}
-               </button>
-               <button
-                  onClick={() => handleTabChange('plans')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'plans' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
-               >
-                  {t('superAdmin.tabs.plans')}
-               </button>
-               {/* Sotuvchilarni boshqarish — faqat superadmin */}
-               {!salesAgentMode && (
-                  <button
-                     onClick={() => handleTabChange('sales')}
-                     className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'sales' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}
-                  >
-                     Sotuvchilar
-                  </button>
-               )}
-               <button
-                  onClick={() => handleTabChange('blocked')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'blocked' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'text-gray-600 dark:text-gray-400'}`}
-               >
-                  {t('superAdmin.tabs.blocked')} ({blockedCount})
-               </button>
-               <button
-                  onClick={() => handleTabChange('leads')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5 ${activeTab === 'leads' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'}`}
-               >
-                  <Inbox className="w-3.5 h-3.5" />
-                  Lidlar
-               </button>
             </div>
          </div>
 
@@ -1434,7 +1409,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            ulangan
                         </span>
                      )}
-                     <span className="ml-auto text-xs text-gray-400">ochish</span>
+                     <span className="ml-auto flex items-center gap-1 text-xs text-gray-400">
+                        ochish <ChevronDown className="w-3.5 h-3.5" />
+                     </span>
                   </button>
                )}
 
@@ -1447,27 +1424,38 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               <h4 className="font-bold text-gray-900 dark:text-white">Tashqi lid manbasi (yuboraman.uz)</h4>
                               <p className="text-xs text-gray-500">Bu kalit orqali kelgan lidlar shu ro'yxatga tushadi</p>
                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                           {leadApiInfo?.apiKey ? (
+                              <>
+                                 <Button variant="secondary" onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
+                                    <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} /> Yangilash
+                                 </Button>
+                                 <Button variant="danger" onClick={handleRevokePlatformKey} disabled={leadApiLoading}>
+                                    <Trash2 className="w-4 h-4 mr-2" /> O'chirish
+                                 </Button>
+                              </>
+                           ) : (
+                              <Button onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
+                                 <KeyRound className="w-4 h-4 mr-2" /> Kalit yaratish
+                              </Button>
+                           )}
+
+                           {/* Yopish "ochish" bilan BIR XIL joyda — o'ng chekkada.
+                               Ilgari u sarlavha yonidagi kichkina havola edi va
+                               ko'zga tashlanmasdi: panelni ochish oson, yopish esa
+                               qidirishni talab qilardi. */}
                            <button
                               onClick={() => setLeadApiOpen(false)}
-                              className="ml-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
+                              aria-label="Yopish"
+                              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm
+                                         text-gray-500 dark:text-gray-400
+                                         hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                            >
                               yopish
+                              <ChevronUp className="w-4 h-4" />
                            </button>
                         </div>
-                        {leadApiInfo?.apiKey ? (
-                           <div className="flex flex-wrap gap-2">
-                              <Button variant="secondary" onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
-                                 <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} /> Yangilash
-                              </Button>
-                              <Button variant="danger" onClick={handleRevokePlatformKey} disabled={leadApiLoading}>
-                                 <Trash2 className="w-4 h-4 mr-2" /> O'chirish
-                              </Button>
-                           </div>
-                        ) : (
-                           <Button onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
-                              <KeyRound className="w-4 h-4 mr-2" /> Kalit yaratish
-                           </Button>
-                        )}
                      </div>
 
                      <label className="block text-xs font-medium text-gray-500 mb-1">So'rov manzili</label>

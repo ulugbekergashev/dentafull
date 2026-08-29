@@ -39,6 +39,7 @@ export const translations = {
     // Navigation
     'nav.dashboard': 'Boshqaruv Paneli',
     'nav.leads': 'Lidlar',
+    'nav.salesAgents': 'Sotuvchilar',
     'nav.patients': 'Bemorlar',
     'nav.calendar': 'Kalendar',
     'nav.finance': 'Moliya',
@@ -820,6 +821,7 @@ export const translations = {
     // Navigation
     'nav.dashboard': 'Панель управления',
     'nav.leads': 'Лиды',
+    'nav.salesAgents': 'Продавцы',
     'nav.patients': 'Пациенты',
     'nav.calendar': 'Календарь',
     'nav.finance': 'Финансы',
