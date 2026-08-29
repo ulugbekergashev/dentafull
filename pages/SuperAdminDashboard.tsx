@@ -775,14 +775,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
    return (
       <div className="space-y-6 animate-fade-in">
-         {/* Header */}
-         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('superAdmin.title')}</h1>
-               <p className="text-sm text-gray-500 dark:text-gray-400">{t('superAdmin.subtitle')}</p>
-            </div>
-         </div>
-
+         {/* Sahifa sarlavhasi ataylab yo'q.
+             Bo'limlar yuqoridagi navigatsiyaga ko'chgach, "SaaS Boshqaruv
+             Paneli" sarlavhasi hech qanday ma'lumot bermay qo'ydi —
+             foydalanuvchi qayerdaligini navigatsiyadagi faol bo'limdan
+             ko'rib turadi. U faqat ish maydonini pastga surardi. */}
          {/* OVERVIEW TAB */}
          {activeTab === 'overview' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
