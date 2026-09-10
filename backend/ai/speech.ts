@@ -157,6 +157,19 @@ const transcribeGemini = async (
             yoriq.push(`Quyidagi atama va ismlar aynan shu shaklda yozilishi kerak: ${terms.join(', ')}.`);
         }
         body.input.unshift({ type: 'text', text: yoriq.join(' ') });
+
+        // O'YLASH O'CHIRILADI — bu kechikishning asosiy sababi edi.
+        //
+        // gemini-3.5-flash standart holda "o'ylab" javob beradi (standart
+        // daraja — medium). Transkripsiyada esa o'ylashning ma'nosi yo'q:
+        // vazifa ijodiy emas, model shunchaki eshitganini yozadi. Ya'ni
+        // butun o'ylash vaqti sof kutish bo'lib qolardi va shifokor
+        // mikrofonni qo'yib yuborgandan keyin spinnerga qarab turardi.
+        //
+        // 'minimal' — 3.x da eng past daraja ('none' bu modellarda
+        // ishlamaydi). Maxsus transcribe modelida bu maydon kerak emas:
+        // u umuman o'ylamaydi.
+        body.generation_config = { thinking_level: 'minimal' };
     }
 
     const controller = new AbortController();

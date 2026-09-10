@@ -98,7 +98,7 @@ function encodeWav(samples: Float32Array, rate: number): Blob {
  * alialising kiradi — quloqqa sezilmaydi, lekin model uchun aynan shovqin
  * bo'lib qoladi, ya'ni sifat oshirish uchun qilingan ish sifatni buzardi.
  */
-async function toWav(blob: Blob): Promise<Blob> {
+async function toWav(blob: Blob, keepSec = 0): Promise<Blob> {
     const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
     const Offline = (window as any).OfflineAudioContext || (window as any).webkitOfflineAudioContext;
     if (!Ctx || !Offline) throw new Error('AudioContext yo\'q');
@@ -112,7 +112,17 @@ async function toWav(blob: Blob): Promise<Blob> {
         try { ctx.close(); } catch { /* muhim emas */ }
     }
 
-    const frames = Math.max(1, Math.ceil(decoded.duration * WAV_RATE));
+    // JIM QUYRUQ QIRQILADI.
+    //
+    // Yozuv jimlik bo'yicha to'xtaydi, ya'ni oxirida har doim ~1 soniya
+    // sukut qoladi. U ikki marta pul turadi: 32 KB bekorga yuklanadi va
+    // model ham o'sha bo'lakni tinglab chiqadi. Foydali qismi esa nol.
+    //
+    // keepSec berilmasa hech narsa qirqilmaydi — o'lchov ishlamay qolgan
+    // holatda butun yozuv o'tishi, gapning oxiri kesilib ketishidan
+    // yaxshiroq.
+    const dur = keepSec > 0 ? Math.min(decoded.duration, keepSec) : decoded.duration;
+    const frames = Math.max(1, Math.ceil(dur * WAV_RATE));
     // Kanal soni 1 berilgani uchun stereo o'zi mono'ga qo'shiladi.
     const off = new Offline(1, frames, WAV_RATE);
     const src = off.createBufferSource();
@@ -166,6 +176,9 @@ export function useVoiceInput({ lang, onResult }: Options) {
     const audioCtxRef = useRef<AudioContext | null>(null);
     const rafRef = useRef<number | null>(null);
     const chunksRef = useRef<BlobPart[]>([]);
+    /** Jim quyruqni qirqish uchun: yozuv boshi va oxirgi ovoz payti. */
+    const startedAtRef = useRef(0);
+    const lastVoiceRef = useRef(0);
     // Natija ikki marta yuborilmasligi uchun: Web Speech ba'zan `onresult`
     // dan keyin `onend` da ham chaqiradi.
     const deliveredRef = useRef(false);
@@ -210,6 +223,10 @@ export function useVoiceInput({ lang, onResult }: Options) {
             const rec = new MediaRecorder(stream);
             recorderRef.current = rec;
             chunksRef.current = [];
+            // Yozuv boshlangan va oxirgi ovoz eshitilgan payt — jim quyruqni
+            // qirqish uchun (rec.onstop ichida ishlatiladi).
+            startedAtRef.current = Date.now();
+            lastVoiceRef.current = 0;
 
             rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
 
@@ -227,7 +244,13 @@ export function useVoiceInput({ lang, onResult }: Options) {
                     let audio = blob;
                     let filename = `speech.${(rec.mimeType || 'audio/webm').includes('ogg') ? 'ogg' : 'webm'}`;
                     try {
-                        audio = await toWav(blob);
+                        // Oxirgi ovozdan keyin 250ms qoldiriladi: so'z oxiridagi
+                        // undosh ("...yubor") jimlik chegarasidan pastda bo'lishi
+                        // mumkin va uni kesib yuborish so'zni buzardi.
+                        const keepSec = lastVoiceRef.current
+                            ? (lastVoiceRef.current - startedAtRef.current + 250) / 1000
+                            : 0;
+                        audio = await toWav(blob, keepSec);
                         filename = 'speech.wav';
                     } catch (e) {
                         console.warn('[ovoz] WAV\'ga o\'girilmadi, xom yozuv yuboriladi:', e);
@@ -293,12 +316,22 @@ export function useVoiceInput({ lang, onResult }: Options) {
                 const hozir = Date.now();
                 // 0.02 — tinch xonadagi shovqindan yuqori, lekin sekin
                 // gapirishni ham ushlaydi.
-                if (rms > 0.02) { oxirgiOvoz = hozir; ovozEshitildi = true; }
+                if (rms > 0.02) {
+                    oxirgiOvoz = hozir;
+                    ovozEshitildi = true;
+                    lastVoiceRef.current = hozir;
+                }
 
                 // Boshlanishiga 700ms beriladi: mikrofon yonguncha va odam
                 // gapira boshlaguncha o'tadigan vaqt jimlik deb hisoblanmasin.
+                //
+                // Jimlik chegarasi 1500 -> 900ms. Bu SOF kutish edi: gap
+                // tugagandan keyin shifokor 1.5 soniya spinnerga qarab
+                // turardi va bu vaqt hech qanday ish qilmasdi. 900ms —
+                // gap ichidagi tabiiy pauzadan uzun (odatda 200-500ms),
+                // lekin sezilmaydigan darajada qisqa.
                 const jimlik = ovozEshitildi
-                    && hozir - oxirgiOvoz > 1500
+                    && hozir - oxirgiOvoz > 900
                     && hozir - boshlandi > 700;
                 // Umuman gapirilmadi — mikrofonni bekorga ochiq qoldirmaymiz.
                 const jimjit = !ovozEshitildi && hozir - boshlandi > 8000;
