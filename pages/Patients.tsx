@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
 import { StatCard } from '../components/StatCard';
-import { Search, Plus, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity } from 'lucide-react';
-import { Patient, Doctor, Appointment, Transaction, Clinic } from '../types';
+import { Search, Plus, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity, MapPin } from 'lucide-react';
+import { Patient, Doctor, Appointment, Transaction, Clinic, Branch } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { calcAge } from '../utils/dateUtils';
@@ -20,6 +20,11 @@ interface PatientsProps {
   onUpdatePatient: (id: string, data: Partial<Patient>) => Promise<void>;
   currentClinic?: Clinic;
   showPatientPhone?: boolean; // Ruxsatlar: bemor telefon raqamini ko'rsatish
+  branches?: Branch[];
+  /** Sarlavhada tanlangan filial — yangi bemor odatda shunga biriktiriladi. */
+  activeBranchId?: string | null;
+  /** Bir nechta bemorni bir yo'la filialga biriktirish (yoki chiqarish). */
+  onAssignBranch?: (patientIds: string[], branchId: string | null) => Promise<void>;
 }
 
 export const Patients: React.FC<PatientsProps> = ({
@@ -34,6 +39,9 @@ export const Patients: React.FC<PatientsProps> = ({
   onUpdatePatient,
   currentClinic,
   showPatientPhone = true,
+  branches = [],
+  activeBranchId = null,
+  onAssignBranch,
 }) => {
   const { t } = useLanguage();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -43,11 +51,22 @@ export const Patients: React.FC<PatientsProps> = ({
   const [isAssigning, setIsAssigning] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
+  // Filialga biriktirish. Ikki yo'l bor: bitta bemor uchun biriktirish
+  // oynasida, va ro'yxatdan belgilab bir yo'la — mavjud bazani filiallarga
+  // taqsimlashda bittalab ochib chiqish real ish emas.
+  const [assignBranchId, setAssignBranchId] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBranchId, setBulkBranchId] = useState('');
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false);
+  const hasBranches = branches.length > 0;
+  const canAssignBranch = hasBranches && !!onAssignBranch;
+
   // Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterGender, setFilterGender] = useState('all');
   const [filterDoctor, setFilterDoctor] = useState('all');
+  const [filterBranch, setFilterBranch] = useState('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null);
@@ -64,6 +83,7 @@ export const Patients: React.FC<PatientsProps> = ({
     secondaryPhone: '',
     doctorId: '',
     pinfl: '',
+    branchId: '',
   });
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,6 +111,11 @@ export const Patients: React.FC<PatientsProps> = ({
         filterDoctor === 'all' ||
         (filterDoctor === 'none' && !p.doctorId) ||
         p.doctorId === filterDoctor;
+
+      const matchesBranch =
+        filterBranch === 'all' ||
+        (filterBranch === 'none' && !p.branchId) ||
+        p.branchId === filterBranch;
 
       const matchesDateFrom = !filterDateFrom || p.dob >= filterDateFrom;
       const matchesDateTo = !filterDateTo || p.dob <= filterDateTo;
@@ -123,9 +148,9 @@ export const Patients: React.FC<PatientsProps> = ({
         matchesStat = hasUnpaid;
       }
 
-      return matchesSearch && matchesStatus && matchesGender && matchesDoctor && matchesDateFrom && matchesDateTo && matchesStat;
+      return matchesSearch && matchesStatus && matchesGender && matchesDoctor && matchesBranch && matchesDateFrom && matchesDateTo && matchesStat;
     });
-  }, [patients, searchTerm, filterStatus, filterGender, filterDoctor, filterDateFrom, filterDateTo, activeStatFilter, appointments, transactions]);
+  }, [patients, searchTerm, filterStatus, filterGender, filterDoctor, filterBranch, filterDateFrom, filterDateTo, activeStatFilter, appointments, transactions]);
 
   // Stats
   const stats = useMemo(() => {
@@ -154,6 +179,38 @@ export const Patients: React.FC<PatientsProps> = ({
   }, [patients, appointments, transactions]);
 
   const unassignedCount = patients.filter((p) => !p.doctorId).length;
+
+  const branchNameOf = (p: Patient): string | null =>
+    p.branchId ? (branches.find((b) => b.id === p.branchId)?.name || null) : null;
+
+  const allFilteredSelected =
+    filteredPatients.length > 0 && filteredPatients.every((p) => selectedIds.includes(p.id));
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      const shown = new Set(filteredPatients.map((p) => p.id));
+      setSelectedIds((prev) => prev.filter((id) => !shown.has(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...filteredPatients.map((p) => p.id)])));
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleBulkAssignBranch = async () => {
+    if (!onAssignBranch || selectedIds.length === 0) return;
+    setIsBulkAssigning(true);
+    try {
+      await onAssignBranch(selectedIds, bulkBranchId || null);
+      setSelectedIds([]);
+    } catch {
+      // xabarni yuqoridagi komponent ko'rsatadi
+    } finally {
+      setIsBulkAssigning(false);
+    }
+  };
 
   // Shifokor ismi: API'dan kelgan doctorName yoki doctorId orqali doctors ro'yxatidan
   // (doctorName bazada saqlanmaydi — doctorId asosiy manba)
@@ -193,6 +250,7 @@ export const Patients: React.FC<PatientsProps> = ({
     e.stopPropagation();
     setSelectedPatient(patient);
     setAssignDoctorId(patient.doctorId || '');
+    setAssignBranchId(patient.branchId || '');
     setIsAssignModalOpen(true);
   };
 
@@ -204,6 +262,9 @@ export const Patients: React.FC<PatientsProps> = ({
       await onUpdatePatient(selectedPatient.id, {
         doctorId: assignDoctorId || undefined,
         doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : undefined,
+        // Filialni faqat filiallar mavjud bo'lsa yuboramiz — aks holda
+        // filialsiz klinikada har tahrir bekorga branchId yozardi.
+        ...(hasBranches ? { branchId: assignBranchId || null } : {}),
       });
       setIsAssignModalOpen(false);
     } catch {
@@ -251,6 +312,7 @@ export const Patients: React.FC<PatientsProps> = ({
         gender: formData.gender as 'Male' | 'Female',
         doctorId: formData.doctorId || undefined,
         doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : undefined,
+        ...(hasBranches ? { branchId: formData.branchId || null } : {}),
       });
 
       // Upload photo if selected
@@ -262,7 +324,7 @@ export const Patients: React.FC<PatientsProps> = ({
       }
 
       setIsAddModalOpen(false);
-      setFormData({ firstName: '', lastName: '', phone: '', dob: '', gender: 'Male', medicalHistory: '', address: '', secondaryPhone: '', doctorId: '', pinfl: '' });
+      setFormData({ firstName: '', lastName: '', phone: '', dob: '', gender: 'Male', medicalHistory: '', address: '', secondaryPhone: '', doctorId: '', pinfl: '', branchId: '' });
       setSelectedPhoto(null);
     } catch {
       // handled by parent
@@ -280,6 +342,7 @@ export const Patients: React.FC<PatientsProps> = ({
     filterStatus !== 'all',
     filterGender !== 'all',
     filterDoctor !== 'all',
+    filterBranch !== 'all',
     !!filterDateFrom,
     !!filterDateTo,
   ].filter(Boolean).length;
@@ -318,7 +381,10 @@ export const Patients: React.FC<PatientsProps> = ({
           
           <Button 
             className="flex-1 lg:flex-none justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white shadow-lg shadow-primary-500/25 transition-all active:scale-95 py-2.5 border-none"
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              setFormData((prev) => ({ ...prev, branchId: activeBranchId || '' }));
+              setIsAddModalOpen(true);
+            }}
           >
             <Plus className="w-4 h-4" /> 
             <span className="whitespace-nowrap">{t('patients.buttons.add')}</span>
@@ -423,6 +489,22 @@ export const Patients: React.FC<PatientsProps> = ({
                 ))}
               </select>
             </div>
+            {hasBranches && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('branches.doctorBranch')}</label>
+                <select
+                  value={filterBranch}
+                  onChange={(e) => setFilterBranch(e.target.value)}
+                  className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="all">{t('patients.filter.all')}</option>
+                  <option value="none">{t('branches.unassigned')}</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Tug'ilganidan boshlab</label>
               <input
@@ -447,7 +529,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 <button
                   onClick={() => {
                     setFilterStatus('all'); setFilterGender('all'); setFilterDoctor('all');
-                    setFilterDateFrom(''); setFilterDateTo('');
+                    setFilterBranch('all'); setFilterDateFrom(''); setFilterDateTo('');
                   }}
                   className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 underline"
                 >
@@ -459,16 +541,60 @@ export const Patients: React.FC<PatientsProps> = ({
         )}
       </Card>
 
+      {/* Belgilangan bemorlarni bir yo'la filialga biriktirish */}
+      {canAssignBranch && selectedIds.length > 0 && (
+        <Card className="p-3 flex flex-wrap items-center gap-3 border-primary-300 dark:border-primary-800 bg-primary-50/60 dark:bg-primary-900/20">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">
+            {t('branches.selectedCount').replace('{n}', String(selectedIds.length))}
+          </span>
+          <select
+            value={bulkBranchId}
+            onChange={(e) => setBulkBranchId(e.target.value)}
+            className="h-9 min-w-[200px] rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="">{t('branches.unassigned')}</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          <Button size="sm" onClick={handleBulkAssignBranch} disabled={isBulkAssigning}>
+            {isBulkAssigning
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('branches.saving')}</>
+              : <><MapPin className="w-4 h-4 mr-2" />{t('branches.assignAction')}</>}
+          </Button>
+          <button
+            onClick={() => setSelectedIds([])}
+            className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline"
+          >
+            {t('branches.clearSelection')}
+          </button>
+        </Card>
+      )}
+
       {/* Table */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr className="border-b border-gray-200 dark:border-gray-700">
+                {canAssignBranch && (
+                  <th className="pl-6 pr-0 py-4 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label={t('branches.selectAll')}
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.name')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.phone')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.age_gender')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.doctor')}</th>
+                {hasBranches && (
+                  <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('branches.doctorBranch')}</th>
+                )}
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.lastVisit')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">DMED</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.status')}</th>
@@ -479,9 +605,20 @@ export const Patients: React.FC<PatientsProps> = ({
               {filteredPatients.map((patient) => (
                 <tr
                   key={patient.id}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group"
+                  className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group ${selectedIds.includes(patient.id) ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
                   onClick={() => onPatientClick(patient.id)}
                 >
+                  {canAssignBranch && (
+                    <td className="pl-6 pr-0 py-4" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`${patient.lastName} ${patient.firstName}`}
+                        checked={selectedIds.includes(patient.id)}
+                        onChange={() => toggleSelectOne(patient.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                      />
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="h-9 w-9 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold text-sm group-hover:bg-primary-200 dark:group-hover:bg-primary-800 transition-colors overflow-hidden">
@@ -520,6 +657,18 @@ export const Patients: React.FC<PatientsProps> = ({
                       );
                     })()}
                   </td>
+                  {hasBranches && (
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {branchNameOf(patient) ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-200">
+                          <MapPin className="w-3 h-3 text-gray-400" />
+                          {branchNameOf(patient)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">{t('branches.unassigned')}</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{patient.lastVisit}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     {patient.pinfl ? (
@@ -565,7 +714,7 @@ export const Patients: React.FC<PatientsProps> = ({
               ))}
               {filteredPatients.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7 + (canAssignBranch ? 1 : 0) + (hasBranches ? 1 : 0)} className="px-6 py-12 text-center text-gray-500">
                     <Search className="w-10 h-10 mx-auto mb-2 text-gray-300" />
                     So'rovingiz bo'yicha bemorlar topilmadi.
                   </td>
@@ -577,7 +726,7 @@ export const Patients: React.FC<PatientsProps> = ({
       </Card>
 
       {/* Doctor Assignment Modal */}
-      <Modal isOpen={isAssignModalOpen} onClose={() => setIsAssignModalOpen(false)} title="Doktorga Biriktirish">
+      <Modal isOpen={isAssignModalOpen} onClose={() => setIsAssignModalOpen(false)} title={hasBranches ? t('branches.assignTitle') : "Doktorga Biriktirish"}>
         {selectedPatient && (
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -603,6 +752,22 @@ export const Patients: React.FC<PatientsProps> = ({
                 ))}
               </select>
             </div>
+
+            {hasBranches && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('branches.pick')}</label>
+                <select
+                  value={assignBranchId}
+                  onChange={(e) => setAssignBranchId(e.target.value)}
+                  className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">{t('branches.unassigned')}</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="secondary" onClick={() => setIsAssignModalOpen(false)} disabled={isAssigning}>
@@ -705,6 +870,23 @@ export const Patients: React.FC<PatientsProps> = ({
                 <option value="">— Keyinroq biriktirish —</option>
                 {doctors.filter((d) => d.status === 'Active').map((d) => (
                   <option key={d.id} value={d.id}>{d.lastName} {d.firstName} ({d.specialty})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {hasBranches && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('branches.doctorBranch')}</label>
+              <select
+                name="branchId"
+                value={formData.branchId}
+                onChange={handleInputChange}
+                className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">{t('branches.unassigned')}</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
             </div>

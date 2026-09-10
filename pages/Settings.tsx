@@ -41,6 +41,8 @@ interface SettingsProps {
    onUpdateLabTechnician?: (id: string, tech: Partial<LabTechnician>) => void;
    onDeleteLabTechnician?: (id: string) => void;
    branches?: Branch[];
+   /** Filial bo'yicha bemorlar soni. '' kaliti — filialsiz bemorlar. */
+   patientCountByBranch?: Record<string, number>;
    onAddBranch?: (data: { name: string; address?: string; phone?: string; assignExisting?: boolean }) => Promise<Branch>;
    onUpdateBranch?: (id: string, data: Partial<Branch>) => Promise<void>;
    onDeleteBranch?: (id: string) => Promise<void>;
@@ -50,7 +52,7 @@ interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({
-   userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, branches = [], onAddBranch, onUpdateBranch, onDeleteBranch, currentClinic, plans, reviews
+   userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, branches = [], patientCountByBranch = {}, onAddBranch, onUpdateBranch, onDeleteBranch, currentClinic, plans, reviews
 }) => {
    const { t } = useLanguage();
    type SettingsTab = 'general' | 'branches' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed' | 'access' | 'leadApi' | 'ai';
@@ -1811,8 +1813,30 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                                        {branch.phone}
                                     </p>
                                  )}
+                                 <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/60 flex items-center gap-3 text-xs text-gray-500">
+                                    <span className="inline-flex items-center gap-1.5">
+                                       <Users className="w-3.5 h-3.5 text-gray-400" />
+                                       {t('branches.doctorCount').replace('{n}', String(doctors.filter(d => d.branchId === branch.id).length))}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1.5">
+                                       <User className="w-3.5 h-3.5 text-gray-400" />
+                                       {t('branches.patientCount').replace('{n}', String(patientCountByBranch[branch.id] || 0))}
+                                    </span>
+                                 </div>
                               </div>
                            ))}
+                        </div>
+                     )}
+
+                     {branches.length > 0 && (patientCountByBranch[''] || 0) > 0 && (
+                        <div className="mt-5 flex items-start gap-3 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20">
+                           <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                           <div className="text-sm">
+                              <p className="font-medium text-gray-900 dark:text-white">
+                                 {t('branches.unassignedPatients').replace('{n}', String(patientCountByBranch[''] || 0))}
+                              </p>
+                              <p className="text-gray-600 dark:text-gray-400 mt-0.5">{t('branches.unassignedHint')}</p>
+                           </div>
                         </div>
                      )}
                   </Card>
@@ -1836,18 +1860,26 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                                  </div>
                                  <div>
                                     <p className="font-medium text-gray-900 dark:text-white">Dr. {doc.firstName} {doc.lastName}</p>
-                                    <p className="text-xs text-gray-500">
-                                       {doc.specialty}
-                                       {branches.length > 0 && (
-                                          <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-gray-400">
-                                             <MapPin className="w-3 h-3" />
-                                             {branches.find(b => b.id === doc.branchId)?.name || t('branches.doctorAllBranches')}
-                                          </span>
-                                       )}
-                                    </p>
+                                    <p className="text-xs text-gray-500">{doc.specialty}</p>
                                  </div>
                               </div>
                               <div className="flex items-center gap-2">
+                                 {/* Filialni shu yerdan almashtirish mumkin — tahrirlash
+                                     oynasini ochish shart emas. Bo'sh qiymat: shifokor
+                                     barcha filiallarda ko'rinadi. */}
+                                 {branches.length > 0 && (
+                                    <select
+                                       value={doc.branchId || ''}
+                                       onChange={(e) => onUpdateDoctor(doc.id, { branchId: e.target.value || null })}
+                                       title={t('branches.doctorBranch')}
+                                       className="h-8 max-w-[170px] rounded-md border border-gray-200 dark:border-gray-700 bg-transparent text-xs text-gray-600 dark:text-gray-300 px-2 focus:ring-2 focus:ring-primary-500"
+                                    >
+                                       <option value="">{t('branches.doctorAllBranches')}</option>
+                                       {branches.map(b => (
+                                          <option key={b.id} value={b.id}>{b.name}</option>
+                                       ))}
+                                    </select>
+                                 )}
                                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{doc.status === 'Active' ? t('settings.staff.statusActive') : t('settings.staff.statusVoc')}</span>
                                  <button
                                     onClick={() => handleOpenDoctorModal(doc)}

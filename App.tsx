@@ -927,6 +927,22 @@ const AppContent: React.FC = () => {
     addToast('info', t('branches.deleted'));
   };
 
+  // Bir nechta bemorni filialga biriktirish (yoki filialdan chiqarish).
+  const assignPatientsToBranch = async (patientIds: string[], branchId: string | null) => {
+    try {
+      const res = await api.patients.assignBranch(patientIds, branchId);
+      const touched = new Set(patientIds);
+      setPatients(prev => prev.map(p => touched.has(p.id) ? { ...p, branchId: res.branchId } : p));
+      const name = branchId ? (branches.find(b => b.id === branchId)?.name || '') : '';
+      addToast('success', branchId
+        ? t('branches.assignedToBranch').replace('{n}', String(res.updated)).replace('{name}', name)
+        : t('branches.assignedNone').replace('{n}', String(res.updated)));
+    } catch (e: any) {
+      addToast('error', e.message || 'Xatolik yuz berdi');
+      throw e;
+    }
+  };
+
   const addDoctor = async (doctor: Omit<Doctor, 'id'>) => {
     try {
       const newDoc = await api.doctors.create({ ...doctor, clinicId });
@@ -1644,6 +1660,9 @@ const AppContent: React.FC = () => {
                   onDeletePatient={deletePatient}
                   onUpdatePatient={updatePatient}
                   currentClinic={currentClinic}
+                  branches={branches}
+                  activeBranchId={activeBranchId}
+                  onAssignBranch={assignPatientsToBranch}
                 />
               } />
 
@@ -1834,6 +1853,11 @@ const AppContent: React.FC = () => {
                       onUpdateLabTechnician={updateLabTechnician}
                       onDeleteLabTechnician={deleteLabTechnician}
                       branches={branches}
+                      patientCountByBranch={patients.reduce((acc, p) => {
+                        const key = p.branchId || '';
+                        acc[key] = (acc[key] || 0) + 1;
+                        return acc;
+                      }, {} as Record<string, number>)}
                       onAddBranch={addBranch}
                       onUpdateBranch={updateBranch}
                       onDeleteBranch={deleteBranch}

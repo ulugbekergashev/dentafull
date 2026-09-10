@@ -204,6 +204,22 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+        // Bir nechta bemorni filialga biriktirish. branchId null — filialdan chiqarish.
+        assignBranch: (patientIds: string[], branchId: string | null) => {
+            if (isDemoMode()) {
+                patientIds.forEach(id => {
+                    const p = DEMO_PATIENTS.find(x => x.id === id);
+                    if (p) p.branchId = branchId;
+                });
+                saveDemoData();
+                return Promise.resolve({ updated: patientIds.length, branchId });
+            }
+            return fetchJson<{ updated: number; branchId: string | null }>('/patients/assign-branch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ patientIds, branchId }),
+            });
+        },
         update: (id: string, data: Partial<Patient>) => {
             if (isDemoMode()) {
                 const index = DEMO_PATIENTS.findIndex(p => p.id === id);

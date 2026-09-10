@@ -307,7 +307,12 @@ app.use((req: any, res: any, next: any) => {
 // Filial klinikaga tegishli va o'chirilmagan bo'lishi shart — aks holda null.
 // Begona klinika filialiga yozuv biriktirib bo'lmaydi.
 const resolveBranchId = async (req: any, clinicId: string | null): Promise<string | null> => {
-    const raw = req.body?.branchId ?? req.headers?.['x-branch-id'] ?? null;
+    // Mijoz body'da branchId ni ATAYLAB yuborgan bo'lsa — hatto bo'sh qiymat
+    // bo'lsa ham — o'sha hal qiladi. Aks holda sarlavhadagi tanlov ishlatiladi.
+    // Busiz "Filialsiz" deb tanlangan yangi bemor baribir sarlavhadagi
+    // filialga tushib qolardi.
+    const explicit = req.body && Object.prototype.hasOwnProperty.call(req.body, 'branchId');
+    const raw = explicit ? req.body.branchId : (req.headers?.['x-branch-id'] ?? null);
     if (!raw || !clinicId) return null;
     const branch = await prisma.branch.findFirst({
         where: { id: String(raw), clinicId, status: 'Active' },
@@ -1740,6 +1745,43 @@ app.get('/api/patients/:id', authenticateToken, async (req, res) => {
         res.json(patient);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch patient' });
+    }
+});
+
+// Bir nechta bemorni filialga biriktirish (yoki filialdan chiqarish).
+// Bittalab tahrirlash mavjud klinika uchun yaroqsiz: yuzlab bemorni
+// birma-bir ochib chiqishga to'g'ri kelardi.
+app.post('/api/patients/assign-branch', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+
+        const ids: string[] = Array.isArray(req.body?.patientIds)
+            ? req.body.patientIds.map((x: any) => String(x)).filter(Boolean)
+            : [];
+        if (ids.length === 0) return res.status(400).json({ error: 'Bemor tanlanmagan' });
+
+        // Bo'sh branchId — "filialdan chiqarish" (yozuv umumiy bo'lib qoladi).
+        let branchId: string | null = null;
+        if (req.body?.branchId) {
+            const branch = await prisma.branch.findFirst({
+                where: { id: String(req.body.branchId), clinicId, status: 'Active' },
+                select: { id: true },
+            });
+            if (!branch) return res.status(400).json({ error: 'Filial topilmadi' });
+            branchId = branch.id;
+        }
+
+        // clinicId shartda turibdi — begona klinika bemorining id'si yuborilsa
+        // u shunchaki topilmaydi, ya'ni yangilanmaydi.
+        const result = await prisma.patient.updateMany({
+            where: { id: { in: ids }, clinicId },
+            data: { branchId },
+        });
+        res.json({ updated: result.count, branchId });
+    } catch (error: any) {
+        console.error('Patient branch assign error:', error);
+        res.status(500).json({ error: error.message || 'Failed to assign branch' });
     }
 });
 
