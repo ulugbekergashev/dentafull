@@ -1510,11 +1510,12 @@ const AppContent: React.FC = () => {
         {/* Bottom Row: Navigation Links */}
         <div className="border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/80">
           <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14">
-            {/* Bo'limlar qatori. O'lchamlar brauzerda o'lchab tanlangan:
-                ruscha yorliqlar (eng uzuni) hech qaysi bosqichda kesilmasin,
-                lekin matn imkon qadar katta qolsin. 1800px dan boshlab
-                o'lcham asl holiga qaytadi. */}
-            <div className="h-12 flex items-center gap-0 min-[1600px]:gap-1 min-[1800px]:gap-2 overflow-x-auto no-scrollbar">
+            {/* Bo'limlar qatori. Har bir bosqich brauzerda o'lchab tanlangan:
+                yorliqlar orasidagi bo'sh joy oyna imkon bergancha kengayadi,
+                lekin ruscha nomlar (eng uzuni) hech qachon kesilmaydi.
+                1700px dan oraliq asl holiga yetadi, 1800px dan esa undan
+                ham kengroq — keng ekranda bo'sh joy behuda turgandi. */}
+            <div className="h-12 flex items-center gap-0 min-[1520px]:gap-0.5 min-[1600px]:gap-1 min-[1700px]:gap-2 overflow-x-auto no-scrollbar">
               {visibleNavigation.map((item) => {
                 const to = (item as any).to || (item.id === 'dashboard' ? '/' : `/${item.id}`);
                 // `?tab=` li havolalarda NavLink faol holatni o'zi aniqlay
@@ -1532,7 +1533,7 @@ const AppContent: React.FC = () => {
                     className={({ isActive }) => {
                       const active = tabOf !== null ? tabActive
                         : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
-                      return `relative flex items-center h-12 px-2.5 min-[1600px]:px-3.5 min-[1800px]:px-4 text-[13px] min-[1440px]:text-sm font-medium transition-colors whitespace-nowrap group ${active
+                      return `relative flex items-center h-12 px-2.5 min-[1520px]:px-3 min-[1600px]:px-3.5 min-[1700px]:px-4 min-[1800px]:px-5 text-[13px] min-[1440px]:text-sm font-medium transition-colors whitespace-nowrap group ${active
                         ? 'text-primary dark:text-primary-400 bg-primary-50/60 dark:bg-primary-900/20'
                         : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`
@@ -1543,7 +1544,7 @@ const AppContent: React.FC = () => {
                         : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
                       return (
                         <>
-                          <item.icon className={`w-4 h-4 mr-1.5 min-[1600px]:mr-2 ${active ? 'text-primary dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
+                          <item.icon className={`w-4 h-4 mr-1.5 min-[1520px]:mr-2 ${active ? 'text-primary dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
                           {t(item.labelKey as any)}
                           {active && (
                             <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary dark:bg-primary-400 rounded-t-full"></span>
