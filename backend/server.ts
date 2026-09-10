@@ -6085,7 +6085,7 @@ app.get('/api/superadmin/sales', authenticateToken, async (req, res) => {
 
 const { chatMeta, chatWithTools, isAiConfigured } = require('./aiService');
 const { toolsForRole, runTool } = require('./ai/tools');
-const { askSystemPrompt, chatSystemPrompt } = require('./ai/prompts');
+const { askSystemPrompt, chatSystemPrompt, replyLang } = require('./ai/prompts');
 const {
     toolsForRequest, cachedTool, tryFastPath, invalidateToolCache, actionsForQuestion,
 } = require('./ai/router');
@@ -6225,7 +6225,6 @@ const runAsk = async (
     const user = req.user;
     const clinicId = getScopedClinicId(req) || '';
     const role = user?.role || 'CLINIC_ADMIN';
-    const lang = reqLang(req);
     const today = clinicToday();
 
     const raw = (req.body?.messages || []) as { role: string; content: string }[];
@@ -6240,6 +6239,12 @@ const runAsk = async (
 
     const question = [...history].reverse().find(m => m.role === 'user')?.content || '';
     const isFollowUp = history.filter(m => m.role === 'user').length > 1;
+
+    // Javob tili SAVOLDAN olinadi, interfeys tilidan emas: ovoz bilan
+    // so'ralganda diktovka tili interfeysdan mustaqil va klinika ruscha
+    // interfeysda o'zbekcha savolga ruscha javob olardi. Noaniq bo'lsa
+    // interfeys tili qoladi — batafsil: ai/prompts.ts -> replyLang
+    const lang = replyLang(question, reqLang(req));
 
     const ctx = { clinicId, role, doctorId: user?.doctorId };
     // Klinikaning o'z kaliti (keshlangan). Bo'lsa — zanjirning boshida

@@ -478,6 +478,42 @@ export interface ToolCallTrace {
     args: any;
 }
 
+// ─── O'ylash budjeti ─────────────────────────────────────────────────────────
+//
+// Gemini 3.x (va 2.5) modellari standart holda "o'ylab" javob beradi.
+// DIQQAT: Google o'ylash tokenlarini CHIQISH budjetiga qo'shib hisoblaydi.
+//
+// Aynan shu productionda nosozlikka olib keldi: max_tokens 1024 edi, model
+// budjetning katta qismini o'ylashga sarfladi va javob o'rtada uzildi —
+// ekranda "1. Финансовые показатели и" deb to'xtab qoldi. Ovozli savoldan
+// keyingi kutish ham sezilarli uzun edi, sababi ham shu.
+//
+// Ikki chora BIRGA ishlaydi:
+//
+//   • reasoning_effort — o'ylashni kamaytiradi, ya'ni tezlik. 'none'
+//     berilmadi: Google hujjatiga ko'ra 3.x modellarida o'ylashni butunlay
+//     o'chirib bo'lmaydi, 'minimal' eng past daraja. 'low' o'rta yo'l —
+//     tool tanlash sifati saqlanadi.
+//
+//   • THINK_ALLOWANCE — max_tokens USTIGA qo'shiladi. Shuning uchun
+//     chaqiruv joylaridagi budjet (180, 220, 1024) JAVOB uchun to'liq
+//     qoladi va ularni birma-bir qayta yozish kerak emas. Aks holda
+//     kunlik xulosa (maxTokens: 180) butunlay o'ylashga ketib, bo'sh
+//     javob qaytarardi.
+//
+// Sifatga ta'sirini o'lchash uchun: `npm run eval -- --model <nom>`.
+const REASONING_EFFORT = process.env.AI_REASONING_EFFORT || 'low';
+const THINK_ALLOWANCE = Number(process.env.AI_THINK_ALLOWANCE || 1024);
+
+/**
+ * Bu provayder o'ylash tokenlarini chiqish budjetidan yeydimi.
+ *
+ * Faqat Gemini: `reasoning_effort` — uning OpenAI-mos qatlamidagi
+ * parametr. Groq'ga yuborilsa modelga qarab e'tiborsiz qolishi yoki 400
+ * berishi mumkin, ya'ni zanjirning ishlaydigan bo'g'inini buzardi.
+ */
+const thinks = (providerName: string): boolean => providerName.startsWith('gemini');
+
 /** Bitta provayderga tool'lar bilan so'rov — xom javob qaytaradi. */
 const callProviderRaw = async (
     p: ProviderConfig,
@@ -501,7 +537,9 @@ const callProviderRaw = async (
             body: JSON.stringify({
                 model,
                 messages,
-                max_tokens: opts.maxTokens ?? 1024,
+                // Javob budjeti + o'ylash uchun qo'shimcha (yuqoridagi izoh).
+                max_tokens: (opts.maxTokens ?? 1024) + (thinks(p.name) ? THINK_ALLOWANCE : 0),
+                ...(thinks(p.name) ? { reasoning_effort: REASONING_EFFORT } : {}),
                 ...(tools.length ? { tools, tool_choice: 'auto' } : {}),
                 // include_usage — oqim rejimida token hisobini oxirgi bo'lakda
                 // beradi. Usiz jurnal (ai/log.ts) token ustunlari bo'sh qolardi

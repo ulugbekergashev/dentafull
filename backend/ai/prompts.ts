@@ -15,12 +15,45 @@
  */
 export type Lang = 'uz' | 'ru';
 
-/** Model javob beradigan til. Ilova tili bilan bir xil bo'lishi shart —
- *  aks holda ruscha interfeysda o'zbekcha javob chiqadi. */
+/** Model javob beradigan til. */
 const langLine = (lang: Lang): string =>
     lang === 'ru'
         ? 'Отвечай на русском языке.'
         : 'Tilingiz: o\'zbek.';
+
+/**
+ * Javob tilini SAVOLDAN aniqlaydi, interfeys tilidan emas.
+ *
+ * Ilgari javob tili ilova tiliga qattiq bog'langan edi va sabab asosli
+ * ko'rinardi: ruscha interfeysda o'zbekcha javob chiqmasin. Lekin ovozli
+ * kiritish qo'shilgach bu teskari tomonga aylandi — diktovka tili
+ * interfeysdan MUSTAQIL (hooks/useVoiceInput.ts), ya'ni klinika ruscha
+ * interfeysda ishlab, savolni o'zbekcha aytadi va javobni ruscha oladi.
+ * Yozib so'raganda ham xuddi shunday bo'lardi.
+ *
+ * Alifbo ishonchli ishora: bu ilovada o'zbekcha LOTIN yozuvida, ruscha esa
+ * kirillda. Shuning uchun harflar sanaladi, til modeli chaqirilmaydi —
+ * qo'shimcha kechikish yoki token sarfi yo'q.
+ *
+ * Noaniq holatda (faqat raqam, ism yoki juda qisqa matn) interfeys tili
+ * qoladi: taxmin qilgandan ko'ra oldingi xatti-harakatni saqlash
+ * xavfsizroq.
+ */
+export const replyLang = (question: string, uiLang: Lang): Lang => {
+    const kirill = (question.match(/[Ѐ-ӿ]/g) || []).length;
+    const lotin = (question.match(/[A-Za-z]/g) || []).length;
+
+    // Kamida 4 harf kerak: "ok", "Ali" kabi qisqa matnda alifbo hech
+    // narsani anglatmaydi.
+    if (kirill + lotin < 4) return uiLang;
+
+    // Aniq ustunlik talab qilinadi. O'zbekcha matnda ruscha xizmat nomi
+    // ("Гигиена") yoki teskarisi uchrashi normal — bitta begona so'z
+    // tilni almashtirmasligi kerak.
+    if (kirill > lotin * 2) return 'ru';
+    if (lotin > kirill * 2) return 'uz';
+    return uiLang;
+};
 
 /**
  * @param today   klinika mintaqasidagi bugungi sana (UTC+5)
