@@ -252,6 +252,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [filteredTransactionsByDoctor]);
 
+  /**
+   * O'ng ustunda ko'rsatiladigan "hali olinmagan pul" ro'yxatlari bormi.
+   * Bo'lmasa, kunlik jadval butun kenglikni egallaydi.
+   */
+  const hasMoneyCards = (showFinance && pendingDebts.length > 0) || unpaidCompleted.length > 0;
+
   const pendingDebtsTotal = useMemo(() =>
     pendingDebts.reduce((acc, t) => acc + t.amount, 0)
     , [pendingDebts]);
@@ -412,8 +418,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </>)}
       </div>
 
+      {/* Kunning ikki savoli yonma-yon: bugun kim keladi va qancha pul
+          yig'ilmagan. Nisbat 8/4 — jadvalda yettita ustun bor, u tor joyda
+          gorizontal siljishga tushib qoladi; o'ngdagi ro'yxatlar esa
+          oddiy va tor kenglikda ham bemalol o'qiladi. */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+
       {/* Bugungi Qabullar */}
-      <Card className="p-6 rounded-[2rem]">
+      <Card className={`p-6 rounded-[2rem] ${hasMoneyCards ? 'xl:col-span-8' : 'xl:col-span-12'}`}>
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-xl font-black text-gray-900 dark:text-white">
@@ -446,13 +458,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colTime')}</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colPatient')}</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDoctor')}</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colService')}</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colStatus')}</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colState')}</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colActions')}</th>
+                  <th className="pb-3 pr-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colTime')}</th>
+                  <th className="pb-3 pr-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colPatient')}</th>
+                  <th className="pb-3 pr-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDoctor')}</th>
+                  <th className="pb-3 pr-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colService')}</th>
+                  <th className="pb-3 pr-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colStatus')}</th>
+                  <th className="pb-3 pr-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colState')}</th>
+                  <th className="pb-3 pr-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -472,7 +484,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <td className="py-3.5 pr-4">
                         <button
                           onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
-                          className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                          className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left whitespace-nowrap"
                         >
                           {app.patientName}
                         </button>
@@ -480,7 +492,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <td className="py-3.5 pr-4">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: doctorColor }} />
-                          <span className="text-sm text-gray-600 dark:text-gray-300">{app.doctorName}</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap">{app.doctorName}</span>
                         </div>
                       </td>
                       <td className="py-3.5 pr-4">
@@ -553,10 +565,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         )}
       </Card>
 
-      {/* Yig'ilmagan pul — ikkita ro'yxat yonma-yon.
-          Ikkalasi ham "hali olinmagan pul" bo'lgani uchun bir qatorda turadi. */}
-      {((showFinance && pendingDebts.length > 0) || unpaidCompleted.length > 0) && (
-        <div className={`grid grid-cols-1 gap-6 ${showFinance && pendingDebts.length > 0 && unpaidCompleted.length > 0 ? 'xl:grid-cols-2' : ''}`}>
+      {/* Yig'ilmagan pul — o'ng ustunda ustma-ust.
+          Ikkalasi ham "hali olinmagan pul" bo'lgani uchun bir joyda turadi. */}
+      {hasMoneyCards && (
+        <div className="xl:col-span-4 space-y-6">
 
           {/* Qarzdorlar — qarzga yozilgan, yopilmagan to'lovlar */}
           {showFinance && pendingDebts.length > 0 && (
@@ -592,7 +604,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                         >
                           {tx.patientName}
                         </button>
-                        <p className="text-[11px] text-gray-400 truncate">{tx.date} · {serviceLabel}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{String(tx.date).slice(0, 10)} · {serviceLabel}</p>
                       </div>
                       <span className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">
                         {tx.amount.toLocaleString()}
@@ -686,6 +698,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           )}
         </div>
       )}
+
+      </div>
 
       {/* Charts Row - hidden for receptionist */}
       {!isReceptionist && (<>
