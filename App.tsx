@@ -35,6 +35,7 @@ import { BranchSwitcher } from './components/BranchSwitcher';
 import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } from './services/api';
 import type { CashCloseInput } from './services/api';
 import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone } from './utils/accessControl';
+import { formatHeaderDate } from './utils/dateUtils';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { Language } from './i18n/translations';
@@ -1309,9 +1310,11 @@ const AppContent: React.FC = () => {
         {/* Center container for alignment with main content */}
         <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14">
           {/* Top Row: Logo, Search, Actions */}
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-6">
-              {/* Logo */}
+          <div className="flex items-center gap-4 xl:gap-6 h-16">
+            {/* Chap: logotip va filial. "Qaysi filialdaman" — bu savol
+                qidiruvdan oldin javob topishi kerak, shuning uchun chap
+                burchakda, brauzerning manzil satri kabi. */}
+            <div className="flex items-center gap-3 shrink-0">
               <Logo size="lg" />
 
               {clinicId === 'demo-clinic-1' && (
@@ -1320,115 +1323,119 @@ const AppContent: React.FC = () => {
                 </span>
               )}
 
-              {/* Search and Branch Control */}
-              <div className="flex items-center gap-3 ml-4">
-                <div className="relative group">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
-                  <input
-                    type="text"
-                    placeholder={t('header.search')}
-                    value={searchBarTerm}
-                    onChange={(e) => setSearchBarTerm(e.target.value)}
-                    onFocus={() => setIsSearchFocused(true)}
-                    className="pl-11 pr-5 py-2.5 w-80 bg-gray-100 dark:bg-gray-900/60 border border-transparent rounded-full text-sm text-gray-900 dark:text-white focus:bg-white dark:focus:bg-gray-900 focus:border-primary-200 dark:focus:border-primary-900 focus:ring-4 focus:ring-primary-500/10 placeholder-gray-400 dark:placeholder-gray-500 transition-all outline-none"
-                  />
+              {/* Filial tanlagichi — filiallar bo'lsagina ko'rinadi */}
+              {userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.SALES_AGENT && (
+                <BranchSwitcher
+                  branches={branches}
+                  activeBranchId={activeBranchId}
+                  onChange={setActiveBranchId}
+                />
+              )}
+            </div>
 
-                  {/* Search Results Dropdown */}
-                  {isSearchFocused && searchBarTerm.length >= 2 && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setIsSearchFocused(false)}></div>
-                      <div className="absolute top-full left-0 mt-2 w-[340px] bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 dark:border-gray-700/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-300">
-                        {searchResults.patients.length === 0 && searchResults.doctors.length === 0 ? (
-                          <div className="p-8 text-center">
-                            <div className="w-12 h-12 bg-gray-50 dark:bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-3">
-                              <Search className="w-5 h-5 text-gray-400" />
-                            </div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">Natija topilmadi</p>
-                            <p className="text-xs text-gray-500 mt-1">Boshqa so'z bilan urinib ko'ring</p>
-                          </div>
-                        ) : (
-                          <div className="max-h-[420px] overflow-y-auto no-scrollbar py-2">
-                            {searchResults.patients.length > 0 && (
-                              <div className="px-2 mb-2">
-                                <div className="px-3 py-2 flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                  <Users className="w-3 h-3" />
-                                  Bemorlar
-                                </div>
-                                {searchResults.patients.map(p => (
-                                  <button
-                                    key={p.id}
-                                    onClick={() => {
-                                      navigate(`/patients/${p.id}`);
-                                      setSearchBarTerm('');
-                                      setIsSearchFocused(false);
-                                    }}
-                                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-primary/5 dark:hover:bg-primary-400/10 group transition-all text-left"
-                                  >
-                                    <div className="w-9 h-9 rounded-lg bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xs shrink-0 group-hover:scale-110 transition-transform">
-                                      {p.firstName[0]}{p.lastName[0]}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                                        {p.firstName} {p.lastName}
-                                      </p>
-                                      <p className="text-[11px] text-gray-500 truncate">{p.phone}</p>
-                                    </div>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
+            {/* O'rta: qidiruv. Qolgan bo'sh joyni o'zi egallaydi, ya'ni oyna
+                torayganda birinchi bo'lib SHU kichrayadi. Ilgari kengligi
+                qat'iy (w-80) edi va filial tanlagichi qo'shilgach qatorni
+                to'ldirib yuborgandi: sana ikki qatorga sinib, bo'limlar
+                qatori gorizontal siljib qolgandi. */}
+            <div className="flex-1 min-w-0 flex justify-center">
+              <div className="relative group w-full max-w-[440px]">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                <input
+                  type="text"
+                  placeholder={t('header.search')}
+                  value={searchBarTerm}
+                  onChange={(e) => setSearchBarTerm(e.target.value)}
+                  onFocus={() => setIsSearchFocused(true)}
+                  className="pl-11 pr-5 py-2.5 w-full bg-gray-100 dark:bg-gray-900/60 border border-transparent rounded-full text-sm text-gray-900 dark:text-white focus:bg-white dark:focus:bg-gray-900 focus:border-primary-200 dark:focus:border-primary-900 focus:ring-4 focus:ring-primary-500/10 placeholder-gray-400 dark:placeholder-gray-500 transition-all outline-none"
+                />
 
-                            {searchResults.doctors.length > 0 && (
-                              <div className="px-2 border-t border-gray-100 dark:border-gray-700/50 pt-2">
-                                <div className="px-3 py-2 flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                  <Activity className="w-3 h-3" />
-                                  Shifokorlar
-                                </div>
-                                {searchResults.doctors.map(d => (
-                                  <button
-                                    key={d.id}
-                                    onClick={() => {
-                                      navigate(`/doctors/${d.id}`);
-                                      setSearchBarTerm('');
-                                      setIsSearchFocused(false);
-                                    }}
-                                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-primary/5 dark:hover:bg-primary-400/10 group transition-all text-left"
-                                  >
-                                    <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xs shrink-0 group-hover:scale-110 transition-transform">
-                                      {d.firstName[0]}{d.lastName[0]}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                                        Dr. {d.firstName} {d.lastName}
-                                      </p>
-                                      <p className="text-[11px] text-gray-500 truncate">{d.specialty}</p>
-                                    </div>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
+                {/* Search Results Dropdown */}
+                {isSearchFocused && searchBarTerm.length >= 2 && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsSearchFocused(false)}></div>
+                    <div className="absolute top-full left-0 mt-2 w-full min-w-[320px] bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 dark:border-gray-700/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                      {searchResults.patients.length === 0 && searchResults.doctors.length === 0 ? (
+                        <div className="p-8 text-center">
+                          <div className="w-12 h-12 bg-gray-50 dark:bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Search className="w-5 h-5 text-gray-400" />
                           </div>
-                        )}
-                        <div className="p-3 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-100 dark:border-gray-700/50 text-center">
-                          <p className="text-[10px] text-gray-400 font-medium">Barcha natijalarni ko'rish uchun "Enter" ni bosing</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">Natija topilmadi</p>
+                          <p className="text-xs text-gray-500 mt-1">Boshqa so'z bilan urinib ko'ring</p>
                         </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                      ) : (
+                        <div className="max-h-[420px] overflow-y-auto no-scrollbar py-2">
+                          {searchResults.patients.length > 0 && (
+                            <div className="px-2 mb-2">
+                              <div className="px-3 py-2 flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                <Users className="w-3 h-3" />
+                                Bemorlar
+                              </div>
+                              {searchResults.patients.map(p => (
+                                <button
+                                  key={p.id}
+                                  onClick={() => {
+                                    navigate(`/patients/${p.id}`);
+                                    setSearchBarTerm('');
+                                    setIsSearchFocused(false);
+                                  }}
+                                  className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-primary/5 dark:hover:bg-primary-400/10 group transition-all text-left"
+                                >
+                                  <div className="w-9 h-9 rounded-lg bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xs shrink-0 group-hover:scale-110 transition-transform">
+                                    {p.firstName[0]}{p.lastName[0]}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                      {p.firstName} {p.lastName}
+                                    </p>
+                                    <p className="text-[11px] text-gray-500 truncate">{p.phone}</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
 
-                {/* Filial tanlagichi — filiallar bo'lsagina ko'rinadi */}
-                {userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.SALES_AGENT && (
-                  <BranchSwitcher
-                    branches={branches}
-                    activeBranchId={activeBranchId}
-                    onChange={setActiveBranchId}
-                  />
+                          {searchResults.doctors.length > 0 && (
+                            <div className="px-2 border-t border-gray-100 dark:border-gray-700/50 pt-2">
+                              <div className="px-3 py-2 flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                <Activity className="w-3 h-3" />
+                                Shifokorlar
+                              </div>
+                              {searchResults.doctors.map(d => (
+                                <button
+                                  key={d.id}
+                                  onClick={() => {
+                                    navigate(`/doctors/${d.id}`);
+                                    setSearchBarTerm('');
+                                    setIsSearchFocused(false);
+                                  }}
+                                  className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-primary/5 dark:hover:bg-primary-400/10 group transition-all text-left"
+                                >
+                                  <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xs shrink-0 group-hover:scale-110 transition-transform">
+                                    {d.firstName[0]}{d.lastName[0]}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                      Dr. {d.firstName} {d.lastName}
+                                    </p>
+                                    <p className="text-[11px] text-gray-500 truncate">{d.specialty}</p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <div className="p-3 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-100 dark:border-gray-700/50 text-center">
+                        <p className="text-[10px] text-gray-400 font-medium">Barcha natijalarni ko'rish uchun "Enter" ni bosing</p>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-2 xl:gap-3 shrink-0">
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
                   Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
                   lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
@@ -1436,20 +1443,22 @@ const AppContent: React.FC = () => {
                 onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
                 title="DentaAI — Ctrl+Shift+Space yoki F2 (ovoz bilan)"
                 aria-label="DentaAI"
-                className="group relative flex items-center gap-2 pl-2.5 pr-3.5 py-1.5 rounded-xl
+                className="group relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl
                            text-white font-bold text-[13px] tracking-wide
                            bg-gradient-to-br from-violet-500 to-indigo-600
                            shadow-sm hover:shadow-md hover:from-violet-500 hover:to-indigo-500
                            active:scale-[0.97] transition-all"
               >
                 <Sparkles className="w-4 h-4 opacity-90 group-hover:rotate-12 transition-transform" />
-                DentaAI
+                <span className="hidden xl:inline">DentaAI</span>
               </button>
 
-              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                {new Date().toLocaleDateString('uz-UZ', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+              {/* Sana faqat keng ekranda: u ma'lumot emas, bezak — tor
+                  oynada qidiruv joyini yeyishiga arzimaydi. */}
+              <span className="hidden 2xl:block text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                {formatHeaderDate(language)}
               </span>
-              <div className="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
+              <div className="hidden 2xl:block h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
               <button
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
@@ -1479,17 +1488,17 @@ const AppContent: React.FC = () => {
               </div>
 
               {/* User Profile Info */}
-              <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700 ml-2">
+              <div className="flex items-center gap-2 xl:gap-3 pl-2 xl:pl-4 border-l border-gray-200 dark:border-gray-700">
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm uppercase shadow-sm ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-primary'}`}>
                   {userName ? userName.slice(0, 2) : 'A'}
                 </div>
-                <div className="flex flex-col">
+                <div className="hidden 2xl:flex flex-col">
                   <span className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{userName}</span>
                   <span className="text-xs text-gray-500 capitalize leading-tight">
                     {userRole === UserRole.SUPER_ADMIN ? t('roles.superAdmin') : userRole === UserRole.CLINIC_ADMIN ? t('roles.admin') : userRole === UserRole.RECEPTIONIST ? t('roles.receptionist') : userRole === UserRole.SALES_AGENT ? 'Sotuvchi' : t('roles.doctor')}
                   </span>
                 </div>
-                <button onClick={handleLogout} className="ml-2 p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title={t('common.logout')}>
+                <button onClick={handleLogout} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title={t('common.logout')}>
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>
@@ -1501,7 +1510,7 @@ const AppContent: React.FC = () => {
         {/* Bottom Row: Navigation Links */}
         <div className="border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/80">
           <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14">
-            <div className="h-12 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <div className="h-12 flex items-center gap-0 min-[1600px]:gap-0.5 overflow-x-auto no-scrollbar">
               {visibleNavigation.map((item) => {
                 const to = (item as any).to || (item.id === 'dashboard' ? '/' : `/${item.id}`);
                 // `?tab=` li havolalarda NavLink faol holatni o'zi aniqlay
@@ -1519,7 +1528,7 @@ const AppContent: React.FC = () => {
                     className={({ isActive }) => {
                       const active = tabOf !== null ? tabActive
                         : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
-                      return `relative flex items-center h-12 px-4 text-sm font-medium transition-colors whitespace-nowrap group ${active
+                      return `relative flex items-center h-12 px-2 min-[1366px]:px-2.5 min-[1600px]:px-3.5 text-xs min-[1366px]:text-[13px] min-[1600px]:text-sm font-medium transition-colors whitespace-nowrap group ${active
                         ? 'text-primary dark:text-primary-400 bg-primary-50/60 dark:bg-primary-900/20'
                         : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`
@@ -1530,7 +1539,7 @@ const AppContent: React.FC = () => {
                         : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
                       return (
                         <>
-                          <item.icon className={`w-4 h-4 mr-2 ${active ? 'text-primary dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
+                          <item.icon className={`w-4 h-4 mr-1.5 min-[1600px]:mr-2 ${active ? 'text-primary dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
                           {t(item.labelKey as any)}
                           {active && (
                             <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary dark:bg-primary-400 rounded-t-full"></span>

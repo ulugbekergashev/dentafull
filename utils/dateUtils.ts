@@ -50,3 +50,24 @@ export const getCurrentMonthRange = () => {
         endDate: formatDateToISO(now)
     };
 };
+
+/**
+ * Sarlavhadagi bugungi sana.
+ *
+ * `toLocaleDateString('uz-UZ', …)` brauzerlarda "2026 M09 10, Thu" beradi:
+ * oy raqam kodi bo'lib qoladi, hafta kuni esa inglizcha. Shuning uchun
+ * nomlar qo'lda yoziladi — natija ikkala tilda ham qisqa va o'qiladigan.
+ */
+const MONTHS_UZ = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr'];
+const MONTHS_RU = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const WEEKDAYS_UZ = ['yak', 'dush', 'sesh', 'chor', 'pay', 'jum', 'shan'];
+const WEEKDAYS_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+export const formatHeaderDate = (lang: string, date: Date = new Date()): string => {
+    const day = date.getDate();
+    const month = date.getMonth();
+    const weekday = date.getDay();
+    return lang === 'ru'
+        ? `${day} ${MONTHS_RU[month]}, ${WEEKDAYS_RU[weekday]}`
+        : `${day}-${MONTHS_UZ[month]}, ${WEEKDAYS_UZ[weekday]}`;
+};
