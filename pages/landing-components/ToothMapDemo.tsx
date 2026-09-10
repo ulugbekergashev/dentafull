@@ -3,15 +3,14 @@ import { Sparkles, Heart } from "lucide-react";
 import { useLandingCopy } from "./useLandingCopy";
 import { Section, SectionHeader, Reveal } from "./ui";
 
-/* ── Types ───────────────────────────────────────────────────── */
+/* ── Turlar ──────────────────────────────────────────────────── */
 type Condition = "healthy" | "cavity" | "filled" | "pulpitis" | "missing" | "crown" | "implant";
 
-interface Tooth {
-  number: number;
-  conditions: Condition[];
-}
-
-/* ── Exact SVG from real TeethChart.tsx ──────────────────────── */
+/**
+ * Filtr va gradientlar TeethChart dan olingan. Ular butun bo'lim uchun
+ * BIR MARTA chiziladi: ilgari har bir tish o'z nusxasini chizardi va
+ * hujjatda bir xil ID li 32 ta ta'rif paydo bo'lardi.
+ */
 const SVGDefs = () => (
   <defs>
     <filter id="lp-glossy3D" x="-20%" y="-20%" width="140%" height="140%">
@@ -65,17 +64,25 @@ const RealisticTooth: React.FC<{
   return (
     <div
       onClick={onClick}
-      className={`flex flex-col items-center cursor-pointer group transition-all duration-200 ${isUpper ? 'flex-col-reverse' : 'flex-col'}`}
+      className={`flex-1 min-w-0 max-w-[48px] flex flex-col items-center cursor-pointer group transition-all duration-200 ${
+        isUpper ? 'flex-col-reverse' : 'flex-col'
+      }`}
     >
       <span className={`text-[9px] sm:text-[11px] font-bold font-mono my-2 ${!isHealthy ? 'text-primary-600' : 'text-gray-400'} ${isSelected ? 'text-primary-700' : ''}`}>
         {number}
       </span>
-      <div className={`w-6 h-10 sm:w-10 sm:h-16 relative filter drop-shadow-sm transition-all duration-200 ${isSelected ? 'drop-shadow-md scale-110' : 'hover:scale-105'}`}>
+      {/* O'lcham qat'iy berilmaydi: 16 ta tish qat'iy kenglikda kartaga
+            sig'may, chetlariga chiqib ketardi. Endi ular mavjud joyga
+            bo'linadi, nisbat esa viewBox bilan bir xil (100x120). */}
+      <div
+        className={`w-full aspect-[5/6] relative filter drop-shadow-md transition-all duration-200 ${
+          isSelected ? 'drop-shadow-lg scale-110' : 'hover:scale-105'
+        }`}
+      >
         {isSelected && (
           <div className="absolute -inset-1.5 rounded-2xl border-2 border-primary-400 bg-primary-50/60 z-0" />
         )}
         <svg viewBox="0 0 100 120" className="w-full h-full overflow-visible relative z-10">
-          <SVGDefs />
           <g transform={transform}>
             {has("missing") ? (
               <path
@@ -88,13 +95,25 @@ const RealisticTooth: React.FC<{
                   d="M20,50 Q20,80 25,105 Q27,115 35,110 Q43,105 48,90 L52,90 Q57,105 65,110 Q73,115 75,105 Q80,80 80,50"
                   fill="url(#lp-rootGradient)"
                 />
+                {/* Tojning o'zi doim oq emal bilan chiziladi. Oltin — ustiga
+                    qo'yiladigan alohida qatlam (TeethChart dagi kabi). Ilgari
+                    tish butunlay oltin rangga bo'yalib, konturi ham olib
+                    tashlangan edi va u shaklsiz dog'ga o'xshab qolgandi. */}
                 <path
                   d="M15,45 Q15,20 25,10 Q35,2 50,2 Q65,2 75,10 Q85,20 85,45 Q88,65 80,75 Q70,85 50,82 Q30,85 20,75 Q12,65 15,45 Z"
-                  fill={has("crown") ? "url(#lp-goldGradient)" : "url(#lp-crownGradient)"}
+                  fill="url(#lp-crownGradient)"
                   filter={has("crown") ? "url(#lp-goldMaterial)" : "url(#lp-glossy3D)"}
                   stroke={has("crown") ? "none" : "#d1d5db"}
                   strokeWidth="0.5"
                 />
+                {has("crown") && (
+                  <path
+                    d="M15,45 Q15,20 25,10 Q35,2 50,2 Q65,2 75,10 Q85,20 85,45 Q88,65 80,75 Q70,85 50,82 Q30,85 20,75 Q12,65 15,45 Z"
+                    fill="url(#lp-goldGradient)"
+                    opacity="0.9"
+                    style={{ mixBlendMode: "multiply" }}
+                  />
+                )}
                 {!has("crown") && (
                   <path
                     d="M35,25 Q50,35 65,25 M50,25 L50,45 M40,35 Q50,50 60,35"
@@ -191,7 +210,12 @@ export default function ToothMapDemo() {
     <Section id="tooth-map" bg="white" border>
       <SectionHeader badge={t.badge} title={t.title} subtitle={t.sub} className="mb-12" />
 
-      <Reveal className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start max-w-5xl mx-auto">
+      {/* Filtrlar bir marta — barcha tishlar shularga murojaat qiladi */}
+      <svg width="0" height="0" className="absolute" aria-hidden="true" focusable="false">
+        <SVGDefs />
+      </svg>
+
+      <Reveal className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Tish formulasi */}
         <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 text-center">
           <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-5 flex items-center justify-center gap-2">
@@ -199,7 +223,12 @@ export default function ToothMapDemo() {
             {t.cardTitle}
           </h3>
 
-          <div className="flex justify-center items-end gap-1 sm:gap-1.5 pb-2 border-b border-slate-100 mb-1">
+          {/* Tor ekranda qatorni siljitib ko'rish mumkin — tishlarni
+              o'qib bo'lmas darajada kichraytirgandan ko'ra shu afzal. */}
+          <div className="rounded-2xl bg-slate-50 border border-slate-100 px-3 sm:px-4">
+            <div className="overflow-x-auto no-scrollbar -mx-1 px-1 py-3">
+              <div className="min-w-[520px]">
+          <div className="flex items-end gap-1 sm:gap-1.5 pb-2 border-b border-slate-200">
             {UPPER_NUMS.map((n) => (
               <RealisticTooth
                 key={n}
@@ -212,9 +241,15 @@ export default function ToothMapDemo() {
             ))}
           </div>
 
-          <div className="text-[9px] text-slate-400 font-semibold text-center mb-1 tracking-widest">{t.jawBorder}</div>
+          {/* Yozuv gorizontal siljiydigan qatorning ichida: tor ekranda u
+                  ko'rinmay qolmasligi uchun chap chekkaga yopishtiriladi. */}
+              <div className="my-1 text-left sm:text-center">
+                <span className="sticky left-0 inline-block text-[9px] text-slate-400 font-semibold tracking-widest">
+                  {t.jawBorder}
+                </span>
+              </div>
 
-          <div className="flex justify-center items-start gap-1 sm:gap-1.5 pt-1">
+          <div className="flex items-start gap-1 sm:gap-1.5 pt-1">
             {LOWER_NUMS.map((n) => (
               <RealisticTooth
                 key={n}
@@ -225,6 +260,9 @@ export default function ToothMapDemo() {
                 onClick={() => setSelected(n)}
               />
             ))}
+          </div>
+              </div>
+            </div>
           </div>
 
           {/* Belgilar ro'yxati */}
