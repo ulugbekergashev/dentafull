@@ -1510,7 +1510,11 @@ const AppContent: React.FC = () => {
         {/* Bottom Row: Navigation Links */}
         <div className="border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/80">
           <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14">
-            <div className="h-12 flex items-center gap-0 min-[1600px]:gap-0.5 overflow-x-auto no-scrollbar">
+            {/* Bo'limlar qatori. O'lchamlar brauzerda o'lchab tanlangan:
+                ruscha yorliqlar (eng uzuni) hech qaysi bosqichda kesilmasin,
+                lekin matn imkon qadar katta qolsin. 1800px dan boshlab
+                o'lcham asl holiga qaytadi. */}
+            <div className="h-12 flex items-center gap-0 min-[1600px]:gap-1 min-[1800px]:gap-2 overflow-x-auto no-scrollbar">
               {visibleNavigation.map((item) => {
                 const to = (item as any).to || (item.id === 'dashboard' ? '/' : `/${item.id}`);
                 // `?tab=` li havolalarda NavLink faol holatni o'zi aniqlay
@@ -1528,7 +1532,7 @@ const AppContent: React.FC = () => {
                     className={({ isActive }) => {
                       const active = tabOf !== null ? tabActive
                         : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
-                      return `relative flex items-center h-12 px-2 min-[1366px]:px-2.5 min-[1600px]:px-3.5 text-xs min-[1366px]:text-[13px] min-[1600px]:text-sm font-medium transition-colors whitespace-nowrap group ${active
+                      return `relative flex items-center h-12 px-2.5 min-[1600px]:px-3.5 min-[1800px]:px-4 text-[13px] min-[1440px]:text-sm font-medium transition-colors whitespace-nowrap group ${active
                         ? 'text-primary dark:text-primary-400 bg-primary-50/60 dark:bg-primary-900/20'
                         : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`
