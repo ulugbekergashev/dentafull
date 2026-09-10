@@ -79,6 +79,8 @@ const uz = {
     title: "Bu maket emas — tizimning haqiqiy ekranlari",
     sub: "Quyidagi rasmlar demo ma'lumotlar bilan ishlab turgan tizimdan olingan.",
     phoneAlt: "DentaCRM telefon ekranida",
+    phoneTitle: "Telefonda ham xuddi shunday",
+    phoneNote: "Brauzerda ochiladi va ilova sifatida o'rnatiladi. Do'kondan yuklab olish shart emas.",
     tabs: [
       {
         id: "dashboard",
@@ -605,6 +607,8 @@ const ru: LandingCopy = {
     title: "Это не макет — реальные экраны системы",
     sub: "Скриншоты сделаны в работающей системе на демонстрационных данных.",
     phoneAlt: "DentaCRM на экране телефона",
+    phoneTitle: "На телефоне точно так же",
+    phoneNote: "Открывается в браузере и устанавливается как приложение. Скачивать из магазина не нужно.",
     tabs: [
       {
         id: "dashboard",

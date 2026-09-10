@@ -87,13 +87,17 @@ export default function ProductShowcase() {
           </AnimatePresence>
 
           {/* Telefon ko'rinishi — skrinshot ustiga qo'yilmaydi, chunki u
-              jadval ustunlarini yopib qo'yardi. */}
+              jadval ustunlarini yopib qo'yardi. Alohida karta sifatida
+              turgani uchun bo'sh joy qolmaydi va nima demoqchi ekani aniq. */}
           {active === 0 && (
-            <div className="hidden lg:flex items-center gap-4 mt-8 pt-6 border-t border-slate-200">
-              <div className="w-20 shrink-0">
+            <div className="hidden lg:flex items-center gap-4 mt-8 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+              <div className="w-24 shrink-0">
                 <PhoneFrame image="dashboard-mobile" alt={c.showcase.phoneAlt} />
               </div>
-              <p className="text-xs text-slate-500 leading-relaxed">{c.showcase.phoneAlt}</p>
+              <div className="space-y-1.5 min-w-0">
+                <p className="text-sm font-bold text-slate-900">{c.showcase.phoneTitle}</p>
+                <p className="text-xs text-slate-600 leading-relaxed">{c.showcase.phoneNote}</p>
+              </div>
             </div>
           )}
         </div>

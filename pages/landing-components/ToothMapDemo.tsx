@@ -67,12 +67,12 @@ const RealisticTooth: React.FC<{
       onClick={onClick}
       className={`flex flex-col items-center cursor-pointer group transition-all duration-200 ${isUpper ? 'flex-col-reverse' : 'flex-col'}`}
     >
-      <span className={`text-[9px] sm:text-[10px] font-bold font-mono mb-0.5 ${!isHealthy ? 'text-primary-600' : 'text-gray-400'} ${isSelected ? 'text-primary-700' : ''}`}>
+      <span className={`text-[9px] sm:text-[11px] font-bold font-mono my-2 ${!isHealthy ? 'text-primary-600' : 'text-gray-400'} ${isSelected ? 'text-primary-700' : ''}`}>
         {number}
       </span>
-      <div className={`w-6 h-10 sm:w-9 sm:h-14 relative filter drop-shadow-sm transition-all duration-200 ${isSelected ? 'drop-shadow-md scale-110' : 'hover:scale-105'}`}>
+      <div className={`w-6 h-10 sm:w-10 sm:h-16 relative filter drop-shadow-sm transition-all duration-200 ${isSelected ? 'drop-shadow-md scale-110' : 'hover:scale-105'}`}>
         {isSelected && (
-          <div className="absolute -inset-1 rounded-xl border-2 border-primary-500 bg-primary-50/30 z-0" />
+          <div className="absolute -inset-1.5 rounded-2xl border-2 border-primary-400 bg-primary-50/60 z-0" />
         )}
         <svg viewBox="0 0 100 120" className="w-full h-full overflow-visible relative z-10">
           <SVGDefs />
@@ -276,7 +276,16 @@ export default function ToothMapDemo() {
             </span>
           </div>
 
-          <div className="space-y-2 flex-1 overflow-auto max-h-64">
+          {/* Ro'yxat uzun bo'lsa pastda yumshoq so'nish qoldiramiz — aks holda
+              oxirgi qator keskin kesilib, davomi borligi bilinmay qolardi. */}
+          <div className="relative flex-1 min-h-0">
+            {plan.length > 5 && (
+              <div
+                className="pointer-events-none absolute bottom-0 inset-x-0 h-10 bg-gradient-to-t from-white to-transparent z-10"
+                aria-hidden="true"
+              />
+            )}
+            <div className="space-y-2 overflow-auto max-h-80 pr-1">
             {plan.length === 0 ? (
               <div className="py-8 text-center space-y-2">
                 <Sparkles className="w-8 h-8 text-slate-300 mx-auto" />
@@ -307,6 +316,7 @@ export default function ToothMapDemo() {
                 </button>
               ))
             )}
+            </div>
           </div>
 
           {total > 0 && (

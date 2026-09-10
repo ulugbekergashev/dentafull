@@ -147,19 +147,34 @@ function DashboardTab({ d, fmt }: { d: Copy; fmt: (n: number) => string }) {
               {d.kpi.revenueBadge}
             </span>
           </div>
-          <div className="flex items-end gap-1 h-24">
+          {/* Ustunlar balandligi foizda beriladi, shuning uchun ular bevosita
+              aniq balandlikdagi qatorning bolasi bo'lishi shart. Ilgari orada
+              balandligi aniqlanmagan ustun-konteyner turardi va foiz nolga
+              aylanib, grafik butunlay ko'rinmay qolgan edi. */}
+          <div className="flex items-end gap-1 h-28 sm:h-40 border-b border-slate-100">
             {chartBars.map((h, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-                <motion.div
-                  initial={reduce ? false : { scaleY: 0 }}
-                  whileInView={reduce ? undefined : { scaleY: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, ease: EASE, delay: i * 0.03 }}
-                  style={{ height: `${h}%`, transformOrigin: "bottom" }}
-                  className={`w-full rounded-sm ${i === 9 ? "bg-primary-600" : "bg-primary-100"}`}
-                />
-                <span className="text-[7px] text-slate-400 font-medium">{d.months[i]}</span>
-              </div>
+              <motion.div
+                key={i}
+                initial={reduce ? false : { scaleY: 0 }}
+                animate={reduce ? undefined : { scaleY: 1 }}
+                transition={{ duration: 0.5, ease: EASE, delay: i * 0.03 }}
+                style={{ height: `${h}%`, transformOrigin: "bottom" }}
+                className={`flex-1 rounded-t-md transition-colors ${
+                  i === 9 ? "bg-primary-600" : "bg-primary-200 hover:bg-primary-300"
+                }`}
+              />
+            ))}
+          </div>
+          <div className="flex gap-1 mt-1.5">
+            {d.months.map((m, i) => (
+              <span
+                key={m}
+                className={`flex-1 text-center text-[8px] ${
+                  i === 9 ? "text-primary-600 font-bold" : "text-slate-400 font-medium"
+                }`}
+              >
+                {m}
+              </span>
             ))}
           </div>
         </div>
@@ -452,22 +467,29 @@ export default function DashboardDemo() {
             <Bell className="w-4 h-4 text-slate-400" aria-hidden="true" />
           </div>
 
-          {/* Mobil sarlavha */}
-          <div className="sm:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-primary-600 flex items-center justify-center text-white font-extrabold text-xs">
+          {/* Ilova sarlavhasi — haqiqiy tizimdagi kabi */}
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-100">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-primary-600 flex items-center justify-center text-white font-extrabold text-sm shrink-0">
                 S
               </div>
-              <div>
-                <p className="text-xs font-extrabold text-slate-800">{d.clinic}</p>
-                <p className="text-[9px] text-emerald-500 font-semibold">{d.role}</p>
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-slate-800 truncate">{d.clinic}</p>
+                <p className="text-[10px] text-emerald-500 font-semibold truncate">{d.role}</p>
               </div>
             </div>
-            <Bell className="w-4 h-4 text-slate-400" aria-hidden="true" />
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary-50 border border-primary-100 text-[10px] font-bold text-primary-700">
+                {d.smsPack} · {d.smsPackState}
+              </span>
+              <Bell className="w-4 h-4 text-slate-400" aria-hidden="true" />
+            </div>
           </div>
 
-          {/* Mobil bo'limlar */}
-          <div className="sm:hidden flex border-b border-slate-100 bg-white overflow-x-auto no-scrollbar">
+          {/* Bo'limlar gorizontal qatorda — tizimning o'zida ham shunday.
+              Ilgari bu yerda yon panel turardi va u yuqoridagi haqiqiy
+              ekran rasmlariga o'xshamas edi. */}
+          <div className="flex border-b border-slate-100 bg-white overflow-x-auto no-scrollbar px-2">
             {tabs.map((t) => {
               const Icon = TAB_ICONS[t.id];
               const on = active === t.id;
@@ -476,69 +498,32 @@ export default function DashboardDemo() {
                   key={t.id}
                   onClick={() => setActive(t.id)}
                   aria-pressed={on}
-                  className={`flex-1 min-w-fit flex flex-col items-center gap-1 px-3 py-2.5 transition-all cursor-pointer border-b-2 ${
-                    on ? "border-primary-600 text-primary-600" : "border-transparent text-slate-400"
+                  className={`shrink-0 flex items-center gap-2 px-3 sm:px-4 py-3 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                    on
+                      ? "border-primary-600 text-primary-600"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span className="text-[9px] font-bold whitespace-nowrap">{t.label.split(" ")[0]}</span>
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="text-[11px] sm:text-xs font-bold">{t.label}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="flex" style={{ minHeight: 420 }}>
-            {/* Yon panel — faqat keng ekranda */}
-            <div className="hidden sm:flex w-48 shrink-0 bg-white border-r border-slate-100 p-3 flex-col gap-1">
-              <div className="flex items-center gap-2 p-2.5 mb-2">
-                <div className="w-8 h-8 rounded-xl bg-primary-600 flex items-center justify-center text-white font-extrabold text-sm">
-                  S
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-extrabold text-slate-800 leading-tight truncate">{d.clinic}</p>
-                  <p className="text-[8px] text-emerald-500 font-semibold truncate">{d.role}</p>
-                </div>
-              </div>
-              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-1">
-                {d.sidebarTitle}
-              </p>
-              {tabs.map((t) => {
-                const Icon = TAB_ICONS[t.id];
-                const on = active === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setActive(t.id)}
-                    aria-pressed={on}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                      on ? "bg-primary-600 text-white shadow-sm shadow-primary-200" : "text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    <Icon className={`w-3.5 h-3.5 shrink-0 ${on ? "text-white" : "text-slate-400"}`} />
-                    <span className="text-[10px] font-bold">{t.label}</span>
-                  </button>
-                );
-              })}
-              <div className="mt-auto p-2.5 bg-primary-50 border border-primary-100 rounded-xl">
-                <p className="text-[8px] font-extrabold text-primary-700 uppercase tracking-wide">{d.smsPack}</p>
-                <p className="text-[9px] text-primary-500 font-semibold mt-0.5">{d.smsPackState}</p>
-              </div>
-            </div>
-
-            {/* Asosiy maydon */}
-            <div className="flex-1 p-4 sm:p-5 bg-slate-50/70 overflow-auto">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={active}
-                  initial={reduce ? false : { opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={reduce ? undefined : { opacity: 0 }}
-                  transition={{ duration: 0.22, ease: EASE }}
-                >
-                  {panes[active]}
-                </motion.div>
-              </AnimatePresence>
-            </div>
+          {/* Asosiy maydon */}
+          <div className="p-4 sm:p-5 bg-slate-50/70" style={{ minHeight: 420 }}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={active}
+                initial={reduce ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduce ? undefined : { opacity: 0 }}
+                transition={{ duration: 0.22, ease: EASE }}
+              >
+                {panes[active]}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </Reveal>
