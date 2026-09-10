@@ -12,9 +12,9 @@ import { API_URL } from '../services/api';
 //      bermaydi, token sarflamaydi va o'zbek tilida Google'ning o'z
 //      modeliga tayanadi.
 //
-//   2. Server orqali Whisper (Groq). Brauzer qo'llab-quvvatlamaganda.
-//      O'lchangan sifat: ruschada so'zma-so'z, o'zbekchada qisqa buyruq
-//      o'tadi, lekin ism va summani buzadi.
+//   2. Server orqali model (Gemini, zaxirasi Groq Whisper). Brauzer
+//      qo'llab-quvvatlamaganda va O'ZBEKCHA uchun asosiy yo'l — u yerda
+//      klinikaning o'z lug'ati modelga beriladi (backend: ai/speech.ts).
 //
 // Ikkala yo'l ham natijani BAJARMAYDI — u savol maydoniga tushadi va
 // harakat bo'lsa tasdiqlash kartasi chiqadi. Noto'g'ri eshitilgan gap
@@ -39,6 +39,90 @@ interface Options {
 /** Brauzer o'zi tanish imkoniyatini beradimi. */
 const nativeRecognition = (): any =>
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+
+// ─── WAV'ga o'girish ─────────────────────────────────────────────────────────
+//
+// MediaRecorder webm/opus beradi, Gemini esa webm'ni QABUL QILMAYDI (wav,
+// mp3, ogg, flac, aac, aiff). Groq Whisper webm'ni tushunadi, lekin serverda
+// zanjir bor: klinikaning kaliti Gemini bo'lsa birinchi navbatda Gemini
+// urinadi. Ya'ni o'girish bo'lmasa, o'z kalitini kiritgan klinika har safar
+// birinchi bo'g'inni bekorga yiqitardi.
+//
+// Serverda o'girish mumkin emas edi: opus'ni yechish uchun ffmpeg kerak,
+// bu esa deploy'ga yangi tizim bog'liqligi qo'shardi. Brauzerda esa buning
+// hammasi allaqachon bor.
+//
+// 16 kHz mono — nutq uchun yetarli va ikkala model ham audioni ichida
+// aynan shunga keltiradi. Hajm: 10 soniya ~320 KB (webm ~25 KB bo'lardi).
+// Bu narx ataylab to'lanadi — server chegarasi 10 MB, ya'ni sig'adi.
+const WAV_RATE = 16000;
+
+/** Float namunalarni 16-bitli PCM WAV'ga o'raydi. */
+function encodeWav(samples: Float32Array, rate: number): Blob {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buf);
+    const str = (off: number, s: string) => {
+        for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+    };
+
+    str(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    str(8, 'WAVE');
+    str(12, 'fmt ');
+    view.setUint32(16, 16, true);          // fmt bo'limi uzunligi
+    view.setUint16(20, 1, true);           // PCM
+    view.setUint16(22, 1, true);           // mono
+    view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true);    // bayt/sekund
+    view.setUint16(32, 2, true);           // bayt/namuna
+    view.setUint16(34, 16, true);          // bit/namuna
+    str(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    let off = 44;
+    for (let i = 0; i < samples.length; i++, off += 2) {
+        // Qirqib olish majburiy: chegaradan chiqqan qiymat 16-bitga
+        // sig'maydi va ovoz "chirsillab" ketadi.
+        const v = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(off, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+    }
+
+    return new Blob([buf], { type: 'audio/wav' });
+}
+
+/**
+ * Yozuvni 16 kHz mono WAV'ga o'giradi.
+ *
+ * OfflineAudioContext ishlatiladi, qo'lda "har uchinchi namunani olish"
+ * emas: u chastotani to'g'ri filtrlab tushiradi. Qo'lda qilinganda
+ * alialising kiradi — quloqqa sezilmaydi, lekin model uchun aynan shovqin
+ * bo'lib qoladi, ya'ni sifat oshirish uchun qilingan ish sifatni buzardi.
+ */
+async function toWav(blob: Blob): Promise<Blob> {
+    const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    const Offline = (window as any).OfflineAudioContext || (window as any).webkitOfflineAudioContext;
+    if (!Ctx || !Offline) throw new Error('AudioContext yo\'q');
+
+    const bytes = await blob.arrayBuffer();
+    const ctx = new Ctx();
+    let decoded: AudioBuffer;
+    try {
+        decoded = await ctx.decodeAudioData(bytes);
+    } finally {
+        try { ctx.close(); } catch { /* muhim emas */ }
+    }
+
+    const frames = Math.max(1, Math.ceil(decoded.duration * WAV_RATE));
+    // Kanal soni 1 berilgani uchun stereo o'zi mono'ga qo'shiladi.
+    const off = new Offline(1, frames, WAV_RATE);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    src.connect(off.destination);
+    src.start();
+    const rendered: AudioBuffer = await off.startRendering();
+
+    return encodeWav(rendered.getChannelData(0), WAV_RATE);
+}
 
 /**
  * Server yo'li ishlamay qolganini eslab qolamiz.
@@ -136,8 +220,21 @@ export function useVoiceInput({ lang, onResult }: Options) {
 
                 setState('processing');
                 try {
+                    // WAV'ga o'girishga urinamiz — Gemini webm'ni qabul
+                    // qilmaydi. O'girish yiqilsa xom yozuv yuboriladi:
+                    // serverdagi zanjir uni Whisper'ga o'tkazadi. Ya'ni
+                    // eski brauzerda sifat pasayadi, lekin ovoz ishlaydi.
+                    let audio = blob;
+                    let filename = `speech.${(rec.mimeType || 'audio/webm').includes('ogg') ? 'ogg' : 'webm'}`;
+                    try {
+                        audio = await toWav(blob);
+                        filename = 'speech.wav';
+                    } catch (e) {
+                        console.warn('[ovoz] WAV\'ga o\'girilmadi, xom yozuv yuboriladi:', e);
+                    }
+
                     const fd = new FormData();
-                    fd.append('audio', blob, 'speech.webm');
+                    fd.append('audio', audio, filename);
                     const token = authToken();
                     const res = await fetch(`${API_URL}/ai/transcribe?lang=${lang}`, {
                         method: 'POST',
@@ -232,10 +329,10 @@ export function useVoiceInput({ lang, onResult }: Options) {
         // ("plomba" -> "qlondi") va buni to'g'rilashning iloji yo'q: Web
         // Speech API ga lug'at berib bo'lmaydi.
         //
-        // Serverdagi Whisper esa `prompt` orqali klinikaning O'Z xizmat
-        // nomlari va shifokor familiyalariga moyil qilinadi
-        // (backend: ai/context.ts -> clinicVocab). Aynan shu so'zlar eng
-        // ko'p buzilardi.
+        // Serverdagi model esa klinikaning O'Z xizmat nomlari va shifokor
+        // familiyalariga moyil qilinadi (backend: ai/context.ts ->
+        // clinicVocab). Aynan shu so'zlar eng ko'p buzilardi. Gemini'da
+        // lug'at to'liq beriladi — Whisper'dagi ~224 token chegarasi yo'q.
         //
         // Ruscha uchun brauzer qoladi: u yerda tanish ishonchli va tekin.
         const preferServer = lang === 'uz' && !serverSttDown;

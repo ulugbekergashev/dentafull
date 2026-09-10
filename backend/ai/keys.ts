@@ -88,8 +88,12 @@ export const verifyClinicKey = async (
         groq: 'https://api.groq.com/openai/v1/chat/completions',
         openrouter: 'https://openrouter.ai/api/v1/chat/completions',
     };
+    // Tekshiruv ARZON model bilan qilinadi, lekin u MAVJUD bo'lishi shart:
+    // aks holda to'g'ri kalit ham rad etiladi. Aynan shunday bo'ldi —
+    // gemini-2.5-flash-lite yangi kalitlar uchun yopilgach, klinika o'z
+    // kalitini saqlay olmay qoldi va xatoda kalit emas, model aybdor edi.
     const defaults: Record<string, string> = {
-        gemini: process.env.GEMINI_MODEL_CHEAP || 'gemini-2.5-flash-lite',
+        gemini: process.env.GEMINI_MODEL_CHEAP || 'gemini-3.1-flash-lite',
         groq: process.env.GROQ_MODEL_CHEAP || 'openai/gpt-oss-20b',
         openrouter: process.env.OPENROUTER_MODEL_CHEAP || 'meta-llama/llama-3.1-8b-instruct:free',
     };
@@ -132,8 +136,13 @@ export const verifyClinicKey = async (
 
         // Model nomi eskirgan bo'lishi mumkin — bu kalitning aybi emas,
         // shuning uchun sabab alohida aytiladi.
-        if (/model.*(not found|does not exist)/i.test(body)) {
-            return { ok: false, error: 'Provayderda bu model mavjud emas. Administratorga xabar bering.' };
+        //
+        // "no longer available to new users" ham shu turkumga kiradi va u
+        // ilgari tanilmasdi: klinika 404 ning xom JSON'ini ko'rardi va
+        // kalitida xato bor deb o'ylardi. Model eskirishi har safar shunday
+        // ko'rinmasin — naqsh keng olindi.
+        if (/model.*(not found|does not exist|no longer available|not supported|deprecated)/i.test(body)) {
+            return { ok: false, error: 'Provayderda bu model mavjud emas yoki eskirgan. Administratorga xabar bering.' };
         }
 
         return { ok: false, error: `Provayder xatosi (${res.status}): ${body.slice(0, 160)}` };

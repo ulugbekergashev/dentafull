@@ -6095,7 +6095,7 @@ const { logAi, rateAiLog, aiUsageStats, negativeFeedback } = require('./ai/log')
 const {
     getClinicKey, invalidateClinicKey, verifyClinicKey, isSupportedProvider, SUPPORTED_PROVIDERS,
 } = require('./ai/keys');
-const { transcribe, sttKey } = require('./ai/speech');
+const { transcribe, sttTargets } = require('./ai/speech');
 const { clinicVocab } = require('./ai/context');
 const {
     actionsForRole, isAction, previewAction, executeAction, storePending, takePending,
@@ -6793,15 +6793,19 @@ app.post('/api/ai/transcribe', authenticateToken, audioUpload.single('audio'), a
             return res.status(429).json({ success: false, message: 'Soatlik chegaraga yetdingiz.' });
         }
 
-        const key = sttKey(await getClinicKey(getScopedClinicId(req)));
-        if (!key) {
+        // Zanjir: klinikaning o'z kaliti (Gemini yoki Groq), keyin platforma
+        // kalitlari. Bittasi yiqilsa keyingisi urinadi — ilgari faqat Groq
+        // bor edi va Gemini kaliti kiritgan klinikada mikrofon jimgina
+        // ishlamay qolardi.
+        const targets = sttTargets(await getClinicKey(getScopedClinicId(req)));
+        if (!targets.length) {
             return res.status(503).json({ success: false, message: 'Ovoz xizmati sozlanmagan.' });
         }
 
         const lang = reqLang(req);
         // Klinika lug'ati keshdan keladi — qo'shimcha DB so'rovi yo'q.
         const vocab = await clinicVocab(getScopedClinicId(req)).catch(() => '');
-        const out = await transcribe(file.buffer, file.mimetype || 'audio/webm', lang, key, vocab);
+        const out = await transcribe(file.buffer, file.mimetype || 'audio/webm', lang, targets, vocab);
 
         await logAi({
             clinicId: getScopedClinicId(req), userId: userKey(user), userName: user?.name,

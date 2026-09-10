@@ -109,16 +109,26 @@ const providers = (): ProviderConfig[] => [
         name: 'gemini',
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
         apiKey: process.env.GEMINI_API_KEY,
-        // 2.0 -> 2.5: bir xil API, bir xil narx darajasi, lekin ko'rsatma
+        // 2.5 -> 3.x: bir xil API, ikkisi ham bepul tierda, lekin ko'rsatma
         // bajarish va o'zbek tilida sezilarli kuchliroq.
+        //
+        // MAJBURIY almashtirish edi, shunchaki yangilash emas: Google
+        // gemini-2.5-flash-lite ni YANGI kalitlar uchun yopdi. Eski kalitda
+        // u ishlashda davom etadi, shuning uchun serverda sezilmaydi —
+        // lekin o'z kalitini kiritgan klinika Sozlamalarda darhol 404 oladi:
+        // "no longer available to new users". Ya'ni nosozlik faqat yangi
+        // klinikada ko'rinadi, bizda emas — eng yomon turi.
+        //
+        // cheap uchun 3.5-flash-lite EMAS, 3.1-flash-lite: bepul tierda
+        // aynan shu ikkisi (3.5-flash va 3.1-flash-lite) turadi.
         //
         // Model almashtirish ilgari qo'rqinchli amal edi — regressiyani sezmay
         // qolish mumkin edi. Endi `ai/evals/run.ts --model <nom>` bor: nomzodni
         // bir xil 54 savolda o'tkazib, ballni oldingisi bilan solishtirsa
         // bo'ladi. Ya'ni bu qator endi o'lchov bilan tasdiqlanadigan qaror.
         models: {
-            chat: process.env.GEMINI_MODEL_CHAT || 'gemini-2.5-flash',
-            cheap: process.env.GEMINI_MODEL_CHEAP || 'gemini-2.5-flash-lite',
+            chat: process.env.GEMINI_MODEL_CHAT || 'gemini-3.5-flash',
+            cheap: process.env.GEMINI_MODEL_CHEAP || 'gemini-3.1-flash-lite',
         },
     },
     {

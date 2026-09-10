@@ -248,6 +248,10 @@ export interface TriggerDescriptor {
   supportsDoctorFilter: boolean;
   /** Tinch soatlar — trigger faqat shu oraliqda yuboradi (Toshkent vaqti) */
   sendWindow?: { fromHour: number; toHour: number };
+  /** Auditoriya segmenti kerakmi (masalan, "jadval bo'yicha segmentga") */
+  supportsSegment?: boolean;
+  /** Yuborish jadvali (hafta kuni, soat) sozlanadimi */
+  supportsSchedule?: boolean;
   offset?: {
     label: string;
     unit: 'hour' | 'day' | 'month';

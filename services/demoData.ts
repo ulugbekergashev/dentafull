@@ -414,6 +414,10 @@ export const DEMO_TRIGGERS: TriggerDescriptor[] = [
     { id: 'payment_received', label: "To'lov qabul qilindi", respectCooldown: false, supportsDoctorFilter: false, offset: { label: 'Necha soat keyin', unit: 'hour', options: [0, 1, 2, 24], default: 0 } },
     { id: 'recall', label: 'Uzoq kelmaganlarni qaytarish', respectCooldown: true, supportsDoctorFilter: true, offset: { label: 'Necha oydan beri kelmagan', unit: 'month', options: [3, 6, 9, 12], default: 6 } },
     { id: 'debt_reminder', label: 'Qarz eslatmasi', respectCooldown: true, supportsDoctorFilter: false, offset: { label: 'Qarz necha kundan beri', unit: 'day', options: [3, 7, 14, 30], default: 7 } },
+    // Segmentga jadval bo'yicha yuborish. Backendda bor edi (backend/triggers.ts),
+    // lekin demo ro'yxatiga tushmagani uchun demo rejimda auditoriya
+    // konstruktorini umuman ko'rib bo'lmasdi.
+    { id: 'scheduled', label: "Jadval bo'yicha (segmentga)", respectCooldown: true, supportsDoctorFilter: false, supportsSegment: true, supportsSchedule: true },
 ];
 
 // Demo rejim uchun segment maydonlari — backend/segmentFields.ts qisqartmasi
