@@ -15,7 +15,9 @@ import { FinanceHub } from './pages/FinanceHub';
 import { Leads } from './pages/Leads';
 import { Settings } from './pages/Settings';
 import { SignIn } from './pages/SignIn';
-import { LandingPage } from './pages/LandingPage';
+// Landing faqat tizimga kirmagan mehmonga kerak — alohida chunk sifatida
+// yuklanadi, shunda CRM foydalanuvchisi marketing sahifasi kodini tortmaydi.
+const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { SalesDashboard } from './pages/SalesDashboard';
 import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
@@ -1027,11 +1029,20 @@ const AppContent: React.FC = () => {
     return (
       <>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/"
+            element={
+              <React.Suspense fallback={null}>
+                <LandingPage />
+              </React.Suspense>
+            }
+          />
           <Route path="/login" element={<SignIn onLogin={handleLogin} />} />
           <Route path="*" element={<SignIn onLogin={handleLogin} />} />
         </Routes>
-        <InstallPWAButton />
+        {/* Landingda pastda "ilovani o'rnatish" tugmasi mobil CTA paneli
+            bilan ustma-ust tushadi — u faqat login sahifasida kerak. */}
+        {location.pathname !== '/' && <InstallPWAButton />}
       </>
     );
   }
@@ -1201,7 +1212,7 @@ const AppContent: React.FC = () => {
 
               {clinicId === 'demo-clinic-1' && (
                 <span className="px-2 py-1 text-xs font-bold bg-primary-100 dark:bg-primary-900/40 text-primary dark:text-primary-400 rounded-full border border-primary-200 dark:border-primary-800">
-                  рџ§Є DEMO MODE
+                  DEMO REJIM
                 </span>
               )}
 

@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Sparkles, Heart } from "lucide-react";
+import { useLandingCopy } from "./useLandingCopy";
+import { Section, SectionHeader, Reveal } from "./ui";
 
 /* ── Types ───────────────────────────────────────────────────── */
 type Condition = "healthy" | "cavity" | "filled" | "pulpitis" | "missing" | "crown" | "implant";
@@ -148,174 +150,176 @@ const INITIAL: Record<number, Condition[]> = {
   35: ["cavity"],
 };
 
-const CONDITIONS: { id: Condition; label: string; color: string; desc: string; price: number }[] = [
-  { id: "healthy",  label: "Sog'lom",         color: "bg-emerald-50 text-emerald-700 border-emerald-200", desc: "Profilaktik ko'rik",              price: 50000 },
-  { id: "cavity",   label: "Karies",           color: "bg-amber-50 text-amber-700 border-amber-200",      desc: "Karies davolash",                price: 250000 },
-  { id: "pulpitis", label: "Kanal (Pulpit)",   color: "bg-red-50 text-red-700 border-red-200",            desc: "Kanal tozalash va asab olish",   price: 400000 },
-  { id: "filled",   label: "Plomba",           color: "bg-teal-50 text-teal-700 border-teal-200",         desc: "Gelioplastik plomba",            price: 300000 },
-  { id: "crown",    label: "Toj (Crown)",      color: "bg-yellow-50 text-yellow-700 border-yellow-200",   desc: "Metall-keramika toj",            price: 850000 },
-  { id: "missing",  label: "Yo'q tish",        color: "bg-rose-50 text-rose-700 border-rose-200",         desc: "Protezlash zarur",               price: 0 },
-  { id: "implant",  label: "Implant",          color: "bg-primary-50 text-primary-700 border-primary-200",         desc: "Dental implant (Osstem)",        price: 3500000 },
+/** Matnlar `content.ts` da; bu yerda faqat rang va taxminiy narx. */
+const CONDITIONS: { id: Condition; color: string; price: number }[] = [
+  { id: "healthy",  color: "bg-emerald-50 text-emerald-700 border-emerald-200", price: 50000 },
+  { id: "cavity",   color: "bg-amber-50 text-amber-700 border-amber-200",       price: 250000 },
+  { id: "pulpitis", color: "bg-red-50 text-red-700 border-red-200",             price: 400000 },
+  { id: "filled",   color: "bg-teal-50 text-teal-700 border-teal-200",          price: 300000 },
+  { id: "crown",    color: "bg-yellow-50 text-yellow-700 border-yellow-200",    price: 850000 },
+  { id: "missing",  color: "bg-rose-50 text-rose-700 border-rose-200",          price: 0 },
+  { id: "implant",  color: "bg-primary-50 text-primary-700 border-primary-200", price: 3500000 },
 ];
 
 /* ── Main Component ──────────────────────────────────────────── */
 export default function ToothMapDemo() {
+  const { c, fmt } = useLandingCopy();
   const [teeth, setTeeth] = useState<Record<number, Condition[]>>(INITIAL);
   const [selected, setSelected] = useState<number | null>(17);
 
-  const activeConds = selected !== null ? (teeth[selected] ?? []) : [];
-  const activeLabel = activeConds.length > 0 ? CONDITIONS.find(c => activeConds.includes(c.id))?.label ?? "Sog'lom" : "Sog'lom";
+  const t = c.toothMap;
+  const condText = (id: Condition) => t.conditions[id];
 
-  const setCondition = (c: Condition) => {
+  const activeConds = selected !== null ? teeth[selected] ?? [] : [];
+  const activeId: Condition = activeConds[0] ?? "healthy";
+
+  const setCondition = (id: Condition) => {
     if (selected === null) return;
-    setTeeth(prev => ({ ...prev, [selected]: c === "healthy" ? [] : [c] }));
+    setTeeth((prev) => ({ ...prev, [selected]: id === "healthy" ? [] : [id] }));
   };
 
-  const treatmentTeeth = (Object.entries(teeth) as [string, Condition[]][])
-    .filter(([,conds]) => conds.length > 0 && !conds.includes("healthy"))
+  const plan = (Object.entries(teeth) as [string, Condition[]][])
+    .filter(([, conds]) => conds.length > 0 && !conds.includes("healthy"))
     .map(([num, conds]) => {
-      const info = CONDITIONS.find(c => conds.includes(c.id));
-      return { num: parseInt(num), info };
+      const id = conds[0];
+      return { num: parseInt(num, 10), id, price: CONDITIONS.find((x) => x.id === id)?.price ?? 0 };
     });
 
-  const total = treatmentTeeth.reduce((acc, t) => acc + (t.info?.price ?? 0), 0);
+  const total = plan.reduce((acc, x) => acc + x.price, 0);
 
   return (
-    <section id="tooth-map" className="py-20 bg-white relative overflow-hidden border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <Section id="tooth-map" bg="white" border>
+      <SectionHeader badge={t.badge} title={t.title} subtitle={t.sub} className="mb-12" />
 
-        {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-10 space-y-3">
-          <span className="px-3 py-1.5 rounded-full bg-teal-50 border border-teal-100 text-xs font-bold text-teal-700 uppercase tracking-widest">
-            Elektron Tish Xaritasi
-          </span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-            Interaktiv 2D Tish Formulari
-          </h2>
-          <p className="text-slate-500 text-sm sm:text-base leading-relaxed">
-            Quyidagi tishlardan birini bosib, holatini o'zgartiring — xuddi haqiqiy DentaCRM interfeysi kabi.
-          </p>
-        </div>
+      <Reveal className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start max-w-5xl mx-auto">
+        {/* Tish formulasi */}
+        <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 text-center">
+          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-5 flex items-center justify-center gap-2">
+            <Heart className="w-3.5 h-3.5 text-primary-600" />
+            {t.cardTitle}
+          </h3>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start max-w-5xl mx-auto">
-
-          {/* Teeth visualizer */}
-          <div className="lg:col-span-8 bg-white rounded-[1.5rem] border border-gray-100 shadow-sm p-5 sm:p-6 text-center">
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-5 flex items-center justify-center gap-2">
-              <Heart className="w-3.5 h-3.5 text-primary-600" />
-              Tish Formula Kartasi
-            </h3>
-
-            {/* Upper jaw */}
-            <div className="flex justify-center items-end gap-1 sm:gap-1.5 pb-2 border-b border-gray-100 mb-1">
-              {UPPER_NUMS.map(n => (
-                <RealisticTooth
-                  key={n} number={n}
-                  conditions={teeth[n] ?? []}
-                  isUpper={true}
-                  isSelected={selected === n}
-                  onClick={() => setSelected(n)}
-                />
-              ))}
-            </div>
-            <div className="text-[8px] text-gray-400 font-medium text-center mb-1 font-mono">JAR CHEGARASI</div>
-            {/* Lower jaw */}
-            <div className="flex justify-center items-start gap-1 sm:gap-1.5 pt-1">
-              {LOWER_NUMS.map(n => (
-                <RealisticTooth
-                  key={n} number={n}
-                  conditions={teeth[n] ?? []}
-                  isUpper={false}
-                  isSelected={selected === n}
-                  onClick={() => setSelected(n)}
-                />
-              ))}
-            </div>
-
-            {/* Legend */}
-            <div className="flex flex-wrap justify-center gap-1.5 mt-5 pt-4 border-t border-gray-50">
-              {CONDITIONS.filter(c=>c.id !== 'healthy').map(c => (
-                <span key={c.id} className={`px-2 py-0.5 rounded-full text-[8px] font-bold border ${c.color}`}>
-                  {c.label}
-                </span>
-              ))}
-            </div>
-
-            {/* Active tooth control */}
-            {selected !== null && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 text-left">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="px-2 py-0.5 rounded-lg bg-primary-50 border border-primary-100 text-xs font-bold text-primary-800 font-mono">Tish #{selected}</span>
-                  <span className="text-[11px] text-gray-500">Holat:</span>
-                  <span className="text-[11px] font-bold text-gray-800">{activeLabel}</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {CONDITIONS.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => setCondition(c.id)}
-                      className={`px-2.5 py-1 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
-                        (activeConds.includes(c.id) || (activeConds.length === 0 && c.id === 'healthy'))
-                          ? 'border-primary-500 bg-primary-50 text-primary-700'
-                          : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="flex justify-center items-end gap-1 sm:gap-1.5 pb-2 border-b border-slate-100 mb-1">
+            {UPPER_NUMS.map((n) => (
+              <RealisticTooth
+                key={n}
+                number={n}
+                conditions={teeth[n] ?? []}
+                isUpper
+                isSelected={selected === n}
+                onClick={() => setSelected(n)}
+              />
+            ))}
           </div>
 
-          {/* Treatment plan */}
-          <div className="lg:col-span-4 bg-white rounded-[1.5rem] border border-gray-100 shadow-sm p-5 flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Davolash Rejasi</p>
-              <span className="text-[10px] font-bold px-2 py-0.5 bg-primary-50 text-primary-700 rounded-full border border-primary-100">
-                {treatmentTeeth.length} ta tish
+          <div className="text-[9px] text-slate-400 font-semibold text-center mb-1 tracking-widest">{t.jawBorder}</div>
+
+          <div className="flex justify-center items-start gap-1 sm:gap-1.5 pt-1">
+            {LOWER_NUMS.map((n) => (
+              <RealisticTooth
+                key={n}
+                number={n}
+                conditions={teeth[n] ?? []}
+                isUpper={false}
+                isSelected={selected === n}
+                onClick={() => setSelected(n)}
+              />
+            ))}
+          </div>
+
+          {/* Belgilar ro'yxati */}
+          <div className="flex flex-wrap justify-center gap-1.5 mt-5 pt-4 border-t border-slate-100">
+            {CONDITIONS.filter((x) => x.id !== "healthy").map((x) => (
+              <span key={x.id} className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${x.color}`}>
+                {condText(x.id).label}
               </span>
-            </div>
+            ))}
+          </div>
 
-            <div className="space-y-2 flex-1 overflow-auto max-h-64">
-              {treatmentTeeth.length === 0 ? (
-                <div className="py-8 text-center space-y-2">
-                  <Sparkles className="w-8 h-8 text-gray-300 mx-auto" />
-                  <p className="text-xs text-gray-400">Barcha tishlar sog'lom. Tishlarni bosib holatni o'zgartiring.</p>
-                </div>
-              ) : (
-                treatmentTeeth.map(({ num, info }) => (
-                  <div
-                    key={num}
-                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${selected === num ? 'border-primary-300 bg-primary-50/50' : 'border-gray-100 hover:border-gray-200 bg-gray-50/50'}`}
-                    onClick={() => setSelected(num)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-gray-700 font-mono">Tish #{num}</span>
-                      {info && info.price > 0 && (
-                        <span className="text-[9px] font-bold text-green-700">
-                          {(info.price / 1000).toFixed(0)}K so'm
-                        </span>
-                      )}
-                    </div>
-                    {info && <p className="text-[9px] text-gray-500 mt-0.5">{info.desc}</p>}
-                  </div>
-                ))
-              )}
-            </div>
-
-            {total > 0 && (
-              <div className="pt-3 border-t border-gray-100">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Jami smeta</span>
-                  <span className="text-base font-black text-gray-900">{total.toLocaleString()} so'm</span>
-                </div>
-                <p className="text-[9px] text-gray-400 mt-1">✓ PDF formatida bemorga yuborish imkoni mavjud</p>
+          {/* Tanlangan tish */}
+          {selected !== null && (
+            <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-left">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="px-2 py-0.5 rounded-lg bg-primary-50 border border-primary-100 text-xs font-bold text-primary-800">
+                  {t.toothNo} #{selected}
+                </span>
+                <span className="text-[11px] text-slate-500">{t.stateLabel}</span>
+                <span className="text-[11px] font-bold text-slate-800">{condText(activeId).label}</span>
               </div>
+              <div className="flex flex-wrap gap-1.5">
+                {CONDITIONS.map((x) => (
+                  <button
+                    key={x.id}
+                    onClick={() => setCondition(x.id)}
+                    aria-pressed={activeId === x.id}
+                    className={`px-3 py-2 min-h-[36px] rounded-xl text-[11px] font-bold border transition-all cursor-pointer
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+                        activeId === x.id
+                          ? "border-primary-500 bg-primary-50 text-primary-700"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      }`}
+                  >
+                    {condText(x.id).label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Davolash rejasi */}
+        <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200 shadow-sm p-5 flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
+            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{t.planTitle}</h3>
+            <span className="text-[11px] font-bold px-2 py-0.5 bg-primary-50 text-primary-700 rounded-full border border-primary-100 whitespace-nowrap">
+              {t.planCount(plan.length)}
+            </span>
+          </div>
+
+          <div className="space-y-2 flex-1 overflow-auto max-h-64">
+            {plan.length === 0 ? (
+              <div className="py-8 text-center space-y-2">
+                <Sparkles className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="text-xs text-slate-400 leading-relaxed">{t.planEmpty}</p>
+              </div>
+            ) : (
+              plan.map((item) => (
+                <button
+                  key={item.num}
+                  onClick={() => setSelected(item.num)}
+                  className={`w-full p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                    selected === item.num
+                      ? "border-primary-300 bg-primary-50/60"
+                      : "border-slate-100 hover:border-slate-200 bg-slate-50/60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-700">
+                      {t.toothNo} #{item.num}
+                    </span>
+                    {item.price > 0 && (
+                      <span className="text-[11px] font-bold text-emerald-700 whitespace-nowrap">
+                        {fmt(item.price)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{condText(item.id).desc}</p>
+                </button>
+              ))
             )}
           </div>
+
+          {total > 0 && (
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{t.total}</span>
+                <span className="text-base font-extrabold text-slate-900 whitespace-nowrap">{fmt(total)}</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">{t.totalNote}</p>
+            </div>
+          )}
         </div>
-      </div>
-    </section>
+      </Reveal>
+    </Section>
   );
 }

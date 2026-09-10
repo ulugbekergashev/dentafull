@@ -13,6 +13,12 @@ export default defineConfig(() => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
+        workbox: {
+          // Landing skrinshotlari va OG rasmi marketing uchun; ular
+          // ilovaning offline keshiga kirmasligi kerak.
+          globIgnores: ['**/landing/**', '**/og.png'],
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        },
         includeAssets: ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png', 'logo.svg'],
         manifestFilename: 'manifest.json',
         manifest: {

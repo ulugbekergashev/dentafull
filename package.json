@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "landing:shots": "node scripts/landing-shots.mjs",
+    "landing:smoke": "node scripts/landing-smoke.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.1",
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "playwright-core": "1.61.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vite-plugin-pwa": "^1.2.0"

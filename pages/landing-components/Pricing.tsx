@@ -1,212 +1,199 @@
 import React, { useState } from "react";
-import { Check, Info, ShieldCheck } from "lucide-react";
+import { Check, Info, Users, ArrowRight } from "lucide-react";
+import { useLandingCopy } from "./useLandingCopy";
+import { Section, SectionHeader, Reveal, RevealGroup, RevealItem, PrimaryButton, SecondaryButton } from "./ui";
 
 interface PricingProps {
   onOpenDemoModal: () => void;
 }
 
-export default function Pricing({ onOpenDemoModal }: PricingProps) {
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("annual");
+/**
+ * Tariflar. Backend faqat shifokor hisoblari sonini cheklaydi —
+ * shuning uchun landing ham aynan shuni ko'rsatadi: modullar ro'yxati
+ * hamma tarif uchun bitta, kartalarda takrorlanmaydi.
+ */
+const PLANS = [
+  { key: "individual", seats: 1, monthly: 190000, annual: 152000, popular: false },
+  { key: "start", seats: 3, monthly: 290000, annual: 232000, popular: false },
+  { key: "pro", seats: 10, monthly: 590000, annual: 472000, popular: true },
+];
 
-  const plans = [
-    {
-      name: "Individual",
-      desc: "Yakka tartibda ishlayotgan stomatolog shifokorlar uchun.",
-      monthlyPrice: 190000,
-      annualPrice: 152000,
-      popular: false,
-      features: [
-        "1 ta shifokor hisobi",
-        "Telegram bot integratsiyasi",
-        "Tizimni o'rnatib berish",
-        "Xodimlarni o'qitish",
-        "7 kunlik bepul sinov (Freemium)"
-      ]
-    },
-    {
-      name: "Start",
-      desc: "Kichik va o'rta klinikalar uchun — to'liq imkoniyatlar.",
-      monthlyPrice: 290000,
-      annualPrice: 232000,
-      popular: false,
-      features: [
-        "3 tagacha shifokor hisobi",
-        "Telegram bot integratsiyasi",
-        "Tizimni o'rnatib berish",
-        "Xodimlarni o'qitish",
-        "7 kunlik bepul sinov (Freemium)"
-      ]
-    },
-    {
-      name: "Pro",
-      desc: "Ko'p shifokorli va rivojlangan klinikalar uchun.",
-      monthlyPrice: 590000,
-      annualPrice: 472000,
-      popular: true,
-      features: [
-        "10 tagacha shifokor hisobi",
-        "Telegram bot integratsiyasi",
-        "Tizimni o'rnatib berish",
-        "Xodimlarni o'qitish",
-        "7 kunlik bepul sinov (Freemium)"
-      ]
-    }
-  ];
+export default function Pricing({ onOpenDemoModal }: PricingProps) {
+  const { c, fmt } = useLandingCopy();
+  const [annual, setAnnual] = useState(true);
 
   return (
-    <section id="pricing" className="py-24 bg-slate-900 relative">
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-transparent to-slate-950/40 pointer-events-none"></div>
+    <Section id="pricing" bg="slate" border>
+      <SectionHeader badge={c.pricing.badge} title={c.pricing.title} subtitle={c.pricing.sub} className="mb-8" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-          <span className="px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-xs font-semibold text-cyan-400 uppercase tracking-widest">
-            Shaffof Tariflar
-          </span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Klinikangiz Hajmiga Mos To'lovlar
-          </h2>
-          <p className="text-slate-400 text-sm sm:text-base">
-            Hech qanday yashirin to'lovlarsiz shaffof xizmat haqi. Yillik to'lov bilan <b>20% gacha mablag'ni tejang</b> va bepul o'rnatib berish xizmatidan foydalaning.
-          </p>
-
-          {/* Cycle Toggle Switch */}
-          <div className="pt-6 flex items-center justify-center">
-            <div className="bg-slate-950 p-1 rounded-2xl border border-slate-800 flex items-center gap-1.5">
-              <button
-                onClick={() => setBillingCycle("monthly")}
-                className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
-                  billingCycle === "monthly"
-                    ? "bg-slate-900 text-white border border-slate-800"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                Oylik To'lov
-              </button>
-              <button
-                onClick={() => setBillingCycle("annual")}
-                className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                  billingCycle === "annual"
-                    ? "bg-gradient-to-r from-cyan-500 to-indigo-500 text-white border border-cyan-400/10"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                Yillik To'lov 
-                <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/25 text-[9px] text-emerald-400 font-extrabold uppercase animate-pulse">
-                  -20%
-                </span>
-              </button>
-            </div>
-          </div>
+      {/* Oylik / yillik almashtirgich */}
+      <Reveal className="flex justify-center mb-12" y={12}>
+        <div
+          role="group"
+          aria-label={c.pricing.badge}
+          className="inline-flex items-center gap-1 p-1 rounded-2xl bg-white border border-slate-200 shadow-sm"
+        >
+          <button
+            onClick={() => setAnnual(false)}
+            aria-pressed={!annual}
+            className={`px-4 py-2.5 min-h-[44px] text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+              !annual ? "bg-primary-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {c.pricing.monthly}
+          </button>
+          <button
+            onClick={() => setAnnual(true)}
+            aria-pressed={annual}
+            className={`px-4 py-2.5 min-h-[44px] text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+              annual ? "bg-primary-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {c.pricing.annual}
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                annual ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600"
+              }`}
+            >
+              {c.pricing.saveBadge}
+            </span>
+          </button>
         </div>
+      </Reveal>
 
-        {/* Pricing Cards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch max-w-6xl mx-auto">
-          {plans.map((plan, i) => {
-            const price = billingCycle === "annual" ? plan.annualPrice : plan.monthlyPrice;
-            const savings = (plan.monthlyPrice - plan.annualPrice) * 12;
+      {/* Tarif kartalari */}
+      <RevealGroup className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch max-w-5xl mx-auto" stagger={0.08}>
+        {PLANS.map((plan) => {
+          const meta = c.pricing.plans.find((p) => p.key === plan.key)!;
+          const price = annual ? plan.annual : plan.monthly;
+          const savings = (plan.monthly - plan.annual) * 12;
 
-            return (
+          return (
+            <RevealItem key={plan.key} className="h-full">
               <div
-                key={i}
-                className={`relative bg-slate-950 rounded-3xl p-6 sm:p-8 flex flex-col justify-between text-left border transition-all duration-300 ${
+                className={`relative h-full rounded-3xl p-6 sm:p-7 flex flex-col justify-between text-left transition-all duration-300 ${
                   plan.popular
-                    ? "border-cyan-500/60 shadow-xl shadow-cyan-500/[0.03] scale-102 lg:-translate-y-2 z-10"
-                    : "border-slate-800 hover:border-slate-700 hover:shadow-lg hover:shadow-slate-950/20"
+                    ? "bg-primary-900 text-white shadow-2xl shadow-primary-900/25 lg:-translate-y-3 z-10"
+                    : "bg-white border border-slate-200 hover:border-slate-300 hover:shadow-lg"
                 }`}
               >
-                {/* Popular Badge */}
                 {plan.popular && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-cyan-500 to-indigo-500 text-[10px] text-white font-extrabold rounded-full uppercase tracking-wider shadow-md">
-                    O'TA OMMABOP • TAVSIYA ETILADI
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary-500 text-[10px] text-white font-extrabold rounded-full uppercase tracking-wider shadow-md whitespace-nowrap">
+                    {c.pricing.popular}
                   </span>
                 )}
 
-                {/* Card Top */}
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                    <p className="text-xs text-slate-500 mt-1 leading-normal">{plan.desc}</p>
+                    <h3 className={`text-lg font-extrabold ${plan.popular ? "text-white" : "text-slate-900"}`}>
+                      {meta.name}
+                    </h3>
+                    <p className={`text-xs mt-1 leading-normal ${plan.popular ? "text-primary-200" : "text-slate-500"}`}>
+                      {meta.desc}
+                    </p>
                   </div>
 
-                  {/* Price info */}
-                  <div className="py-2.5">
-                    <span className="text-3xl sm:text-4xl font-extrabold text-white font-mono">
-                      {price.toLocaleString("uz-UZ")}
+                  <div>
+                    <span className={`text-3xl sm:text-4xl font-extrabold ${plan.popular ? "text-white" : "text-slate-900"}`}>
+                      {fmt(price)}
                     </span>
-                    <span className="text-xs text-slate-500 font-sans ml-1">UZS / oy</span>
-                    
-                    {billingCycle === "annual" ? (
-                      <p className="text-[10px] text-emerald-400 font-semibold mt-1.5 flex items-center gap-1">
-                        <Info className="w-3.5 h-3.5 shrink-0" />
-                        Yiliga {savings.toLocaleString("uz-UZ")} UZS tejaladi (yillik hisoblanadi)
+                    <span className={`text-xs ml-1.5 ${plan.popular ? "text-primary-200" : "text-slate-500"}`}>
+                      {c.pricing.perMonth}
+                    </span>
+
+                    {annual ? (
+                      <p
+                        className={`text-[11px] font-semibold mt-2 flex items-start gap-1.5 ${
+                          plan.popular ? "text-primary-200" : "text-emerald-600"
+                        }`}
+                      >
+                        <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
+                        {c.pricing.annualNote(fmt(savings))}
                       </p>
                     ) : (
-                      <p className="text-[10px] text-slate-500 mt-1.5">
-                        Xohlagan paytda to'xtatish yoki tarifni o'zgartirish mumkin.
+                      <p className={`text-[11px] mt-2 ${plan.popular ? "text-primary-200" : "text-slate-500"}`}>
+                        {c.pricing.monthlyNote}
                       </p>
                     )}
                   </div>
 
-                  {/* Feature Checkboxes */}
-                  <div className="border-t border-slate-900 pt-6">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">TARIF TARKIBI:</p>
-                    <ul className="space-y-3.5">
-                      {plan.features.map((feature, idx) => (
-                        <li key={idx} className="flex items-start space-x-3 text-xs text-slate-300">
-                          <div className="w-4.5 h-4.5 rounded-full bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center shrink-0 text-cyan-400 mt-0.5">
-                            <Check className="w-3 h-3" />
-                          </div>
-                          <span className="leading-normal">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
+                  {/* Yagona farq — shifokor hisoblari soni */}
+                  <div
+                    className={`flex items-center gap-3 rounded-2xl p-4 ${
+                      plan.popular ? "bg-white/10" : "bg-primary-50 border border-primary-100"
+                    }`}
+                  >
+                    <Users className={`w-5 h-5 shrink-0 ${plan.popular ? "text-primary-200" : "text-primary-600"}`} />
+                    <span className={`text-sm font-bold ${plan.popular ? "text-white" : "text-primary-800"}`}>
+                      {c.pricing.seats(plan.seats)}
+                    </span>
                   </div>
                 </div>
 
-                {/* CTA Button */}
-                <div className="pt-8 border-t border-slate-900 mt-8">
+                <div className="pt-7">
                   <button
                     onClick={onOpenDemoModal}
-                    className={`w-full py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 cursor-pointer text-center ${
-                      plan.popular
-                        ? "bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white shadow-lg shadow-cyan-500/10"
-                        : "bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:text-white text-slate-300"
-                    }`}
+                    className={`w-full py-3.5 min-h-[48px] rounded-xl font-bold text-sm transition-all active:scale-[0.98] cursor-pointer
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500 ${
+                        plan.popular
+                          ? "bg-white text-primary-800 hover:bg-primary-50"
+                          : "bg-primary-600 text-white hover:bg-primary-700 shadow-md shadow-primary-500/20"
+                      }`}
                   >
-                    Bepul Sinab Ko'rishni Boshlash
+                    {c.pricing.cta}
                   </button>
-                  <p className="text-[9px] text-center text-slate-600 mt-2.5">
-                    Kartasiz faollashtirish • 7 kunlik to'liq test rejimi
+                  <p className={`text-[10px] text-center mt-2.5 ${plan.popular ? "text-primary-300" : "text-slate-400"}`}>
+                    {c.pricing.ctaNote}
                   </p>
                 </div>
-
               </div>
-            );
-          })}
-        </div>
+            </RevealItem>
+          );
+        })}
+      </RevealGroup>
 
-        {/* Dynamic Trust Badge */}
-        <div className="mt-16 p-4 bg-slate-950/60 border border-slate-800 rounded-3xl max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between text-left gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400 shrink-0">
-              <ShieldCheck className="w-5.5 h-5.5" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-200">100% Qoniqish Kafolati</h4>
-              <p className="text-[10px] text-slate-500 mt-0.5">Agar dastur yoqmasa, birinchi 30 kun ichida to'lov to'liq qaytariladi. Hech qanday shartlarsiz.</p>
-            </div>
+      {/* Hamma tarifga kiradigan imkoniyatlar — bir marta, takrorlanmaydi */}
+      <Reveal className="mt-12 max-w-5xl mx-auto">
+        <div className="rounded-3xl bg-white border border-slate-200 p-6 sm:p-8 shadow-sm">
+          <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-widest mb-5">
+            {c.pricing.includedTitle}
+          </h3>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
+            {c.pricing.included.map((f) => (
+              <li key={f} className="flex items-start gap-2.5 text-sm text-slate-700">
+                <span className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                </span>
+                {f}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Reveal>
+
+      {/* Katta klinikalar */}
+      <Reveal className="mt-6 max-w-5xl mx-auto">
+        <div className="rounded-3xl bg-slate-900 p-6 sm:p-7 flex flex-col md:flex-row items-center justify-between gap-5 text-left">
+          <div className="space-y-1">
+            <h3 className="text-sm sm:text-base font-bold text-white">{c.pricing.enterpriseTitle}</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">{c.pricing.enterpriseDesc}</p>
           </div>
-          <button
+          <SecondaryButton
             onClick={onOpenDemoModal}
-            className="px-5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold hover:bg-slate-850 cursor-pointer transition-all shrink-0"
+            className="shrink-0"
+            icon={<ArrowRight className="w-4 h-4" />}
           >
-            Yordam va Konsultatsiya
-          </button>
+            {c.pricing.enterpriseCta}
+          </SecondaryButton>
         </div>
+      </Reveal>
 
-      </div>
-    </section>
+      {/* Mobil ekranda asosiy harakat takrorlanadi */}
+      <Reveal className="mt-8 flex lg:hidden justify-center">
+        <PrimaryButton onClick={onOpenDemoModal} full className="max-w-sm">
+          {c.pricing.cta}
+        </PrimaryButton>
+      </Reveal>
+    </Section>
   );
 }

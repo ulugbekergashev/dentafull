@@ -1,234 +1,202 @@
-import React, { useState, useEffect } from "react";
-import { Sparkles, BrainCircuit, ArrowRight, CheckCircle, Send, AlertCircle, Bot, Zap } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { BrainCircuit, Send, AlertCircle, Check, Loader2, Zap } from "lucide-react";
 import { API_URL } from "../../services/api";
+import { useLandingCopy } from "./useLandingCopy";
+import { Section, SectionHeader, Reveal, BrowserFrame } from "./ui";
 
+type Topic = "treatment_plan" | "sms_generator" | "staff_optimization";
+const TOPICS: Topic[] = ["treatment_plan", "sms_generator", "staff_optimization"];
+
+/**
+ * Ochiq DentaAI demosi.
+ *
+ * Backend: POST /api/ai/dental-advisor — autentifikatsiyasiz, IP bo'yicha
+ * soatiga 5 ta so'rov bilan cheklangan (backend/server.ts). Shu sababli
+ * bo'lim birinchi ochilganda "namuna javob" ko'rsatiladi: foydalanuvchi
+ * bo'sh quti emas, natijaning ko'rinishini ko'radi.
+ */
 export default function AiAssistantWidget() {
-  const [topic, setTopic] = useState<"treatment_plan" | "sms_generator" | "staff_optimization">("treatment_plan");
-  const [inputData, setInputData] = useState("");
+  const { c } = useLandingCopy();
+  const [topic, setTopic] = useState<Topic>("treatment_plan");
+  const [input, setInput] = useState(c.ai.samples.treatment_plan);
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState("");
+  const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
-  const [apiKeyStatus, setApiKeyStatus] = useState<boolean>(true);
 
-  // Pre-populated suggestions based on topics to help user test quickly
-  const suggestions = {
-    treatment_plan: "35-tishda chuqur karies bor, sovuq va issiqqa og'riydi. Rentgende ildiz uchi yallig'lanmagan.",
-    sms_generator: "Bemor Sevara Aliyeva 3 oydan beri tish tozalash qabuliga kelmadi. Uni bepul profilaktik ko'rikka taklif qilish.",
-    staff_optimization: "Klinikamizda 3 ta shifokor ishlaydi, lekin qabul vaqtlari chalkashib ketmoqda, bemorlar kutish zalida 30 daqiqadan ko'p qolyapti."
-  };
-
-  // Set default suggestion on topic change
+  // Mavzu yoki til o'zgarganda taklif matni ham yangilanadi
   useEffect(() => {
-    setInputData(suggestions[topic]);
-  }, [topic]);
+    setInput(c.ai.samples[topic]);
+  }, [topic, c.ai.samples]);
 
-  useEffect(() => { setApiKeyStatus(true); }, []);
-
-  const handleAiCall = async (e: React.FormEvent) => {
+  const ask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputData.trim()) return;
+    const text = input.trim();
+    if (text.length < 10) {
+      setError(c.ai.errors.tooShort);
+      return;
+    }
 
     setLoading(true);
-    setResponse("");
+    setAnswer("");
     setError("");
 
     try {
-      // Nisbiy manzil ishlamaydi: frontend Vercel'da, backend Railway'da turadi.
-      // API_URL ikkalasini to'g'ri bog'laydi.
+      // Nisbiy manzil ishlamaydi: frontend Vercel'da, backend Railway'da.
       const res = await fetch(`${API_URL}/ai/dental-advisor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, inputData })
+        body: JSON.stringify({ topic, inputData: text }),
       });
 
+      if (res.status === 429) throw new Error(c.ai.errors.rateLimit);
+      if (res.status === 503) throw new Error(c.ai.errors.notConfigured);
+      if (res.status === 400) throw new Error(c.ai.errors.tooShort);
+      if (!res.ok) throw new Error(c.ai.errors.generic);
+
       const data = await res.json();
-      if (data.success) {
-        setResponse(data.response);
-      } else {
-        throw new Error(data.message || "AI so'rovida noma'lum xatolik yuz berdi.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Server bilan aloqa o'rnatib bo'lmadi. Iltimos, keyinroq qayta urining.");
-      
-      // Fallback elegant mock response if API Key is not configured yet (prevents user getting stuck)
-      if (!apiKeyStatus) {
-        setResponse(`[DentaAI Maslahatchisi (Simulyatsiya mode)]
-1. Tashxis: Ko'rsatilgan ma'lumotlarga ko'ra, tishda pulpit yoki chuqur karies rivojlanishi mumkin.
-2. Tavsiya etilgan reja:
-   - Anesteziya ostida kariesli kavakni tozalash.
-   - Ildiz kanallarini mexanik va dori vositalari bilan qayta ishlash.
-   - Muvaqqat plomba va keyinchalik doimiy fotopolimer plomba qo'yish.
-3. Davomiylik: 1-2 seans (har biri 45 daqiqa).
-4. Profilaktika: Kuniga 2 marta tish yuvish, tish ipidan muntazam foydalanish.`);
-      }
+      if (!data?.success || !data.response) throw new Error(c.ai.errors.generic);
+      setAnswer(data.response);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      // Tarmoq uzilgani `fetch` ning o'zidan keladi — bizning matnlarimizdan emas
+      const known = Object.values(c.ai.errors).includes(msg);
+      setError(known ? msg : c.ai.errors.network);
     } finally {
       setLoading(false);
     }
   };
 
+  const showSample = !answer && !loading && !error;
+
   return (
-    <section id="ai-advisor" className="py-24 bg-slate-50 relative overflow-hidden border-b border-slate-200">
-      {/* Decorative blurred rings */}
-      <div className="absolute top-1/4 right-0 w-80 h-80 bg-primary-500/5 rounded-full blur-3xl -z-10"></div>
-      <div className="absolute bottom-1/4 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl -z-10"></div>
- 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-          <span className="px-3.5 py-1.5 rounded-full bg-primary-100 border border-primary-200 text-xs font-bold text-primary-800 tracking-wider inline-flex items-center gap-1.5 uppercase">
-            <Bot className="w-4 h-4 animate-bounce text-primary-600" />
-            DentaAI • Sun'iy Intellekt Maslahatchisi
-          </span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-            Klinikangiz Uchun Aqlli AI Assistent
-          </h2>
-          <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-            DentaCRM tarkibiga o'rnatilgan sun'iy intellekt shifokorlarga davolash rejalari tuzishda va ma'murlarga SMS shablonlari yaratishda yordam beradi. Quyida uni bevosita sinab ko'ring.
-          </p>
-        </div>
- 
-        {/* AI Playground Box */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 max-w-4xl mx-auto shadow-sm grid grid-cols-1 md:grid-cols-12 gap-8 items-stretch">
-          
-          {/* Controls column (Col span 5) */}
-          <div className="md:col-span-5 flex flex-col justify-between space-y-6">
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+    <Section id="ai" bg="white" border>
+      <SectionHeader badge={c.ai.badge} title={c.ai.title} subtitle={c.ai.sub} className="mb-14" />
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
+        {/* Chap: tizim ichidagi ko'rinish */}
+        <Reveal className="lg:col-span-5 space-y-6">
+          <BrowserFrame image="dentaai" alt={c.ai.alt} urlBar="app.dentacrm.uz / dentaai" />
+          <ul className="space-y-3">
+            {c.ai.bullets.map((b) => (
+              <li key={b} className="flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-primary-50 border border-primary-100 flex items-center justify-center shrink-0 mt-0.5">
+                  <Check className="w-3 h-3 text-primary-600" />
+                </span>
+                <span className="text-sm text-slate-700 leading-relaxed">{b}</span>
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+
+        {/* O'ng: ochiq demo */}
+        <Reveal delay={0.1} className="lg:col-span-7">
+          <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 sm:p-7 space-y-5">
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
                 <BrainCircuit className="w-4 h-4 text-primary-600" />
-                Maslahat yo'nalishini tanlang
+                {c.ai.pickTopic}
               </h3>
- 
-              {/* Topic Toggles */}
-              <div className="flex flex-col space-y-2">
-                <button
-                  onClick={() => setTopic("treatment_plan")}
-                  className={`w-full text-left p-3 rounded-xl border transition-all text-xs font-semibold flex items-center justify-between cursor-pointer ${
-                    topic === "treatment_plan"
-                      ? "border-primary-500 bg-primary-50 text-primary-800"
-                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <span>1. Davolash Rejasi tuzish</span>
-                  <Zap className="w-3.5 h-3.5" />
-                </button>
- 
-                <button
-                  onClick={() => setTopic("sms_generator")}
-                  className={`w-full text-left p-3 rounded-xl border transition-all text-xs font-semibold flex items-center justify-between cursor-pointer ${
-                    topic === "sms_generator"
-                      ? "border-primary-500 bg-primary-50 text-primary-800"
-                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <span>2. Marketing va SMS yozish</span>
-                  <Zap className="w-3.5 h-3.5" />
-                </button>
- 
-                <button
-                  onClick={() => setTopic("staff_optimization")}
-                  className={`w-full text-left p-3 rounded-xl border transition-all text-xs font-semibold flex items-center justify-between cursor-pointer ${
-                    topic === "staff_optimization"
-                      ? "border-primary-500 bg-primary-50 text-primary-800"
-                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  <span>3. Klinikani optimallashtirish</span>
-                  <Zap className="w-3.5 h-3.5" />
-                </button>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {TOPICS.map((t) => {
+                  const on = topic === t;
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTopic(t)}
+                      aria-pressed={on}
+                      className={`min-h-[44px] p-3 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer
+                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
+                          on
+                            ? "border-primary-500 bg-primary-50 text-primary-800"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                        }`}
+                    >
+                      <Zap className={`w-3.5 h-3.5 mb-1.5 ${on ? "text-primary-600" : "text-slate-400"}`} />
+                      <span className="block leading-snug">{c.ai.topics[t]}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
- 
-            {/* Quick stats on AI */}
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-left text-[11px] text-slate-500 leading-normal">
-              <p className="font-bold text-slate-700 flex items-center gap-1.5">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                Gemini 3.5-Flash bilan integratsiya
-              </p>
-              <p>DentaCRM foydalanuvchilari ushbu AI yordamchini qo'shimcha to'lovlarsiz o'z shaxsiy kabinetlarida cheksiz ishlata oladilar.</p>
-            </div>
- 
-          </div>
- 
-          {/* Prompt & Output column (Col span 7) */}
-          <div className="md:col-span-7 flex flex-col justify-between space-y-4 text-left">
-            <form onSubmit={handleAiCall} className="space-y-3">
-              <label className="block text-xs font-bold text-slate-750">
-                {topic === "treatment_plan" && "Tish muammosi yoki bemor shikoyatini tasvirlang:"}
-                {topic === "sms_generator" && "SMS maqsadini yoki aksiyani yozing:"}
-                {topic === "staff_optimization" && "Klinikadagi qiyinchilik yoki holatni yozing:"}
+
+            <form onSubmit={ask} className="space-y-3">
+              <label htmlFor="lp-ai-input" className="block text-xs font-bold text-slate-700">
+                {c.ai.prompts[topic]}
               </label>
-              
-              <div className="relative">
-                <textarea
-                  value={inputData}
-                  onChange={(e) => setInputData(e.target.value)}
-                  rows={3}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-755 focus:outline-none focus:border-primary-500 focus:bg-white leading-relaxed resize-none text-slate-800"
-                  placeholder="Bu yerga tafsilotlarni yozing..."
-                />
-              </div>
- 
+              <textarea
+                id="lp-ai-input"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                rows={3}
+                placeholder={c.ai.placeholder}
+                className="w-full bg-white border border-slate-200 rounded-xl p-3.5 text-[13px] text-slate-800 leading-relaxed resize-none
+                           focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+              />
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md"
+                className="w-full py-3 min-h-[48px] rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-60
+                           disabled:cursor-not-allowed text-white font-bold text-sm transition-all flex items-center justify-center gap-2
+                           cursor-pointer active:scale-[0.98] shadow-md shadow-primary-500/20
+                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
               >
                 {loading ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0"></span>
-                    <span>DentaAI tahlil qilmoqda...</span>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {c.ai.loading}
                   </>
                 ) : (
                   <>
-                    <Send className="w-3.5 h-3.5" />
-                    <span>DentaAI Tahlilini Sinash (O'zbekcha)</span>
+                    <Send className="w-4 h-4" />
+                    {c.ai.submit}
                   </>
                 )}
               </button>
             </form>
- 
-            {/* AI Result Area */}
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 min-h-[160px] flex flex-col justify-between overflow-hidden">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                  <span>DentaAI JAVOBI</span>
-                  {loading && <span className="text-primary-600 animate-pulse">Generatsiya qilinmoqda...</span>}
-                </div>
-                
-                {error && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2 text-xs text-rose-700">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 animate-pulse" />
-                    <p>{error}</p>
-                  </div>
-                )}
- 
-                {!response && !loading && !error && (
-                  <p className="text-xs text-slate-400 italic py-6 text-center">
-                    Yuqoridagi tugmani bosing va bir necha soniyada sun'iy intellekt taqdim etadigan tahlilni ko'ring.
-                  </p>
-                )}
- 
-                {response && (
-                  <div className="text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-wrap max-h-[180px] overflow-y-auto pr-1">
-                    {response}
-                  </div>
-                )}
+
+            {/* Javob maydoni */}
+            <div
+              className="bg-white border border-slate-200 rounded-2xl p-4 min-h-[190px] flex flex-col"
+              aria-live="polite"
+            >
+              <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-400 tracking-wider mb-2">
+                <span>{showSample ? c.ai.sampleTitle : c.ai.answerTitle}</span>
+                {loading && <span className="text-primary-600">{c.ai.generating}</span>}
               </div>
- 
-              {response && (
-                <div className="pt-3 border-t border-slate-200 flex justify-between items-center text-[9px] text-slate-400">
-                  <span>✓ Javob tahrirlash uchun tayyor</span>
-                  <span>Tezlik: ~1.2 soniya</span>
+
+              {error && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p>{error}</p>
                 </div>
               )}
+
+              {loading && (
+                <div className="space-y-2 animate-pulse" aria-hidden="true">
+                  {[80, 95, 70, 88, 60].map((w, i) => (
+                    <div key={i} className="h-2.5 rounded bg-slate-100" style={{ width: `${w}%` }} />
+                  ))}
+                </div>
+              )}
+
+              {showSample && (
+                <p className="text-[13px] text-slate-500 leading-relaxed whitespace-pre-wrap">{c.ai.sampleAnswer}</p>
+              )}
+
+              {answer && (
+                <>
+                  <div className="flex-1 text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap max-h-56 overflow-y-auto pr-1">
+                    {answer}
+                  </div>
+                  <p className="pt-3 mt-3 border-t border-slate-100 text-[10px] text-slate-400">{c.ai.ready}</p>
+                </>
+              )}
             </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">{c.ai.note}</p>
           </div>
- 
-        </div>
- 
+        </Reveal>
       </div>
-    </section>
+    </Section>
   );
 }

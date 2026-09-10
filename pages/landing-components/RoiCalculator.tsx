@@ -1,173 +1,175 @@
 import React, { useState } from "react";
-import { TrendingUp, Clock, Hourglass, Landmark, HelpCircle } from "lucide-react";
+import { TrendingUp, Clock, Landmark } from "lucide-react";
+import { useLandingCopy } from "./useLandingCopy";
+import { Section, SectionHeader, Reveal, CountUp } from "./ui";
+
+/* Hisob-kitob asoslari — matnda ham aynan shu raqamlar ochiq yozilgan */
+const WORKING_DAYS = 26;
+const AVG_CHECK = 300_000;
+const NO_SHOW_RATE = 0.12;
+const RECOVERY_RATE = 0.7;
+const BILLING_UPLIFT = 0.08;
+const MINUTES_PER_PATIENT = 25;
+/** Taqqoslash uchun o'rta tarif narxi */
+const REFERENCE_PRICE = 290_000;
 
 export default function RoiCalculator() {
-  const [doctorsCount, setDoctorsCount] = useState(4);
-  const [dailyPatients, setDailyPatients] = useState(6);
+  const { c, fmt } = useLandingCopy();
+  const [doctors, setDoctors] = useState(4);
+  const [daily, setDaily] = useState(6);
 
-  // Constants for calculation (realistic clinic estimations)
-  const workingDays = 26; // monthly
-  const monthlyPatients = doctorsCount * dailyPatients * workingDays;
-  
-  // 1. Time saved: 45 minutes saved per patient in administrative tasks (EHR notes, invoicing, recalls, reminders)
-  const timeSavedHours = Math.round((monthlyPatients * 25) / 60);
+  const monthlyPatients = doctors * daily * WORKING_DAYS;
+  const timeSavedHours = Math.round((monthlyPatients * MINUTES_PER_PATIENT) / 60);
+  const workDaysSaved = Math.max(1, Math.round(timeSavedHours / 8));
+  const recoveredPatients = Math.round(monthlyPatients * NO_SHOW_RATE * RECOVERY_RATE);
+  const recoveredRevenue = recoveredPatients * AVG_CHECK;
+  const billingAdded = Math.round(monthlyPatients * AVG_CHECK * BILLING_UPLIFT);
+  const totalGain = recoveredRevenue + billingAdded;
+  const timesPrice = Math.max(1, Math.round(totalGain / REFERENCE_PRICE));
 
-  // 2. Revenue recovered: 12% of patients usually forget appointments, with DentaCRM recall SMS and bot, we recover 70% of them.
-  // Average check size: 300,000 UZS
-  const recoveredPatients = Math.round(monthlyPatients * 0.12 * 0.70);
-  const recoveredRevenue = recoveredPatients * 300000;
-
-  // 3. Billing efficiency: 8% increase in overall clinic billing due to accurate material consumption & procedure logging
-  const billValueAdded = Math.round(monthlyPatients * 300000 * 0.08);
-
-  const totalMonthlyGain = recoveredRevenue + billValueAdded;
+  const slider =
+    "w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary-600 " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2";
 
   return (
-    <section id="calculator" className="py-24 bg-slate-50 relative border-b border-slate-200">
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-100/20 via-transparent to-slate-100/20 pointer-events-none"></div>
+    <Section id="calculator" bg="white" border>
+      <SectionHeader badge={c.roi.badge} title={c.roi.title} subtitle={c.roi.sub} className="mb-14" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-          <span className="px-3 py-1 rounded-full bg-primary-100 border border-primary-200 text-xs font-bold text-primary-800 uppercase tracking-widest">
-            Moliyaviy Samara Kalkulyatori
-          </span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-            DentaCRM Qancha Foyda Keltiradi?
-          </h2>
-          <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-            Klinikangiz o'lchamlarini kiriting va DentaCRM orqali qancha vaqt va mablag' tejashingiz mumkinligini real hisob-kitoblar misolida ko'ring.
-          </p>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+        {/* Kiritish paneli */}
+        <Reveal className="lg:col-span-5">
+          <div className="h-full bg-slate-50 border border-slate-200 rounded-3xl p-6 sm:p-8 flex flex-col justify-center gap-8">
+            <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-widest">{c.roi.inputsTitle}</h3>
 
-        {/* Calculator Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-stretch">
-          
-          {/* Controls Panel (Col span 5) */}
-          <div className="lg:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 flex flex-col justify-center space-y-8 shadow-sm">
-            <h3 className="text-base font-bold text-slate-900 uppercase tracking-wider text-left">Klinika Ma'lumotlari</h3>
-
-            {/* Doctor count slider */}
-            <div className="space-y-3 text-left">
-              <div className="flex justify-between items-center text-sm">
-                <span className="font-semibold text-slate-600">Shifokorlar soni:</span>
-                <span className="px-3 py-1 bg-primary-50 border border-primary-200 rounded-lg font-bold text-primary-700 font-mono">
-                  {doctorsCount} ta shifokor
+            <div className="space-y-3">
+              <div className="flex justify-between items-center gap-3 text-sm">
+                <label htmlFor="roi-doctors" className="font-semibold text-slate-600">
+                  {c.roi.doctorsLabel}
+                </label>
+                <span className="px-3 py-1 bg-white border border-primary-200 rounded-lg font-bold text-primary-700 whitespace-nowrap">
+                  {c.roi.doctorsValue(doctors)}
                 </span>
               </div>
               <input
+                id="roi-doctors"
                 type="range"
-                min="1"
-                max="25"
-                value={doctorsCount}
-                onChange={(e) => setDoctorsCount(parseInt(e.target.value))}
-                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary-600 focus:outline-none"
+                min={1}
+                max={25}
+                value={doctors}
+                onChange={(e) => setDoctors(Number(e.target.value))}
+                className={slider}
               />
-              <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                <span>1 ta</span>
-                <span>12 ta</span>
-                <span>25 ta</span>
+              <div className="flex justify-between text-[11px] text-slate-400 font-medium">
+                <span>1</span>
+                <span>12</span>
+                <span>25</span>
               </div>
             </div>
 
-            {/* Daily patients slider */}
-            <div className="space-y-3 text-left">
-              <div className="flex justify-between items-center text-sm">
-                <span className="font-semibold text-slate-600">Kunlik bemorlar (shifokor boshiga):</span>
-                <span className="px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-lg font-bold text-indigo-700 font-mono">
-                  {dailyPatients} ta bemor
+            <div className="space-y-3">
+              <div className="flex justify-between items-center gap-3 text-sm">
+                <label htmlFor="roi-patients" className="font-semibold text-slate-600">
+                  {c.roi.patientsLabel}
+                </label>
+                <span className="px-3 py-1 bg-white border border-indigo-200 rounded-lg font-bold text-indigo-700 whitespace-nowrap">
+                  {c.roi.patientsValue(daily)}
                 </span>
               </div>
               <input
+                id="roi-patients"
                 type="range"
-                min="1"
-                max="15"
-                value={dailyPatients}
-                onChange={(e) => setDailyPatients(parseInt(e.target.value))}
-                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none"
+                min={1}
+                max={15}
+                value={daily}
+                onChange={(e) => setDaily(Number(e.target.value))}
+                className={slider}
               />
-              <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                <span>1 ta</span>
-                <span>8 ta</span>
-                <span>15 ta</span>
+              <div className="flex justify-between text-[11px] text-slate-400 font-medium">
+                <span>1</span>
+                <span>8</span>
+                <span>15</span>
               </div>
             </div>
 
-            {/* Quick calculations basis indicator */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 leading-relaxed text-left">
-              * Hisob-kitoblar tish klinikalari o'rtacha statistikasi asosida tuzilgan: ish kunlari: 26 kun/oy, o'rtacha davolash cheki: 300,000 UZS, eslatmalarsiz bemorlar kelmasligi: 12%.
-            </div>
-
+            <p className="p-3.5 rounded-2xl bg-white border border-slate-200 text-[11px] text-slate-500 leading-relaxed">
+              {c.roi.note}
+            </p>
           </div>
+        </Reveal>
 
-          {/* Results Panel (Col span 7) */}
-          <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6 items-stretch">
-            
-            {/* Hour saved card */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col justify-between text-left group hover:border-slate-300 transition-colors shadow-sm">
+        {/* Natijalar */}
+        <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-5 items-stretch">
+          <Reveal delay={0.06}>
+            <div className="h-full bg-white border border-slate-200 rounded-3xl p-6 flex flex-col justify-between shadow-sm">
               <div className="space-y-4">
                 <div className="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center text-primary-600">
                   <Clock className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900">Tejalgan Qog'ozbozlik Vaqti</h4>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Sarf materiallari hisoboti, retseptlar va ma'lumotlarni avtomatlashtirish orqali tejaladigan oylik vaqt.</p>
+                  <h3 className="text-sm font-bold text-slate-900">{c.roi.timeTitle}</h3>
+                  <p className="text-[12px] text-slate-500 mt-1 leading-relaxed">{c.roi.timeDesc}</p>
                 </div>
               </div>
               <div className="mt-8">
-                <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 font-mono block">
-                  ~{timeSavedHours} soat <span className="text-xs text-slate-400 font-sans font-normal">/ oy</span>
+                <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 block">
+                  <CountUp value={timeSavedHours} format={fmt} />{" "}
+                  <span className="text-xs text-slate-400 font-medium">{c.roi.timeUnit}</span>
                 </span>
-                <span className="text-[10px] text-emerald-600 font-bold mt-1 block">Xodimlarning 4 ta to'liq ish kuni</span>
+                <span className="text-[11px] text-emerald-600 font-bold mt-1 block">{c.roi.timeSub(workDaysSaved)}</span>
               </div>
             </div>
+          </Reveal>
 
-            {/* Recovered patients card */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col justify-between text-left group hover:border-slate-300 transition-colors shadow-sm">
+          <Reveal delay={0.12}>
+            <div className="h-full bg-white border border-slate-200 rounded-3xl p-6 flex flex-col justify-between shadow-sm">
               <div className="space-y-4">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
                   <TrendingUp className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900">Qaytarilgan Bemorlar Soni</h4>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Avtomatik SMS recall va Telegram bot eslatmalari orqali esdan chiqqan yoki kelmagan qayta davolanish oqimi.</p>
+                  <h3 className="text-sm font-bold text-slate-900">{c.roi.patientsTitle}</h3>
+                  <p className="text-[12px] text-slate-500 mt-1 leading-relaxed">{c.roi.patientsDesc}</p>
                 </div>
               </div>
               <div className="mt-8">
-                <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 font-mono block">
-                  +{recoveredPatients} bemor <span className="text-xs text-slate-400 font-sans font-normal">/ oy</span>
+                <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 block">
+                  +<CountUp value={recoveredPatients} format={fmt} />{" "}
+                  <span className="text-xs text-slate-400 font-medium">{c.roi.patientsUnit}</span>
                 </span>
-                <span className="text-[10px] text-emerald-600 font-semibold mt-1 block">Tushum: +{(recoveredRevenue).toLocaleString("uz-UZ")} UZS</span>
+                <span className="text-[11px] text-emerald-600 font-semibold mt-1 block">
+                  {c.roi.patientsSub(fmt(recoveredRevenue))}
+                </span>
               </div>
             </div>
+          </Reveal>
 
-            {/* Big Revenue card (Spans 2 columns on SM if grid, otherwise block) */}
-            <div className="sm:col-span-2 bg-gradient-to-br from-primary-50/50 to-indigo-50 border border-primary-200 rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between text-left gap-6 shadow-sm">
+          <Reveal delay={0.18} className="sm:col-span-2">
+            <div className="bg-gradient-to-br from-primary-50 to-indigo-50 border border-primary-200 rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 text-left shadow-sm">
               <div className="space-y-3 max-w-md">
                 <div className="w-12 h-12 rounded-2xl bg-primary-100 flex items-center justify-center text-primary-700">
                   <Landmark className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-slate-900">Umumiy Qo'shimcha Foyda</h4>
-                  <p className="text-xs text-slate-600 leading-relaxed">Klinikadagi qaytarilgan bemorlar, aniq material hisobi va yo'qotilgan aloqalarni qayta tiklash orqali oyiga hosil bo'ladigan qo'shimcha tushum.</p>
+                  <h3 className="text-base font-bold text-slate-900">{c.roi.totalTitle}</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed mt-1">{c.roi.totalDesc}</p>
                 </div>
               </div>
 
               <div className="shrink-0 text-center sm:text-right space-y-1">
-                <span className="text-2xl sm:text-3xl font-extrabold text-primary-800 font-mono block">
-                  +{totalMonthlyGain.toLocaleString("uz-UZ")} UZS
+                <span className="text-2xl sm:text-3xl font-extrabold text-primary-800 block">
+                  +<CountUp value={totalGain} format={fmt} /> {c.roi.totalCurrency}
                 </span>
-                <span className="text-[10px] text-slate-500 block font-bold uppercase tracking-wider">HAR OY QO'SHIMCHA DAROMAD</span>
-                <span className="px-3 py-1 rounded-full bg-primary-100 text-[10px] text-primary-800 font-bold inline-block mt-2">DentaCRM narxidan 20 barobar ko'p</span>
+                <span className="text-[11px] text-slate-500 block font-bold uppercase tracking-wider">
+                  {c.roi.totalLabel}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-primary-100 text-[11px] text-primary-800 font-bold inline-block mt-2">
+                  {c.roi.timesBadge(timesPrice)}
+                </span>
               </div>
             </div>
-
-          </div>
-
+          </Reveal>
         </div>
-
       </div>
-    </section>
+    </Section>
   );
 }

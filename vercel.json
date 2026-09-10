@@ -39,6 +39,17 @@
             "dest": "/privacy.html"
         },
         {
+            "src": "/landing/(.*)",
+            "headers": {
+                "cache-control": "public, max-age=86400"
+            },
+            "dest": "/landing/$1"
+        },
+        {
+            "src": "/(og\\.png|robots\\.txt|sitemap\\.xml)",
+            "dest": "/$1"
+        },
+        {
             "src": "/(.*)",
             "dest": "/index.html"
         }
