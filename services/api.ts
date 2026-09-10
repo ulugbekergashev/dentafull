@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -49,6 +49,25 @@ export const isDemoMode = () => {
     return false;
 };
 
+// ─── Faol filial ─────────────────────────────────────────────────────────────
+// Sarlavhada tanlangan filial. Har bir so'rovga X-Branch-Id sifatida qo'shiladi,
+// server yangi bemor/qabul/to'lov/xarajatni shu filialga yozadi. Bitta joyda
+// hal qilinadi — kalendar, bemor kartasi, kassa: yaratish nuqtalari ko'p, har
+// biriga branchId uzatib yurish o'rniga sarlavha yetarli.
+// Brauzerda saqlanadi: sahifa yangilansa ham tanlov qolsin.
+export const ACTIVE_BRANCH_KEY = 'dentalflow_branch';
+let activeBranchId: string | null = (() => {
+    try { return localStorage.getItem(ACTIVE_BRANCH_KEY) || null; } catch { return null; }
+})();
+export const getActiveBranchId = () => activeBranchId;
+export const setActiveBranchId = (id: string | null) => {
+    activeBranchId = id || null;
+    try {
+        if (activeBranchId) localStorage.setItem(ACTIVE_BRANCH_KEY, activeBranchId);
+        else localStorage.removeItem(ACTIVE_BRANCH_KEY);
+    } catch { /* xotira yopiq bo'lsa — sessiya davomida baribir ishlaydi */ }
+};
+
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF = 1000; // 1 second
 
@@ -97,6 +116,9 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
         } catch (e) {
             // Ignore parse error
         }
+    }
+    if (activeBranchId) {
+        headers['X-Branch-Id'] = activeBranchId;
     }
 
     const response = await fetchWithRetry(`${API_URL}${url}`, {
@@ -636,6 +658,33 @@ export const api = {
             return fetchJson<{ success: true }>(`/doctors/${id}`, {
                 method: 'DELETE',
             });
+        },
+    },
+    branches: {
+        getAll: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([] as Branch[]);
+            return fetchJson<Branch[]>(`/branches?clinicId=${clinicId}`);
+        },
+        // assignExisting — birinchi filial yaratilganda mavjud yozuvlarni unga biriktirish.
+        create: (data: { clinicId: string; name: string; address?: string; phone?: string; assignExisting?: boolean }) => {
+            if (isDemoMode()) return Promise.reject(new Error("Demo rejimida filial qo'shib bo'lmaydi"));
+            return fetchJson<Branch & { assigned: number }>('/branches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<Pick<Branch, 'name' | 'address' | 'phone' | 'sortOrder'>>) => {
+            if (isDemoMode()) return Promise.reject(new Error("Demo rejimida filialni o'zgartirib bo'lmaydi"));
+            return fetchJson<Branch>(`/branches/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        delete: (id: string) => {
+            if (isDemoMode()) return Promise.reject(new Error("Demo rejimida filialni o'chirib bo'lmaydi"));
+            return fetchJson<{ success: true }>(`/branches/${id}`, { method: 'DELETE' });
         },
     },
     receptionists: {

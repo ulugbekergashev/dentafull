@@ -26,12 +26,13 @@ import { Inventory } from './pages/Inventory';
 import { OnlineQueue } from './pages/OnlineQueue';
 import { LabOrders } from './pages/LabOrders';
 import { MessagesManagement } from './pages/MessagesManagement';
-import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder, CashRegisterDay, CashMovement } from './types';
+import { UserRole, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, InventoryItem, ServiceCategory, Lead, LabTechnician, LabOrder, CashRegisterDay, CashMovement, Branch } from './types';
 import { ToastContainer, ToastMessage } from './components/Common';
 import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
 import { Logo } from './components/Logo';
-import { api } from './services/api';
+import { BranchSwitcher } from './components/BranchSwitcher';
+import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } from './services/api';
 import type { CashCloseInput } from './services/api';
 import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone } from './utils/accessControl';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
@@ -162,6 +163,17 @@ const AppContent: React.FC = () => {
   const [labTechnicians, setLabTechnicians] = useState<LabTechnician[]>([]);
   const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
+
+  // Filiallar. Sarlavhadagi tanlov (activeBranchId) ro'yxat, kalendar va
+  // moliyani bitta filialga toraytiradi; null — "Butun klinika".
+  // Tanlov api.ts da saqlanadi (localStorage + X-Branch-Id sarlavhasi), bu
+  // yerda faqat ekran uchun nusxasi turadi.
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [activeBranchId, setActiveBranchIdState] = useState<string | null>(() => getActiveBranchId());
+  const setActiveBranchId = (id: string | null) => {
+    persistActiveBranchId(id);
+    setActiveBranchIdState(id);
+  };
   const [searchBarTerm, setSearchBarTerm] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
@@ -184,6 +196,34 @@ const AppContent: React.FC = () => {
 
     return { patients: filteredPatients, doctors: filteredDoctors };
   }, [searchBarTerm, patients, doctors]);
+
+  // ─── Filial bo'yicha ko'rinish ─────────────────────────────────────────────
+  // Ro'yxatlar, kalendar, moliya va boshqaruv paneli tanlangan filial
+  // yozuvlarini ko'rsatadi. Bemor kartasi (PatientDetails) esa ataylab
+  // to'liq: bemor bir filialda ro'yxatdan o'tib, boshqasida davolanishi
+  // mumkin — kartada butun tarixi ko'rinishi kerak.
+  //
+  // Shifokorlarda qoida yumshoqroq: filiali bo'sh shifokor barcha
+  // filiallarda ishlaydi (ko'p klinikalarda shunday).
+  const branchScoped = activeBranchId !== null && branches.length > 0;
+  const scopedPatients = useMemo(
+    () => branchScoped ? patients.filter(p => p.branchId === activeBranchId) : patients,
+    [patients, branchScoped, activeBranchId]);
+  const scopedAppointments = useMemo(
+    () => branchScoped ? appointments.filter(a => a.branchId === activeBranchId) : appointments,
+    [appointments, branchScoped, activeBranchId]);
+  const scopedTransactions = useMemo(
+    () => branchScoped ? transactions.filter(t => t.branchId === activeBranchId) : transactions,
+    [transactions, branchScoped, activeBranchId]);
+  const scopedExpenses = useMemo(
+    () => branchScoped ? expenses.filter(e => e.branchId === activeBranchId) : expenses,
+    [expenses, branchScoped, activeBranchId]);
+  const scopedLeads = useMemo(
+    () => branchScoped ? leads.filter(l => l.branchId === activeBranchId) : leads,
+    [leads, branchScoped, activeBranchId]);
+  const scopedDoctors = useMemo(
+    () => branchScoped ? doctors.filter(d => !d.branchId || d.branchId === activeBranchId) : doctors,
+    [doctors, branchScoped, activeBranchId]);
 
   // Subscription Block Logic
   const isSubscriptionBlocked = useMemo(() => {
@@ -283,7 +323,7 @@ const AppContent: React.FC = () => {
           setPlans(plns);
           setClinics(clns);
         } else if (clinicId) {
-          const [pts, appts, txs, exps, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds, closures, movements] = await Promise.all([
+          const [pts, appts, txs, exps, svcs, docs, recs, plns, invItems, cats, revs, leadsData, clinicData, labTechs, labOrds, closures, movements, branchList] = await Promise.all([
             api.patients.getAll(clinicId),
             api.appointments.getAll(clinicId),
             api.transactions.getAll(clinicId),
@@ -301,7 +341,9 @@ const AppContent: React.FC = () => {
             api.labOrders.getAll(clinicId),
             // Kassa ma'lumotlari — yuklanmasa sahifa baribir ishlashi kerak
             api.cashRegister.getAll(clinicId).catch(() => []),
-            api.cashMovements.getAll(clinicId).catch(() => [])
+            api.cashMovements.getAll(clinicId).catch(() => []),
+            // Filiallar — eski backend'da endpoint bo'lmasa ham ilova ishlasin
+            api.branches.getAll(clinicId).catch(() => [] as Branch[])
           ]);
           setCurrentClinic(clinicData);
           setPatients(pts);
@@ -321,6 +363,13 @@ const AppContent: React.FC = () => {
           setLabOrders(labOrds || []);
           setCashClosures(closures || []);
           setCashMovements(movements || []);
+          setBranches(branchList || []);
+          // Saqlangan tanlov o'chirilgan (yoki boshqa klinikaning) filialga
+          // ishora qilsa — "Butun klinika"ga qaytamiz, aks holda ekran bo'sh qoladi.
+          const storedBranch = getActiveBranchId();
+          if (storedBranch && !(branchList || []).some(b => b.id === storedBranch)) {
+            setActiveBranchId(null);
+          }
         }
       } catch (error: any) {
         console.error('Failed to load data:', error);
@@ -833,6 +882,50 @@ const AppContent: React.FC = () => {
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 
+  // --- Filiallar ---
+  const addBranch = async (data: { name: string; address?: string; phone?: string; assignExisting?: boolean }) => {
+    const created = await api.branches.create({ ...data, clinicId });
+    const { assigned, ...branch } = created;
+    setBranches(prev => [...prev, branch]);
+    if (assigned > 0) {
+      // Mavjud yozuvlar serverda biriktirildi — ekrandagi nusxalarni ham
+      // yangilaymiz, qayta yuklamasdan. Faqat filialsiz yozuvlar.
+      const tag = <T extends { branchId?: string | null }>(list: T[]) =>
+        list.map(x => x.branchId ? x : { ...x, branchId: branch.id });
+      setPatients(tag);
+      setAppointments(tag);
+      setTransactions(tag);
+      setExpenses(tag);
+      setLeads(tag);
+      addToast('success', t('branches.createdAssigned').replace('{n}', String(assigned)));
+    } else {
+      addToast('success', t('branches.created'));
+    }
+    return branch;
+  };
+
+  const updateBranch = async (id: string, data: Partial<Branch>) => {
+    const updated = await api.branches.update(id, data);
+    setBranches(prev => prev.map(b => b.id === id ? updated : b));
+    addToast('success', t('branches.updated'));
+  };
+
+  const deleteBranch = async (id: string) => {
+    await api.branches.delete(id);
+    setBranches(prev => prev.filter(b => b.id !== id));
+    // Server bog'liq yozuvlarni "filialsiz" qildi — ekranda ham shunday.
+    const untag = <T extends { branchId?: string | null }>(list: T[]) =>
+      list.map(x => x.branchId === id ? { ...x, branchId: null } : x);
+    setPatients(untag);
+    setAppointments(untag);
+    setTransactions(untag);
+    setExpenses(untag);
+    setLeads(untag);
+    setDoctors(untag);
+    if (activeBranchId === id) setActiveBranchId(null);
+    addToast('info', t('branches.deleted'));
+  };
+
   const addDoctor = async (doctor: Omit<Doctor, 'id'>) => {
     try {
       const newDoc = await api.doctors.create({ ...doctor, clinicId });
@@ -1135,6 +1228,17 @@ const AppContent: React.FC = () => {
             </button>
           </div>
 
+          {userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.SALES_AGENT && branches.length > 0 && (
+            <div className="px-4 pt-4">
+              <BranchSwitcher
+                branches={branches}
+                activeBranchId={activeBranchId}
+                onChange={setActiveBranchId}
+                variant="sidebar"
+              />
+            </div>
+          )}
+
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {visibleNavigation.map((item) => {
               const to = item.id === 'dashboard' ? '/' : `/${item.id}`;
@@ -1313,7 +1417,14 @@ const AppContent: React.FC = () => {
                   )}
                 </div>
 
-
+                {/* Filial tanlagichi — filiallar bo'lsagina ko'rinadi */}
+                {userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.SALES_AGENT && (
+                  <BranchSwitcher
+                    branches={branches}
+                    activeBranchId={activeBranchId}
+                    onChange={setActiveBranchId}
+                  />
+                )}
               </div>
             </div>
 
@@ -1482,14 +1593,14 @@ const AppContent: React.FC = () => {
               ) : (
                 <Route path="/" element={
                   <Dashboard
-                    patients={patients}
-                    appointments={appointments}
-                    transactions={transactions}
+                    patients={scopedPatients}
+                    appointments={scopedAppointments}
+                    transactions={scopedTransactions}
                     reviews={reviews}
                     userRole={userRole}
                     doctorId={doctorId}
-                    doctors={doctors}
-                    leads={leads}
+                    doctors={scopedDoctors}
+                    leads={scopedLeads}
                     labOrders={labOrders}
                     services={services}
                     currentClinic={currentClinic}
@@ -1509,10 +1620,10 @@ const AppContent: React.FC = () => {
               <Route path="/patients" element={
                 <Patients
                   userRole={userRole}
-                  patients={patients}
-                  doctors={doctors}
-                  appointments={appointments}
-                  transactions={transactions}
+                  patients={scopedPatients}
+                  doctors={scopedDoctors}
+                  appointments={scopedAppointments}
+                  transactions={scopedTransactions}
                   showPatientPhone={showPatientPhoneForRole}
                   onPatientClick={handlePatientClick}
                   onAddPatient={addPatient}
@@ -1525,8 +1636,8 @@ const AppContent: React.FC = () => {
               {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
                 <Route path="/leads" element={
                   <Leads
-                    leads={leads}
-                    doctors={doctors}
+                    leads={scopedLeads}
+                    doctors={scopedDoctors}
                     categories={categories}
                     services={services}
                     currentClinic={currentClinic}
@@ -1562,9 +1673,9 @@ const AppContent: React.FC = () => {
 
               <Route path="/calendar" element={
                 <Calendar
-                  appointments={appointments}
-                  patients={patients}
-                  doctors={doctors}
+                  appointments={scopedAppointments}
+                  patients={scopedPatients}
+                  doctors={scopedDoctors}
                   services={services}
                   categories={categories}
                   onAddAppointment={addAppointment}
@@ -1586,15 +1697,15 @@ const AppContent: React.FC = () => {
                 <Route path="/finance" element={
                   <FinanceHub
                     userRole={userRole}
-                    transactions={transactions}
-                    expenses={expenses}
-                    appointments={appointments}
+                    transactions={scopedTransactions}
+                    expenses={scopedExpenses}
+                    appointments={scopedAppointments}
                     services={services}
-                    patients={patients}
+                    patients={scopedPatients}
                     onPatientClick={handlePatientClick}
                     doctorId={doctorId}
                     clinicId={clinicId}
-                    doctors={doctors}
+                    doctors={scopedDoctors}
                     receptionists={receptionists}
                     currentClinic={currentClinic}
                     labOrders={labOrders}
@@ -1616,9 +1727,9 @@ const AppContent: React.FC = () => {
 
               <Route path="/queue" element={
                 <OnlineQueue
-                  doctors={doctors}
-                  patients={patients}
-                  appointments={appointments}
+                  doctors={scopedDoctors}
+                  patients={scopedPatients}
+                  appointments={scopedAppointments}
                   clinicId={clinicId}
                   userRole={userRole}
                   currentClinic={currentClinic}
@@ -1646,10 +1757,10 @@ const AppContent: React.FC = () => {
                 <>
                   <Route path="/doctors" element={
                     <DoctorsAnalytics
-                      doctors={doctors}
-                      appointments={appointments}
+                      doctors={scopedDoctors}
+                      appointments={scopedAppointments}
                       services={services}
-                      transactions={transactions}
+                      transactions={scopedTransactions}
                       reviews={reviews}
                     />
                   } />
@@ -1708,6 +1819,10 @@ const AppContent: React.FC = () => {
                       onAddLabTechnician={addLabTechnician}
                       onUpdateLabTechnician={updateLabTechnician}
                       onDeleteLabTechnician={deleteLabTechnician}
+                      branches={branches}
+                      onAddBranch={addBranch}
+                      onUpdateBranch={updateBranch}
+                      onDeleteBranch={deleteBranch}
                       currentClinic={currentClinic}
                       plans={plans}
                       reviews={reviews}

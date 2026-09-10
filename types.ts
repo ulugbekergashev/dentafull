@@ -44,6 +44,23 @@ export interface Doctor {
   color?: string;
   startHour?: number | null;
   endHour?: number | null;
+  branchId?: string | null; // Bo'sh — shifokor barcha filiallarda ko'rinadi
+}
+
+/**
+ * Klinika filiali. Bemor, qabul, to'lov, xarajat va lid filialga bog'lanadi;
+ * sarlavhadagi tanlagich ko'rinishni bitta filialga toraytiradi.
+ * branchId bo'sh yozuvlar faqat "Barcha filiallar" rejimida ko'rinadi.
+ */
+export interface Branch {
+  id: string;
+  clinicId: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  status?: 'Active' | 'Deleted';
+  sortOrder?: number;
+  createdAt?: string;
 }
 
 export interface Receptionist {
@@ -77,6 +94,7 @@ export interface Patient {
   portraitUrl?: string;
   balance?: number;
   pinfl?: string;
+  branchId?: string | null;
 }
 
 export interface Appointment {
@@ -93,6 +111,7 @@ export interface Appointment {
   reminderSent?: boolean;
   notes?: string;
   clinicId: string;
+  branchId?: string | null;
   review?: Review;
 }
 
@@ -111,6 +130,7 @@ export interface Transaction {
   createdAt?: string | null; // to'lov qabul qilingan aniq vaqt (eski yozuvlarda yo'q)
   receivedById?: string | null;   // pulni kim qabul qildi (server yozadi)
   receivedByName?: string | null;
+  branchId?: string | null;
   discountPercent?: number; // Chegirma foizi (0-100)
   discountAmount?: number;  // Chegirma summasi
 }
@@ -141,6 +161,7 @@ export interface Expense {
   labOrderId?: string | null;    // avtomatik Laboratoriya xarajati bog'lami
   inventoryItemId?: string | null; // avtomatik Ombor xarajati bog'lami
   createdAt?: string;
+  branchId?: string | null;
 }
 
 /**
@@ -647,6 +668,7 @@ export interface Lead {
   createdAt: string;
   updatedAt: string;
   clinicId: string;
+  branchId?: string | null;
 }
 
 // Tashqi lid manbalari (yuboraman.uz va h.k.) uchun integratsiya ma'lumotlari.

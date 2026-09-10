@@ -26,6 +26,9 @@ model Doctor {
   secondaryPhone   String?
   startHour        Int?
   endHour          Int?
+  /// Shifokor qaysi filialda ishlaydi. Bo'sh — barcha filiallarda ko'rinadi.
+  branchId         String?
+  branch           Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
   appointments     Appointment[]
   clinic           Clinic            @relation(fields: [clinicId], references: [id])
   installmentPlans InstallmentPlan[]
@@ -33,6 +36,7 @@ model Doctor {
   expenses         Expense[]
 
   @@unique([clinicId, telegramChatId])
+  @@index([branchId])
 }
 
 model Receptionist {
@@ -68,6 +72,8 @@ model Patient {
   balance          Float              @default(0)
   doctorId         String?
   pinfl            String?
+  branchId         String?
+  branch           Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
   appointments     Appointment[]
   installmentPlans InstallmentPlan[]
   inventoryLogs    InventoryLog[]
@@ -82,6 +88,7 @@ model Patient {
 
   @@unique([clinicId, telegramChatId])
   @@index([phone])
+  @@index([branchId])
 }
 
 model ToothData {
@@ -121,6 +128,8 @@ model Appointment {
   notes        String?
   clinicId     String
   reminderSent Boolean @default(false)
+  branchId     String?
+  branch       Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
   clinic       Clinic  @relation(fields: [clinicId], references: [id])
   doctor       Doctor  @relation(fields: [doctorId], references: [id])
   patient      Patient @relation(fields: [patientId], references: [id])
@@ -130,6 +139,7 @@ model Appointment {
   @@unique([patientId, date], name: "unique_patient_date")
   @@index([date])
   @@index([patientId])
+  @@index([branchId])
 }
 
 model Visit {
@@ -179,7 +189,7 @@ model TreatmentProcedure {
 }
 
 model Transaction {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   patientName     String
   date            String
   amount          Float
@@ -191,16 +201,20 @@ model Transaction {
   doctorName      String?
   patientId       String?
   visitId         String?
-  discountAmount  Float?   @default(0)
-  discountPercent Float?   @default(0)
+  discountAmount  Float?    @default(0)
+  discountPercent Float?    @default(0)
   createdAt       DateTime? @default(now())
   /// Pulni kim qabul qildi. Rollar har xil jadvalda (Receptionist/Doctor/Clinic admin)
   /// bo'lgani uchun FK emas — id va ism nusxasi saqlanadi.
   receivedById    String?
   receivedByName  String?
-  clinic          Clinic   @relation(fields: [clinicId], references: [id])
-  patient         Patient? @relation(fields: [patientId], references: [id])
-  visit           Visit?   @relation(fields: [visitId], references: [id])
+  branchId        String?
+  branch          Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  clinic          Clinic    @relation(fields: [clinicId], references: [id])
+  patient         Patient?  @relation(fields: [patientId], references: [id])
+  visit           Visit?    @relation(fields: [visitId], references: [id])
+
+  @@index([branchId])
 }
 
 model Expense {
@@ -217,6 +231,8 @@ model Expense {
   labOrderId      String?       @unique
   inventoryItemId String?
   createdAt       DateTime      @default(now())
+  branchId        String?
+  branch          Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
   clinic          Clinic        @relation(fields: [clinicId], references: [id])
   doctor          Doctor?       @relation(fields: [doctorId], references: [id])
   receptionist    Receptionist? @relation(fields: [receptionistId], references: [id])
@@ -225,6 +241,7 @@ model Expense {
   @@index([clinicId])
   @@index([doctorId])
   @@index([receptionistId])
+  @@index([branchId])
 }
 
 model Service {
@@ -331,28 +348,54 @@ model Clinic {
   cashAuditLogs           CashAuditLog[]
   /// Kuniga nechta kassa smenasi (1 yoki 2). Klinikaga qarab sozlanadi.
   cashShiftsPerDay        Int                @default(1)
+  branches                Branch[]
 
   @@index([botToken])
+}
+
+/// Klinika filiali. Bemor, qabul, to'lov, xarajat va lid qaysi filialga
+/// tegishli ekanini belgilaydi. branchId bo'sh yozuvlar — filial kiritilgunga
+/// qadar yaratilgan "umumiy" yozuvlar; ular faqat "Barcha filiallar"
+/// rejimida ko'rinadi.
+model Branch {
+  id           String        @id @default(uuid())
+  clinicId     String
+  name         String
+  address      String?
+  phone        String?
+  /// 'Active' | 'Deleted' — o'chirish yumshoq: bog'liq yozuvlar saqlanib qoladi.
+  status       String        @default("Active")
+  sortOrder    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  clinic       Clinic        @relation(fields: [clinicId], references: [id])
+  doctors      Doctor[]
+  patients     Patient[]
+  appointments Appointment[]
+  transactions Transaction[]
+  expenses     Expense[]
+  leads        Lead[]
+
+  @@index([clinicId])
 }
 
 /// Kassa smenasini yopish: sanalgan naqd/terminal/Click hisob bilan solishtiriladi.
 /// Bir kunda bir nechta smena bo'lishi mumkin (klinika sozlamasiga qarab).
 model CashRegisterDay {
-  id            String    @id @default(uuid())
+  id            String   @id @default(uuid())
   clinicId      String
   date          String
   /// Smena raqami. Bitta smenali klinikada har doim 1.
-  shift         Int       @default(1)
+  shift         Int      @default(1)
   shiftStart    String?
   shiftEnd      String?
   /// Smena boshidagi naqd qoldiq (oldingi yopilishdan ko'chib keladi)
-  openingCash   Float     @default(0)
+  openingCash   Float    @default(0)
   /// Kassir haqiqatda sanagan naqd
   countedCash   Float
   /// Yopilgan daqiqadagi hisob bo'yicha naqd qoldiq (snapshot)
   expectedCash  Float
   /// countedCash − expectedCash (kam/ortiq)
-  difference    Float     @default(0)
+  difference    Float    @default(0)
   /// Terminal Z-hisoboti bo'yicha summa (kiritilmasa null — solishtirilmaydi)
   countedCard   Float?
   expectedCard  Float?
@@ -362,8 +405,8 @@ model CashRegisterDay {
   note          String?
   closedByName  String?
   closedByRole  String?
-  closedAt      DateTime  @default(now())
-  clinic        Clinic    @relation(fields: [clinicId], references: [id])
+  closedAt      DateTime @default(now())
+  clinic        Clinic   @relation(fields: [clinicId], references: [id])
 
   @@unique([clinicId, date, shift])
   @@index([clinicId])
@@ -434,11 +477,14 @@ model Lead {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   clinicId  String
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
   clinic    Clinic   @relation(fields: [clinicId], references: [id])
 
   @@index([clinicId])
   @@index([status])
   @@index([clinicId, phone, createdAt])
+  @@index([branchId])
 }
 
 model DemoRequest {
@@ -564,9 +610,9 @@ model MessageTemplate {
   clinicId         String
   name             String
   text             String
-  eskizTemplateId  Int?             // Eskiz.uz'dagi shablon ID'si
-  eskizStatus      String?          // Eskiz'dan qaytgan moderatsiya holati (masalan: moderation/confirmed/declined)
-  eskizSubmittedAt DateTime?        // Oxirgi marta Eskiz'ga yuborilgan vaqt
+  eskizTemplateId  Int? // Eskiz.uz'dagi shablon ID'si
+  eskizStatus      String? // Eskiz'dan qaytgan moderatsiya holati (masalan: moderation/confirmed/declined)
+  eskizSubmittedAt DateTime? // Oxirgi marta Eskiz'ga yuborilgan vaqt
   createdAt        DateTime         @default(now())
   clinic           Clinic           @relation(fields: [clinicId], references: [id])
   rules            AutomationRule[]

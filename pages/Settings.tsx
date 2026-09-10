@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 
-import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review, LabTechnician, AccessControl, RoleAccess, LeadApiKeyInfo } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw, FlaskConical, Shield, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle } from 'lucide-react';
+import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review, LabTechnician, AccessControl, RoleAccess, LeadApiKeyInfo, Branch } from '../types';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw, FlaskConical, Shield, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, MapPin } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { parseAccessControl } from '../utils/accessControl';
@@ -40,21 +40,25 @@ interface SettingsProps {
    onAddLabTechnician?: (tech: Omit<LabTechnician, 'id' | 'status'>) => void;
    onUpdateLabTechnician?: (id: string, tech: Partial<LabTechnician>) => void;
    onDeleteLabTechnician?: (id: string) => void;
+   branches?: Branch[];
+   onAddBranch?: (data: { name: string; address?: string; phone?: string; assignExisting?: boolean }) => Promise<Branch>;
+   onUpdateBranch?: (id: string, data: Partial<Branch>) => Promise<void>;
+   onDeleteBranch?: (id: string) => Promise<void>;
    currentClinic?: Clinic;
    plans?: SubscriptionPlan[];
    reviews: Review[];
 }
 
 export const Settings: React.FC<SettingsProps> = ({
-   userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, currentClinic, plans, reviews
+   userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, branches = [], onAddBranch, onUpdateBranch, onDeleteBranch, currentClinic, plans, reviews
 }) => {
    const { t } = useLanguage();
-   type SettingsTab = 'general' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed' | 'access' | 'leadApi' | 'ai';
+   type SettingsTab = 'general' | 'branches' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed' | 'access' | 'leadApi' | 'ai';
    // Boshqa sahifadan aniq bo'limga yo'naltirish uchun: /settings?tab=leadApi
    const initialTab = ((): SettingsTab => {
       try {
          const t = new URLSearchParams(window.location.search).get('tab');
-         const allowed: SettingsTab[] = ['general', 'services', 'doctors', 'receptionists', 'labTechnicians', 'messaging', 'facebook', 'dmed', 'access', 'leadApi'];
+         const allowed: SettingsTab[] = ['general', 'branches', 'services', 'doctors', 'receptionists', 'labTechnicians', 'messaging', 'facebook', 'dmed', 'access', 'leadApi'];
          if (t && (allowed as string[]).includes(t)) return t as SettingsTab;
       } catch { /* manzilni o'qib bo'lmasa — odatdagi bo'lim */ }
       return 'services';
@@ -256,7 +260,57 @@ export const Settings: React.FC<SettingsProps> = ({
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
    const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
-   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none' as 'none' | 'fixed' | 'fixed_kpi' | 'kpi', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '' });
+   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none' as 'none' | 'fixed' | 'fixed_kpi' | 'kpi', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '', branchId: '' });
+
+   // Filial modali
+   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
+   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+   const [branchForm, setBranchForm] = useState({ name: '', address: '', phone: '', assignExisting: false });
+   const [branchSaving, setBranchSaving] = useState(false);
+   const [branchError, setBranchError] = useState<string | null>(null);
+   const [deleteConfirmBranch, setDeleteConfirmBranch] = useState<Branch | null>(null);
+
+   const handleOpenBranchModal = (branch?: Branch) => {
+      setBranchError(null);
+      if (branch) {
+         setEditingBranchId(branch.id);
+         setBranchForm({ name: branch.name, address: branch.address || '', phone: branch.phone || '', assignExisting: false });
+      } else {
+         setEditingBranchId(null);
+         // Birinchi filialda mavjud yozuvlarni biriktirish odatiy yoqilgan:
+         // aks holda filial tanlangan zahoti hamma ro'yxat bo'sh ko'rinadi.
+         setBranchForm({ name: '', address: '', phone: '', assignExisting: branches.length === 0 });
+      }
+      setIsBranchModalOpen(true);
+   };
+
+   const handleBranchSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!branchForm.name.trim()) return;
+      setBranchSaving(true);
+      setBranchError(null);
+      try {
+         if (editingBranchId) {
+            await onUpdateBranch?.(editingBranchId, {
+               name: branchForm.name.trim(),
+               address: branchForm.address.trim() || null,
+               phone: branchForm.phone.trim() || null,
+            });
+         } else {
+            await onAddBranch?.({
+               name: branchForm.name.trim(),
+               address: branchForm.address.trim() || undefined,
+               phone: branchForm.phone.trim() || undefined,
+               assignExisting: branchForm.assignExisting,
+            });
+         }
+         setIsBranchModalOpen(false);
+      } catch (err: any) {
+         setBranchError(err?.message || 'Saqlanmadi');
+      } finally {
+         setBranchSaving(false);
+      }
+   };
 
    // Receptionist Modal State
    const [isReceptionistModalOpen, setIsReceptionistModalOpen] = useState(false);
@@ -619,10 +673,11 @@ export const Settings: React.FC<SettingsProps> = ({
             color: doctor.color || DOCTOR_COLORS[0].value,
             startHour: doctor.startHour != null ? String(doctor.startHour) : '',
             endHour: doctor.endHour != null ? String(doctor.endHour) : '',
+            branchId: doctor.branchId || '',
          });
       } else {
          setEditingDoctorId(null);
-         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '' });
+         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '', branchId: '' });
       }
       setIsDoctorModalOpen(true);
    };
@@ -636,6 +691,7 @@ export const Settings: React.FC<SettingsProps> = ({
          updateData.fixedSalary = Number(updateData.fixedSalary) || 0;
          updateData.startHour = doctorForm.startHour !== '' ? Number(doctorForm.startHour) : null;
          updateData.endHour = doctorForm.endHour !== '' ? Number(doctorForm.endHour) : null;
+         updateData.branchId = doctorForm.branchId || null;
          onUpdateDoctor(editingDoctorId, updateData);
       } else {
          onAddDoctor({
@@ -644,6 +700,7 @@ export const Settings: React.FC<SettingsProps> = ({
             fixedSalary: Number(doctorForm.fixedSalary) || 0,
             startHour: doctorForm.startHour !== '' ? Number(doctorForm.startHour) : null,
             endHour: doctorForm.endHour !== '' ? Number(doctorForm.endHour) : null,
+            branchId: doctorForm.branchId || null,
             status: 'Active'
          });
       }
@@ -912,6 +969,8 @@ export const Settings: React.FC<SettingsProps> = ({
             <Card className="col-span-1 h-fit p-2">
                {[
                   { id: 'general', name: t('settings.tabs.general'), icon: User },
+                  // Filiallarni faqat klinika egasi boshqaradi — backend ham shu rolni talab qiladi.
+                  ...(userRole === UserRole.CLINIC_ADMIN ? [{ id: 'branches', name: t('settings.tabs.branches'), icon: MapPin }] : []),
                   { id: 'services', name: t('settings.tabs.services'), icon: DollarSign },
                   { id: 'doctors', name: t('settings.tabs.doctors'), icon: Users },
                   { id: 'receptionists', name: t('settings.tabs.receptionists'), icon: Phone },
@@ -1692,6 +1751,73 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                )}
 
                {/* Doctors Tab */}
+               {/* Filiallar */}
+               {activeTab === 'branches' && userRole === UserRole.CLINIC_ADMIN && (
+                  <Card className="p-6">
+                     <div className="flex justify-between items-start gap-4 mb-6">
+                        <div>
+                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('branches.title')}</h3>
+                           <p className="text-sm text-gray-500">{t('branches.subtitle')}</p>
+                        </div>
+                        <Button size="sm" onClick={() => handleOpenBranchModal()}>
+                           <Plus className="w-4 h-4 mr-1.5" />
+                           {t('branches.add')}
+                        </Button>
+                     </div>
+
+                     {branches.length === 0 ? (
+                        <div className="text-center py-12 px-6 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
+                           <div className="mx-auto w-12 h-12 rounded-xl bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center mb-3">
+                              <Building2 className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+                           </div>
+                           <p className="font-medium text-gray-900 dark:text-white">{t('branches.empty')}</p>
+                           <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">{t('branches.emptyHint')}</p>
+                        </div>
+                     ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                           {branches.map(branch => (
+                              <div
+                                 key={branch.id}
+                                 className="group relative p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-sm transition-all"
+                              >
+                                 <div className="flex items-start justify-between">
+                                    <div className="w-11 h-11 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-100 dark:border-primary-800 flex items-center justify-center">
+                                       <Building2 className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                       <button
+                                          type="button"
+                                          onClick={() => handleOpenBranchModal(branch)}
+                                          className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-md"
+                                          title={t('branches.edit')}
+                                       >
+                                          <Edit className="w-4 h-4" />
+                                       </button>
+                                       <button
+                                          type="button"
+                                          onClick={() => setDeleteConfirmBranch(branch)}
+                                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                                          title={t('branches.deleteTitle')}
+                                       >
+                                          <Trash2 className="w-4 h-4" />
+                                       </button>
+                                    </div>
+                                 </div>
+                                 <p className="mt-4 font-semibold text-gray-900 dark:text-white truncate">{branch.name}</p>
+                                 <p className="text-sm text-gray-500 truncate">{branch.address || '—'}</p>
+                                 {branch.phone && (
+                                    <p className="mt-1 text-xs text-gray-400 flex items-center gap-1.5">
+                                       <Phone className="w-3 h-3" />
+                                       {branch.phone}
+                                    </p>
+                                 )}
+                              </div>
+                           ))}
+                        </div>
+                     )}
+                  </Card>
+               )}
+
                {activeTab === 'doctors' && (
                   <Card className="p-6">
                      <div className="flex justify-between items-center mb-6">
@@ -1710,7 +1836,15 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                                  </div>
                                  <div>
                                     <p className="font-medium text-gray-900 dark:text-white">Dr. {doc.firstName} {doc.lastName}</p>
-                                    <p className="text-xs text-gray-500">{doc.specialty}</p>
+                                    <p className="text-xs text-gray-500">
+                                       {doc.specialty}
+                                       {branches.length > 0 && (
+                                          <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-gray-400">
+                                             <MapPin className="w-3 h-3" />
+                                             {branches.find(b => b.id === doc.branchId)?.name || t('branches.doctorAllBranches')}
+                                          </span>
+                                       )}
+                                    </p>
                                  </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -2107,6 +2241,17 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                   <Input label={t('settings.staff.phone')} value={doctorForm.phone} onChange={e => setDoctorForm({ ...doctorForm, phone: e.target.value })} required />
                   <Input label="Qo'shimcha raqam (Ixtiyoriy)" value={doctorForm.secondaryPhone} onChange={e => setDoctorForm({ ...doctorForm, secondaryPhone: e.target.value })} />
                </div>
+               {branches.length > 0 && (
+                  <Select
+                     label={t('branches.doctorBranch')}
+                     value={doctorForm.branchId}
+                     onChange={e => setDoctorForm({ ...doctorForm, branchId: e.target.value })}
+                     options={[
+                        { value: '', label: t('branches.doctorAllBranches') },
+                        ...branches.map(b => ({ value: b.id, label: b.name })),
+                     ]}
+                  />
+               )}
 
                <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                   <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">{t('settings.staff.authTitle')}</h4>
@@ -2269,6 +2414,84 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
          </Modal>
 
          {/* Delete Doctor Confirmation Modal */}
+         {/* Filial qo'shish / tahrirlash */}
+         <Modal isOpen={isBranchModalOpen} onClose={() => setIsBranchModalOpen(false)} title={editingBranchId ? t('branches.edit') : t('branches.addTitle')}>
+            <form onSubmit={handleBranchSubmit} className="space-y-4">
+               <Input
+                  label={t('branches.name')}
+                  value={branchForm.name}
+                  onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
+                  placeholder={t('branches.namePlaceholder')}
+                  autoFocus
+                  required
+               />
+               <Input
+                  label={t('branches.address')}
+                  value={branchForm.address}
+                  onChange={e => setBranchForm({ ...branchForm, address: e.target.value })}
+                  placeholder={t('branches.addressPlaceholder')}
+               />
+               <Input
+                  label={t('branches.phone')}
+                  value={branchForm.phone}
+                  onChange={e => setBranchForm({ ...branchForm, phone: e.target.value })}
+                  placeholder="+998 90 123 45 67"
+               />
+               {!editingBranchId && (
+                  <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 cursor-pointer">
+                     <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        checked={branchForm.assignExisting}
+                        onChange={e => setBranchForm({ ...branchForm, assignExisting: e.target.checked })}
+                     />
+                     <span>
+                        <span className="block text-sm font-medium text-gray-900 dark:text-white">{t('branches.assignExisting')}</span>
+                        <span className="block text-xs text-gray-500 mt-0.5">{t('branches.assignExistingHint')}</span>
+                     </span>
+                  </label>
+               )}
+               {branchError && (
+                  <p className="text-sm text-red-600 flex items-center gap-2">
+                     <AlertTriangle className="w-4 h-4" />
+                     {branchError}
+                  </p>
+               )}
+               <div className="flex justify-end gap-3 pt-2">
+                  <Button type="button" variant="secondary" onClick={() => setIsBranchModalOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit" disabled={branchSaving || !branchForm.name.trim()}>{t('common.save')}</Button>
+               </div>
+            </form>
+         </Modal>
+
+         {/* Filialni o'chirish */}
+         <Modal isOpen={!!deleteConfirmBranch} onClose={() => setDeleteConfirmBranch(null)} title={t('branches.deleteTitle')}>
+            <div className="text-center space-y-4">
+               <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+               </div>
+               <h3 className="text-lg font-medium text-gray-900 dark:text-white">{deleteConfirmBranch?.name}</h3>
+               <p className="text-gray-600 dark:text-gray-300 text-sm">{t('branches.deleteConfirm')}</p>
+               <div className="flex justify-center gap-3 pt-4">
+                  <Button variant="secondary" onClick={() => setDeleteConfirmBranch(null)}>{t('common.cancel')}</Button>
+                  <Button
+                     className="bg-red-600 hover:bg-red-700 text-white border-none"
+                     onClick={async () => {
+                        if (!deleteConfirmBranch) return;
+                        try {
+                           await onDeleteBranch?.(deleteConfirmBranch.id);
+                           setDeleteConfirmBranch(null);
+                        } catch (err: any) {
+                           setBranchError(err?.message || "O'chirilmadi");
+                        }
+                     }}
+                  >
+                     Ha, O'chirish
+                  </Button>
+               </div>
+            </div>
+         </Modal>
+
          <Modal isOpen={!!deleteConfirmDoctor} onClose={() => setDeleteConfirmDoctor(null)} title={t('settings.staff.deleteDoctorConfirm')}>
             <div className="text-center space-y-4">
                <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">

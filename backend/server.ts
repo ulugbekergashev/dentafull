@@ -196,7 +196,9 @@ const corsOptions = {
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    // X-Branch-Id — sarlavhada tanlangan filial (api.ts har so'rovga qo'shadi).
+    // Bu ro'yxatda bo'lmasa brauzer preflight'da BARCHA so'rovlarni bloklaydi.
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-Branch-Id'],
     // Brauzer yangilangan tokenni o'qiy olishi uchun sarlavha ochiq bo'lishi shart
     exposedHeaders: ['X-Refreshed-Token'],
     credentials: true,
@@ -294,6 +296,25 @@ app.use((req: any, res: any, next: any) => {
     });
     next();
 });
+
+// ─── Filiallar ───────────────────────────────────────────────────────────────
+// Yozuv qaysi filialga tegishli ekanini aniqlaydi. Mijoz filialni ikki yo'l
+// bilan yuboradi: body.branchId (aniq tanlov) yoki X-Branch-Id sarlavhasi
+// (hozir tanlangan filial — api.ts har so'rovga qo'shadi).
+// Sarlavha usuli ataylab: yaratish nuqtalari ko'p (kalendar, bemor kartasi,
+// kassa, AI), har birini alohida o'zgartirish o'rniga bitta joyda hal qilinadi.
+//
+// Filial klinikaga tegishli va o'chirilmagan bo'lishi shart — aks holda null.
+// Begona klinika filialiga yozuv biriktirib bo'lmaydi.
+const resolveBranchId = async (req: any, clinicId: string | null): Promise<string | null> => {
+    const raw = req.body?.branchId ?? req.headers?.['x-branch-id'] ?? null;
+    if (!raw || !clinicId) return null;
+    const branch = await prisma.branch.findFirst({
+        where: { id: String(raw), clinicId, status: 'Active' },
+        select: { id: true },
+    });
+    return branch?.id ?? null;
+};
 
 // Faqat ko'rsatilgan rollar uchun ruxsat beruvchi middleware.
 const requireRole = (...roles: string[]) => {
@@ -1670,12 +1691,14 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
             assignedDoctorId = user.doctorId;
         }
 
+        const branchId = await resolveBranchId(req, clinicId);
         const patient = await prisma.patient.create({
             data: {
                 firstName,
                 lastName,
                 phone,
                 clinicId,
+                branchId,
                 dob: dob || '',
                 gender: gender || 'Male',
                 medicalHistory: medicalHistory || '',
@@ -1741,6 +1764,13 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
         if (portraitUrl !== undefined) updateData.portraitUrl = portraitUrl;
         if (doctorId !== undefined) updateData.doctorId = doctorId === "" ? null : doctorId;
         if (pinfl !== undefined) updateData.pinfl = pinfl;
+        // Filialni o'zgartirish faqat aniq so'ralganda (body), sarlavhadan emas:
+        // aks holda boshqa filialda turib bemor ismini tahrirlash uni ko'chirib yuborardi.
+        if (req.body.branchId !== undefined) {
+            updateData.branchId = req.body.branchId
+                ? await resolveBranchId({ body: { branchId: req.body.branchId } }, (req as any).user?.clinicId || clinicId || null)
+                : null;
+        }
 
         const patient = await prisma.patient.update({
             where: { id: req.params.id },
@@ -1827,6 +1857,7 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
 
         // 2. If no existing appointment, create a new one
         const { patientName, doctorId, doctorName, type, duration, status, reminderSent } = req.body;
+        const branchId = await resolveBranchId(req, clinicId);
         const appointment = await prisma.appointment.create({
             data: {
                 patientId: patientId,
@@ -1840,7 +1871,8 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
                 status,
                 reminderSent,
                 notes: notes,
-                clinicId: clinicId
+                clinicId: clinicId,
+                branchId
             }
         });
         res.json(appointment);
@@ -2057,10 +2089,12 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     try {
         const actor = (req as any).user;
+        const txBranchId = await resolveBranchId(req, getScopedClinicId(req) || req.body?.clinicId || null);
         const transaction = await prisma.transaction.create({
             // Pulni kim qabul qilgani serverdan yoziladi — mijoz o'zgartira olmaydi
             data: {
                 ...req.body,
+                branchId: txBranchId,
                 receivedById: actor?.clinicId ? (actor?.id || actor?.receptionistId || null) : null,
                 receivedByName: actor?.name || null,
             }
@@ -2249,6 +2283,7 @@ app.post('/api/expenses', authenticateToken, async (req, res) => {
                 doctorId: doctorId || null,
                 receptionistId: receptionistId || null,
                 clinicId: clinicId as string,
+                branchId: await resolveBranchId(req, clinicId as string),
             }
         });
         res.json(expense);
@@ -2768,6 +2803,11 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
             fixedSalary: fixedSalary ? Number(fixedSalary) : 0
         };
         if (email) data.email = email;
+        // Shifokor filiali faqat aniq tanlanganda (body), sarlavhadan emas —
+        // bo'sh qoldirilgan shifokor barcha filiallarda ishlaydi.
+        if (req.body.branchId) {
+            data.branchId = await resolveBranchId({ body: { branchId: req.body.branchId } }, clinicId);
+        }
 
         const newDoctor = await prisma.doctor.create({ data });
         res.json(newDoctor);
@@ -2808,6 +2848,11 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
         if (clinicId !== undefined) updateData.clinicId = clinicId;
         if (startHour !== undefined) updateData.startHour = startHour === null ? null : Number(startHour);
         if (endHour !== undefined) updateData.endHour = endHour === null ? null : Number(endHour);
+        if (req.body.branchId !== undefined) {
+            updateData.branchId = req.body.branchId
+                ? await resolveBranchId({ body: { branchId: req.body.branchId } }, (req as any).user?.clinicId || clinicId || null)
+                : null;
+        }
 
         if (password) {
             const salt = await bcrypt.genSalt(10);
@@ -2839,6 +2884,112 @@ app.delete('/api/doctors/:id', authenticateToken, async (req, res) => {
     } catch (error: any) {
         console.error('Doctor delete error:', error);
         res.status(500).json({ error: error.message || 'Failed to delete doctor' });
+    }
+});
+
+// ============================================================
+// --- Filiallar (Branches) ---
+// ============================================================
+// Klinika bir nechta manzilda ishlaganda: har bir bemor/qabul/to'lov qaysi
+// filialga tegishli ekani saqlanadi, sarlavhadagi tanlagich esa ko'rinishni
+// shu filialga toraytiradi. Filiallari yo'q klinika uchun hech narsa o'zgarmaydi.
+
+app.get('/api/branches', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const branches = await prisma.branch.findMany({
+            where: { clinicId, status: 'Active' },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        });
+        res.json(branches);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch branches' });
+    }
+});
+
+app.post('/api/branches', authenticateToken, requireRole('CLINIC_ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const name = String(req.body?.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'Filial nomi kiritilishi shart' });
+
+        const count = await prisma.branch.count({ where: { clinicId, status: 'Active' } });
+        const branch = await prisma.branch.create({
+            data: {
+                clinicId,
+                name,
+                address: req.body?.address ? String(req.body.address).trim() : null,
+                phone: req.body?.phone ? String(req.body.phone).trim() : null,
+                sortOrder: count,
+            }
+        });
+
+        // Birinchi filial: mavjud "umumiy" yozuvlarni (branchId bo'sh) shu
+        // filialga biriktirish. Aks holda filial tanlangan zahoti ekran bo'm-bo'sh
+        // ko'rinadi — bemorlar bor, lekin hech biri filialga tegishli emas.
+        // Faqat aniq so'ralganda va faqat bo'sh yozuvlar — boshqa filialnikiga tegilmaydi.
+        let assigned = 0;
+        if (req.body?.assignExisting) {
+            const where = { clinicId, branchId: null };
+            const results = await prisma.$transaction([
+                prisma.patient.updateMany({ where, data: { branchId: branch.id } }),
+                prisma.appointment.updateMany({ where, data: { branchId: branch.id } }),
+                prisma.transaction.updateMany({ where, data: { branchId: branch.id } }),
+                prisma.expense.updateMany({ where, data: { branchId: branch.id } }),
+                prisma.lead.updateMany({ where, data: { branchId: branch.id } }),
+            ]);
+            assigned = results.reduce((sum: number, r: { count: number }) => sum + r.count, 0);
+        }
+
+        res.json({ ...branch, assigned });
+    } catch (error: any) {
+        console.error('Branch creation error:', error);
+        res.status(500).json({ error: error.message || 'Failed to create branch' });
+    }
+});
+
+app.put('/api/branches/:id', authenticateToken, requireRole('CLINIC_ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'branch', req.params.id))) return;
+        const updateData: any = {};
+        if (req.body.name !== undefined) {
+            const name = String(req.body.name).trim();
+            if (!name) return res.status(400).json({ error: "Filial nomi bo'sh bo'lishi mumkin emas" });
+            updateData.name = name;
+        }
+        if (req.body.address !== undefined) updateData.address = req.body.address ? String(req.body.address).trim() : null;
+        if (req.body.phone !== undefined) updateData.phone = req.body.phone ? String(req.body.phone).trim() : null;
+        if (req.body.sortOrder !== undefined) updateData.sortOrder = Number(req.body.sortOrder) || 0;
+        const branch = await prisma.branch.update({ where: { id: req.params.id }, data: updateData });
+        res.json(branch);
+    } catch (error: any) {
+        console.error('Branch update error:', error);
+        res.status(500).json({ error: error.message || 'Failed to update branch' });
+    }
+});
+
+// Yumshoq o'chirish: filialga bog'langan bemorlar/to'lovlar yo'qolmaydi,
+// ular yana "umumiy" (branchId bo'sh) holatga qaytadi.
+app.delete('/api/branches/:id', authenticateToken, requireRole('CLINIC_ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+    try {
+        if (!(await assertOwnership(req, res, 'branch', req.params.id))) return;
+        const id = req.params.id;
+        const where = { branchId: id };
+        await prisma.$transaction([
+            prisma.patient.updateMany({ where, data: { branchId: null } }),
+            prisma.appointment.updateMany({ where, data: { branchId: null } }),
+            prisma.transaction.updateMany({ where, data: { branchId: null } }),
+            prisma.expense.updateMany({ where, data: { branchId: null } }),
+            prisma.lead.updateMany({ where, data: { branchId: null } }),
+            prisma.doctor.updateMany({ where, data: { branchId: null } }),
+            prisma.branch.update({ where: { id }, data: { status: 'Deleted' } }),
+        ]);
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Branch delete error:', error);
+        res.status(500).json({ error: error.message || 'Failed to delete branch' });
     }
 });
 
@@ -3610,7 +3761,7 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
 
         // clinicId har doim tokendan olinadi (SUPER_ADMIN uchun so'rovdan) — body'dan emas.
         const lead = await prisma.lead.create({
-            data: { ...data, status: data.status || 'New', clinicId }
+            data: { ...data, status: data.status || 'New', clinicId, branchId: await resolveBranchId(req, clinicId) }
         });
         res.json(lead);
     } catch (error) {
@@ -7073,6 +7224,12 @@ const migrationStep = async (label: string, sql: string): Promise<boolean> => {
 
 const columnExists = async (table: string, column: string): Promise<boolean> => {
     try {
+        // Mahalliy SQLite (npm run switch:dev) — information_schema yo'q, PRAGMA orqali.
+        // Busiz dev rejimda server umuman ishga tushmasdi.
+        if (process.env.DATABASE_URL?.startsWith('file:')) {
+            const cols: any = await prisma.$queryRawUnsafe(`PRAGMA table_info("${table}")`);
+            return Array.isArray(cols) && cols.some((c: any) => c.name === column);
+        }
         const rows: any = await prisma.$queryRawUnsafe(
             `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2 LIMIT 1`,
             table, column
@@ -7304,6 +7461,28 @@ async function runStartupMigrations() {
     await migrationStep('Clinic.aiProvider', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "aiProvider" TEXT`);
     await migrationStep('Clinic.aiApiKey', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "aiApiKey" TEXT`);
     await migrationStep('Clinic.aiKeyCheckedAt', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "aiKeyCheckedAt" TIMESTAMP(3)`);
+
+    // --- Filiallar ---
+    // Jadval va ustunlar hammasi ixtiyoriy (NULL) — filiali yo'q klinikalar
+    // uchun hech narsa o'zgarmaydi. FK yo'q: filial o'chirilganda yozuvlar
+    // serverda qo'lda "filialsiz" qilinadi (DELETE /api/branches/:id).
+    await migrationStep('Branch table', `
+        CREATE TABLE IF NOT EXISTS "Branch" (
+            "id"        TEXT NOT NULL PRIMARY KEY,
+            "clinicId"  TEXT NOT NULL,
+            "name"      TEXT NOT NULL,
+            "address"   TEXT,
+            "phone"     TEXT,
+            "status"    TEXT NOT NULL DEFAULT 'Active',
+            "sortOrder" INTEGER NOT NULL DEFAULT 0,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('Branch clinic index', `CREATE INDEX IF NOT EXISTS "Branch_clinicId_idx" ON "Branch" ("clinicId")`);
+    for (const table of ['Doctor', 'Patient', 'Appointment', 'Transaction', 'Expense', 'Lead']) {
+        await migrationStep(`${table}.branchId`, `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "branchId" TEXT`);
+        await migrationStep(`${table} branch index`, `CREATE INDEX IF NOT EXISTS "${table}_branchId_idx" ON "${table}" ("branchId")`);
+    }
 
     console.log('✅ Startup migrations applied');
 }
