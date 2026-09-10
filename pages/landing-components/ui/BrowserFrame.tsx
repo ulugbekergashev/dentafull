@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ImageOff } from "lucide-react";
+import { ImageOff, Signal, Wifi, BatteryFull } from "lucide-react";
 import { useLandingCopy } from "../useLandingCopy";
 
 /** Skrinshotlar `public/landing/` da; `?v=` keshni yangilash uchun */
@@ -98,7 +98,14 @@ export const BrowserFrame: React.FC<FrameProps> = ({
   );
 };
 
-/** Telefon ramkasi — mobil skrinshot uchun */
+/**
+ * Telefon ramkasi.
+ *
+ * Skrinshot brauzer oynasidan olinadi, ya'ni unda telefonning status
+ * qatori (soat, aloqa, batareya) bo'lmaydi. Ilgari ramka shunchaki qora
+ * to'rtburchak edi va telefonga o'xshamasdi — shuning uchun status qatori,
+ * yuqoridagi kesma va pastdagi chiziqcha ramkaning o'zida chiziladi.
+ */
 export const PhoneFrame: React.FC<{ image: string; alt: string; className?: string }> = ({
   image,
   alt,
@@ -108,9 +115,24 @@ export const PhoneFrame: React.FC<{ image: string; alt: string; className?: stri
 
   return (
     <div
-      className={`rounded-[2rem] overflow-hidden bg-slate-900 p-1.5 shadow-2xl shadow-slate-400/40 ring-1 ring-slate-900/10 ${className}`}
+      className={`rounded-[1.9rem] bg-slate-900 p-[3px] shadow-2xl shadow-slate-400/40 ring-1 ring-slate-900/10 ${className}`}
     >
-      <div className="rounded-[1.6rem] overflow-hidden bg-white">
+      <div className="relative rounded-[1.7rem] overflow-hidden bg-white">
+        {/* Status qatori */}
+        <div className="relative flex items-center justify-between px-2.5 pt-[5px] pb-[3px] bg-white">
+          <span className="text-[7px] font-bold text-slate-900 leading-none">9:41</span>
+          {/* Yuqoridagi kesma */}
+          <span
+            className="absolute left-1/2 -translate-x-1/2 top-[3px] h-[8px] w-[30%] rounded-full bg-slate-900"
+            aria-hidden="true"
+          />
+          <span className="flex items-center gap-[2px] text-slate-900" aria-hidden="true">
+            <Signal className="w-[7px] h-[7px]" strokeWidth={3} />
+            <Wifi className="w-[7px] h-[7px]" strokeWidth={3} />
+            <BatteryFull className="w-[9px] h-[9px]" strokeWidth={2.5} />
+          </span>
+        </div>
+
         {failed ? (
           <Placeholder ratio="aspect-[390/844]" />
         ) : (
@@ -125,6 +147,12 @@ export const PhoneFrame: React.FC<{ image: string; alt: string; className?: stri
             className="block w-full h-auto aspect-[390/844] object-cover object-top bg-slate-50"
           />
         )}
+
+        {/* Pastdagi boshqaruv chiziqchasi */}
+        <span
+          className="absolute bottom-[4px] left-1/2 -translate-x-1/2 h-[3px] w-1/3 rounded-full bg-slate-900/45"
+          aria-hidden="true"
+        />
       </div>
     </div>
   );

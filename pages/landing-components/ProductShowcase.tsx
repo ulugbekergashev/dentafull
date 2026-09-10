@@ -91,7 +91,7 @@ export default function ProductShowcase() {
               turgani uchun bo'sh joy qolmaydi va nima demoqchi ekani aniq. */}
           {active === 0 && (
             <div className="hidden lg:flex items-center gap-4 mt-8 p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
-              <div className="w-24 shrink-0">
+              <div className="w-28 shrink-0">
                 <PhoneFrame image="dashboard-mobile" alt={c.showcase.phoneAlt} />
               </div>
               <div className="space-y-1.5 min-w-0">

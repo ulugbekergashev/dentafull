@@ -11,6 +11,14 @@ import {
   Search,
   Activity,
   ArrowUpRight,
+  Coins,
+  Banknote,
+  CreditCard,
+  TrendingDown,
+  Wallet,
+  Plus,
+  Download,
+  Lock,
 } from "lucide-react";
 import { useLandingCopy } from "./useLandingCopy";
 import type { LandingCopy } from "./content";
@@ -293,73 +301,154 @@ function PatientsTab({ d, fmt }: { d: Copy; fmt: (n: number) => string }) {
 }
 
 /* ── Moliya ──────────────────────────────────────────────────── */
+/**
+ * Tizimdagi kassa ekranining qisqartirilgan ko'rinishi: tepada amallar,
+ * so'ng olti ta ko'rsatkich, keyin to'lovlar jadvali va qarzdorlar.
+ * Ilgari bu yerda uchta karta va oddiy jadval turardi — u mahsulotning
+ * haqiqiy moliya bo'limiga umuman o'xshamas edi.
+ */
 function FinancesTab({ d, fmt }: { d: Copy; fmt: (n: number) => string }) {
+  const f = d.fin;
+
   const txns = [
-    { patient: "Dilnoza Karimova", service: d.services.filling, amount: 350000, paid: true, doctor: "Azimov" },
-    { patient: "Akmal Toshmatov", service: d.services.implant, amount: 3500000, paid: false, doctor: "Azimov" },
-    { patient: "Zulfiya Rahimova", service: d.services.canal, amount: 400000, paid: true, doctor: "Rasulov" },
-    { patient: "Jasur Mirzayev", service: d.services.cleaning, amount: 150000, paid: true, doctor: "Umarova" },
-    { patient: "Nodira Yusupova", service: d.services.braces, amount: 200000, paid: false, doctor: "Umarova" },
+    { patient: "Dilnoza Karimova", service: d.services.filling, amount: 350000, doctor: "Azimov", method: "click", paid: true },
+    { patient: "Akmal Toshmatov", service: d.services.implant, amount: 3500000, doctor: "Azimov", method: "card", paid: false },
+    { patient: "Zulfiya Rahimova", service: d.services.canal, amount: 400000, doctor: "Rasulov", method: "cash", paid: true },
+    { patient: "Jasur Mirzayev", service: d.services.cleaning, amount: 150000, doctor: "Umarova", method: "cash", paid: true },
+    { patient: "Nodira Yusupova", service: d.services.braces, amount: 200000, doctor: "Umarova", method: "card", paid: false },
   ];
 
-  const cards = [
-    { l: d.finRevenue, v: 84200000, c: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100" },
-    { l: d.finExpense, v: 31500000, c: "text-red-500", bg: "bg-red-50 border-red-100" },
-    { l: d.finProfit, v: 52700000, c: "text-primary-600", bg: "bg-primary-50 border-primary-100" },
+  const methodLabel: Record<string, string> = {
+    cash: f.methodCash,
+    card: f.methodCard,
+    click: f.methodClick,
+  };
+  const methodDot: Record<string, string> = {
+    cash: "bg-emerald-500",
+    card: "bg-primary-500",
+    click: "bg-cyan-500",
+  };
+
+  const paid = txns.filter((t) => t.paid);
+  const unpaid = txns.filter((t) => !t.paid);
+  const totalIn = paid.reduce((a, t) => a + t.amount, 0);
+  const cash = paid.filter((t) => t.method === "cash").reduce((a, t) => a + t.amount, 0);
+  const cashless = totalIn - cash;
+  const expense = 310000;
+  const debt = unpaid.reduce((a, t) => a + t.amount, 0);
+
+  const kpis = [
+    { icon: Coins, label: f.kpiTotal, value: totalIn, sub: f.subPayments(paid.length), fg: "text-slate-900", bg: "bg-slate-100", ico: "text-slate-500" },
+    { icon: Banknote, label: f.kpiCash, value: cash, sub: f.subCurrency, fg: "text-emerald-600", bg: "bg-emerald-50", ico: "text-emerald-600" },
+    { icon: CreditCard, label: f.kpiCashless, value: cashless, sub: f.subCardClick, fg: "text-primary-600", bg: "bg-primary-50", ico: "text-primary-600" },
+    { icon: TrendingDown, label: f.kpiExpense, value: expense, sub: f.subCashOut, fg: "text-red-500", bg: "bg-red-50", ico: "text-red-500" },
+    { icon: Wallet, label: f.kpiLeft, value: cash - expense, sub: f.subCashBox, fg: "text-amber-600", bg: "bg-amber-50", ico: "text-amber-600" },
+    { icon: AlertCircle, label: f.kpiDebt, value: debt, sub: f.subUnpaid, fg: "text-slate-900", bg: "bg-slate-100", ico: "text-slate-400" },
   ];
+
+  const actionBtn = "shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold text-white";
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        {cards.map((s) => (
-          <div key={s.l} className={`rounded-2xl border p-4 ${s.bg}`}>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{s.l}</p>
-            <p className={`text-base sm:text-lg font-extrabold mt-1 ${s.c}`}>{fmt(s.v)}</p>
-          </div>
-        ))}
+      {/* Amallar qatori */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+        <span className={`${actionBtn} bg-emerald-600`}>
+          <Plus className="w-3.5 h-3.5" />
+          {f.actionPay}
+        </span>
+        <span className={`${actionBtn} bg-red-500`}>
+          <TrendingDown className="w-3.5 h-3.5" />
+          {f.actionExpense}
+        </span>
+        <span className={`${actionBtn} bg-primary-600`}>
+          <Download className="w-3.5 h-3.5" />
+          {f.actionCollect}
+        </span>
+        <span className="shrink-0 flex items-center rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <span className="px-2.5 py-1.5 text-[11px] font-bold bg-slate-900 text-white">{f.day}</span>
+          <span className="px-2.5 py-1.5 text-[11px] font-bold text-slate-400">{f.month}</span>
+        </span>
+        <span className="shrink-0 ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-600 text-white text-[11px] font-bold">
+          <Lock className="w-3.5 h-3.5" />
+          {f.closeDay}
+        </span>
       </div>
 
+      {/* Ko'rsatkichlar */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5">
+        {kpis.map((k) => {
+          const Icon = k.icon;
+          return (
+            <div key={k.label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+              <div className={`w-7 h-7 ${k.bg} rounded-lg flex items-center justify-center`}>
+                <Icon className={`w-3.5 h-3.5 ${k.ico}`} />
+              </div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-2 leading-tight">{k.label}</p>
+              <p className={`text-base font-extrabold mt-0.5 leading-none ${k.fg}`}>{fmt(k.value)}</p>
+              <p className="text-[9px] text-slate-400 mt-1 truncate">{k.sub}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* To'lovlar jadvali */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="grid grid-cols-12 px-4 py-2.5 border-b border-slate-50">
-          <span className="col-span-4 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            {d.colPatient}
-          </span>
-          <span className="col-span-3 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            {d.colService}
-          </span>
-          <span className="col-span-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            {d.colDoctor}
-          </span>
-          <span className="col-span-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            {d.colAmount}
-          </span>
-          <span className="col-span-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            {d.colStatus}
-          </span>
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-50">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{f.tableTitle}</p>
+          <p className="text-[11px] font-extrabold text-emerald-600">{fmt(totalIn)}</p>
+        </div>
+
+        <div className="hidden sm:grid grid-cols-12 px-4 py-2.5 border-b border-slate-50">
+          <span className="col-span-4 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{d.colPatient}</span>
+          <span className="col-span-3 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{d.colService}</span>
+          <span className="col-span-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{d.colDoctor}</span>
+          <span className="col-span-2 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{d.colAmount}</span>
+          <span className="col-span-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{f.colMethod}</span>
         </div>
 
         {txns.map((t, i) => (
           <div
             key={i}
-            className="grid grid-cols-12 items-center px-4 py-3 border-b border-slate-50 hover:bg-slate-50/70 transition-colors"
+            className="grid grid-cols-2 sm:grid-cols-12 gap-1 items-center px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/70 transition-colors"
           >
-            <span className="col-span-4 text-[11px] font-bold text-slate-800 truncate">{t.patient}</span>
-            <span className="col-span-3 text-[10px] text-slate-500 truncate">{t.service}</span>
-            <span className="col-span-2 text-[10px] text-slate-400 truncate">{t.doctor}</span>
-            <span className="col-span-2 text-[11px] font-bold text-slate-800">{fmt(t.amount)}</span>
-            <div className="col-span-1">
-              <span
-                className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
-                  t.paid
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                    : "bg-amber-50 text-amber-700 border border-amber-100"
-                }`}
-              >
-                {t.paid ? d.paid : d.unpaid}
-              </span>
-            </div>
+            <span className="sm:col-span-4 text-[11px] font-bold text-slate-800 truncate">{t.patient}</span>
+            <span className="hidden sm:block sm:col-span-3 text-[10px] text-slate-500 truncate">{t.service}</span>
+            <span className="hidden sm:block sm:col-span-2 text-[10px] text-slate-400 truncate">{t.doctor}</span>
+            <span className="sm:col-span-2 text-[11px] font-bold text-slate-800 text-right sm:text-left">{fmt(t.amount)}</span>
+            <span className="sm:col-span-1 flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${methodDot[t.method]}`} />
+              <span className="text-[9px] text-slate-500 truncate">{methodLabel[t.method]}</span>
+            </span>
           </div>
         ))}
+      </div>
+
+      {/* Qarzdorlar */}
+      <div className="bg-amber-50/60 rounded-3xl border border-amber-100 p-4">
+        <div className="flex items-center justify-between gap-2 mb-2.5">
+          <p className="flex items-center gap-2 text-[10px] font-bold text-amber-700 uppercase tracking-widest">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {f.unpaidTitle}
+            <span className="text-amber-500 normal-case tracking-normal">{f.unpaidCount(unpaid.length)}</span>
+          </p>
+          <p className="text-[11px] font-extrabold text-amber-700">{fmt(debt)}</p>
+        </div>
+        <div className="space-y-1.5">
+          {unpaid.map((t, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 bg-white rounded-xl px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-slate-800 truncate">{t.patient}</p>
+                <p className="text-[9px] text-slate-400 truncate">
+                  {t.doctor} · {t.service}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-bold text-amber-700">{fmt(t.amount)}</span>
+                <span className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[9px] font-bold">{f.pay}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
