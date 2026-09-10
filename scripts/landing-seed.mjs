@@ -24,14 +24,29 @@ const DOCTORS = [
   { id: "demo-doctor-2", name: "Dr. Jamshid Karimov" },
 ];
 
-const SERVICES = [
-  { type: "Konsultatsiya", price: 50000, duration: 30 },
-  { type: "Tish plombalash", price: 350000, duration: 45 },
-  { type: "Professional tozalash", price: 200000, duration: 40 },
-  { type: "Kanal davolash", price: 600000, duration: 60 },
-  { type: "Breket nazorati", price: 250000, duration: 30 },
-  { type: "Implant konsultatsiyasi", price: 100000, duration: 30 },
-];
+/**
+ * Xizmat nomlari — bu klinika ma'lumoti, interfeys emas. Shu sababli
+ * ruscha skrinshotda ular ham ruscha bo'lishi kerak: ruszabon klinikada
+ * jadval aynan shunday ko'rinadi.
+ */
+const SERVICES_BY_LANG = {
+  uz: [
+    { type: "Konsultatsiya", price: 50000, duration: 30 },
+    { type: "Tish plombalash", price: 350000, duration: 45 },
+    { type: "Professional tozalash", price: 200000, duration: 40 },
+    { type: "Kanal davolash", price: 600000, duration: 60 },
+    { type: "Breket nazorati", price: 250000, duration: 30 },
+    { type: "Implant konsultatsiyasi", price: 100000, duration: 30 },
+  ],
+  ru: [
+    { type: "Консультация", price: 50000, duration: 30 },
+    { type: "Пломбирование зуба", price: 350000, duration: 45 },
+    { type: "Профессиональная чистка", price: 200000, duration: 40 },
+    { type: "Лечение канала", price: 600000, duration: 60 },
+    { type: "Контроль брекетов", price: 250000, duration: 30 },
+    { type: "Консультация по имплантации", price: 100000, duration: 30 },
+  ],
+};
 
 const CLINIC = "demo-clinic-1";
 /**
@@ -43,7 +58,7 @@ const iso = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /** Bugungi kunga bog'langan qabullar: bir qismi bo'lgan, bir qismi kutilmoqda */
-function buildAppointments(today) {
+function buildAppointments(today, SERVICES) {
   const plan = [
     { time: "09:00", p: 0, d: 0, s: 1, status: "Completed" },
     { time: "09:45", p: 2, d: 0, s: 2, status: "Completed" },
@@ -104,7 +119,7 @@ function buildAppointments(today) {
 }
 
 /** Oxirgi 12 kunlik to'lovlar — daromad grafigi va kassa uchun */
-function buildTransactions(today) {
+function buildTransactions(today, SERVICES) {
   const list = [];
   const methods = ["Cash", "Card", "Click"];
   let n = 0;
@@ -159,11 +174,12 @@ const TEETH = [
   { patientId: "demo-patient-1", number: 36, conditions: ["Filled"], notes: "" },
 ];
 
-export function buildDemoSeed(now = new Date()) {
+export function buildDemoSeed(lang = "uz", now = new Date()) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const services = SERVICES_BY_LANG[lang] || SERVICES_BY_LANG.uz;
   return {
-    appointments: buildAppointments(today),
-    transactions: buildTransactions(today),
+    appointments: buildAppointments(today, services),
+    transactions: buildTransactions(today, services),
     teeth: TEETH,
   };
 }

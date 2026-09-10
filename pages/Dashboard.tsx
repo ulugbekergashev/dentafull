@@ -50,7 +50,7 @@ const DASH_ROW_LIMIT = 4;
 
 export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
   const [isQuickPaymentOpen, setIsQuickPaymentOpen] = useState(false);
   const [payingAppointment, setPayingAppointment] = useState<Appointment | null>(null);
@@ -330,7 +330,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         {!isReceptionist && (
           <div className="flex items-center gap-1 p-1.5 pl-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
             <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-1.5">Davr</span>
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-1.5">{t('dashboard.period')}</span>
             <input
               type="date"
               value={startDate}
@@ -354,14 +354,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               className="flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              Bemor
+              {t('dashboard.quickPatient')}
             </button>
             <button
               onClick={() => navigate('/calendar')}
               className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
             >
               <Calendar className="w-3.5 h-3.5" />
-              Qabul
+              {t('dashboard.quickAppointment')}
             </button>
             {!isReceptionist && (
               <button
@@ -373,7 +373,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 className="flex items-center gap-1.5 px-3 py-2 bg-success hover:bg-success-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
                 <CreditCard className="w-3.5 h-3.5" />
-                To'lov
+                {t('dashboard.quickPayment')}
               </button>
             )}
           </div>
@@ -417,21 +417,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-xl font-black text-gray-900 dark:text-white">
-              Bugungi <span className="text-primary">Qabullar</span>
+              {t('dashboard.todayTitleA')} <span className="text-primary">{t('dashboard.todayTitleB')}</span>
             </h3>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
-              {new Date().toLocaleDateString('uz-UZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {new Date().toLocaleDateString(language === 'ru' ? 'ru-RU' : 'uz-UZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <span className="px-3 py-1.5 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 text-xs font-black rounded-full">
-              {todayAppointments.length} ta
+              {todayAppointments.length} {t('dashboard.count')}
             </span>
             <button
               onClick={() => navigate('/calendar')}
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-all"
             >
-              Hammasi <ChevronRight className="w-3.5 h-3.5" />
+              {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -439,20 +439,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         {todayAppointments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">
             <Calendar className="w-10 h-10 mb-3 opacity-30" />
-            <p className="text-sm font-medium">Bugun qabul yo'q</p>
+            <p className="text-sm font-medium">{t('dashboard.noAppointmentsToday')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Vaqt</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Bemor</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Shifokor</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Xizmat</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Status</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Holat</th>
-                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Amallar</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colTime')}</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colPatient')}</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDoctor')}</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colService')}</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colStatus')}</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colState')}</th>
+                  <th className="pb-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -520,14 +520,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                             )}
                             <button
                               onClick={() => navigate('/calendar')}
-                              title="Boshqa kunga ko'chirish"
+                              title={t('dashboard.moveDay')}
                               className="flex items-center gap-1 px-2 py-1 bg-primary-50 hover:bg-primary-100 dark:bg-primary-900/20 dark:hover:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-[10px] font-bold rounded-lg transition-colors"
                             >
                               <CalendarClock className="w-3 h-3" /> Ko'chir
                             </button>
                             <button
                               onClick={() => onUpdateAppointment(app.id, { status: 'Cancelled' })}
-                              title="Bekor qilish"
+                              title={t('dashboard.cancel')}
                               className="flex items-center gap-1 px-2 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 text-[10px] font-bold rounded-lg transition-colors"
                             >
                               <XCircle className="w-3 h-3" /> Bekor
@@ -546,7 +546,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 onClick={() => navigate('/calendar')}
                 className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
               >
-                Yana {todayAppointments.length - DASH_ROW_LIMIT} ta · Hammasi <ChevronRight className="w-3.5 h-3.5" />
+                {t('dashboard.moreAll')} {todayAppointments.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -564,17 +564,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="min-w-0">
                   <h3 className="text-lg font-black text-gray-900 dark:text-white">
-                    Kutilayotgan <span className="text-red-500">To'lovlar</span>
+                    {t('dashboard.debtsTitleA')} <span className="text-red-500">{t('dashboard.debtsTitleB')}</span>
                   </h3>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                    Qarzga yozilgan, hali yopilmagan
+                    {t('dashboard.debtsDesc')}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="px-3 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-black rounded-full whitespace-nowrap">
                     {pendingDebtsTotal.toLocaleString()} UZS
                   </span>
-                  <span className="text-[10px] font-bold text-gray-400">{pendingDebts.length} ta</span>
+                  <span className="text-[10px] font-bold text-gray-400">{pendingDebts.length} {t('dashboard.count')}</span>
                 </div>
               </div>
 
@@ -615,7 +615,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   onClick={() => navigate('/finance')}
                   className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
                 >
-                  Yana {pendingDebts.length - DASH_ROW_LIMIT} ta · Hammasi <ChevronRight className="w-3.5 h-3.5" />
+                  {t('dashboard.moreAll')} {pendingDebts.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </Card>
@@ -627,14 +627,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="min-w-0">
                   <h3 className="text-lg font-black text-gray-900 dark:text-white">
-                    To'lovni <span className="text-amber-500">Kutayotgan</span>
+                    {t('dashboard.unpaidTitleA')} <span className="text-amber-500">{t('dashboard.unpaidTitleB')}</span>
                   </h3>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                    Yakunlangan, to'lov qabul qilinmagan
+                    {t('dashboard.unpaidDesc')}
                   </p>
                 </div>
                 <span className="px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-black rounded-full flex-shrink-0">
-                  {unpaidCompleted.length} ta
+                  {unpaidCompleted.length} {t('dashboard.count')}
                 </span>
               </div>
 
@@ -679,7 +679,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   onClick={() => navigate('/finance')}
                   className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
                 >
-                  Yana {unpaidCompleted.length - DASH_ROW_LIMIT} ta · Hammasi <ChevronRight className="w-3.5 h-3.5" />
+                  {t('dashboard.moreAll')} {unpaidCompleted.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </Card>
@@ -809,10 +809,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Sana/Vaqt</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Bemor</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Shifokor</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Status</th>
+                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDateTime')}</th>
+                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colPatient')}</th>
+                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDoctor')}</th>
+                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colStatus')}</th>
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Baho</th>
                   </tr>
                 </thead>
@@ -906,15 +906,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
                 // Helper function to format time ago
                 const getTimeAgo = (date: Date) => {
-                  if (!date || isNaN(date.getTime())) return 'Yaqinda';
+                  if (!date || isNaN(date.getTime())) return t('dashboard.recently');
                   const now = new Date();
                   const diffMs = now.getTime() - date.getTime();
-                  if (diffMs < 0) return 'Hozirgina'; // Handle future dates gracefully
+                  if (diffMs < 0) return t('dashboard.justNow'); // Handle future dates gracefully
                   const diffMins = Math.floor(diffMs / 60000);
                   const diffHours = Math.floor(diffMs / 3600000);
                   const diffDays = Math.floor(diffMs / 86400000);
 
-                  if (diffMins < 1) return 'Hozirgina';
+                  if (diffMins < 1) return t('dashboard.justNow');
                   if (diffMins < 60) return `${diffMins} daq oldin`;
                   if (diffHours < 24) return `${diffHours} soat oldin`;
                   return `${diffDays} kun oldin`;
@@ -952,7 +952,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 Qabullar <span className="text-danger">Intensivligi</span>
               </h3>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
-                {intensityView === 'month' ? "Joriy oy kunlari bo'yicha" : "Oxirgi 12 oy davomida"}
+                {intensityView === 'month' ? t('dashboard.byMonthDays') : t('dashboard.byLast12')}
               </p>
             </div>
 
@@ -1051,12 +1051,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       type="button"
                       onClick={() => setDebtPayAmount(String(Math.round(debtTotal / 2)))}
                       className="px-2 py-0.5 text-[10px] font-bold text-primary-600 bg-primary-50 dark:bg-primary-900/20 rounded-md hover:bg-primary-100"
-                    >Yarmi</button>
+                    >{t('dashboard.half')}</button>
                     <button
                       type="button"
                       onClick={() => setDebtPayAmount(String(debtTotal))}
                       className="px-2 py-0.5 text-[10px] font-bold text-primary-600 bg-primary-50 dark:bg-primary-900/20 rounded-md hover:bg-primary-100"
-                    >Hammasi</button>
+                    >{t('dashboard.seeAll')}</button>
                   </div>
                 </div>
                 <input

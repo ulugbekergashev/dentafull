@@ -39,6 +39,8 @@ export default function DemoRequestModal({ isOpen, onClose }: DemoRequestModalPr
   const [digits, setDigits] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [phoneError, setPhoneError] = useState(false);
+  /** Server so'rovlar chegarasini qaytardi (429) — matn boshqacha bo'ladi */
+  const [rateLimited, setRateLimited] = useState(false);
 
   const set = (k: "name" | "clinic" | "city") => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -84,6 +86,7 @@ export default function DemoRequestModal({ isOpen, onClose }: DemoRequestModalPr
       return;
     }
     setPhoneError(false);
+    setRateLimited(false);
     setStatus("loading");
 
     try {
@@ -104,6 +107,10 @@ export default function DemoRequestModal({ isOpen, onClose }: DemoRequestModalPr
         }),
       });
 
+      if (res.status === 429) {
+        setRateLimited(true);
+        throw new Error("rate-limited");
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json().catch(() => null);
       if (data && data.success === false) throw new Error(data.message || "rejected");
@@ -287,7 +294,7 @@ export default function DemoRequestModal({ isOpen, onClose }: DemoRequestModalPr
                         {c.modal.errorTitle}
                       </p>
                       <p className="text-xs text-red-600 leading-relaxed">
-                        {c.modal.errorBody}{" "}
+                        {rateLimited ? c.modal.errorRateLimit : c.modal.errorBody}{" "}
                         <a href={LANDING_CONST.phoneHref} className="font-bold underline whitespace-nowrap">
                           {LANDING_CONST.phone}
                         </a>

@@ -165,15 +165,16 @@ async function main() {
   // kunga moslab yozib qo'yamiz (scripts/landing-seed.mjs).
   // `addInitScript` sahifa skriptlaridan OLDIN ishlaydi, shuning uchun
   // demoData moduli yuklanganda ma'lumot allaqachon joyida bo'ladi.
-  await context.addInitScript((seed) => {
+  await context.addInitScript((seeds) => {
     try {
       const KEY = "dentalflow_demo_data";
+      const lang = localStorage.getItem("app_language") === "ru" ? "ru" : "uz";
       const prev = JSON.parse(localStorage.getItem(KEY) || "{}");
-      localStorage.setItem(KEY, JSON.stringify({ ...prev, ...seed }));
+      localStorage.setItem(KEY, JSON.stringify({ ...prev, ...seeds[lang] }));
     } catch {
       /* private rejim */
     }
-  }, buildDemoSeed());
+  }, { uz: buildDemoSeed("uz"), ru: buildDemoSeed("ru") });
 
   const page = context.pages()[0] ?? (await context.newPage());
   page.on("console", (m) => m.type() === "error" && console.warn("  [brauzer]", m.text()));
@@ -201,7 +202,12 @@ async function main() {
     console.log(`\nSkrinshotlar (${lang}):`);
 
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate((l) => localStorage.setItem("app_language", l), lang);
+    // Tilni qo'yamiz; demo yozuvlarni initScript shu tilga qarab tanlaydi,
+    // shuning uchun eski yozuvlarni oldin tozalaymiz.
+    await page.evaluate((l) => {
+      localStorage.setItem("app_language", l);
+      localStorage.removeItem("dentalflow_demo_data");
+    }, lang);
     await page.reload({ waitUntil: "domcontentloaded" });
     await settle(page, 2500);
     await page.addStyleTag({ content: HIDE_CSS });

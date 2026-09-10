@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 // --- Buttons ---
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -49,25 +50,48 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string }> =
 );
 
 // --- Badge ---
-const STATUS_TRANSLATIONS: Record<string, string> = {
-  'active': 'Faol',
-  'archived': 'Arxiv',
-  'paid': 'To\'landi',
-  'pending': 'Kutilmoqda',
-  'confirmed': 'Tasdiqlandi',
-  'completed': 'Yakunlandi',
-  'cancelled': 'Bekor qilindi',
-  'no-show': 'Kelmadi',
-  'checked-in': 'Keldi',
-  'overdue': 'Qarzdor',
-  'healthy': 'Sog\'lom',
-  'cavity': 'Karies',
-  'filled': 'Plomba',
-  'missing': 'Yo\'q',
-  'crown': 'Qoplama'
+// Yorliq matnlari tanlangan tilga qarab olinadi. Kalitlar `translations.ts`
+// dagi umumiy lug'atga qo'shilmadi: ular status qiymatlariga bog'langan
+// kichik jadval va faqat shu komponentda ishlatiladi.
+const STATUS_TRANSLATIONS: Record<'uz' | 'ru', Record<string, string>> = {
+  uz: {
+    'active': 'Faol',
+    'archived': 'Arxiv',
+    'paid': 'To\'landi',
+    'pending': 'Kutilmoqda',
+    'confirmed': 'Tasdiqlandi',
+    'completed': 'Yakunlandi',
+    'cancelled': 'Bekor qilindi',
+    'no-show': 'Kelmadi',
+    'checked-in': 'Keldi',
+    'overdue': 'Qarzdor',
+    'healthy': 'Sog\'lom',
+    'cavity': 'Karies',
+    'filled': 'Plomba',
+    'missing': 'Yo\'q',
+    'crown': 'Qoplama'
+  },
+  ru: {
+    'active': 'Активен',
+    'archived': 'Архив',
+    'paid': 'Оплачено',
+    'pending': 'Ожидается',
+    'confirmed': 'Подтверждён',
+    'completed': 'Завершён',
+    'cancelled': 'Отменён',
+    'no-show': 'Не пришёл',
+    'checked-in': 'Пришёл',
+    'overdue': 'Должник',
+    'healthy': 'Здоровый',
+    'cavity': 'Кариес',
+    'filled': 'Пломба',
+    'missing': 'Отсутствует',
+    'crown': 'Коронка'
+  },
 };
 
 export const Badge: React.FC<{ status?: string }> = ({ status = 'pending' }) => {
+  const { language } = useLanguage();
   let colorClass = 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
   const lowerStatus = (status || 'pending').toLowerCase();
 
@@ -101,7 +125,7 @@ export const Badge: React.FC<{ status?: string }> = ({ status = 'pending' }) => 
       break;
   }
 
-  const label = STATUS_TRANSLATIONS[lowerStatus] || status;
+  const label = STATUS_TRANSLATIONS[language][lowerStatus] || status;
 
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>

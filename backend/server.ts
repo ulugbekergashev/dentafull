@@ -3288,20 +3288,67 @@ app.delete('/api/services/:id', authenticateToken, async (req, res) => {
 // --- Super Admin: Clinics & Plans ---
 
 // --- Public demo request (landing page, no auth) ---
-app.post('/api/public/demo-request', async (req, res) => {
+/**
+ * Landing formasidan kelgan demo so'rovi.
+ *
+ * Endpoint autentifikatsiyasiz va ochiq — shuning uchun jadvalga faqat
+ * tekshirilgan va uzunligi cheklangan ma'lumot yoziladi:
+ *   - bitta IP soatiga 5 tadan ko'p so'rov yubora olmaydi;
+ *   - telefon +998 va 9 ta raqam bo'lishi shart (asosiy filtr);
+ *   - matn maydonlari qirqiladi, ya'ni bazaga cheksiz satr tushmaydi;
+ *   - shifokorlar soni faqat mantiqiy oraliqda qabul qilinadi.
+ * Aks holda ochiq forma jadvalni axlat bilan to'ldirishi mumkin edi.
+ */
+const clip = (v: unknown, max: number): string | null => {
+    if (typeof v !== 'string') return null;
+    const t = v.trim().slice(0, max);
+    return t.length ? t : null;
+};
+
+app.post('/api/public/demo-request', async (req: any, res: any) => {
     try {
-        const { name, clinicName, phone, city, doctorsCount, source } = req.body;
+        const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+            || req.socket?.remoteAddress || 'unknown';
+
+        if (!aiRateLimit(`demo:${ip}`, 5, 60 * 60 * 1000)) {
+            return res.status(429).json({
+                success: false,
+                message: 'So\'rovlar chegarasiga yetdingiz. Iltimos, telefon orqali bog\'laning.',
+            });
+        }
+
+        const { name, clinicName, phone, city, doctorsCount, source } = req.body || {};
+
+        const cleanPhone = typeof phone === 'string' ? phone.replace(/[^\d+]/g, '') : '';
+        if (!/^\+?998\d{9}$/.test(cleanPhone)) {
+            return res.status(400).json({ success: false, message: 'Telefon raqam noto\'g\'ri.' });
+        }
+
+        const cleanName = clip(name, 120);
+        if (!cleanName) {
+            return res.status(400).json({ success: false, message: 'Ism kiritilmadi.' });
+        }
+
+        const seats = Number(doctorsCount);
+        const cleanSeats = Number.isFinite(seats) && seats > 0 && seats <= 500 ? Math.trunc(seats) : null;
+
         const id = require('crypto').randomUUID();
         await prisma.$executeRawUnsafe(
             `INSERT INTO "DemoRequest" ("id","name","clinicName","phone","city","doctorsCount","source","status","createdAt","updatedAt")
              VALUES ($1,$2,$3,$4,$5,$6,$7,'Inbox',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-            id, name || 'Noma\'lum', clinicName || null, phone || '', city || null,
-            doctorsCount ? parseInt(doctorsCount) : null, source || 'landing'
+            id,
+            cleanName,
+            clip(clinicName, 160),
+            cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`,
+            clip(city, 80),
+            cleanSeats,
+            clip(source, 40) || 'landing'
         );
+
         res.json({ success: true, id });
     } catch (error) {
         console.error('Demo request error:', error);
-        res.status(500).json({ error: 'Failed to save demo request' });
+        res.status(500).json({ success: false, message: 'So\'rovni saqlab bo\'lmadi.' });
     }
 });
 
