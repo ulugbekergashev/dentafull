@@ -15,7 +15,8 @@
     "switch:dev": "node scripts/set-provider.js sqlite",
     "switch:prod": "node scripts/set-provider.js postgresql",
     "postinstall": "prisma generate",
-    "eval:actions": "ts-node ai/evals/actions.ts"
+    "eval:actions": "ts-node ai/evals/actions.ts",
+    "eval:stt": "ts-node ai/evals/stt.ts"
   },
   "keywords": [],
   "author": "",
