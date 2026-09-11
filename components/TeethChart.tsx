@@ -252,6 +252,8 @@ interface TeethChartProps {
   onSave?: (data: { number: number; conditions: ToothStatus[]; notes: string }) => void;
   onToothClick?: (number: number) => void;
   selectedTooth?: number | null;
+  /** Bir nechta tishni belgilash (protsedura qo'shish oynasi). Berilsa selectedTooth o'rniga ishlatiladi. */
+  selectedTeeth?: number[];
   procedures?: { id: string; serviceName: string; date: string; toothNumber?: number }[];
 }
 
@@ -261,6 +263,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
   onSave,
   onToothClick,
   selectedTooth: externalSelectedTooth,
+  selectedTeeth,
   procedures = []
 }) => {
   const { t } = useLanguage();
@@ -317,6 +320,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
 
   // Use external selected tooth if provided, otherwise internal
   const activeSelectedTooth = externalSelectedTooth !== undefined ? externalSelectedTooth : internalSelectedTooth;
+  const isMarked = (num: number) => (selectedTeeth ? selectedTeeth.includes(num) : activeSelectedTooth === num);
 
   const handleToothClick = (num: number) => {
     // If external handler exists, use it and don't open modal
@@ -430,7 +434,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
           <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">{t('patients.details.teethChart.upperJaw')}</div>
           <div className="flex gap-0.5 sm:gap-1 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.upper : PRIMARY_TOOTH_NUMBERS.upper).map(num => (
-              <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-primary-500 ring-offset-2' : ''}`}>
+              <div key={num} className={`rounded-full ${isMarked(num) ? 'ring-2 ring-primary-500 ring-offset-2' : ''}`}>
                 <RealisticTooth
                   number={num}
                   conditions={teethData[num]?.conditions || []}
@@ -449,7 +453,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
           <div className="text-center text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">{t('patients.details.teethChart.lowerJaw')}</div>
           <div className="flex gap-0.5 sm:gap-1 justify-center">
             {(toothType === 'permanent' ? TOOTH_NUMBERS.lower : PRIMARY_TOOTH_NUMBERS.lower).map(num => (
-              <div key={num} className={`rounded-full ${activeSelectedTooth === num ? 'ring-2 ring-primary-500 ring-offset-2' : ''}`}>
+              <div key={num} className={`rounded-full ${isMarked(num) ? 'ring-2 ring-primary-500 ring-offset-2' : ''}`}>
                 <RealisticTooth
                   number={num}
                   conditions={teethData[num]?.conditions || []}
