@@ -927,22 +927,6 @@ const AppContent: React.FC = () => {
     addToast('info', t('branches.deleted'));
   };
 
-  // Bir nechta bemorni filialga biriktirish (yoki filialdan chiqarish).
-  const assignPatientsToBranch = async (patientIds: string[], branchId: string | null) => {
-    try {
-      const res = await api.patients.assignBranch(patientIds, branchId);
-      const touched = new Set(patientIds);
-      setPatients(prev => prev.map(p => touched.has(p.id) ? { ...p, branchId: res.branchId } : p));
-      const name = branchId ? (branches.find(b => b.id === branchId)?.name || '') : '';
-      addToast('success', branchId
-        ? t('branches.assignedToBranch').replace('{n}', String(res.updated)).replace('{name}', name)
-        : t('branches.assignedNone').replace('{n}', String(res.updated)));
-    } catch (e: any) {
-      addToast('error', e.message || 'Xatolik yuz berdi');
-      throw e;
-    }
-  };
-
   const addDoctor = async (doctor: Omit<Doctor, 'id'>) => {
     try {
       const newDoc = await api.doctors.create({ ...doctor, clinicId });
@@ -1530,7 +1514,13 @@ const AppContent: React.FC = () => {
                 yorliqlar orasidagi bo'sh joy oyna imkon bergancha kengayadi,
                 lekin ruscha nomlar (eng uzuni) hech qachon kesilmaydi.
                 1700px dan oraliq asl holiga yetadi, 1800px dan esa undan
-                ham kengroq — keng ekranda bo'sh joy behuda turgandi. */}
+                ham kengroq — keng ekranda bo'sh joy behuda turgandi.
+
+                Shrift va ikonka faqat joy bor joyda kattalashadi: 1700px dan
+                ikonka 18px, 1900px dan shrift 15px. Pastroqda ruscha qatorda
+                atigi 12–56px zapas bor — 1px shrift ~60px qo'shadi va sig'maydi.
+                Uni sig'dirish uchun oraliqni qisqartirish kerak bo'lardi, bu esa
+                "yopishib turgan" holatni qaytarardi. */}
             <div className="h-12 flex items-center gap-0 min-[1520px]:gap-0.5 min-[1600px]:gap-1 min-[1700px]:gap-2 overflow-x-auto no-scrollbar">
               {visibleNavigation.map((item) => {
                 const to = (item as any).to || (item.id === 'dashboard' ? '/' : `/${item.id}`);
@@ -1549,7 +1539,7 @@ const AppContent: React.FC = () => {
                     className={({ isActive }) => {
                       const active = tabOf !== null ? tabActive
                         : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
-                      return `relative flex items-center h-12 px-2.5 min-[1520px]:px-3 min-[1600px]:px-3.5 min-[1700px]:px-4 min-[1800px]:px-5 text-[13px] min-[1440px]:text-sm font-medium transition-colors whitespace-nowrap group ${active
+                      return `relative flex items-center h-12 px-2.5 min-[1520px]:px-3 min-[1600px]:px-3.5 min-[1700px]:px-4 min-[1800px]:px-5 text-[13px] min-[1440px]:text-sm min-[1900px]:text-[15px] font-medium transition-colors whitespace-nowrap group ${active
                         ? 'text-primary dark:text-primary-400 bg-primary-50/60 dark:bg-primary-900/20'
                         : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`
@@ -1560,7 +1550,7 @@ const AppContent: React.FC = () => {
                         : isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'));
                       return (
                         <>
-                          <item.icon className={`w-4 h-4 mr-1.5 min-[1520px]:mr-2 ${active ? 'text-primary dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
+                          <item.icon className={`w-4 h-4 min-[1700px]:w-[18px] min-[1700px]:h-[18px] mr-1.5 min-[1520px]:mr-2 ${active ? 'text-primary dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'}`} />
                           {t(item.labelKey as any)}
                           {active && (
                             <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary dark:bg-primary-400 rounded-t-full"></span>
@@ -1662,7 +1652,6 @@ const AppContent: React.FC = () => {
                   currentClinic={currentClinic}
                   branches={branches}
                   activeBranchId={activeBranchId}
-                  onAssignBranch={assignPatientsToBranch}
                 />
               } />
 

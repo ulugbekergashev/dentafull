@@ -23,8 +23,6 @@ interface PatientsProps {
   branches?: Branch[];
   /** Sarlavhada tanlangan filial — yangi bemor odatda shunga biriktiriladi. */
   activeBranchId?: string | null;
-  /** Bir nechta bemorni bir yo'la filialga biriktirish (yoki chiqarish). */
-  onAssignBranch?: (patientIds: string[], branchId: string | null) => Promise<void>;
 }
 
 export const Patients: React.FC<PatientsProps> = ({
@@ -41,7 +39,6 @@ export const Patients: React.FC<PatientsProps> = ({
   showPatientPhone = true,
   branches = [],
   activeBranchId = null,
-  onAssignBranch,
 }) => {
   const { t } = useLanguage();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -51,15 +48,9 @@ export const Patients: React.FC<PatientsProps> = ({
   const [isAssigning, setIsAssigning] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Filialga biriktirish. Ikki yo'l bor: bitta bemor uchun biriktirish
-  // oynasida, va ro'yxatdan belgilab bir yo'la — mavjud bazani filiallarga
-  // taqsimlashda bittalab ochib chiqish real ish emas.
+  // Filialga biriktirish — bitta bemor uchun, biriktirish oynasida.
   const [assignBranchId, setAssignBranchId] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkBranchId, setBulkBranchId] = useState('');
-  const [isBulkAssigning, setIsBulkAssigning] = useState(false);
   const hasBranches = branches.length > 0;
-  const canAssignBranch = hasBranches && !!onAssignBranch;
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -182,35 +173,6 @@ export const Patients: React.FC<PatientsProps> = ({
 
   const branchNameOf = (p: Patient): string | null =>
     p.branchId ? (branches.find((b) => b.id === p.branchId)?.name || null) : null;
-
-  const allFilteredSelected =
-    filteredPatients.length > 0 && filteredPatients.every((p) => selectedIds.includes(p.id));
-
-  const toggleSelectAll = () => {
-    if (allFilteredSelected) {
-      const shown = new Set(filteredPatients.map((p) => p.id));
-      setSelectedIds((prev) => prev.filter((id) => !shown.has(id)));
-    } else {
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...filteredPatients.map((p) => p.id)])));
-    }
-  };
-
-  const toggleSelectOne = (id: string) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
-
-  const handleBulkAssignBranch = async () => {
-    if (!onAssignBranch || selectedIds.length === 0) return;
-    setIsBulkAssigning(true);
-    try {
-      await onAssignBranch(selectedIds, bulkBranchId || null);
-      setSelectedIds([]);
-    } catch {
-      // xabarni yuqoridagi komponent ko'rsatadi
-    } finally {
-      setIsBulkAssigning(false);
-    }
-  };
 
   // Shifokor ismi: API'dan kelgan doctorName yoki doctorId orqali doctors ro'yxatidan
   // (doctorName bazada saqlanmaydi — doctorId asosiy manba)
@@ -541,53 +503,12 @@ export const Patients: React.FC<PatientsProps> = ({
         )}
       </Card>
 
-      {/* Belgilangan bemorlarni bir yo'la filialga biriktirish */}
-      {canAssignBranch && selectedIds.length > 0 && (
-        <Card className="p-3 flex flex-wrap items-center gap-3 border-primary-300 dark:border-primary-800 bg-primary-50/60 dark:bg-primary-900/20">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">
-            {t('branches.selectedCount').replace('{n}', String(selectedIds.length))}
-          </span>
-          <select
-            value={bulkBranchId}
-            onChange={(e) => setBulkBranchId(e.target.value)}
-            className="h-9 min-w-[200px] rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="">{t('branches.unassigned')}</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
-          <Button size="sm" onClick={handleBulkAssignBranch} disabled={isBulkAssigning}>
-            {isBulkAssigning
-              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('branches.saving')}</>
-              : <><MapPin className="w-4 h-4 mr-2" />{t('branches.assignAction')}</>}
-          </Button>
-          <button
-            onClick={() => setSelectedIds([])}
-            className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline"
-          >
-            {t('branches.clearSelection')}
-          </button>
-        </Card>
-      )}
-
       {/* Table */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr className="border-b border-gray-200 dark:border-gray-700">
-                {canAssignBranch && (
-                  <th className="pl-6 pr-0 py-4 w-8">
-                    <input
-                      type="checkbox"
-                      aria-label={t('branches.selectAll')}
-                      checked={allFilteredSelected}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
-                    />
-                  </th>
-                )}
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.name')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.phone')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.age_gender')}</th>
@@ -605,20 +526,9 @@ export const Patients: React.FC<PatientsProps> = ({
               {filteredPatients.map((patient) => (
                 <tr
                   key={patient.id}
-                  className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group ${selectedIds.includes(patient.id) ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group"
                   onClick={() => onPatientClick(patient.id)}
                 >
-                  {canAssignBranch && (
-                    <td className="pl-6 pr-0 py-4" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        aria-label={`${patient.lastName} ${patient.firstName}`}
-                        checked={selectedIds.includes(patient.id)}
-                        onChange={() => toggleSelectOne(patient.id)}
-                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
-                      />
-                    </td>
-                  )}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="h-9 w-9 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold text-sm group-hover:bg-primary-200 dark:group-hover:bg-primary-800 transition-colors overflow-hidden">
@@ -714,7 +624,7 @@ export const Patients: React.FC<PatientsProps> = ({
               ))}
               {filteredPatients.length === 0 && (
                 <tr>
-                  <td colSpan={7 + (canAssignBranch ? 1 : 0) + (hasBranches ? 1 : 0)} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7 + (hasBranches ? 1 : 0)} className="px-6 py-12 text-center text-gray-500">
                     <Search className="w-10 h-10 mx-auto mb-2 text-gray-300" />
                     So'rovingiz bo'yicha bemorlar topilmadi.
                   </td>
