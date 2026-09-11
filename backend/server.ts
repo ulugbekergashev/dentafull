@@ -411,7 +411,7 @@ async function isWithinCooldown(clinicId: string, patientId: string, days: numbe
 }
 
 type UnifiedSendOpts = {
-    // 'auto' = clinic.notificationMode bo'yicha
+    // 'auto' = 'telegram_first' (pastdagi izohga qarang)
     // 'telegram_first' = Telegram bo'lsa faqat Telegram, aks holda SMS (arzon yo'l)
     channel: 'sms' | 'telegram' | 'both' | 'telegram_first' | 'auto';
     source?: string;   // 'manual' | 'auto' | 'debt' | 'birthday' | 'noshow' | 'bulk' | 'retry'...
@@ -430,16 +430,21 @@ async function sendUnified(
     message: string,
     opts: UnifiedSendOpts
 ): Promise<{ success: boolean; error?: string }> {
-    const mode = clinic.notificationMode || 'telegram_only';
     let channel = opts.channel;
     if (channel === 'auto') {
-        // 'telegram_first' — Sozlamalardagi yangi, tejamli variant.
-        // 'both' o'z ma'nosini saqlaydi (ikkalasiga ham yuboradi) — klinika uni
-        // ataylab tanlagan bo'lishi mumkin, jimgina o'zgartirmaymiz.
-        channel = mode === 'sms_only' ? 'sms'
-            : mode === 'both' ? 'both'
-                : mode === 'telegram_first' ? 'telegram_first'
-                    : 'telegram';
+        // Avtomatik yuborish: bemor botga ulangan bo'lsa Telegram (bepul),
+        // aks holda SMS — Eskiz ulangan bo'lsa. Kanalni ULANGAN NARSA
+        // belgilaydi.
+        //
+        // Ilgari Sozlamalarda qo'lda tanlanadigan "rejim" bor edi va u
+        // ikki xil xato berardi: 'telegram_only' qolib ketsa, Eskiz ulangan
+        // klinikada ham botga ulanmagan bemorga hech narsa bormasdi;
+        // 'both' esa bot orqali allaqachon yetgan har bir xabarga pullik
+        // SMS qo'shardi. Tanlov olib tashlandi — endi har bir xabarning
+        // kanali bemor profilidagi oynada tanlanadi.
+        //
+        // clinic.notificationMode ustuni bazada qoladi, lekin o'qilmaydi.
+        channel = 'telegram_first';
     }
     const patientName = `${patient.firstName} ${patient.lastName || ''}`.trim();
     const logExtra = { source: opts.source || 'manual', ruleId: opts.ruleId, refId: opts.refId };
@@ -546,15 +551,6 @@ async function sendUnified(
     return { success: anySuccess, error: anySuccess ? undefined : lastError };
 }
 
-// Eski nom bilan moslik: notificationMode bo'yicha yuboradi
-async function sendNotification(
-    clinic: any,
-    patient: { firstName: string; lastName?: string; telegramChatId?: string | null; phone?: string | null; id?: string | null },
-    message: string,
-    replyMarkup?: any
-): Promise<void> {
-    await sendUnified(clinic, patient, message, { channel: 'auto', replyMarkup });
-}
 // ──────────────────────────────────────────────────────────────────────────────
 
 // Bot Logs
@@ -2091,17 +2087,34 @@ app.post('/api/patients/:id/send-message', authenticateToken, async (req, res) =
             return res.status(400).json({ error: 'Message content is required' });
         }
 
-        const clinic = patient.clinic as any;
-        const mode = clinic.notificationMode || 'telegram_only';
-        const hasTelegram = !!clinic.botToken && !!patient.telegramChatId;
-        const hasSms = (mode === 'sms_only' || mode === 'both' || mode === 'telegram_first')
-            && !!clinic.eskizEmail && !!patient.phone;
+        // Kanal har bir xabarda tanlanadi (bemor profilidagi oyna).
+        // Ilgari Sozlamalardagi umumiy "rejim" hal qilardi: u 'telegram_only'
+        // bo'lsa, Eskiz ulangan klinikada ham SMS umuman ketmasdi.
+        const requested = req.body?.channel;
+        const channel: 'telegram_first' | 'telegram' | 'sms' =
+            requested === 'telegram' || requested === 'sms' ? requested : 'telegram_first';
 
+        const clinic = patient.clinic as any;
+        const hasTelegram = !!clinic.botToken && !!patient.telegramChatId;
+        const hasSms = !!clinic.eskizEmail && !!patient.phone;
+
+        if (channel === 'telegram' && !hasTelegram) {
+            return res.status(400).json({ error: !clinic.botToken ? 'Telegram bot ulanmagan' : 'Bemor Telegram botga ulanmagan' });
+        }
+        if (channel === 'sms' && !hasSms) {
+            return res.status(400).json({ error: !clinic.eskizEmail ? 'Eskiz SMS ulanmagan (Sozlamalar → SMS va Telegram)' : 'Bemorda telefon raqami yo\'q' });
+        }
         if (!hasTelegram && !hasSms) {
             return res.status(400).json({ error: 'Bemor bilan bog\'lanish imkoni yo\'q (Telegram ham, SMS ham ulangan emas)' });
         }
 
-        await sendNotification(clinic, patient, message);
+        // Natija tekshiriladi. Ilgari bu yerda yuborish xato bilan tugasa
+        // ham { success: true } qaytardi va foydalanuvchi "yuborildi" deb
+        // o'ylardi — xato faqat tarix jurnalida ko'rinardi.
+        const result = await sendUnified(clinic, patient, message, { channel, source: 'manual', type: 'Manual' });
+        if (!result.success) {
+            return res.status(502).json({ error: result.error || 'Xabar yuborilmadi' });
+        }
 
         res.json({ success: true });
     } catch (error) {

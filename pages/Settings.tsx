@@ -790,7 +790,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
       try {
          await api.sms.saveSettings(currentClinic.id, {
-            notificationMode: smsForm.notificationMode,
             eskizEmail: smsForm.eskizEmail,
             eskizPassword: smsForm.eskizPassword || undefined,
             eskizNick: smsForm.eskizNick || '4546'
@@ -2049,82 +2048,14 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                               <p className="text-sm text-amber-900 dark:text-amber-200">{t('settings.bot.notConnected')}</p>
                            </div>
                         )}
-                     </div>
-                  </Card>
 
-                     <Card className="p-6">
-                        <div className="flex items-center gap-4 mb-6">
-                           <div className="p-3 bg-purple-100 dark:bg-purple-900/40 rounded-xl text-purple-600 dark:text-purple-400">
-                              <MessageSquare className="w-8 h-8" />
-                           </div>
-                           <div>
-                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">SMS va Xabar Yuborish Rejimi</h3>
-                              <p className="text-sm text-gray-500">Mijozlarga xabarnomalar qanday yuborilishini sozlang va Eskiz.uz profilingizni ulang.</p>
-                           </div>
-                        </div>
-                        <form onSubmit={handleSmsSave} className="space-y-8">
-                           <div>
-                              <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">1. Standart kanalni tanlang</h4>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">Bu rejim Xabarlar bo'limidagi "avtomatik" (auto) yuborishlar uchun standart kanal sifatida ishlatiladi.</p>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                 <label className={`relative flex cursor-pointer rounded-lg border bg-white dark:bg-gray-800 p-4 shadow-sm focus:outline-none ${smsForm.notificationMode === 'telegram_only' ? 'border-purple-500 ring-1 ring-purple-500' : 'border-gray-300 dark:border-gray-700'}`}>
-                                    <input 
-                                       type="radio" 
-                                       name="notificationMode"
-                                       value="telegram_only"
-                                       checked={smsForm.notificationMode === 'telegram_only'}
-                                       onChange={(e) => setSmsForm({...smsForm, notificationMode: e.target.value})}
-                                       className="sr-only"
-                                    />
-                                    <span className="flex flex-1">
-                                       <span className="flex flex-col">
-                                          <span className="block text-sm font-medium text-gray-900 dark:text-white mb-1">🤖 Faqat Telegram Bot</span>
-                                          <span className="mt-1 flex items-center text-xs text-gray-500 dark:text-gray-400">Xabarlar mijozning Telegram profiliga (bepul) yuboriladi</span>
-                                       </span>
-                                    </span>
-                                    <CheckCircle className={`h-5 w-5 ${smsForm.notificationMode === 'telegram_only' ? 'text-purple-600' : 'invisible'}`} />
-                                 </label>
-                                 <label className={`relative flex cursor-pointer rounded-lg border bg-white dark:bg-gray-800 p-4 shadow-sm focus:outline-none ${smsForm.notificationMode === 'sms_only' ? 'border-purple-500 ring-1 ring-purple-500' : 'border-gray-300 dark:border-gray-700'}`}>
-                                    <input 
-                                       type="radio" 
-                                       name="notificationMode"
-                                       value="sms_only"
-                                       checked={smsForm.notificationMode === 'sms_only'}
-                                       onChange={(e) => setSmsForm({...smsForm, notificationMode: e.target.value})}
-                                       className="sr-only"
-                                    />
-                                    <span className="flex flex-1">
-                                       <span className="flex flex-col">
-                                          <span className="block text-sm font-medium text-gray-900 dark:text-white mb-1">📱 Faqat SMS (Eskiz)</span>
-                                          <span className="mt-1 flex items-center text-xs text-gray-500 dark:text-gray-400">Xabarlar bevosita telefon raqamiga (pullik) yuboriladi</span>
-                                       </span>
-                                    </span>
-                                    <CheckCircle className={`h-5 w-5 ${smsForm.notificationMode === 'sms_only' ? 'text-purple-600' : 'invisible'}`} />
-                                 </label>
-                                 <label className={`relative flex cursor-pointer rounded-lg border bg-white dark:bg-gray-800 p-4 shadow-sm focus:outline-none ${smsForm.notificationMode === 'both' ? 'border-purple-500 ring-1 ring-purple-500' : 'border-gray-300 dark:border-gray-700'}`}>
-                                    <input 
-                                       type="radio" 
-                                       name="notificationMode"
-                                       value="both"
-                                       checked={smsForm.notificationMode === 'both'}
-                                       onChange={(e) => setSmsForm({...smsForm, notificationMode: e.target.value})}
-                                       className="sr-only"
-                                    />
-                                    <span className="flex flex-1">
-                                       <span className="flex flex-col">
-                                          <span className="block text-sm font-medium text-gray-900 dark:text-white mb-1">🤖📱 Ikkalasi ham</span>
-                                          <span className="mt-1 flex items-center text-xs text-gray-500 dark:text-gray-400">Xabarlar avval Telegram, so'ng qo'shimcha sifatida SMS orqali boradi</span>
-                                       </span>
-                                    </span>
-                                    <CheckCircle className={`h-5 w-5 ${smsForm.notificationMode === 'both' ? 'text-purple-600' : 'invisible'}`} />
-                                 </label>
-                              </div>
-                           </div>
-
-                           {(smsForm.notificationMode === 'sms_only' || smsForm.notificationMode === 'both') && (
+                        {/* Eskiz SMS — bot tokeni bilan bir joyda. Telegram'ga ulanmagan
+                            bemorga avtomatik xabar SMS orqali boradi: kanalni ulangan
+                            narsa belgilaydi, alohida "rejim" tanlash yo'q. */}
+                        <form onSubmit={handleSmsSave} className="space-y-3">
                               <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
                                  <div className="flex items-center justify-between mb-6">
-                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white">2. Eskiz.uz Integratsiyasi</h4>
+                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white">Eskiz.uz SMS</h4>
                                     {smsConnected ? (
                                        <span className="flex items-center text-green-600 text-sm font-medium bg-green-50 dark:bg-green-900/30 px-3 py-1.5 rounded-full">
                                           <CheckCircle className="w-4 h-4 mr-1.5" /> Ulangan
@@ -2135,6 +2066,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                                        </span>
                                     )}
                                  </div>
+                                 <p className="text-sm text-gray-600 dark:text-gray-400 -mt-3 mb-5">Telegram botga ulanmagan bemorlarga xabarlar SMS orqali yuboriladi (pullik).</p>
                                  <div className="space-y-4">
                                     <Input 
                                        label="Eskiz.uz Kabinet Email" 
@@ -2173,19 +2105,14 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                                        <Button type="submit" className="w-full sm:w-auto">Saqlash va Ulanishni Tekshirish</Button>
                                     </div>
                                  </div>
-                           )}
 
-                           {smsForm.notificationMode === 'telegram_only' && (
-                              <div className="pt-4">
-                                 <Button type="submit" variant="primary">Saqlash</Button>
-                              </div>
-                           )}
                            
                            {smsSaved && <span className="text-green-600 text-sm flex items-center mt-2"><CheckCircle className="w-4 h-4 mr-1" /> Saqlandi</span>}
                         </form>
-                     </Card>
+                     </div>
+                  </Card>
 
-                     {smsConnected && (smsForm.notificationMode === 'sms_only' || smsForm.notificationMode === 'both') && (
+                     {smsConnected && (
                         <Card className="p-6 border-l-4 border-l-purple-500">
                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                               <div>

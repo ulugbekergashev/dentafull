@@ -102,6 +102,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
    const [messageText, setMessageText] = useState('');
    const [messageType, setMessageType] = useState('Custom'); // Custom, Tomorrow, Debt, Missed
+   const [messageChannel, setMessageChannel] = useState<'auto' | 'telegram' | 'sms'>('auto');
 
    // New Appointment Modal State
    const [isApptModalOpen, setIsApptModalOpen] = useState(false);
@@ -680,7 +681,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const handleSendMessage = async (e: React.FormEvent) => {
       e.preventDefault();
       try {
-         await api.patients.sendMessage(patient.id, messageText);
+         await api.patients.sendMessage(patient.id, messageText, messageChannel);
          alert(t('patients.details.alerts.messageSent'));
          setIsMessageModalOpen(false);
          setMessageText('');
@@ -1936,6 +1937,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         { value: 'Tomorrow', label: t('patients.details.modals.msgTomorrow') },
                         { value: 'Debt', label: t('patients.details.modals.msgDebt') },
                         { value: 'Missed', label: t('patients.details.modals.msgMissed') }
+                     ]}
+                  />
+                  <Select
+                     label={t('patients.details.modals.msgChannel')}
+                     value={messageChannel}
+                     onChange={(e) => setMessageChannel(e.target.value as 'auto' | 'telegram' | 'sms')}
+                     options={[
+                        { value: 'auto', label: t('patients.details.modals.msgChannelAuto') },
+                        { value: 'telegram', label: t('patients.details.modals.msgChannelTelegram') },
+                        { value: 'sms', label: t('patients.details.modals.msgChannelSms') },
                      ]}
                   />
                   <div>

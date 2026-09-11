@@ -241,12 +241,13 @@ export const api = {
                 body: JSON.stringify({ amount }),
             });
         },
-        sendMessage: (id: string, message: string) => {
+        // channel: 'auto' — Telegram, bo'lmasa SMS; yoki aniq kanal.
+        sendMessage: (id: string, message: string, channel: 'auto' | 'telegram' | 'sms' = 'auto') => {
             if (isDemoMode()) return Promise.resolve({ success: true });
             return fetchJson<{ success: true }>(`/patients/${id}/send-message`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message }),
+                body: JSON.stringify({ message, channel }),
             });
         },
         uploadAvatar: (id: string, file: File) => {
