@@ -37,14 +37,13 @@ export const translations = {
     'ai.messageText': 'Xabar matni',
     'ai.willAffect': "Ta'sir qiladi",
     // Navigation
-    'nav.dashboard': 'Boshqaruv Paneli',
+    'nav.dashboard': 'Bosh sahifa',
     'nav.leads': 'Lidlar',
     'nav.salesAgents': 'Sotuvchilar',
     'nav.patients': 'Bemorlar',
     'nav.calendar': 'Kalendar',
     'nav.finance': 'Moliya',
     'nav.cashbook': 'Kassa',
-    'nav.doctors': 'Shifokorlar',
     'inventory.title': 'Ombor',
     'inventory.subtitle': 'Klinika materiallarini boshqarish',
     'inventory.newItem': 'Yangi Material',
@@ -81,6 +80,47 @@ export const translations = {
     'nav.messages': 'Xabarlar',
     'nav.settings': 'Sozlamalar',
     'nav.saas': 'SaaS Dashboard',
+    'nav.staff': 'Xodimlar',
+    'nav.more': 'Barchasi',
+
+    // Sozlamalar guruhlari: Klinika / Xizmatlar / Integratsiyalar / Tarif
+    'settings.tabs.clinic': 'Klinika',
+    'settings.tabs.servicesPrices': 'Xizmatlar va narxlar',
+    'settings.tabs.integrations': 'Integratsiyalar',
+    'settings.tabs.plan': 'Tarif',
+    'settings.staffLink': 'Xodimlar va ruxsatlar',
+    'settings.integrations.messaging': 'Telegram va SMS',
+    'settings.integrations.ai': 'AI kaliti',
+    'settings.integrations.leadApi': 'Lid API',
+    'settings.plan.subtitle': 'Obuna muddati va cheklovlar',
+    'settings.plan.trial': 'Sinov davri',
+    'settings.plan.perMonth': '/ oy',
+    'settings.plan.doctors': 'Shifokorlar',
+    'settings.plan.validUntil': 'Amal qilish muddati',
+    'settings.plan.daysLeft': '{n} kun qoldi',
+    'settings.plan.expired': "Muddati o'tgan",
+
+    // Xodimlar sahifasi
+    'staff.tabs.list': "Ro'yxat",
+    'staff.tabs.stats': 'Statistika',
+    'staff.tabs.access': 'Ruxsatlar',
+    'staff.subtitle.list': "Shifokor, resepshn va texniklarni qo'shish va tahrirlash",
+    'staff.subtitle.stats': "Shifokorlar bo'yicha tushum, qabullar va baholar",
+    'staff.subtitle.access': "Shifokor va resepshn qaysi bo'limlarni ko'rishini belgilash",
+    'staff.add': "Xodim qo'shish",
+    'staff.filter.all': 'Hammasi',
+    'staff.filter.doctors': 'Shifokorlar',
+    'staff.filter.receptionists': 'Resepshnlar',
+    'staff.filter.labTechs': 'Texniklar',
+    'staff.role.doctor': 'Shifokor',
+    'staff.role.receptionist': 'Resepshn',
+    'staff.role.labTech': 'Texnik',
+    'staff.empty': "Hozircha xodim qo'shilmagan",
+
+    // Bosh sahifa va Hisobot
+    'dashboard.serviceDistribution': 'Xizmatlar taqsimoti',
+    'dashboard.todayLabel': 'BUGUN',
+    'finance.appointmentAnalytics': 'Qabullar tahlili',
 
     // Common
     'common.search': 'Qidirish...',
@@ -117,14 +157,6 @@ export const translations = {
 
     // Settings
     'settings.title': 'Klinika Sozlamalari',
-    'settings.tabs.general': 'Umumiy',
-    'settings.tabs.services': 'Xizmatlar',
-    'settings.tabs.doctors': 'Shifokorlar',
-    'settings.tabs.receptionists': 'Resepshnlar',
-    'settings.tabs.labTechnicians': 'Texniklar',
-    'settings.tabs.bot': 'Telegram Bot',
-    'settings.tabs.facebook': 'Facebook',
-    'settings.tabs.branches': 'Filiallar',
 
     // Filiallar
     'branches.whole': 'Butun klinika',
@@ -196,9 +228,6 @@ export const translations = {
     'settings.services.deleteCategoryConfirm': 'Kategoriyani o\'chirmoqchimisiz?',
 
     // Settings Doctors & Staff
-    'settings.staff.doctorsTitle': 'Shifokorlar Boshqaruvi',
-    'settings.staff.doctorsSubtitle': 'Klinika xodimlarini boshqarish.',
-    'settings.staff.addDoctor': 'Shifokor Qo\'shish',
     'settings.staff.statusActive': 'Faol',
     'settings.staff.statusVoc': 'Ta\'tilda',
     'settings.staff.addDoctorModal': 'Yangi Shifokor Qo\'shish',
@@ -671,7 +700,6 @@ export const translations = {
     'dashboard.financialFlow': 'Moliyaviy Oqim',
     'dashboard.income': 'Daromad',
     'dashboard.visits': 'Qabullar',
-    'dashboard.specialty': 'Mutaxassislik',
     'dashboard.active': 'faol',
     'dashboard.allOk': 'Hammasi tartibda',
     'dashboard.pending': 'Kutilayotgan',
@@ -890,14 +918,13 @@ export const translations = {
     'ai.messageText': 'Текст сообщения',
     'ai.willAffect': 'Затронет',
     // Navigation
-    'nav.dashboard': 'Панель управления',
+    'nav.dashboard': 'Главная',
     'nav.leads': 'Лиды',
     'nav.salesAgents': 'Продавцы',
     'nav.patients': 'Пациенты',
     'nav.calendar': 'Календарь',
     'nav.finance': 'Финансы',
     'nav.cashbook': 'Касса',
-    'nav.doctors': 'Врачи',
     'inventory.title': 'Склад',
     'inventory.subtitle': 'Управление материалами клиники',
     'inventory.newItem': 'Новый материал',
@@ -934,6 +961,47 @@ export const translations = {
     'nav.messages': 'Сообщения',
     'nav.settings': 'Настройки',
     'nav.saas': 'SaaS Панель',
+    'nav.staff': 'Сотрудники',
+    'nav.more': 'Ещё',
+
+    // Группы настроек: Клиника / Услуги / Интеграции / Тариф
+    'settings.tabs.clinic': 'Клиника',
+    'settings.tabs.servicesPrices': 'Услуги и цены',
+    'settings.tabs.integrations': 'Интеграции',
+    'settings.tabs.plan': 'Тариф',
+    'settings.staffLink': 'Сотрудники и доступы',
+    'settings.integrations.messaging': 'Telegram и SMS',
+    'settings.integrations.ai': 'Ключ AI',
+    'settings.integrations.leadApi': 'API лидов',
+    'settings.plan.subtitle': 'Срок подписки и ограничения',
+    'settings.plan.trial': 'Пробный период',
+    'settings.plan.perMonth': '/ мес',
+    'settings.plan.doctors': 'Врачи',
+    'settings.plan.validUntil': 'Действует до',
+    'settings.plan.daysLeft': 'осталось {n} дн.',
+    'settings.plan.expired': 'Срок истёк',
+
+    // Страница сотрудников
+    'staff.tabs.list': 'Список',
+    'staff.tabs.stats': 'Статистика',
+    'staff.tabs.access': 'Доступы',
+    'staff.subtitle.list': 'Добавление и редактирование врачей, ресепшн и техников',
+    'staff.subtitle.stats': 'Выручка, записи и оценки по врачам',
+    'staff.subtitle.access': 'Какие разделы видят врачи и ресепшн',
+    'staff.add': 'Добавить сотрудника',
+    'staff.filter.all': 'Все',
+    'staff.filter.doctors': 'Врачи',
+    'staff.filter.receptionists': 'Ресепшн',
+    'staff.filter.labTechs': 'Техники',
+    'staff.role.doctor': 'Врач',
+    'staff.role.receptionist': 'Ресепшн',
+    'staff.role.labTech': 'Техник',
+    'staff.empty': 'Сотрудники пока не добавлены',
+
+    // Главная и отчёт
+    'dashboard.serviceDistribution': 'Распределение услуг',
+    'dashboard.todayLabel': 'СЕГОДНЯ',
+    'finance.appointmentAnalytics': 'Анализ записей',
 
     // Common
     'common.search': 'Поиск...',
@@ -974,14 +1042,6 @@ export const translations = {
 
     // Settings
     'settings.title': 'Настройки клиники',
-    'settings.tabs.general': 'Общее',
-    'settings.tabs.services': 'Услуги',
-    'settings.tabs.doctors': 'Врачи',
-    'settings.tabs.receptionists': 'Ресепшн',
-    'settings.tabs.labTechnicians': 'Техники',
-    'settings.tabs.bot': 'Telegram Bot',
-    'settings.tabs.facebook': 'Facebook',
-    'settings.tabs.branches': 'Филиалы',
 
     // Филиалы
     'branches.whole': 'Вся клиника',
@@ -1053,9 +1113,6 @@ export const translations = {
     'settings.services.deleteCategoryConfirm': 'Вы уверены, что хотите удалить категорию?',
 
     // Settings Doctors & Staff
-    'settings.staff.doctorsTitle': 'Управление врачами',
-    'settings.staff.doctorsSubtitle': 'Управление персоналом клиники.',
-    'settings.staff.addDoctor': 'Добавить врача',
     'settings.staff.statusActive': 'Активен',
     'settings.staff.statusVoc': 'В отпуске',
     'settings.staff.addDoctorModal': 'Добавить нового врача',
@@ -1472,7 +1529,6 @@ export const translations = {
     'dashboard.financialFlow': 'Финансовый поток',
     'dashboard.income': 'Доход',
     'dashboard.visits': 'Посещения',
-    'dashboard.specialty': 'Специальность',
     'dashboard.active': 'актив.',
     'dashboard.allOk': 'Всё в порядке',
     'dashboard.pending': 'Ожидается',

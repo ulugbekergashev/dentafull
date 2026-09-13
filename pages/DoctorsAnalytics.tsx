@@ -14,13 +14,15 @@ interface DoctorsAnalyticsProps {
     services: Service[];
     transactions: Transaction[];
     reviews: Review[];
+    /** Xodimlar sahifasi ichida: sarlavha o'sha sahifada, bu yerda takrorlanmaydi */
+    embedded?: boolean;
 }
 
 type DateRange = 'month' | '3months' | '6months' | 'year' | 'all' | 'custom';
 
 import { getCurrentMonthRange } from '../utils/dateUtils';
 
-export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions, reviews }) => {
+export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, appointments, services, transactions, reviews, embedded = false }) => {
     const { t } = useLanguage();
     const navigate = useNavigate();
     const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
@@ -195,11 +197,24 @@ export const DoctorsAnalytics: React.FC<DoctorsAnalyticsProps> = ({ doctors, app
 
     const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1'];
 
+    // Klinika reytingi — ilgari Sozlamalar → Umumiy bo'limining tepasida turardi.
+    // U sozlama emas, xizmat sifati ko'rsatkichi: shifokorlar baholari yonida o'rni.
+    const clinicAvgRating = reviews.length > 0
+        ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+        : 0;
+
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Header with Date Range Filter */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('doctors.analytics.title')}</h1>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                {!embedded && <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('doctors.analytics.title')}</h1>}
+
+                <div className="flex items-center gap-2 h-10 px-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{t('settings.general.rating')}</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{clinicAvgRating > 0 ? clinicAvgRating.toFixed(1) : '0.0'}</span>
+                    <span className="text-xs text-gray-400">· {reviews.length} {t('settings.general.reviewsSuffix')}</span>
+                </div>
 
                 <div className="flex gap-3">
                     <Input

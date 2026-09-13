@@ -1,45 +1,34 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
+import { UpgradePlanModal } from '../components/UpgradePlanModal';
 
-import { UserRole, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, Review, LabTechnician, AccessControl, RoleAccess, LeadApiKeyInfo, Branch } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Star, MessageSquare, Building2, Plus, Facebook, Activity, RefreshCw, FlaskConical, Shield, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, MapPin } from 'lucide-react';
+import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch } from '../types';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, ChevronRight, Sparkles, AlertTriangle, CreditCard, Plug, IdCard } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { parseAccessControl } from '../utils/accessControl';
-import { ACCESS_MODULES, SIMPLE_VIEW_HIDDEN_MODULES } from '../constants';
+import { parseAccessControl, isModuleHidden } from '../utils/accessControl';
 
-const DOCTOR_COLORS = [
-   { name: 'Ko\'k', value: '#3B82F6' },
-   { name: 'Yashil', value: '#10B981' },
-   { name: 'Binafsha', value: '#8B5CF6' },
-   { name: 'Qizil', value: '#F43F5E' },
-   { name: 'Sariq', value: '#F59E0B' },
-   { name: 'Havorang', value: '#06B6D4' },
-   { name: 'To\'q ko\'k', value: '#6366F1' },
-   { name: 'To\'q sariq', value: '#FB923C' },
-];
+// Sozlamalar — klinikaning o'z sozlamalari, to'rt guruhda:
+//   Klinika         — ma'lumotlar va ish vaqti, filiallar, bron to'lovi, kassa smenalari
+//   Xizmatlar       — kategoriyalar va narxlar
+//   Integratsiyalar — Telegram va SMS, DMED, AI kaliti, lid API
+//   Tarif           — obuna, muddat va cheklovlar
+// Ilgari o'n bitta bo'lim aralash turardi: tarif "Xizmatlar" ichida, reyting
+// "Umumiy" tepasida, xodimlar uch bo'lakka bo'lingan edi. Xodimlar va ruxsatlar
+// endi yon menyudagi "Xodimlar" sahifasida, klinika reytingi — uning statistikasida.
 
 interface SettingsProps {
    userRole: UserRole;
    services: Service[];
+   /** Tarif cheklovi (nechta shifokor bor) va filial kartalaridagi hisob uchun */
    doctors: Doctor[];
-   receptionists?: Receptionist[];
-   labTechnicians?: LabTechnician[];
    categories: ServiceCategory[];
    onAddService: (service: Omit<Service, 'id' | 'clinicId'>) => void;
    onUpdateService: (index: number, service: Partial<Service>) => void;
    onDeleteService?: (id: number) => Promise<void>;
    onAddCategory: (category: Omit<ServiceCategory, 'id' | 'clinicId'>) => void;
    onDeleteCategory: (id: string) => void;
-   onAddDoctor: (doctor: Omit<Doctor, 'id'>) => void;
-   onUpdateDoctor: (id: string, doctor: Partial<Doctor>) => void;
-   onDeleteDoctor: (id: string) => void;
-   onAddReceptionist?: (receptionist: Omit<Receptionist, 'id'>) => void;
-   onUpdateReceptionist?: (id: string, receptionist: Partial<Receptionist>) => void;
-   onDeleteReceptionist?: (id: string) => void;
-   onAddLabTechnician?: (tech: Omit<LabTechnician, 'id' | 'status'>) => void;
-   onUpdateLabTechnician?: (id: string, tech: Partial<LabTechnician>) => void;
-   onDeleteLabTechnician?: (id: string) => void;
    branches?: Branch[];
    /** Filial bo'yicha bemorlar soni. '' kaliti — filialsiz bemorlar. */
    patientCountByBranch?: Record<string, number>;
@@ -48,24 +37,33 @@ interface SettingsProps {
    onDeleteBranch?: (id: string) => Promise<void>;
    currentClinic?: Clinic;
    plans?: SubscriptionPlan[];
-   reviews: Review[];
 }
 
 export const Settings: React.FC<SettingsProps> = ({
-   userRole, services, categories, doctors, receptionists = [], labTechnicians = [], onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, branches = [], patientCountByBranch = {}, onAddBranch, onUpdateBranch, onDeleteBranch, currentClinic, plans, reviews
+   userRole, services, categories, doctors, onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, branches = [], patientCountByBranch = {}, onAddBranch, onUpdateBranch, onDeleteBranch, currentClinic, plans
 }) => {
    const { t } = useLanguage();
-   type SettingsTab = 'general' | 'branches' | 'services' | 'doctors' | 'receptionists' | 'labTechnicians' | 'messaging' | 'facebook' | 'dmed' | 'access' | 'leadApi' | 'ai';
-   // Boshqa sahifadan aniq bo'limga yo'naltirish uchun: /settings?tab=leadApi
-   const initialTab = ((): SettingsTab => {
+   const isAdmin = userRole === UserRole.CLINIC_ADMIN;
+   type SettingsTab = 'clinic' | 'services' | 'integrations' | 'plan';
+   type IntegrationTab = 'messaging' | 'dmed' | 'ai' | 'leadApi';
+   // Boshqa sahifadan aniq bo'limga yo'naltirish uchun: /settings?tab=leadApi.
+   // Eski bo'lim nomlari (general, branches, messaging, dmed...) ham ishlaydi.
+   const [initialTab, initialIntegration] = ((): [SettingsTab, IntegrationTab] => {
       try {
-         const t = new URLSearchParams(window.location.search).get('tab');
-         const allowed: SettingsTab[] = ['general', 'branches', 'services', 'doctors', 'receptionists', 'labTechnicians', 'messaging', 'facebook', 'dmed', 'access', 'leadApi'];
-         if (t && (allowed as string[]).includes(t)) return t as SettingsTab;
+         const tab = new URLSearchParams(window.location.search).get('tab') || '';
+         if (tab === 'clinic' || tab === 'general' || tab === 'branches') return ['clinic', 'messaging'];
+         if (tab === 'services' || tab === 'integrations' || tab === 'plan') return [tab, 'messaging'];
+         if (tab === 'messaging' || tab === 'dmed') return ['integrations', tab];
+         // AI va lid kalitini faqat klinika egasi ko'radi
+         if ((tab === 'ai' || tab === 'leadApi') && isAdmin) return ['integrations', tab];
       } catch { /* manzilni o'qib bo'lmasa — odatdagi bo'lim */ }
-      return 'services';
+      return ['services', 'messaging'];
    })();
    const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(initialIntegration);
+   // Hozir ochiq bo'lim. Integratsiyalar ichidagi har bir bo'lim o'z ma'lumotini
+   // faqat o'zi ochilganda yuklaydi — quyidagi effektlar shunga qaraydi.
+   const activeSection: string = activeTab === 'integrations' ? integrationTab : activeTab;
 
    // Klinikaning o'z AI kaliti
    const [aiInfo, setAiInfo] = useState<{ provider: string; hasKey: boolean; keyHint: string; checkedAt: string | null; providers: string[] } | null>(null);
@@ -82,7 +80,7 @@ export const Settings: React.FC<SettingsProps> = ({
    const [leadDocsOpen, setLeadDocsOpen] = useState(false);
 
    React.useEffect(() => {
-      if (activeTab !== 'leadApi' || !currentClinic?.id) return;
+      if (activeSection !== 'leadApi' || !currentClinic?.id) return;
       let cancelled = false;
       setLeadApiLoading(true);
       api.leads.getApiKey(currentClinic.id)
@@ -90,10 +88,10 @@ export const Settings: React.FC<SettingsProps> = ({
          .catch(err => console.error('Lid API kalitini yuklab bo\'lmadi', err))
          .finally(() => { if (!cancelled) setLeadApiLoading(false); });
       return () => { cancelled = true; };
-   }, [activeTab, currentClinic?.id]);
+   }, [activeSection, currentClinic?.id]);
 
    React.useEffect(() => {
-      if (activeTab !== 'ai' || !currentClinic?.id) return;
+      if (activeSection !== 'ai' || !currentClinic?.id) return;
       let cancelled = false;
       api.aiSettings.get(currentClinic.id)
          .then(info => {
@@ -103,7 +101,7 @@ export const Settings: React.FC<SettingsProps> = ({
          })
          .catch(err => console.error("AI sozlamalarini yuklab bo'lmadi", err));
       return () => { cancelled = true; };
-   }, [activeTab, currentClinic?.id]);
+   }, [activeSection, currentClinic?.id]);
 
    const handleSaveAiKey = async () => {
       if (!currentClinic?.id) return;
@@ -179,44 +177,14 @@ export const Settings: React.FC<SettingsProps> = ({
       }
    };
 
-   // Ruxsatlar (access control) formasi — klinika sozlamalaridan boshlang'ich qiymat
-   const [accessForm, setAccessForm] = useState<AccessControl>(() => parseAccessControl(currentClinic));
-   const [accessSaving, setAccessSaving] = useState(false);
-   // Kassa smenalari (Ruxsatlar bo'limining oxirida)
+   // Kassa smenalari — Klinika bo'limida. Ilgari Ruxsatlar oxirida turardi, lekin u ruxsat emas.
    const [cashShifts, setCashShifts] = useState<number>(currentClinic?.cashShiftsPerDay || 1);
    const [cashShiftsSaving, setCashShiftsSaving] = useState(false);
-   const [accessSaved, setAccessSaved] = useState(false);
 
-   const updateRoleAccess = (roleKey: 'doctor' | 'receptionist', patch: Partial<RoleAccess>) => {
-      setAccessForm(prev => ({ ...prev, [roleKey]: { ...prev[roleKey], ...patch } }));
-   };
-
-   const toggleModule = (roleKey: 'doctor' | 'receptionist', moduleId: string) => {
-      const hidden = accessForm[roleKey]?.hiddenModules || [];
-      const next = hidden.includes(moduleId) ? hidden.filter(m => m !== moduleId) : [...hidden, moduleId];
-      updateRoleAccess(roleKey, { hiddenModules: next });
-   };
-
-   // Tayyor presetlar: "Sodda" — faqat kundalik ish uchun kerak modullar, "Hammasi" — cheklovsiz
-   const applyPreset = (roleKey: 'doctor' | 'receptionist', preset: 'simple' | 'all') => {
-      const roleId = roleKey === 'doctor' ? 'DOCTOR' : 'RECEPTIONIST';
-      updateRoleAccess(roleKey, {
-         hiddenModules: preset === 'simple' ? [...SIMPLE_VIEW_HIDDEN_MODULES[roleId]] : [],
-      });
-   };
-
-   const isSimplePreset = (roleKey: 'doctor' | 'receptionist') => {
-      const roleId = roleKey === 'doctor' ? 'DOCTOR' : 'RECEPTIONIST';
-      const hidden = [...(accessForm[roleKey]?.hiddenModules || [])].sort();
-      const target = [...SIMPLE_VIEW_HIDDEN_MODULES[roleId]].sort();
-      return hidden.length === target.length && hidden.every((m, i) => m === target[i]);
-   };
-
-   // Klinika ma'lumoti keyin yuklansa, formani sinxronlash
+   // Klinika ma'lumoti keyin yuklansa, qiymatni sinxronlash
    React.useEffect(() => {
-      setAccessForm(parseAccessControl(currentClinic));
       setCashShifts(currentClinic?.cashShiftsPerDay || 1);
-   }, [currentClinic?.id, currentClinic?.accessControl, currentClinic?.cashShiftsPerDay]);
+   }, [currentClinic?.id, currentClinic?.cashShiftsPerDay]);
 
    const saveCashShifts = async (value: number) => {
       if (!currentClinic?.id) return;
@@ -233,23 +201,6 @@ export const Settings: React.FC<SettingsProps> = ({
       }
    };
 
-   const handleAccessSave = async () => {
-      if (!currentClinic?.id) return;
-      setAccessSaving(true);
-      try {
-         await api.clinics.updateAccessControl(currentClinic.id, accessForm);
-         setAccessSaved(true);
-         setTimeout(() => {
-            setAccessSaved(false);
-            window.location.reload();
-         }, 1000);
-      } catch (error: any) {
-         console.error('Failed to save access control:', error);
-         alert(error?.message || 'Ruxsatlarni saqlashda xatolik. Backend yangilanganiga ishonch hosil qiling.');
-      } finally {
-         setAccessSaving(false);
-      }
-   };
    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
    const [categoryForm, setCategoryForm] = useState({ name: '' });
@@ -258,11 +209,6 @@ export const Settings: React.FC<SettingsProps> = ({
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
    const [editingServiceId, setEditingServiceId] = useState<number | null>(null);
    const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '' });
-
-   // Doctor Modal State
-   const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
-   const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
-   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none' as 'none' | 'fixed' | 'fixed_kpi' | 'kpi', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '', branchId: '' });
 
    // Filial modali
    const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -314,25 +260,8 @@ export const Settings: React.FC<SettingsProps> = ({
       }
    };
 
-   // Receptionist Modal State
-   const [isReceptionistModalOpen, setIsReceptionistModalOpen] = useState(false);
-   const [editingReceptionistId, setEditingReceptionistId] = useState<string | null>(null);
-   const [receptionistForm, setReceptionistForm] = useState({ firstName: '', lastName: '', phone: '', username: '', password: '' });
-
-   // LabTechnician Modal State
-   const [isLabTechModalOpen, setIsLabTechModalOpen] = useState(false);
-   const [editingLabTechId, setEditingLabTechId] = useState<string | null>(null);
-   const [labTechForm, setLabTechForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '' });
-
    // Upgrade Plan Modal State
    const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-
-   // Delete Confirmation Modals
-   const [deleteConfirmDoctor, setDeleteConfirmDoctor] = useState<Doctor | null>(null);
-   const [deleteConfirmLabTech, setDeleteConfirmLabTech] = useState<LabTechnician | null>(null);
-   const [deleteConfirmReceptionist, setDeleteConfirmReceptionist] = useState<Receptionist | null>(null);
-
-
 
    // General Form State
    const [generalForm, setGeneralForm] = useState({
@@ -354,11 +283,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
    const [botLogs, setBotLogs] = useState<any[]>([]);
    const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-
-   // Facebook State
-   const [facebookPages, setFacebookPages] = useState<any[]>([]);
-   const [isFBPageModalOpen, setIsFBPageModalOpen] = useState(false);
-   const [isFBLoading, setIsFBLoading] = useState(false);
 
    // SMS Settings State
    const [smsForm, setSmsForm] = useState({
@@ -389,13 +313,6 @@ export const Settings: React.FC<SettingsProps> = ({
       prepaymentAmount: 0,
    });
    const [prepaymentSaved, setPrepaymentSaved] = useState(false);
-
-   // Clinic overall rating calculation
-   const clinicAvgRating = useMemo(() => {
-      if (!reviews || reviews.length === 0) return 0;
-      const total = reviews.reduce((sum, r) => sum + r.rating, 0);
-      return total / reviews.length;
-   }, [reviews]);
 
    // Debug: Log botUsername changes
    React.useEffect(() => {
@@ -463,11 +380,10 @@ export const Settings: React.FC<SettingsProps> = ({
             }
          }
       };
-      if (activeTab === 'messaging') {
+      if (activeSection === 'messaging') {
           fetchSms();
       }
-   }, [currentClinic?.id, activeTab]);
-
+   }, [currentClinic?.id, activeSection]);
 
    // Fetch bot username when clinic has bot token
    React.useEffect(() => {
@@ -520,80 +436,6 @@ export const Settings: React.FC<SettingsProps> = ({
       fetchBotUsername();
    }, [currentClinic?.id, currentClinic?.botToken]);
 
-   // Handle Facebook Redirect success
-   React.useEffect(() => {
-       const urlParams = new URLSearchParams(window.location.search);
-       if (urlParams.get('connected') === 'true' && urlParams.get('tab') === 'facebook') {
-           setActiveTab('facebook');
-           handleFetchFBPages();
-           // Clear search params
-           window.history.replaceState({}, '', window.location.pathname);
-       }
-   }, []);
-
-   const handleFetchFBPages = async () => {
-       if (!currentClinic?.id) return;
-       setIsFBLoading(true);
-       try {
-           const pages = await api.facebook.getPages(currentClinic.id);
-           setFacebookPages(pages);
-           setIsFBPageModalOpen(true);
-       } catch (error) {
-           console.error('Failed to fetch FB pages:', error);
-           alert('Facebook sahifalarini yuklashda xatolik yuz berdi');
-       } finally {
-           setIsFBLoading(false);
-       }
-   };
-
-   const handleConnectFB = async () => {
-       if (!currentClinic?.id) return;
-       try {
-           const { url } = await api.facebook.getAuthUrl(currentClinic.id);
-           const width = 700;
-           const height = 850;
-           const left = Math.max(0, (window.screen.width / 2) - (width / 2));
-           const top = Math.max(0, (window.screen.height / 2) - (height / 2));
-           window.open(
-               url,
-               'FacebookLogin',
-               `width=${width},height=${height},left=${left},top=${top},status=yes,scrollbars=yes`
-           );
-       } catch (error) {
-           console.error('Failed to get FB auth URL:', error);
-           alert('Facebook-ga bog\'lanishda xatolik yuz berdi');
-       }
-   };
-
-   const handleSelectFBPage = async (page: any) => {
-       if (!currentClinic?.id) return;
-       try {
-           await api.facebook.selectPage({
-               clinicId: currentClinic.id,
-               pageId: page.id,
-               pageAccessToken: page.access_token,
-               pageName: page.name
-           });
-           setIsFBPageModalOpen(false);
-           alert('Sahifa muvaffaqiyatli bog\'landi!');
-           window.location.reload(); // Refresh to get updated clinic data
-       } catch (error) {
-           console.error('Failed to select FB page:', error);
-           alert('Sahifani saqlashda xatolik yuz berdi');
-       }
-   };
-
-   const handleDisconnectFB = async () => {
-       if (!currentClinic?.id || !window.confirm('Facebook-ni uzmoqchimisiz?')) return;
-       try {
-           await api.facebook.disconnect(currentClinic.id);
-           alert('Facebook muvaffaqiyatli uzildi');
-           window.location.reload();
-       } catch (error) {
-           console.error('Failed to disconnect FB:', error);
-       }
-   };
-
    // Categories effect removed as it's now in App.tsx
 
 
@@ -644,144 +486,6 @@ export const Settings: React.FC<SettingsProps> = ({
       if (!window.confirm('Kategoriyani o\'chirmoqchimisiz?')) return;
       onDeleteCategory(id);
       if (selectedCategory === id) setSelectedCategory(null);
-   };
-
-   const handleOpenDoctorModal = (doctor?: Doctor) => {
-      if (!doctor) {
-         // Adding new doctor - check limit
-         const currentPlanId = currentClinic?.planId;
-         const currentPlan = plans?.find(p => p.id === currentPlanId);
-         const maxDoctors = currentPlan?.maxDoctors || 10;
-
-         if (doctors.length >= maxDoctors) {
-            setIsUpgradeModalOpen(true);
-            return;
-         }
-      }
-
-      if (doctor) {
-         setEditingDoctorId(doctor.id);
-         setDoctorForm({
-            firstName: doctor.firstName,
-            lastName: doctor.lastName,
-            specialty: doctor.specialty,
-            phone: doctor.phone,
-            secondaryPhone: doctor.secondaryPhone || '',
-            username: doctor.username || '',
-            password: '',
-            percentage: (doctor.percentage || 0).toString(),
-            salaryType: (doctor.salaryType || 'none') as 'none' | 'fixed' | 'fixed_kpi' | 'kpi',
-            fixedSalary: (doctor.fixedSalary || 0).toString(),
-            color: doctor.color || DOCTOR_COLORS[0].value,
-            startHour: doctor.startHour != null ? String(doctor.startHour) : '',
-            endHour: doctor.endHour != null ? String(doctor.endHour) : '',
-            branchId: doctor.branchId || '',
-         });
-      } else {
-         setEditingDoctorId(null);
-         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '', branchId: '' });
-      }
-      setIsDoctorModalOpen(true);
-   };
-
-   const handleDoctorSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (editingDoctorId) {
-         const updateData: any = { ...doctorForm };
-         if (!updateData.password) delete updateData.password;
-         updateData.percentage = Number(updateData.percentage) || 0;
-         updateData.fixedSalary = Number(updateData.fixedSalary) || 0;
-         updateData.startHour = doctorForm.startHour !== '' ? Number(doctorForm.startHour) : null;
-         updateData.endHour = doctorForm.endHour !== '' ? Number(doctorForm.endHour) : null;
-         updateData.branchId = doctorForm.branchId || null;
-         onUpdateDoctor(editingDoctorId, updateData);
-      } else {
-         onAddDoctor({
-            ...doctorForm,
-            percentage: Number(doctorForm.percentage) || 0,
-            fixedSalary: Number(doctorForm.fixedSalary) || 0,
-            startHour: doctorForm.startHour !== '' ? Number(doctorForm.startHour) : null,
-            endHour: doctorForm.endHour !== '' ? Number(doctorForm.endHour) : null,
-            branchId: doctorForm.branchId || null,
-            status: 'Active'
-         });
-      }
-      setIsDoctorModalOpen(false);
-   };
-
-   const handleOpenReceptionistModal = (receptionist?: Receptionist) => {
-      if (receptionist) {
-         setEditingReceptionistId(receptionist.id);
-         setReceptionistForm({
-            firstName: receptionist.firstName,
-            lastName: receptionist.lastName,
-            phone: receptionist.phone,
-            username: receptionist.username,
-            password: ''
-         });
-      } else {
-         setEditingReceptionistId(null);
-         setReceptionistForm({ firstName: '', lastName: '', phone: '', username: '', password: '' });
-      }
-      setIsReceptionistModalOpen(true);
-   };
-
-   const handleReceptionistSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (editingReceptionistId) {
-         if (onUpdateReceptionist) {
-            const updateData: any = { ...receptionistForm };
-            if (!updateData.password) {
-               delete updateData.password;
-            }
-            onUpdateReceptionist(editingReceptionistId, updateData);
-         }
-      } else {
-         if (onAddReceptionist) {
-            onAddReceptionist({
-               ...receptionistForm,
-               status: 'Active',
-               clinicId: currentClinic?.id || ''
-            });
-         }
-      }
-      setIsReceptionistModalOpen(false);
-   };
-
-   const handleOpenLabTechModal = (tech?: LabTechnician) => {
-      if (tech) {
-         setEditingLabTechId(tech.id);
-         setLabTechForm({
-            firstName: tech.firstName,
-            lastName: tech.lastName,
-            specialty: tech.specialty,
-            phone: tech.phone,
-            username: tech.username || '',
-            password: ''
-         });
-      } else {
-         setEditingLabTechId(null);
-         setLabTechForm({ firstName: '', lastName: '', specialty: '', phone: '', username: '', password: '' });
-      }
-      setIsLabTechModalOpen(true);
-   };
-
-   const handleLabTechSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      const data: any = {
-         firstName: labTechForm.firstName,
-         lastName: labTechForm.lastName,
-         specialty: labTechForm.specialty,
-         phone: labTechForm.phone,
-         username: labTechForm.username || undefined,
-      };
-      if (labTechForm.password) data.password = labTechForm.password;
-      if (editingLabTechId) {
-         if (onUpdateLabTechnician) onUpdateLabTechnician(editingLabTechId, data);
-      } else {
-         if (onAddLabTechnician) onAddLabTechnician(data);
-      }
-      setIsLabTechModalOpen(false);
    };
 
    const handleSmsSave = async (e: React.FormEvent) => {
@@ -961,70 +665,66 @@ export const Settings: React.FC<SettingsProps> = ({
       );
    }
 
+   const tabs: { id: SettingsTab; name: string; icon: React.ElementType }[] = [
+      { id: 'clinic', name: t('settings.tabs.clinic'), icon: Building2 },
+      { id: 'services', name: t('settings.tabs.servicesPrices'), icon: DollarSign },
+      { id: 'integrations', name: t('settings.tabs.integrations'), icon: Plug },
+      { id: 'plan', name: t('settings.tabs.plan'), icon: CreditCard },
+   ];
+
+   const integrationTabs: { id: IntegrationTab; name: string; icon: React.ElementType }[] = [
+      { id: 'messaging', name: t('settings.integrations.messaging'), icon: MessageSquare },
+      { id: 'dmed', name: 'DMED', icon: Activity },
+      // Kalitlarni faqat klinika egasi ko'radi — backend ham shu rolni talab qiladi.
+      ...(isAdmin ? [
+         { id: 'ai' as const, name: t('settings.integrations.ai'), icon: Sparkles },
+         { id: 'leadApi' as const, name: t('settings.integrations.leadApi'), icon: Link2 },
+      ] : []),
+   ];
+
+   // Xodimlarni odat bo'yicha shu yerdan qidirgan odamga yo'l — agar bu bo'lim
+   // uning roliga Ruxsatlarda yashirilmagan bo'lsa.
+   const canOpenStaff = !isModuleHidden(parseAccessControl(currentClinic), userRole, 'doctors');
+
    return (
       <div className="space-y-6 animate-fade-in">
          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
 
          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Sidebar Tabs */}
+            {/* Bo'limlar */}
             <Card className="col-span-1 h-fit p-2">
-               {[
-                  { id: 'general', name: t('settings.tabs.general'), icon: User },
-                  // Filiallarni faqat klinika egasi boshqaradi — backend ham shu rolni talab qiladi.
-                  ...(userRole === UserRole.CLINIC_ADMIN ? [{ id: 'branches', name: t('settings.tabs.branches'), icon: MapPin }] : []),
-                  { id: 'services', name: t('settings.tabs.services'), icon: DollarSign },
-                  { id: 'doctors', name: t('settings.tabs.doctors'), icon: Users },
-                  { id: 'receptionists', name: t('settings.tabs.receptionists'), icon: Phone },
-                  { id: 'labTechnicians', name: t('settings.tabs.labTechnicians'), icon: FlaskConical },
-                  { id: 'messaging', name: "SMS va Telegram", icon: MessageSquare },
-                  { id: 'dmed', name: "DMED (IT-MED)", icon: Activity },
-                  // Kalitni faqat klinika egasi ko'radi — backend ham shu rolni talab qiladi.
-                  ...(userRole === UserRole.CLINIC_ADMIN ? [{ id: 'ai', name: 'AI kaliti', icon: Sparkles }] : []),
-                  ...(userRole === UserRole.CLINIC_ADMIN ? [{ id: 'leadApi', name: 'Lid integratsiyasi', icon: Link2 }] : []),
-                  ...(userRole === UserRole.CLINIC_ADMIN ? [{ id: 'access', name: 'Ruxsatlar', icon: Shield }] : []),
-               ].map((item) => (
+               {tabs.map((item) => (
                   <button
                      key={item.id}
-                     onClick={() => setActiveTab(item.id as any)}
-                     className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-colors 
-                   ${activeTab === item.id
-                           ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                           : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
-                        }`}
+                     onClick={() => setActiveTab(item.id)}
+                     className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-colors ${activeTab === item.id
+                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                        : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'}`}
                   >
                      <item.icon className="w-4 h-4" />
                      {item.name}
                   </button>
                ))}
+               {canOpenStaff && (
+                  <div className="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700/60">
+                     <Link
+                        to="/doctors"
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-colors text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"
+                     >
+                        <IdCard className="w-4 h-4" />
+                        {/* Ruxsatlar tabi faqat klinika egasiga ko'rinadi */}
+                        <span className="flex-1">{isAdmin ? t('settings.staffLink') : t('nav.staff')}</span>
+                        <ChevronRight className="w-4 h-4" />
+                     </Link>
+                  </div>
+               )}
             </Card>
 
             <div className="lg:col-span-3 space-y-6">
 
-                {/* General Tab */}
-               {activeTab === 'general' && (
+               {/* Klinika: ma'lumotlar va ish vaqti, filiallar, bron to'lovi, kassa smenalari */}
+               {activeTab === 'clinic' && (
                   <div className="space-y-6">
-                     <Card className="p-6">
-                        <div className="flex items-center justify-between">
-                           <div>
-                              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('settings.general.rating')}</p>
-                              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                                 {clinicAvgRating > 0 ? clinicAvgRating.toFixed(1) : '0.0'}
-                              </h3>
-                           </div>
-                           <div className="p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-full">
-                              <Star className="w-6 h-6 text-yellow-500 fill-current" />
-                           </div>
-                        </div>
-                        <div className="mt-4 flex items-center text-sm text-gray-500">
-                           <span className="font-medium text-yellow-600 mr-2 flex items-center">
-                              {[...Array(5)].map((_, i) => (
-                                 <Star key={i} className={`w-3 h-3 ${i < Math.round(clinicAvgRating) ? 'fill-current' : 'text-gray-200'}`} />
-                              ))}
-                           </span>
-                           {reviews.length} {t('settings.general.reviewsSuffix')}
-                        </div>
-                     </Card>
-
                      <Card className="p-6">
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">{t('settings.general.info')}</h3>
                         <form onSubmit={handleGeneralSave} className="space-y-4">
@@ -1082,6 +782,95 @@ export const Settings: React.FC<SettingsProps> = ({
                            </div>
                         </form>
                      </Card>
+
+                     {/* Filiallar — ilgari alohida bo'lim edi. Ularni faqat klinika egasi boshqaradi, backend ham shuni talab qiladi. */}
+                     {isAdmin && (
+                     <Card className="p-6">
+                        <div className="flex justify-between items-start gap-4 mb-6">
+                           <div>
+                              <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('branches.title')}</h3>
+                              <p className="text-sm text-gray-500">{t('branches.subtitle')}</p>
+                           </div>
+                           <Button size="sm" onClick={() => handleOpenBranchModal()}>
+                              <Plus className="w-4 h-4 mr-1.5" />
+                              {t('branches.add')}
+                           </Button>
+                        </div>
+
+                        {branches.length === 0 ? (
+                           <div className="text-center py-12 px-6 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
+                              <div className="mx-auto w-12 h-12 rounded-xl bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center mb-3">
+                                 <Building2 className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+                              </div>
+                              <p className="font-medium text-gray-900 dark:text-white">{t('branches.empty')}</p>
+                              <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">{t('branches.emptyHint')}</p>
+                           </div>
+                        ) : (
+                           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                              {branches.map(branch => (
+                                 <div
+                                    key={branch.id}
+                                    className="group relative p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-sm transition-all"
+                                 >
+                                    <div className="flex items-start justify-between">
+                                       <div className="w-11 h-11 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-100 dark:border-primary-800 flex items-center justify-center">
+                                          <Building2 className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+                                       </div>
+                                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                          <button
+                                             type="button"
+                                             onClick={() => handleOpenBranchModal(branch)}
+                                             className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-md"
+                                             title={t('branches.edit')}
+                                          >
+                                             <Edit className="w-4 h-4" />
+                                          </button>
+                                          <button
+                                             type="button"
+                                             onClick={() => setDeleteConfirmBranch(branch)}
+                                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                                             title={t('branches.deleteTitle')}
+                                          >
+                                             <Trash2 className="w-4 h-4" />
+                                          </button>
+                                       </div>
+                                    </div>
+                                    <p className="mt-4 font-semibold text-gray-900 dark:text-white truncate">{branch.name}</p>
+                                    <p className="text-sm text-gray-500 truncate">{branch.address || '—'}</p>
+                                    {branch.phone && (
+                                       <p className="mt-1 text-xs text-gray-400 flex items-center gap-1.5">
+                                          <Phone className="w-3 h-3" />
+                                          {branch.phone}
+                                       </p>
+                                    )}
+                                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/60 flex items-center gap-3 text-xs text-gray-500">
+                                       <span className="inline-flex items-center gap-1.5">
+                                          <Users className="w-3.5 h-3.5 text-gray-400" />
+                                          {t('branches.doctorCount').replace('{n}', String(doctors.filter(d => d.branchId === branch.id).length))}
+                                       </span>
+                                       <span className="inline-flex items-center gap-1.5">
+                                          <User className="w-3.5 h-3.5 text-gray-400" />
+                                          {t('branches.patientCount').replace('{n}', String(patientCountByBranch[branch.id] || 0))}
+                                       </span>
+                                    </div>
+                                 </div>
+                              ))}
+                           </div>
+                        )}
+
+                        {branches.length > 0 && (patientCountByBranch[''] || 0) > 0 && (
+                           <div className="mt-5 flex items-start gap-3 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20">
+                              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                              <div className="text-sm">
+                                 <p className="font-medium text-gray-900 dark:text-white">
+                                    {t('branches.unassignedPatients').replace('{n}', String(patientCountByBranch[''] || 0))}
+                                 </p>
+                                 <p className="text-gray-600 dark:text-gray-400 mt-0.5">{t('branches.unassignedHint')}</p>
+                              </div>
+                           </div>
+                        )}
+                     </Card>
+                     )}
 
                      {/* Prepayment Settings Card */}
                      <Card className="p-6">
@@ -1147,493 +936,40 @@ export const Settings: React.FC<SettingsProps> = ({
                            </div>
                         </form>
                      </Card>
-                  </div>
-               )}
 
-               {/* DMED Tab */}
-               {activeTab === 'dmed' && (
-                  <div className="space-y-6">
-                     <Card className="p-6">
-                        <div className="flex items-center gap-4 mb-6">
-                           <div className="p-3 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl text-indigo-600 dark:text-indigo-400">
-                              <Activity className="w-8 h-8" />
-                           </div>
-                           <div>
-                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">DMED (IT-MED) Integratsiyasi</h3>
-                              <p className="text-sm text-gray-500">O'zbekiston milliy tibbiy axborot tizimi bilan bog'lanish va ma'lumotlarni sinxronizatsiya qilish.</p>
-                           </div>
-                        </div>
-
-                        <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-100 dark:border-primary-800/40 mb-6">
-                           <p className="text-sm text-primary-800 dark:text-primary-200">
-                              <strong>Eslatma:</strong> DMED tizimiga ulanish uchun klinika rasmiy ravishda SSV (Uzinfocom) orqali Client ID va Client Secret kalitlarini olgan bo'lishi shart.
-                           </p>
-                        </div>
-
-                        <form onSubmit={handleDmedSave} className="space-y-6">
-                           <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-                              <div>
-                                 <h4 className="font-medium text-gray-900 dark:text-white">DMED Integratsiyasini yoqish</h4>
-                                 <p className="text-sm text-gray-500">Agar yoqilsa, bemorlar profilida DMED ma'lumotlari paydo bo'ladi.</p>
-                              </div>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                 <input 
-                                    type="checkbox" 
-                                    className="sr-only peer" 
-                                    checked={dmedEnabled}
-                                    onChange={(e) => setDmedEnabled(e.target.checked)}
-                                 />
-                                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
-                              </label>
-                           </div>
-
-                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <Input 
-                                 label="DMED Client ID (API Key)" 
-                                 value={dmedApiKey} 
-                                 onChange={e => setDmedApiKey(e.target.value)} 
-                                 placeholder="Masalan: denta_clinic_123"
-                                 disabled={!dmedEnabled}
-                              />
-                              <Input 
-                                 label="DMED Client Secret" 
-                                 value={dmedApiSecret} 
-                                 onChange={e => setDmedApiSecret(e.target.value)} 
-                                 type="password"
-                                 placeholder="••••••••••••••••"
-                                 disabled={!dmedEnabled}
-                              />
-                           </div>
-                           
-                           <Input 
-                              label="Klinika ID (DMED tizimidagi)" 
-                              value={dmedClinicId} 
-                              onChange={e => setDmedClinicId(e.target.value)} 
-                              placeholder="Masalan: 69213aa6-b1f2-11ee-9cc3..."
-                              disabled={!dmedEnabled}
-                           />
-
-                           <div className="flex items-center gap-4 pt-4">
-                              <Button type="submit" disabled={!dmedEnabled}>
-                                 {t('common.save')}
-                              </Button>
-                              <Button 
-                                 type="button" 
-                                 variant="secondary" 
-                                 onClick={handleDmedTest}
-                                 disabled={!dmedEnabled || isCheckingDmed || !dmedApiKey || !dmedApiSecret}
-                              >
-                                 {isCheckingDmed ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
-                                 Ulanishni tekshirish
-                              </Button>
-                              {dmedSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
-                           </div>
-                        </form>
-                     </Card>
-                  </div>
-               )}
-
-               {/* Services Tab */}
-               {/* Access Control Tab — faqat klinika admini */}
-               {activeTab === 'ai' && userRole === UserRole.CLINIC_ADMIN && (
-                  <div className="space-y-6">
-                     <Card className="p-6">
-                        <div className="flex items-center gap-3 mb-2">
-                           <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
-                              <Sparkles className="w-5 h-5 text-primary-600 dark:text-primary-300" />
-                           </div>
-                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI kaliti</h3>
-                        </div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                           DentaAI hozir umumiy kalit bilan ishlaydi va u barcha klinikalarga taqsimlanadi —
-                           tig'iz paytda "xizmat band" xabari chiqishi mumkin. O'z kalitingizni kiritsangiz,
-                           chegara faqat sizniki bo'ladi va kutish yo'qoladi. Kalit bepul olinadi.
-                        </p>
-
-                        {aiInfo?.hasKey ? (
-                           <div className="rounded-lg border border-emerald-200 dark:border-emerald-800
-                                           bg-emerald-50 dark:bg-emerald-900/20 p-4 mb-5">
-                              <div className="flex items-start gap-3">
-                                 <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
-                                 <div className="min-w-0">
-                                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                                       O'z kalitingiz ulangan
-                                    </p>
-                                    <p className="text-sm text-emerald-700/80 dark:text-emerald-300/70 mt-0.5">
-                                       {aiInfo.provider} · {aiInfo.keyHint}
-                                       {aiInfo.checkedAt && ` · tekshirilgan: ${new Date(aiInfo.checkedAt).toLocaleString('uz-UZ')}`}
-                                    </p>
-                                 </div>
-                              </div>
-                           </div>
-                        ) : (
-                           <div className="rounded-lg border border-gray-200 dark:border-gray-700
-                                           bg-gray-50 dark:bg-gray-800/50 p-4 mb-5">
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
-                                 Hozir umumiy kalit ishlatilmoqda.
+                     {/* Kassa smenalari — backend faqat klinika egasiga ruxsat beradi */}
+                     {isAdmin && (
+                        <Card className="p-6">
+                           <div className="mb-4">
+                              <h4 className="text-base font-bold text-gray-900 dark:text-white">Kassa smenalari</h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                 Smena kassir "Kunni yopish" bosgan daqiqada tugaydi — soat bo'yicha emas.
+                                 Undan keyingi to'lovlar keyingi smenaga o'tadi.
                               </p>
                            </div>
-                        )}
-
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                           Provayder
-                        </label>
-                        <select
-                           value={aiProvider}
-                           onChange={e => setAiProvider(e.target.value)}
-                           className="w-full px-3 py-2.5 mb-4 bg-white dark:bg-gray-800 border border-gray-200
-                                      dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100"
-                        >
-                           <option value="gemini">Google Gemini (bepul, tavsiya etiladi)</option>
-                           <option value="groq">Groq</option>
-                           <option value="openrouter">OpenRouter</option>
-                        </select>
-
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                           Kalit
-                        </label>
-                        <div className="flex gap-2">
-                           <input
-                              type="password"
-                              value={aiKeyInput}
-                              onChange={e => setAiKeyInput(e.target.value)}
-                              placeholder={aiInfo?.hasKey ? 'Yangi kalit kiriting (almashtirish uchun)' : 'API kalitini shu yerga qo\'ying'}
-                              className="flex-1 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200
-                                         dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100"
-                           />
-                           <Button onClick={handleSaveAiKey} disabled={aiSaving || aiKeyInput.trim().length < 10}>
-                              {aiSaving ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                              Tekshirish va saqlash
-                           </Button>
-                        </div>
-
-                        {/* Saqlashdan oldin server kalitni haqiqiy so'rov bilan
-                            tekshiradi — shuning uchun bu yerdagi xabar aniq sabab
-                            bo'ladi, "keyinroq bilib olasiz" emas. */}
-                        {aiMsg && (
-                           <div className={`flex items-start gap-2 mt-3 text-sm ${aiMsg.kind === 'ok'
-                              ? 'text-emerald-700 dark:text-emerald-300'
-                              : 'text-red-600 dark:text-red-400'}`}>
-                              {aiMsg.kind === 'ok'
-                                 ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                                 : <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
-                              <span>{aiMsg.text}</span>
+                           <div className="flex flex-wrap items-center gap-2">
+                              {[1, 2].map(n => (
+                                 <button
+                                    key={n}
+                                    type="button"
+                                    disabled={cashShiftsSaving}
+                                    onClick={() => saveCashShifts(n)}
+                                    className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all disabled:opacity-50 ${cashShifts === n
+                                       ? 'bg-primary-600 text-white border-primary-600'
+                                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
+                                 >
+                                    {n === 1 ? 'Kuniga 1 smena' : 'Kuniga 2 smena'}
+                                 </button>
+                              ))}
+                              {cashShiftsSaving && <span className="text-xs text-gray-400">Saqlanmoqda...</span>}
                            </div>
-                        )}
-
-                        {aiInfo?.hasKey && (
-                           <div className="mt-4">
-                              <Button variant="danger" onClick={handleRemoveAiKey} disabled={aiSaving}>
-                                 <Trash2 className="w-4 h-4 mr-2" />
-                                 Kalitni o'chirish
-                              </Button>
-                           </div>
-                        )}
-                     </Card>
-
-                     <Card className="p-6">
-                        <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
-                           Bepul kalitni qanday olish
-                        </h4>
-                        <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-2 list-decimal list-inside">
-                           <li>
-                              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
-                                 className="text-primary-600 dark:text-primary-400 hover:underline">
-                                 aistudio.google.com/apikey
-                              </a> manzilini oching va Google hisobingiz bilan kiring.
-                           </li>
-                           <li>"Create API key" tugmasini bosing.</li>
-                           <li>Chiqqan kalitni nusxalab, yuqoridagi maydonga qo'ying.</li>
-                           <li>"Tekshirish va saqlash" — kalit darhol sinab ko'riladi.</li>
-                        </ol>
-                        <p className="text-xs text-gray-400 mt-4">
-                           Kalit faqat serverda saqlanadi va hech qachon qaytarib berilmaydi.
-                           Uni o'chirsangiz, klinika yana umumiy kalitga qaytadi.
-                        </p>
-                     </Card>
-                  </div>
-               )}
-
-               {activeTab === 'leadApi' && userRole === UserRole.CLINIC_ADMIN && (
-                  <div className="space-y-6">
-                     <Card className="p-6">
-                        <div className="flex items-center gap-3 mb-2">
-                           <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
-                              <Link2 className="w-5 h-5 text-primary-600 dark:text-primary-300" />
-                           </div>
-                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">Lid integratsiyasi</h3>
-                        </div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                           yuboraman.uz va shunga o'xshash manbalar lidlarni to'g'ridan-to'g'ri CRM'ga yuborishi uchun
-                           quyidagi manzil va kalitni ularga bering. Lid tushishi bilan «Lidlar» bo'limida paydo bo'ladi
-                           va Telegram bot orqali xabar keladi.
-                        </p>
-
-                        {/* Endpoint */}
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">So'rov manzili (endpoint)</label>
-                        <div className="flex gap-2 mb-5">
-                           <code className="flex-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100 break-all">
-                              POST {leadApiInfo?.endpoint || '—'}
-                           </code>
-                           <Button
-                              variant="secondary"
-                              onClick={() => leadApiInfo?.endpoint && copyLeadValue(leadApiInfo.endpoint, 'endpoint')}
-                              disabled={!leadApiInfo?.endpoint}
-                           >
-                              {leadCopied === 'endpoint' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                           </Button>
-                        </div>
-
-                        {/* API kalit */}
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">API kalit (X-API-Key)</label>
-                        {leadApiInfo?.apiKey ? (
-                           <>
-                              <div className="flex gap-2">
-                                 <code className="flex-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100 break-all">
-                                    {leadKeyVisible
-                                       ? leadApiInfo.apiKey
-                                       : `${leadApiInfo.apiKey.slice(0, 8)}${'•'.repeat(24)}${leadApiInfo.apiKey.slice(-4)}`}
-                                 </code>
-                                 <Button variant="secondary" onClick={() => setLeadKeyVisible(v => !v)}>
-                                    {leadKeyVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                 </Button>
-                                 <Button variant="secondary" onClick={() => copyLeadValue(leadApiInfo.apiKey as string, 'key')}>
-                                    {leadCopied === 'key' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                 </Button>
-                              </div>
-                              {leadApiInfo.createdAt && (
-                                 <p className="text-xs text-gray-400 mt-2">
-                                    Yaratilgan: {new Date(leadApiInfo.createdAt).toLocaleString('uz-UZ')}
-                                 </p>
-                              )}
-                              <div className="flex flex-wrap gap-2 mt-4">
-                                 <Button variant="secondary" onClick={handleGenerateLeadKey} disabled={leadApiLoading}>
-                                    <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} />
-                                    Yangi kalit yaratish
-                                 </Button>
-                                 <Button variant="danger" onClick={handleRevokeLeadKey} disabled={leadApiLoading}>
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Kalitni o'chirish
-                                 </Button>
-                              </div>
-                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-3">
-                                 ⚠️ Kalitni faqat ishonchli hamkorga bering — u bilan klinikangizga lid yozish mumkin.
-                              </p>
-                           </>
-                        ) : (
-                           <div className="p-5 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg text-center">
-                              <KeyRound className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-                              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                                 Kalit hali yaratilmagan.
-                              </p>
-                              <Button onClick={handleGenerateLeadKey} disabled={leadApiLoading}>
-                                 <Plus className="w-4 h-4 mr-2" />
-                                 Kalit yaratish
-                              </Button>
-                           </div>
-                        )}
-                     </Card>
-
-                     {/* Texnik ma'lumot — odatda kerak emas, shuning uchun yig'ib qo'yilgan.
-                         yuboraman.uz'da DentaCRM allaqachon ulangan, kalitni kiritish yetarli.
-                         Bu bo'lim klinikaning o'z dasturchisi yoki boshqa xizmat uchun qoldirilgan. */}
-                     <Card className="p-6">
-                        <button
-                           onClick={() => setLeadDocsOpen(v => !v)}
-                           className="w-full flex items-center justify-between gap-3 text-left"
-                        >
-                           <div>
-                              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Texnik ma'lumot</h4>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">
-                                 Odatda kerak emas — kalitni kiritish yetarli. Boshqa xizmat ulanmoqchi bo'lsa kerak bo'ladi.
-                              </p>
-                           </div>
-                           <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${leadDocsOpen ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {leadDocsOpen && (<>
-                        <pre className="mt-4 p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto leading-relaxed">
-{`POST ${leadApiInfo?.endpoint || 'https://<server>/api/public/leads'}
-Content-Type: application/json
-X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizga berilgan kalit>'}
-
-{
-  "name": "Ali Valiyev",
-  "phone": "+998901234567",
-  "service": "Implantatsiya",
-  "manzil": "Toshkent, Chilonzor 5",
-  "yosh": "34"
-}`}
-                        </pre>
-
-                        <div className="mt-5 space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                           <p><b className="text-gray-900 dark:text-white">phone</b> — yagona majburiy maydon. Qolgani ixtiyoriy.</p>
-                           <p>
-                              <b className="text-gray-900 dark:text-white">Tanish maydonlar:</b> name/ism/fio, phone/telefon,
-                              service/xizmat, source/manba, address/manzil, dob/tug'ilgan sana, notes/izoh.
+                           <p className="text-[11px] text-gray-400 mt-3">
+                              {cashShifts === 1
+                                 ? 'Kassa sahifasida kun butunligicha ko\'rinadi.'
+                                 : 'Kassa sahifasida "1-smena / 2-smena" tanlagichi chiqadi. 2-smena 1-smena topshirgan naqddan boshlanadi.'}
                            </p>
-                           <p>
-                              <b className="text-gray-900 dark:text-white">Boshqa har qanday maydon</b> ham qabul qilinadi —
-                              u lid kartasida alohida qator bo'lib ko'rinadi. Ya'ni target formasidagi savollar
-                              o'zgarsa ham, bizga qayta sozlash kerak emas.
-                           </p>
-                           <p>
-                              Javob: muvaffaqiyatli bo'lsa <code className="px-1 bg-gray-100 dark:bg-gray-800 rounded">201</code> va lid <code className="px-1 bg-gray-100 dark:bg-gray-800 rounded">id</code> si.
-                              15 daqiqa ichida shu raqamdan takroriy lid kelsa, <code className="px-1 bg-gray-100 dark:bg-gray-800 rounded">duplicate: true</code> qaytadi va yangi yozuv yaratilmaydi.
-                           </p>
-                        </div>
-                        </>)}
-                     </Card>
-                  </div>
-               )}
-
-               {activeTab === 'access' && userRole === UserRole.CLINIC_ADMIN && (
-                  <div className="space-y-6">
-                     <Card className="p-6">
-                        <div className="flex items-start gap-3">
-                           <div className="p-2.5 bg-primary-50 dark:bg-primary-900/30 rounded-xl">
-                              <Shield className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-                           </div>
-                           <div>
-                              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Ruxsatlarni boshqarish</h3>
-                              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                 Shifokor va resepshn qaysi bo'limlar va ma'lumotlarni ko'rishini belgilang.
-                                 Belgisi olib tashlangan modul menyuda ko'rinmaydi. Bosh sahifa (Dashboard) har doim ochiq qoladi.
-                              </p>
-                           </div>
-                        </div>
-                     </Card>
-
-                     {([
-                        { roleKey: 'receptionist' as const, roleId: 'RECEPTIONIST' as const, title: 'Resepshn', desc: 'Qabulxona xodimlari uchun' },
-                        { roleKey: 'doctor' as const, roleId: 'DOCTOR' as const, title: 'Shifokor', desc: 'Shifokorlar uchun' },
-                     ]).map(({ roleKey, roleId, title, desc }) => {
-                        const roleAccess = accessForm[roleKey] || {};
-                        const hidden = roleAccess.hiddenModules || [];
-                        const modules = ACCESS_MODULES.filter(m => m.roles.includes(roleId));
-                        return (
-                           <Card key={roleKey} className="p-6">
-                              <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-                                 <div>
-                                    <h4 className="text-base font-bold text-gray-900 dark:text-white">{title}</h4>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
-                                 </div>
-                                 <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
-                                    {([
-                                       { key: 'simple' as const, label: 'Sodda', active: isSimplePreset(roleKey) },
-                                       { key: 'all' as const, label: 'Hammasi', active: (accessForm[roleKey]?.hiddenModules || []).length === 0 },
-                                    ]).map(p => (
-                                       <button
-                                          key={p.key}
-                                          type="button"
-                                          onClick={() => applyPreset(roleKey, p.key)}
-                                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${p.active
-                                             ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-white shadow-sm'
-                                             : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                                       >
-                                          {p.label}
-                                       </button>
-                                    ))}
-                                 </div>
-                              </div>
-
-                              {roleKey === 'receptionist' && (
-                                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 -mt-2">
-                                    <b>Sodda</b> — faqat kundalik ish uchun kerak bo'lgan bo'limlar qoladi
-                                    (Bemorlar, Kalendar, Kassa, Navbat). Menyu qisqarsa, yangi xodim tezroq o'rganadi.
-                                 </p>
-                              )}
-
-                              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Ko'rinadigan modullar</p>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-6">
-                                 {modules.map(m => {
-                                    const visible = !hidden.includes(m.id);
-                                    return (
-                                       <label key={m.id} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border cursor-pointer transition-all text-sm font-medium ${visible
-                                          ? 'border-primary-200 bg-primary-50/60 text-primary-700 dark:border-primary-800 dark:bg-primary-900/20 dark:text-primary-300'
-                                          : 'border-gray-200 bg-gray-50 text-gray-400 dark:border-gray-700 dark:bg-gray-800/50 line-through'}`}>
-                                          <input
-                                             type="checkbox"
-                                             checked={visible}
-                                             onChange={() => toggleModule(roleKey, m.id)}
-                                             className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
-                                          />
-                                          {m.label}
-                                       </label>
-                                    );
-                                 })}
-                              </div>
-
-                              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Maxfiy ma'lumotlar</p>
-                              <div className="space-y-2">
-                                 <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-primary-300 transition-colors">
-                                    <input
-                                       type="checkbox"
-                                       checked={roleAccess.showFinance !== false}
-                                       onChange={e => updateRoleAccess(roleKey, { showFinance: e.target.checked })}
-                                       className="w-4 h-4 mt-0.5 rounded text-primary-600 focus:ring-primary-500"
-                                    />
-                                    <div>
-                                       <p className="text-sm font-semibold text-gray-900 dark:text-white">Moliyaviy ko'rsatkichlarni ko'rsatish</p>
-                                       <p className="text-xs text-gray-500 dark:text-gray-400">Dashboarddagi tushum, o'rtacha chek, kutilayotgan to'lovlar va qarzdorlar ro'yxati</p>
-                                    </div>
-                                 </label>
-                                 {roleKey === 'doctor' && (
-                                    <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-primary-300 transition-colors">
-                                       <input
-                                          type="checkbox"
-                                          checked={roleAccess.showPatientPhone !== false}
-                                          onChange={e => updateRoleAccess(roleKey, { showPatientPhone: e.target.checked })}
-                                          className="w-4 h-4 mt-0.5 rounded text-primary-600 focus:ring-primary-500"
-                                       />
-                                       <div>
-                                          <p className="text-sm font-semibold text-gray-900 dark:text-white">Bemor telefon raqamlarini ko'rsatish</p>
-                                          <p className="text-xs text-gray-500 dark:text-gray-400">O'chirilsa, shifokorga raqamlar yulduzcha bilan maskalanadi (masalan, +*** ** *** ** 67)</p>
-                                       </div>
-                                    </label>
-                                 )}
-                              </div>
-                           </Card>
-                        );
-                     })}
-
-                     <Card className="p-6">
-                        <div className="mb-4">
-                           <h4 className="text-base font-bold text-gray-900 dark:text-white">Kassa smenalari</h4>
-                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              Smena kassir "Kunni yopish" bosgan daqiqada tugaydi — soat bo'yicha emas.
-                              Undan keyingi to'lovlar keyingi smenaga o'tadi.
-                           </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                           {[1, 2].map(n => (
-                              <button
-                                 key={n}
-                                 type="button"
-                                 disabled={cashShiftsSaving}
-                                 onClick={() => saveCashShifts(n)}
-                                 className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all disabled:opacity-50 ${cashShifts === n
-                                    ? 'bg-primary-600 text-white border-primary-600'
-                                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
-                              >
-                                 {n === 1 ? 'Kuniga 1 smena' : 'Kuniga 2 smena'}
-                              </button>
-                           ))}
-                           {cashShiftsSaving && <span className="text-xs text-gray-400">Saqlanmoqda...</span>}
-                        </div>
-                        <p className="text-[11px] text-gray-400 mt-3">
-                           {cashShifts === 1
-                              ? 'Kassa sahifasida kun butunligicha ko\'rinadi.'
-                              : 'Kassa sahifasida "1-smena / 2-smena" tanlagichi chiqadi. 2-smena 1-smena topshirgan naqddan boshlanadi.'}
-                        </p>
-                     </Card>
-
-                     <div className="flex items-center gap-3">
-                        <Button onClick={handleAccessSave} disabled={accessSaving}>
-                           {accessSaving ? 'Saqlanmoqda...' : accessSaved ? 'Saqlandi ✓' : 'Saqlash'}
-                        </Button>
-                        {accessSaved && <span className="text-sm text-success-600 font-medium">Ruxsatlar yangilandi, sahifa yangilanmoqda...</span>}
-                     </div>
+                        </Card>
+                     )}
                   </div>
                )}
 
@@ -1730,275 +1066,31 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                               </table>
                            </div>
                         </Card>
-
-                        <Card className="p-6">
-                           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.services.currentPlan')}</h3>
-                           <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg border border-indigo-100 dark:border-indigo-800">
-                              <div>
-                                 <p className="font-bold text-indigo-900 dark:text-indigo-200">{plans?.find(p => p.id === currentClinic?.planId)?.name || 'Standart Tarif'}</p>
-                                 <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">{plans?.find(p => p.id === currentClinic?.planId)?.maxDoctors || 10} tagacha shifokor • Ustuvor Yordam</p>
-                              </div>
-                              <Button
-                                 size="sm"
-                                 className="bg-indigo-600 hover:bg-indigo-700 text-white border-none"
-                                 onClick={() => setIsUpgradeModalOpen(true)}
-                              >
-                                 {t('settings.services.upgrade')}
-                              </Button>
-                           </div>
-                        </Card>
                      </div>
                   </div>
                )}
 
-               {/* Doctors Tab */}
-               {/* Filiallar */}
-               {activeTab === 'branches' && userRole === UserRole.CLINIC_ADMIN && (
-                  <Card className="p-6">
-                     <div className="flex justify-between items-start gap-4 mb-6">
-                        <div>
-                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('branches.title')}</h3>
-                           <p className="text-sm text-gray-500">{t('branches.subtitle')}</p>
-                        </div>
-                        <Button size="sm" onClick={() => handleOpenBranchModal()}>
-                           <Plus className="w-4 h-4 mr-1.5" />
-                           {t('branches.add')}
-                        </Button>
-                     </div>
-
-                     {branches.length === 0 ? (
-                        <div className="text-center py-12 px-6 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
-                           <div className="mx-auto w-12 h-12 rounded-xl bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center mb-3">
-                              <Building2 className="w-6 h-6 text-primary-600 dark:text-primary-400" />
-                           </div>
-                           <p className="font-medium text-gray-900 dark:text-white">{t('branches.empty')}</p>
-                           <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">{t('branches.emptyHint')}</p>
-                        </div>
-                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                           {branches.map(branch => (
-                              <div
-                                 key={branch.id}
-                                 className="group relative p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-sm transition-all"
-                              >
-                                 <div className="flex items-start justify-between">
-                                    <div className="w-11 h-11 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-100 dark:border-primary-800 flex items-center justify-center">
-                                       <Building2 className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-                                    </div>
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                                       <button
-                                          type="button"
-                                          onClick={() => handleOpenBranchModal(branch)}
-                                          className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-md"
-                                          title={t('branches.edit')}
-                                       >
-                                          <Edit className="w-4 h-4" />
-                                       </button>
-                                       <button
-                                          type="button"
-                                          onClick={() => setDeleteConfirmBranch(branch)}
-                                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
-                                          title={t('branches.deleteTitle')}
-                                       >
-                                          <Trash2 className="w-4 h-4" />
-                                       </button>
-                                    </div>
-                                 </div>
-                                 <p className="mt-4 font-semibold text-gray-900 dark:text-white truncate">{branch.name}</p>
-                                 <p className="text-sm text-gray-500 truncate">{branch.address || '—'}</p>
-                                 {branch.phone && (
-                                    <p className="mt-1 text-xs text-gray-400 flex items-center gap-1.5">
-                                       <Phone className="w-3 h-3" />
-                                       {branch.phone}
-                                    </p>
-                                 )}
-                                 <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/60 flex items-center gap-3 text-xs text-gray-500">
-                                    <span className="inline-flex items-center gap-1.5">
-                                       <Users className="w-3.5 h-3.5 text-gray-400" />
-                                       {t('branches.doctorCount').replace('{n}', String(doctors.filter(d => d.branchId === branch.id).length))}
-                                    </span>
-                                    <span className="inline-flex items-center gap-1.5">
-                                       <User className="w-3.5 h-3.5 text-gray-400" />
-                                       {t('branches.patientCount').replace('{n}', String(patientCountByBranch[branch.id] || 0))}
-                                    </span>
-                                 </div>
-                              </div>
-                           ))}
-                        </div>
-                     )}
-
-                     {branches.length > 0 && (patientCountByBranch[''] || 0) > 0 && (
-                        <div className="mt-5 flex items-start gap-3 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20">
-                           <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                           <div className="text-sm">
-                              <p className="font-medium text-gray-900 dark:text-white">
-                                 {t('branches.unassignedPatients').replace('{n}', String(patientCountByBranch[''] || 0))}
-                              </p>
-                              <p className="text-gray-600 dark:text-gray-400 mt-0.5">{t('branches.unassignedHint')}</p>
-                           </div>
-                        </div>
-                     )}
-                  </Card>
-               )}
-
-               {activeTab === 'doctors' && (
-                  <Card className="p-6">
-                     <div className="flex justify-between items-center mb-6">
-                        <div>
-                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('settings.staff.doctorsTitle')}</h3>
-                           <p className="text-sm text-gray-500">{t('settings.staff.doctorsSubtitle')}</p>
-                        </div>
-                        <Button size="sm" onClick={() => handleOpenDoctorModal()}>{t('settings.staff.addDoctor')}</Button>
-                     </div>
-                     <div className="grid grid-cols-1 gap-4">
-                        {doctors.map(doc => (
-                           <div key={doc.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
-                              <div className="flex items-center gap-4">
-                                 <div className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold shadow-sm" style={{ backgroundColor: doc.color || '#3B82F6' }}>
-                                    {doc.firstName[0]}{doc.lastName[0]}
-                                 </div>
-                                 <div>
-                                    <p className="font-medium text-gray-900 dark:text-white">Dr. {doc.firstName} {doc.lastName}</p>
-                                    <p className="text-xs text-gray-500">{doc.specialty}</p>
-                                 </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                 {/* Filialni shu yerdan almashtirish mumkin — tahrirlash
-                                     oynasini ochish shart emas. Bo'sh qiymat: shifokor
-                                     barcha filiallarda ko'rinadi. */}
-                                 {branches.length > 0 && (
-                                    <select
-                                       value={doc.branchId || ''}
-                                       onChange={(e) => onUpdateDoctor(doc.id, { branchId: e.target.value || null })}
-                                       title={t('branches.doctorBranch')}
-                                       className="h-8 max-w-[170px] rounded-md border border-gray-200 dark:border-gray-700 bg-transparent text-xs text-gray-600 dark:text-gray-300 px-2 focus:ring-2 focus:ring-primary-500"
-                                    >
-                                       <option value="">{t('branches.doctorAllBranches')}</option>
-                                       {branches.map(b => (
-                                          <option key={b.id} value={b.id}>{b.name}</option>
-                                       ))}
-                                    </select>
-                                 )}
-                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{doc.status === 'Active' ? t('settings.staff.statusActive') : t('settings.staff.statusVoc')}</span>
-                                 <button
-                                    onClick={() => handleOpenDoctorModal(doc)}
-                                    className="p-2 text-primary-600 hover:bg-primary-50 rounded-md"
-                                 >
-                                    <Edit className="w-4 h-4" />
-                                 </button>
-                                 <button
-                                    className="p-2 text-gray-400 hover:text-red-600"
-                                    onClick={() => setDeleteConfirmDoctor(doc)}
-                                 >
-                                    <Trash2 className="w-4 h-4" />
-                                 </button>
-                              </div>
-                           </div>
+               {/* Integratsiyalar: tashqi xizmatlar bilan ulanishlar bir joyda */}
+               {activeTab === 'integrations' && (
+                  <div className="space-y-6">
+                     <div className="flex flex-wrap items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit max-w-full">
+                        {integrationTabs.map(item => (
+                           <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setIntegrationTab(item.id)}
+                              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${integrationTab === item.id
+                                 ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-white shadow-sm'
+                                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                           >
+                              <item.icon className="w-4 h-4" />
+                              {item.name}
+                           </button>
                         ))}
                      </div>
-                  </Card>
-               )}
 
-                {/* Receptionists Tab */}
-               {activeTab === 'receptionists' && (
-                  <Card className="p-6">
-                     <div className="flex justify-between items-center mb-6">
-                        <div>
-                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">Resepshnlar Boshqaruvi</h3>
-                           <p className="text-sm text-gray-500">Qabul xodimlarini boshqarish.</p>
-                        </div>
-                        <Button size="sm" onClick={() => handleOpenReceptionistModal()}>Resepshn Qo'shish</Button>
-                     </div>
-                     <div className="grid grid-cols-1 gap-4">
-                        {receptionists.map(rec => (
-                           <div key={rec.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
-                              <div className="flex items-center gap-4">
-                                 <div className="h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">
-                                    {rec.firstName[0]}{rec.lastName[0]}
-                                 </div>
-                                 <div>
-                                    <p className="font-medium text-gray-900 dark:text-white">{rec.firstName} {rec.lastName}</p>
-                                    <p className="text-xs text-gray-500">{rec.phone}</p>
-                                 </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">{rec.status === 'Active' ? t('settings.staff.statusActive') : t('settings.staff.statusVoc')}</span>
-                                 <button
-                                    onClick={() => handleOpenReceptionistModal(rec)}
-                                    className="p-2 text-primary-600 hover:bg-primary-50 rounded-md"
-                                 >
-                                    <Edit className="w-4 h-4" />
-                                 </button>
-                                 <button
-                                    className="p-2 text-gray-400 hover:text-red-600"
-                                    onClick={() => setDeleteConfirmReceptionist(rec)}
-                                 >
-                                    <Trash2 className="w-4 h-4" />
-                                 </button>
-                              </div>
-                           </div>
-                        ))}
-                        {receptionists.length === 0 && (
-                           <div className="text-center py-8 text-gray-500 text-sm">
-                              Hozircha resepshnlar qo'shilmagan
-                           </div>
-                        )}
-                     </div>
-                  </Card>
-               )}
-
-               {/* Lab Technicians Tab */}
-               {activeTab === 'labTechnicians' && (
-                  <Card className="p-6">
-                     <div className="flex justify-between items-center mb-6">
-                        <div>
-                           <h3 className="text-lg font-medium text-gray-900 dark:text-white">Lab Texniklar Boshqaruvi</h3>
-                           <p className="text-sm text-gray-500">Stomatologik laboratoriya texniklarini boshqarish.</p>
-                        </div>
-                        <Button size="sm" onClick={() => handleOpenLabTechModal()}>Texnik Qo'shish</Button>
-                     </div>
-                     <div className="grid grid-cols-1 gap-4">
-                        {labTechnicians.map(tech => (
-                           <div key={tech.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
-                              <div className="flex items-center gap-4">
-                                 <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold">
-                                    {tech.firstName[0]}{tech.lastName[0]}
-                                 </div>
-                                 <div>
-                                    <p className="font-medium text-gray-900 dark:text-white">{tech.firstName} {tech.lastName}</p>
-                                    <p className="text-xs text-gray-500">{tech.specialty} · {tech.phone}</p>
-                                 </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${tech.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
-                                    {tech.status === 'Active' ? 'Faol' : 'Faol emas'}
-                                 </span>
-                                 <button
-                                    onClick={() => handleOpenLabTechModal(tech)}
-                                    className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md"
-                                 >
-                                    <Edit className="w-4 h-4" />
-                                 </button>
-                                 <button
-                                    className="p-2 text-gray-400 hover:text-red-600"
-                                    onClick={() => setDeleteConfirmLabTech(tech)}
-                                 >
-                                    <Trash2 className="w-4 h-4" />
-                                 </button>
-                              </div>
-                           </div>
-                        ))}
-                        {labTechnicians.length === 0 && (
-                           <div className="text-center py-8 text-gray-500 text-sm">
-                              Hozircha lab texniklar qo'shilmagan
-                           </div>
-                        )}
-                     </div>
-                  </Card>
-               )}
-
-               {/* SMS va Telegram Tab (birlashtirilgan) */}
-               {activeTab === 'messaging' && (
+                     {/* Telegram bot va Eskiz SMS (birlashtirilgan) */}
+                     {integrationTab === 'messaging' && (
                   <div className="space-y-6">
                   <Card className="p-6">
                      <div className="flex items-center gap-4 mb-6">
@@ -2142,8 +1234,432 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                         </Card>
                      )}
                   </div>
+                     )}
+
+                     {integrationTab === 'dmed' && (
+                  <div className="space-y-6">
+                     <Card className="p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                           <div className="p-3 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl text-indigo-600 dark:text-indigo-400">
+                              <Activity className="w-8 h-8" />
+                           </div>
+                           <div>
+                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">DMED (IT-MED) Integratsiyasi</h3>
+                              <p className="text-sm text-gray-500">O'zbekiston milliy tibbiy axborot tizimi bilan bog'lanish va ma'lumotlarni sinxronizatsiya qilish.</p>
+                           </div>
+                        </div>
+
+                        <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-100 dark:border-primary-800/40 mb-6">
+                           <p className="text-sm text-primary-800 dark:text-primary-200">
+                              <strong>Eslatma:</strong> DMED tizimiga ulanish uchun klinika rasmiy ravishda SSV (Uzinfocom) orqali Client ID va Client Secret kalitlarini olgan bo'lishi shart.
+                           </p>
+                        </div>
+
+                        <form onSubmit={handleDmedSave} className="space-y-6">
+                           <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                              <div>
+                                 <h4 className="font-medium text-gray-900 dark:text-white">DMED Integratsiyasini yoqish</h4>
+                                 <p className="text-sm text-gray-500">Agar yoqilsa, bemorlar profilida DMED ma'lumotlari paydo bo'ladi.</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                 <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={dmedEnabled}
+                                    onChange={(e) => setDmedEnabled(e.target.checked)}
+                                 />
+                                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                              </label>
+                           </div>
+
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <Input 
+                                 label="DMED Client ID (API Key)" 
+                                 value={dmedApiKey} 
+                                 onChange={e => setDmedApiKey(e.target.value)} 
+                                 placeholder="Masalan: denta_clinic_123"
+                                 disabled={!dmedEnabled}
+                              />
+                              <Input 
+                                 label="DMED Client Secret" 
+                                 value={dmedApiSecret} 
+                                 onChange={e => setDmedApiSecret(e.target.value)} 
+                                 type="password"
+                                 placeholder="••••••••••••••••"
+                                 disabled={!dmedEnabled}
+                              />
+                           </div>
+                           
+                           <Input 
+                              label="Klinika ID (DMED tizimidagi)" 
+                              value={dmedClinicId} 
+                              onChange={e => setDmedClinicId(e.target.value)} 
+                              placeholder="Masalan: 69213aa6-b1f2-11ee-9cc3..."
+                              disabled={!dmedEnabled}
+                           />
+
+                           <div className="flex items-center gap-4 pt-4">
+                              <Button type="submit" disabled={!dmedEnabled}>
+                                 {t('common.save')}
+                              </Button>
+                              <Button 
+                                 type="button" 
+                                 variant="secondary" 
+                                 onClick={handleDmedTest}
+                                 disabled={!dmedEnabled || isCheckingDmed || !dmedApiKey || !dmedApiSecret}
+                              >
+                                 {isCheckingDmed ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+                                 Ulanishni tekshirish
+                              </Button>
+                              {dmedSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
+                           </div>
+                        </form>
+                     </Card>
+                  </div>
+                     )}
+
+                     {integrationTab === 'ai' && isAdmin && (
+                  <div className="space-y-6">
+                     <Card className="p-6">
+                        <div className="flex items-center gap-3 mb-2">
+                           <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
+                              <Sparkles className="w-5 h-5 text-primary-600 dark:text-primary-300" />
+                           </div>
+                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI kaliti</h3>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                           DentaAI hozir umumiy kalit bilan ishlaydi va u barcha klinikalarga taqsimlanadi —
+                           tig'iz paytda "xizmat band" xabari chiqishi mumkin. O'z kalitingizni kiritsangiz,
+                           chegara faqat sizniki bo'ladi va kutish yo'qoladi. Kalit bepul olinadi.
+                        </p>
+
+                        {aiInfo?.hasKey ? (
+                           <div className="rounded-lg border border-emerald-200 dark:border-emerald-800
+                                           bg-emerald-50 dark:bg-emerald-900/20 p-4 mb-5">
+                              <div className="flex items-start gap-3">
+                                 <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                                 <div className="min-w-0">
+                                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                                       O'z kalitingiz ulangan
+                                    </p>
+                                    <p className="text-sm text-emerald-700/80 dark:text-emerald-300/70 mt-0.5">
+                                       {aiInfo.provider} · {aiInfo.keyHint}
+                                       {aiInfo.checkedAt && ` · tekshirilgan: ${new Date(aiInfo.checkedAt).toLocaleString('uz-UZ')}`}
+                                    </p>
+                                 </div>
+                              </div>
+                           </div>
+                        ) : (
+                           <div className="rounded-lg border border-gray-200 dark:border-gray-700
+                                           bg-gray-50 dark:bg-gray-800/50 p-4 mb-5">
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                 Hozir umumiy kalit ishlatilmoqda.
+                              </p>
+                           </div>
+                        )}
+
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                           Provayder
+                        </label>
+                        <select
+                           value={aiProvider}
+                           onChange={e => setAiProvider(e.target.value)}
+                           className="w-full px-3 py-2.5 mb-4 bg-white dark:bg-gray-800 border border-gray-200
+                                      dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100"
+                        >
+                           <option value="gemini">Google Gemini (bepul, tavsiya etiladi)</option>
+                           <option value="groq">Groq</option>
+                           <option value="openrouter">OpenRouter</option>
+                        </select>
+
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                           Kalit
+                        </label>
+                        <div className="flex gap-2">
+                           <input
+                              type="password"
+                              value={aiKeyInput}
+                              onChange={e => setAiKeyInput(e.target.value)}
+                              placeholder={aiInfo?.hasKey ? 'Yangi kalit kiriting (almashtirish uchun)' : 'API kalitini shu yerga qo\'ying'}
+                              className="flex-1 px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200
+                                         dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100"
+                           />
+                           <Button onClick={handleSaveAiKey} disabled={aiSaving || aiKeyInput.trim().length < 10}>
+                              {aiSaving ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                              Tekshirish va saqlash
+                           </Button>
+                        </div>
+
+                        {/* Saqlashdan oldin server kalitni haqiqiy so'rov bilan
+                            tekshiradi — shuning uchun bu yerdagi xabar aniq sabab
+                            bo'ladi, "keyinroq bilib olasiz" emas. */}
+                        {aiMsg && (
+                           <div className={`flex items-start gap-2 mt-3 text-sm ${aiMsg.kind === 'ok'
+                              ? 'text-emerald-700 dark:text-emerald-300'
+                              : 'text-red-600 dark:text-red-400'}`}>
+                              {aiMsg.kind === 'ok'
+                                 ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                                 : <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
+                              <span>{aiMsg.text}</span>
+                           </div>
+                        )}
+
+                        {aiInfo?.hasKey && (
+                           <div className="mt-4">
+                              <Button variant="danger" onClick={handleRemoveAiKey} disabled={aiSaving}>
+                                 <Trash2 className="w-4 h-4 mr-2" />
+                                 Kalitni o'chirish
+                              </Button>
+                           </div>
+                        )}
+                     </Card>
+
+                     <Card className="p-6">
+                        <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
+                           Bepul kalitni qanday olish
+                        </h4>
+                        <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-2 list-decimal list-inside">
+                           <li>
+                              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+                                 className="text-primary-600 dark:text-primary-400 hover:underline">
+                                 aistudio.google.com/apikey
+                              </a> manzilini oching va Google hisobingiz bilan kiring.
+                           </li>
+                           <li>"Create API key" tugmasini bosing.</li>
+                           <li>Chiqqan kalitni nusxalab, yuqoridagi maydonga qo'ying.</li>
+                           <li>"Tekshirish va saqlash" — kalit darhol sinab ko'riladi.</li>
+                        </ol>
+                        <p className="text-xs text-gray-400 mt-4">
+                           Kalit faqat serverda saqlanadi va hech qachon qaytarib berilmaydi.
+                           Uni o'chirsangiz, klinika yana umumiy kalitga qaytadi.
+                        </p>
+                     </Card>
+                  </div>
+                     )}
+
+                     {integrationTab === 'leadApi' && isAdmin && (
+                  <div className="space-y-6">
+                     <Card className="p-6">
+                        <div className="flex items-center gap-3 mb-2">
+                           <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
+                              <Link2 className="w-5 h-5 text-primary-600 dark:text-primary-300" />
+                           </div>
+                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">Lid integratsiyasi</h3>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                           yuboraman.uz va shunga o'xshash manbalar lidlarni to'g'ridan-to'g'ri CRM'ga yuborishi uchun
+                           quyidagi manzil va kalitni ularga bering. Lid tushishi bilan «Lidlar» bo'limida paydo bo'ladi
+                           va Telegram bot orqali xabar keladi.
+                        </p>
+
+                        {/* Endpoint */}
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">So'rov manzili (endpoint)</label>
+                        <div className="flex gap-2 mb-5">
+                           <code className="flex-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100 break-all">
+                              POST {leadApiInfo?.endpoint || '—'}
+                           </code>
+                           <Button
+                              variant="secondary"
+                              onClick={() => leadApiInfo?.endpoint && copyLeadValue(leadApiInfo.endpoint, 'endpoint')}
+                              disabled={!leadApiInfo?.endpoint}
+                           >
+                              {leadCopied === 'endpoint' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                           </Button>
+                        </div>
+
+                        {/* API kalit */}
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">API kalit (X-API-Key)</label>
+                        {leadApiInfo?.apiKey ? (
+                           <>
+                              <div className="flex gap-2">
+                                 <code className="flex-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100 break-all">
+                                    {leadKeyVisible
+                                       ? leadApiInfo.apiKey
+                                       : `${leadApiInfo.apiKey.slice(0, 8)}${'•'.repeat(24)}${leadApiInfo.apiKey.slice(-4)}`}
+                                 </code>
+                                 <Button variant="secondary" onClick={() => setLeadKeyVisible(v => !v)}>
+                                    {leadKeyVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                 </Button>
+                                 <Button variant="secondary" onClick={() => copyLeadValue(leadApiInfo.apiKey as string, 'key')}>
+                                    {leadCopied === 'key' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                 </Button>
+                              </div>
+                              {leadApiInfo.createdAt && (
+                                 <p className="text-xs text-gray-400 mt-2">
+                                    Yaratilgan: {new Date(leadApiInfo.createdAt).toLocaleString('uz-UZ')}
+                                 </p>
+                              )}
+                              <div className="flex flex-wrap gap-2 mt-4">
+                                 <Button variant="secondary" onClick={handleGenerateLeadKey} disabled={leadApiLoading}>
+                                    <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} />
+                                    Yangi kalit yaratish
+                                 </Button>
+                                 <Button variant="danger" onClick={handleRevokeLeadKey} disabled={leadApiLoading}>
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Kalitni o'chirish
+                                 </Button>
+                              </div>
+                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-3">
+                                 ⚠️ Kalitni faqat ishonchli hamkorga bering — u bilan klinikangizga lid yozish mumkin.
+                              </p>
+                           </>
+                        ) : (
+                           <div className="p-5 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg text-center">
+                              <KeyRound className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                                 Kalit hali yaratilmagan.
+                              </p>
+                              <Button onClick={handleGenerateLeadKey} disabled={leadApiLoading}>
+                                 <Plus className="w-4 h-4 mr-2" />
+                                 Kalit yaratish
+                              </Button>
+                           </div>
+                        )}
+                     </Card>
+
+                     {/* Texnik ma'lumot — odatda kerak emas, shuning uchun yig'ib qo'yilgan.
+                         yuboraman.uz'da DentaCRM allaqachon ulangan, kalitni kiritish yetarli.
+                         Bu bo'lim klinikaning o'z dasturchisi yoki boshqa xizmat uchun qoldirilgan. */}
+                     <Card className="p-6">
+                        <button
+                           onClick={() => setLeadDocsOpen(v => !v)}
+                           className="w-full flex items-center justify-between gap-3 text-left"
+                        >
+                           <div>
+                              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Texnik ma'lumot</h4>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                 Odatda kerak emas — kalitni kiritish yetarli. Boshqa xizmat ulanmoqchi bo'lsa kerak bo'ladi.
+                              </p>
+                           </div>
+                           <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${leadDocsOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {leadDocsOpen && (<>
+                        <pre className="mt-4 p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto leading-relaxed">
+{`POST ${leadApiInfo?.endpoint || 'https://<server>/api/public/leads'}
+Content-Type: application/json
+X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizga berilgan kalit>'}
+
+{
+  "name": "Ali Valiyev",
+  "phone": "+998901234567",
+  "service": "Implantatsiya",
+  "manzil": "Toshkent, Chilonzor 5",
+  "yosh": "34"
+}`}
+                        </pre>
+
+                        <div className="mt-5 space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                           <p><b className="text-gray-900 dark:text-white">phone</b> — yagona majburiy maydon. Qolgani ixtiyoriy.</p>
+                           <p>
+                              <b className="text-gray-900 dark:text-white">Tanish maydonlar:</b> name/ism/fio, phone/telefon,
+                              service/xizmat, source/manba, address/manzil, dob/tug'ilgan sana, notes/izoh.
+                           </p>
+                           <p>
+                              <b className="text-gray-900 dark:text-white">Boshqa har qanday maydon</b> ham qabul qilinadi —
+                              u lid kartasida alohida qator bo'lib ko'rinadi. Ya'ni target formasidagi savollar
+                              o'zgarsa ham, bizga qayta sozlash kerak emas.
+                           </p>
+                           <p>
+                              Javob: muvaffaqiyatli bo'lsa <code className="px-1 bg-gray-100 dark:bg-gray-800 rounded">201</code> va lid <code className="px-1 bg-gray-100 dark:bg-gray-800 rounded">id</code> si.
+                              15 daqiqa ichida shu raqamdan takroriy lid kelsa, <code className="px-1 bg-gray-100 dark:bg-gray-800 rounded">duplicate: true</code> qaytadi va yangi yozuv yaratilmaydi.
+                           </p>
+                        </div>
+                        </>)}
+                     </Card>
+                  </div>
+                     )}
+                  </div>
                )}
 
+               {/* Tarif — ilgari "Xizmatlar" ichida, narxnoma ostida turardi */}
+               {activeTab === 'plan' && (() => {
+                  const plan = plans?.find(p => p.id === currentClinic?.planId);
+                  const maxDoctors = plan?.maxDoctors || 10;
+                  const usedPercent = Math.min(100, Math.round((doctors.length / maxDoctors) * 100));
+                  const price = currentClinic?.customPrice ?? plan?.price ?? 0;
+                  const expiry = currentClinic?.expiryDate ? String(currentClinic.expiryDate).slice(0, 10) : '';
+                  const expiryTime = expiry ? new Date(expiry).getTime() : NaN;
+                  const daysLeft = Number.isNaN(expiryTime) ? null : Math.ceil((expiryTime - Date.now()) / 86400000);
+                  const features: string[] = plan && Array.isArray(plan.features) ? plan.features : [];
+                  return (
+                     <Card className="p-6">
+                        <div className="flex items-center gap-4 mb-6">
+                           <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl">
+                              <CreditCard className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                           </div>
+                           <div>
+                              <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('settings.services.currentPlan')}</h3>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.plan.subtitle')}</p>
+                           </div>
+                        </div>
+
+                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-5 rounded-xl border border-indigo-100 dark:border-indigo-800 space-y-5">
+                           <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div>
+                                 <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-xl font-bold text-indigo-900 dark:text-indigo-200">{plan?.name || 'Standart Tarif'}</p>
+                                    {currentClinic?.subscriptionType === 'Trial' && (
+                                       <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                          {t('settings.plan.trial')}
+                                       </span>
+                                    )}
+                                 </div>
+                                 {price > 0 && (
+                                    <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
+                                       {price.toLocaleString()} UZS {t('settings.plan.perMonth')}
+                                    </p>
+                                 )}
+                              </div>
+                              <Button
+                                 size="sm"
+                                 className="bg-indigo-600 hover:bg-indigo-700 text-white border-none"
+                                 onClick={() => setIsUpgradeModalOpen(true)}
+                              >
+                                 {t('settings.services.upgrade')}
+                              </Button>
+                           </div>
+
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                              <div>
+                                 <div className="flex justify-between text-sm mb-1.5">
+                                    <span className="text-gray-600 dark:text-gray-300">{t('settings.plan.doctors')}</span>
+                                    <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{doctors.length} / {maxDoctors}</span>
+                                 </div>
+                                 <div className="h-2 rounded-full bg-white dark:bg-gray-800 overflow-hidden">
+                                    <div
+                                       className={`h-full rounded-full ${usedPercent >= 100 ? 'bg-red-500' : 'bg-indigo-500'}`}
+                                       style={{ width: `${usedPercent}%` }}
+                                    />
+                                 </div>
+                              </div>
+                              {daysLeft !== null && (
+                                 <div>
+                                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-1.5">{t('settings.plan.validUntil')}</p>
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
+                                       {expiry}
+                                       <span className={`ml-2 text-xs font-medium ${daysLeft < 0 ? 'text-red-600 dark:text-red-400' : daysLeft <= 7 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                          {daysLeft < 0 ? t('settings.plan.expired') : t('settings.plan.daysLeft').replace('{n}', String(daysLeft))}
+                                       </span>
+                                    </p>
+                                 </div>
+                              )}
+                           </div>
+
+                           {features.length > 0 && (
+                              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                 {features.map(feature => (
+                                    <li key={feature} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                       <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
+                                       {feature}
+                                    </li>
+                                 ))}
+                              </ul>
+                           )}
+                        </div>
+                     </Card>
+                  );
+               })()}
 
             </div>
          </div>
@@ -2186,193 +1702,8 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
             </form>
          </Modal>
 
+         <UpgradePlanModal isOpen={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} />
 
-
-         {/* Add/Edit Doctor Modal */}
-         <Modal isOpen={isDoctorModalOpen} onClose={() => setIsDoctorModalOpen(false)} title={editingDoctorId ? t('settings.staff.editDoctor') : t('settings.staff.addDoctorModal')}>
-            <form onSubmit={handleDoctorSubmit} className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                  <Input label={t('settings.staff.firstName')} value={doctorForm.firstName} onChange={e => setDoctorForm({ ...doctorForm, firstName: e.target.value })} required />
-                  <Input label={t('settings.staff.lastName')} value={doctorForm.lastName} onChange={e => setDoctorForm({ ...doctorForm, lastName: e.target.value })} required />
-               </div>
-               <Input label={t('settings.staff.specialty')} value={doctorForm.specialty} onChange={e => setDoctorForm({ ...doctorForm, specialty: e.target.value })} required />
-               <div className="grid grid-cols-2 gap-4">
-                  <Input label={t('settings.staff.phone')} value={doctorForm.phone} onChange={e => setDoctorForm({ ...doctorForm, phone: e.target.value })} required />
-                  <Input label="Qo'shimcha raqam (Ixtiyoriy)" value={doctorForm.secondaryPhone} onChange={e => setDoctorForm({ ...doctorForm, secondaryPhone: e.target.value })} />
-               </div>
-               {branches.length > 0 && (
-                  <Select
-                     label={t('branches.doctorBranch')}
-                     value={doctorForm.branchId}
-                     onChange={e => setDoctorForm({ ...doctorForm, branchId: e.target.value })}
-                     options={[
-                        { value: '', label: t('branches.doctorAllBranches') },
-                        ...branches.map(b => ({ value: b.id, label: b.name })),
-                     ]}
-                  />
-               )}
-
-               <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">{t('settings.staff.authTitle')}</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                     <Input
-                        label="Login (Username)"
-                        value={doctorForm.username}
-                        onChange={e => setDoctorForm({ ...doctorForm, username: e.target.value })}
-                        required={!editingDoctorId}
-                        placeholder="shifokor_login"
-                     />
-                     <Input
-                        label={t('settings.staff.password')}
-                        type="password"
-                        value={doctorForm.password}
-                        onChange={e => setDoctorForm({ ...doctorForm, password: e.target.value })}
-                        required={!editingDoctorId}
-                        placeholder={editingDoctorId ? "O'zgartirish uchun kiriting" : "********"}
-                     />
-                  </div>
-
-                  <div className="mt-4">
-                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Maosh turi</label>
-                     <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
-                        {([
-                           ['none', "Bo'sh"],
-                           ['fixed', 'Fix'],
-                           ['fixed_kpi', 'Fix+KPI'],
-                           ['kpi', 'KPI'],
-                        ] as const).map(([val, label]) => (
-                           <button
-                              key={val}
-                              type="button"
-                              onClick={() => setDoctorForm({ ...doctorForm, salaryType: val })}
-                              className={`px-2 py-2 rounded-lg text-xs font-bold transition-all ${doctorForm.salaryType === val
-                                 ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
-                                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                           >
-                              {label}
-                           </button>
-                        ))}
-                     </div>
-                     <p className="text-xs text-gray-500 mt-1.5">
-                        {doctorForm.salaryType === 'none' && "Maosh turi belgilanmagan — Xarajat bo'limida qo'lda kiritiladi."}
-                        {doctorForm.salaryType === 'fixed' && "Har oy belgilangan qat'iy summa to'lanadi."}
-                        {doctorForm.salaryType === 'fixed_kpi' && "Qat'iy summa + sof foydadan foiz — ikkalasi ham to'lanadi."}
-                        {doctorForm.salaryType === 'kpi' && "Faqat sof foydadan foiz (hisoblangan ulush) to'lanadi."}
-                     </p>
-
-                     {(doctorForm.salaryType === 'fixed' || doctorForm.salaryType === 'fixed_kpi') && (
-                        <Input
-                           label="Fix maosh (UZS)"
-                           type="number"
-                           value={doctorForm.fixedSalary}
-                           onChange={e => setDoctorForm({ ...doctorForm, fixedSalary: e.target.value })}
-                           placeholder="2000000"
-                           containerClassName="w-full mt-3"
-                        />
-                     )}
-
-                     {(doctorForm.salaryType === 'fixed_kpi' || doctorForm.salaryType === 'kpi') && (
-                        <Input
-                           label="Shifokor Ulushi (%)"
-                           type="number"
-                           value={doctorForm.percentage}
-                           onChange={e => setDoctorForm({ ...doctorForm, percentage: e.target.value })}
-                           placeholder="50"
-                           helperText="Sof foydadan shifokor olishi kerak bo'lgan foiz"
-                           containerClassName="w-full mt-3"
-                        />
-                     )}
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Kalendar rangi</label>
-                     <div className="flex flex-wrap gap-3">
-                        {DOCTOR_COLORS.map((color) => (
-                           <button
-                              key={color.value}
-                              type="button"
-                              onClick={() => setDoctorForm({ ...doctorForm, color: color.value })}
-                              className={`w-8 h-8 rounded-full border-2 transition-all ${doctorForm.color === color.value ? 'border-primary-500 scale-110 shadow-md' : 'border-transparent hover:scale-105'}`}
-                              style={{ backgroundColor: color.value }}
-                              title={color.name}
-                           />
-                        ))}
-                     </div>
-                     <p className="text-xs text-gray-500 mt-2">Bu rang kalendarda shifokor qabullarini belgilash uchun ishlatiladi.</p>
-                  </div>
-               </div>
-
-               <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Ishlash vaqti (Ixtiyoriy)</h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Bo'sh qoldirsa, klinika umumiy vaqti ishlatiladi</p>
-                  <div className="grid grid-cols-2 gap-4">
-                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Boshlanish vaqti</label>
-                        <select
-                           value={doctorForm.startHour}
-                           onChange={e => setDoctorForm({ ...doctorForm, startHour: e.target.value })}
-                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                           <option value="">— Klinika vaqti —</option>
-                           {Array.from({ length: 18 }, (_, i) => i + 6).map(h => (
-                              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tugash vaqti</label>
-                        <select
-                           value={doctorForm.endHour}
-                           onChange={e => setDoctorForm({ ...doctorForm, endHour: e.target.value })}
-                           className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                           <option value="">— Klinika vaqti —</option>
-                           {Array.from({ length: 18 }, (_, i) => i + 6).map(h => (
-                              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
-                           ))}
-                        </select>
-                     </div>
-                  </div>
-               </div>
-
-               <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="secondary" onClick={() => setIsDoctorModalOpen(false)}>{t('common.cancel')}</Button>
-                  <Button type="submit">{t('common.save')}</Button>
-               </div>
-            </form>
-         </Modal>
-
-         {/* Upgrade Plan Modal */}
-         <Modal isOpen={isUpgradeModalOpen} onClose={() => setIsUpgradeModalOpen(false)} title="{t('settings.services.upgrade')}">
-            <div className="text-center py-4 space-y-4">
-               <div className="mx-auto w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-4">
-                  <Users className="w-6 h-6 text-indigo-600" />
-               </div>
-               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Cheklovlarni olib tashlang!</h3>
-               <p className="text-gray-500 dark:text-gray-400 px-4">
-                  Sizning tarifingiz bo'yicha yangi shifokor qo'sha olmaysiz. Iltimos, tarifingizni o'zgartirish uchun menejer bilan bog'laning!
-               </p>
-               <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg space-y-2">
-                  <p className="font-bold text-gray-900 dark:text-white text-lg">+998 90 824 29 92</p>
-                  <a
-                     href="https://t.me/ergashevulugbekk"
-                     target="_blank"
-                     rel="noopener noreferrer"
-                     className="flex items-center justify-center gap-2 text-primary-500 hover:text-primary-600 font-medium"
-                  >
-                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.11.02-1.93 1.23-5.46 3.62-.51.35-.98.52-1.4.51-.46-.01-1.35-.26-2.01-.48-.81-.27-1.44-.42-1.38-.88.03-.24.38-.49 1.03-.75 4.06-1.77 6.77-2.94 8.13-3.51 3.87-1.6 4.67-1.88 5.2-1.88.11 0 .37.03.54.17.14.12.18.28.2.45-.02.07-.02.13-.03.23z" />
-                     </svg>
-                     t.me/ergashevulugbekk
-                  </a>
-               </div>
-               <div className="pt-2">
-                  <Button onClick={() => setIsUpgradeModalOpen(false)}>Tushunarli</Button>
-               </div>
-            </div>
-         </Modal>
-
-         {/* Delete Doctor Confirmation Modal */}
          {/* Filial qo'shish / tahrirlash */}
          <Modal isOpen={isBranchModalOpen} onClose={() => setIsBranchModalOpen(false)} title={editingBranchId ? t('branches.edit') : t('branches.addTitle')}>
             <form onSubmit={handleBranchSubmit} className="space-y-4">
@@ -2447,199 +1778,6 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                   >
                      Ha, O'chirish
                   </Button>
-               </div>
-            </div>
-         </Modal>
-
-         <Modal isOpen={!!deleteConfirmDoctor} onClose={() => setDeleteConfirmDoctor(null)} title={t('settings.staff.deleteDoctorConfirm')}>
-            <div className="text-center space-y-4">
-               <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <Trash2 className="w-6 h-6 text-red-600" />
-               </div>
-               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
-               <p className="text-gray-600 dark:text-gray-300">
-                  {t('settings.staff.deleteDoctorConfirm')} <br />
-                   <strong>Dr. {deleteConfirmDoctor?.firstName} {deleteConfirmDoctor?.lastName}</strong>. {t('common.confirmDeleteDesc')}
-               </p>
-               <div className="flex justify-center gap-3 pt-4">
-                  <Button variant="secondary" onClick={() => setDeleteConfirmDoctor(null)}>{t('common.cancel')}</Button>
-                  <Button
-                     className="bg-red-600 hover:bg-red-700 text-white border-none"
-                     onClick={() => {
-                        if (deleteConfirmDoctor) {
-                           onDeleteDoctor(deleteConfirmDoctor.id);
-                           setDeleteConfirmDoctor(null);
-                        }
-                     }}
-                  >
-                     Ha, O'chirish
-                  </Button>
-               </div>
-            </div>
-         </Modal>
-
-         {/* Add/Edit Receptionist Modal */}
-         <Modal isOpen={isReceptionistModalOpen} onClose={() => setIsReceptionistModalOpen(false)} title={editingReceptionistId ? t('settings.staff.editReceptionist') : t('settings.staff.addReceptionistModal')}>
-            <form onSubmit={handleReceptionistSubmit} className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                  <Input label={t('settings.staff.firstName')} value={receptionistForm.firstName} onChange={e => setReceptionistForm({ ...receptionistForm, firstName: e.target.value })} required />
-                  <Input label={t('settings.staff.lastName')} value={receptionistForm.lastName} onChange={e => setReceptionistForm({ ...receptionistForm, lastName: e.target.value })} required />
-               </div>
-               <Input label={t('settings.staff.phone')} value={receptionistForm.phone} onChange={e => setReceptionistForm({ ...receptionistForm, phone: e.target.value })} required />
-
-               <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">{t('settings.staff.authTitle')}</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                     <Input
-                        label="Login (Username)"
-                        value={receptionistForm.username}
-                        onChange={e => setReceptionistForm({ ...receptionistForm, username: e.target.value })}
-                        required={!editingReceptionistId}
-                        placeholder="resepshn_login"
-                     />
-                     <Input
-                        label={t('settings.staff.password')}
-                        type="password"
-                        value={receptionistForm.password}
-                        onChange={e => setReceptionistForm({ ...receptionistForm, password: e.target.value })}
-                        required={!editingReceptionistId}
-                        placeholder={editingReceptionistId ? "O'zgartirish uchun kiriting" : "********"}
-                     />
-                  </div>
-               </div>
-               <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="secondary" onClick={() => setIsReceptionistModalOpen(false)}>{t('common.cancel')}</Button>
-                  <Button type="submit">{t('common.save')}</Button>
-               </div>
-            </form>
-         </Modal>
-
-         {/* Add/Edit Lab Technician Modal */}
-         <Modal isOpen={isLabTechModalOpen} onClose={() => setIsLabTechModalOpen(false)} title={editingLabTechId ? 'Texnikni Tahrirlash' : 'Texnik Qo\'shish'}>
-            <form onSubmit={handleLabTechSubmit} className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                  <Input label="Ism" value={labTechForm.firstName} onChange={e => setLabTechForm({ ...labTechForm, firstName: e.target.value })} required />
-                  <Input label="Familiya" value={labTechForm.lastName} onChange={e => setLabTechForm({ ...labTechForm, lastName: e.target.value })} required />
-               </div>
-               <Input label="Mutaxassislik" value={labTechForm.specialty} onChange={e => setLabTechForm({ ...labTechForm, specialty: e.target.value })} placeholder="Koronka, Protez, Veneer..." required />
-               <Input label="Telefon" value={labTechForm.phone} onChange={e => setLabTechForm({ ...labTechForm, phone: e.target.value })} required />
-               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Tizimga kirish (ixtiyoriy)</p>
-                  <div className="grid grid-cols-2 gap-4">
-                     <Input
-                        label="Login (Username)"
-                        value={labTechForm.username}
-                        onChange={e => setLabTechForm({ ...labTechForm, username: e.target.value })}
-                        placeholder="texnik_login"
-                     />
-                     <Input
-                        label="Parol"
-                        type="password"
-                        value={labTechForm.password}
-                        onChange={e => setLabTechForm({ ...labTechForm, password: e.target.value })}
-                        placeholder={editingLabTechId ? "O'zgartirish uchun kiriting" : "********"}
-                     />
-                  </div>
-               </div>
-               <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="secondary" onClick={() => setIsLabTechModalOpen(false)}>{t('common.cancel')}</Button>
-                  <Button type="submit">{t('common.save')}</Button>
-               </div>
-            </form>
-         </Modal>
-
-         {/* Delete Lab Technician Confirmation Modal */}
-         <Modal isOpen={!!deleteConfirmLabTech} onClose={() => setDeleteConfirmLabTech(null)} title="Texnikni O'chirish">
-            <div className="text-center space-y-4">
-               <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <Trash2 className="w-6 h-6 text-red-600" />
-               </div>
-               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
-               <p className="text-gray-600 dark:text-gray-300">
-                  <strong>{deleteConfirmLabTech?.firstName} {deleteConfirmLabTech?.lastName}</strong> texnikni o'chirasizmi? {t('common.confirmDeleteDesc')}
-               </p>
-               <div className="flex justify-center gap-3 pt-4">
-                  <Button variant="secondary" onClick={() => setDeleteConfirmLabTech(null)}>{t('common.cancel')}</Button>
-                  <Button
-                     className="bg-red-600 hover:bg-red-700 text-white border-none"
-                     onClick={() => {
-                        if (deleteConfirmLabTech && onDeleteLabTechnician) {
-                           onDeleteLabTechnician(deleteConfirmLabTech.id);
-                           setDeleteConfirmLabTech(null);
-                        }
-                     }}
-                  >
-                     Ha, O'chirish
-                  </Button>
-               </div>
-            </div>
-         </Modal>
-
-         {/* Delete Receptionist Confirmation Modal */}
-         <Modal isOpen={!!deleteConfirmReceptionist} onClose={() => setDeleteConfirmReceptionist(null)} title={t('settings.staff.deleteReceptionistConfirm')}>
-            <div className="text-center space-y-4">
-               <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <Trash2 className="w-6 h-6 text-red-600" />
-               </div>
-               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Ishonchingiz komilmi?</h3>
-               <p className="text-gray-600 dark:text-gray-300">
-                  {t('settings.staff.deleteReceptionistConfirm')} <br />
-                   <strong>{deleteConfirmReceptionist?.firstName} {deleteConfirmReceptionist?.lastName}</strong>. {t('common.confirmDeleteDesc')}
-               </p>
-               <div className="flex justify-center gap-3 pt-4">
-                  <Button variant="secondary" onClick={() => setDeleteConfirmReceptionist(null)}>{t('common.cancel')}</Button>
-                  <Button
-                     className="bg-red-600 hover:bg-red-700 text-white border-none"
-                     onClick={() => {
-                        if (deleteConfirmReceptionist && onDeleteReceptionist) {
-                           onDeleteReceptionist(deleteConfirmReceptionist.id);
-                           setDeleteConfirmReceptionist(null);
-                        }
-                     }}
-                  >
-                     Ha, O'chirish
-                  </Button>
-               </div>
-            </div>
-         </Modal>
-         {/* Facebook Page Selection Modal */}
-         <Modal isOpen={isFBPageModalOpen} onClose={() => setIsFBPageModalOpen(false)} title="Facebook Sahifasini Tanlang">
-            <div className="space-y-4">
-               <p className="text-sm text-gray-500 mb-4">
-                  Quyidagi sahifalardan birini tanlang. Ushbu sahifaga kelgan arizalar tizimga avtomatik tushadi.
-               </p>
-               <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
-                  {facebookPages.map(page => (
-                     <button
-                        key={page.id}
-                        onClick={() => handleSelectFBPage(page)}
-                        className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 hover:bg-primary-50 dark:hover:bg-primary-900/30 border border-gray-100 dark:border-gray-700 rounded-xl transition-all group"
-                     >
-                        <div className="flex items-center gap-3 text-left">
-                           <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/40 rounded-lg flex items-center justify-center text-primary-600 dark:text-primary-400">
-                              <Facebook className="w-6 h-6" />
-                           </div>
-                           <div>
-                              <div className="font-bold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                                 {page.name}
-                               </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">ID: {page.id}</div>
-                           </div>
-                        </div>
-                        <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 flex items-center justify-center group-hover:border-primary-500 transition-colors">
-                           <Plus className="w-4 h-4 text-gray-400 group-hover:text-primary-500" />
-                        </div>
-                     </button>
-                  ))}
-                  {facebookPages.length === 0 && (
-                     <div className="py-8 text-center bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
-                        <Facebook className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">Hech qanday sahifa topilmadi</p>
-                     </div>
-                  )}
-               </div>
-               <div className="flex justify-end pt-4">
-                  <Button variant="secondary" onClick={() => setIsFBPageModalOpen(false)}>Yopish</Button>
                </div>
             </div>
          </Modal>

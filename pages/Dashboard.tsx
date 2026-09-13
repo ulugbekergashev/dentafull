@@ -7,10 +7,7 @@ import {
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
   Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot
 } from 'lucide-react';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, BarChart, Bar
-} from 'recharts';
+import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
 import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { getCurrentMonthRange } from '../utils/dateUtils';
@@ -19,7 +16,6 @@ import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { AddPatientModal } from '../components/AddPatientModal';
 import { QuickPaymentModal } from '../components/QuickPaymentModal';
-import { CHART_COLORS, CHART } from '../utils/chartColors';
 
 interface DashboardProps {
   patients: Patient[];
@@ -48,6 +44,14 @@ interface DashboardProps {
 // dashboard umumiy holatni ko'rsatadi, to'liq ro'yxat o'z sahifasida.
 const DASH_ROW_LIMIT = 4;
 
+// Kartalar soniga qarab ustunlar — qatorda bo'sh katak qolmasin
+const STAT_GRID_COLS: Record<number, string> = {
+  2: 'lg:grid-cols-2',
+  3: 'lg:grid-cols-3',
+  4: 'lg:grid-cols-4',
+  6: 'lg:grid-cols-3 xl:grid-cols-6',
+};
+
 export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
@@ -58,8 +62,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const [debtPayAmount, setDebtPayAmount] = useState('');
   const [debtPayMethod, setDebtPayMethod] = useState<PaymentMethod>('Cash');
   const [debtSaving, setDebtSaving] = useState(false);
-  const [intensityView, setIntensityView] = useState<'month' | 'year'>('year');
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
+  // Grafiklar va "jami" kartalar faqat shifokorga. Klinika egasi ularni Moliya →
+  // Hisobot da ko'radi (bu yerda takror edi), shifokorda esa Hisobot yo'q.
+  const isDoctor = userRole === UserRole.DOCTOR;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
   const [startDate, setStartDate] = useState(isReceptionist ? today : defaultStart);
@@ -111,51 +117,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // Daromad = to'langan to'lovlar (Finance sahifasi bilan izchil)
   const totalRevenue = filteredTransactions.reduce((acc, t) => acc + (t.status === 'Paid' ? t.amount : 0), 0);
 
-  // Dynamic Service Data from Appointments
-  const SERVICE_DATA = useMemo(() => {
-    const serviceCount = new Map<string, number>();
-
-    filteredAppointments.forEach(app => {
-      const count = serviceCount.get(app.type) || 0;
-      serviceCount.set(app.type, count + 1);
-    });
-
-    const colors = CHART_COLORS;
-
-    return Array.from(serviceCount.entries())
-      .map(([name, value], index) => ({
-        name,
-        value,
-        color: colors[index % colors.length]
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [filteredAppointments]);
-
-  // Dynamic Chart Data Aggregation
-  const trendData = useMemo(() => {
-    const dataMap = new Map<string, { revenue: number, appointments: number }>();
-
-    // Aggregate Transactions (faqat to'langanlari)
-    filteredTransactions.forEach(t => {
-      if (t.status !== 'Paid') return;
-      const current = dataMap.get(t.date) || { revenue: 0, appointments: 0 };
-      dataMap.set(t.date, { ...current, revenue: current.revenue + t.amount });
-    });
-
-    // Aggregate Appointments
-    filteredAppointments.forEach(a => {
-      const current = dataMap.get(a.date) || { revenue: 0, appointments: 0 };
-      dataMap.set(a.date, { ...current, appointments: current.appointments + 1 });
-    });
-
-    // Convert to Array & Sort
-    const result = Array.from(dataMap.entries())
-      .map(([date, data]) => ({ name: date, ...data }))
-      .sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime());
-
-    // If no data, return empty or a placeholder
-    return result.length > 0 ? result : [];
-  }, [filteredTransactions, filteredAppointments]);
 
   // New Stats Calculation
   const newLeadsCount = useMemo(() => leads.filter(l => l.status === 'New').length, [leads]);
@@ -169,53 +130,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     filteredTransactions.filter(t => t.status === 'Pending').reduce((acc, t) => acc + t.amount, 0)
     , [filteredTransactions]);
 
-  // Seasonal Intensity Data
-  const intensityData = useMemo(() => {
-    const uzMonths = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
-    const now = new Date();
-
-    if (intensityView === 'month') {
-      // Current Month Daily Distribution
-      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      const days: { [key: string]: number } = {};
-
-      for (let i = 1; i <= daysInMonth; i++) {
-        days[i.toString()] = 0;
-      }
-
-      appointments.forEach(a => {
-        const d = new Date(a.date);
-        if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
-          days[d.getDate().toString()]++;
-        }
-      });
-
-      return Object.entries(days).map(([name, count]) => ({ name, count }));
-    } else {
-      // Last 12 Months Overview
-      const result: { name: string, count: number, monthIndex: number, year: number }[] = [];
-
-      for (let i = 11; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        result.push({
-          name: uzMonths[d.getMonth()],
-          count: 0,
-          monthIndex: d.getMonth(),
-          year: d.getFullYear()
-        });
-      }
-
-      appointments.forEach(a => {
-        const apptDate = new Date(a.date);
-        const item = result.find(r => r.monthIndex === apptDate.getMonth() && r.year === apptDate.getFullYear());
-        if (item) {
-          item.count++;
-        }
-      });
-
-      return result;
-    }
-  }, [appointments, intensityView]);
 
   // Today's Appointments
   const todayAppointments = useMemo(() => {
@@ -389,11 +303,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       {/* UMUMIY */}
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+          {/* Olib tashlangan takrorlar: "Jami bemorlar" Bemorlar sahifasida,
+              "O'rtacha chek" Hisobotda bor. Shifokorda ular qoladi. */}
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${STAT_GRID_COLS[(isDoctor ? 3 : 2) + (showFinance ? (isDoctor ? 3 : 2) : 0)]}`}>
+        {isDoctor && (
         <StatCard
           label={t('dashboard.totalPatients')} value={totalPatients.toLocaleString()} icon={Users} color="primary"
           subtitle={<span className="flex items-center"><span className="font-bold text-success-600 bg-success-50 dark:bg-success-900/30 px-1.5 py-0.5 rounded-full">+{activePatients}</span><span className="ml-1.5">{t('dashboard.active')}</span></span>}
         />
+        )}
         <StatCard
           label={t('dashboard.todayAppointments')} value={periodAppointmentsCount} icon={Calendar} color="info"
           subtitle={pendingAppointments > 0 ? `${pendingAppointments} ${t('dashboard.pending')}` : t('dashboard.allOk')}
@@ -403,17 +321,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           subtitle={t('dashboard.fromAds')}
         />
         {showFinance && (<>
+          {isDoctor && (
           <StatCard
             label={t('dashboard.avgCheck')} value={avgCheck.toLocaleString()} unit="UZS" icon={TrendingUp} color="success"
             subtitle={t('dashboard.perPatient')}
           />
+          )}
           <StatCard
             label={t('dashboard.pending')} value={pendingRevenue.toLocaleString()} unit="UZS" icon={Clock} color="warning"
             subtitle={t('dashboard.unpaid')}
           />
           <StatCard
             label={t('dashboard.todayRevenue')} value={totalRevenue.toLocaleString()} unit="UZS" icon={DollarSign} color="success" variant="gradient"
-            subtitle={t('dashboard.selectedPeriod')}
+            subtitle={isReceptionist ? t('dashboard.todayLabel') : t('dashboard.selectedPeriod')}
           />
         </>)}
       </div>
@@ -701,117 +621,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       </div>
 
-      {/* Charts Row - hidden for receptionist */}
-      {!isReceptionist && (<>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Revenue Chart */}
-          {showFinance && <Card className="p-8 lg:col-span-2 rounded-[2rem]">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">
-                {t('dashboard.financialFlow')}
-              </h3>
-              <div className="flex gap-4">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400">
-                  <div className="w-2.5 h-2.5 rounded-full bg-primary" /> {t('dashboard.income')}
-                </div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400">
-                  <div className="w-2.5 h-2.5 rounded-full bg-success" /> {t('dashboard.visits')}
-                </div>
-              </div>
-            </div>
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData}>
-                  <defs>
-                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorAppts" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#059669" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#059669" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark:stroke="#374151" strokeOpacity={0.4} />
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 600 }}
-                    dy={10}
-                  />
-                  <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 600 }} />
-                  <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 600 }} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1F2937', borderRadius: '16px', border: 'none', color: '#fff', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
-                    itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
-                    labelStyle={{ color: '#9CA3AF', marginBottom: '0.5rem', fontWeight: 'bold' }}
-                  />
-                  <Area
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#2563EB"
-                    strokeWidth={4}
-                    fillOpacity={1}
-                    fill="url(#colorRevenue)"
-                    activeDot={{ r: 6, fill: '#2563EB', stroke: '#fff', strokeWidth: 2 }}
-                  />
-                  <Area
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="appointments"
-                    stroke="#059669"
-                    strokeWidth={4}
-                    fillOpacity={1}
-                    fill="url(#colorAppts)"
-                    activeDot={{ r: 6, fill: '#059669', stroke: '#fff', strokeWidth: 2 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-              {trendData.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm font-medium">
-                  Ma'lumotlar mavjud emas
-                </div>
-              )}
-            </div>
-          </Card>}
-
-          {/* Service Distribution */}
-          <Card className="p-8 rounded-[2rem]">
-            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-8">{t('dashboard.specialty')}</h3>
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={SERVICE_DATA}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={65}
-                    outerRadius={95}
-                    paddingAngle={8}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {SERVICE_DATA.map((entry, index) => (
-                      <Cell key={`cell - ${index} `} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Legend
-                    verticalAlign="bottom"
-                    height={36}
-                    iconType="circle"
-                    formatter={(value) => <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{value}</span>}
-                  />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1F2937', borderRadius: '16px', border: 'none', color: '#fff' }}
-                    itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </div>
+      {/* Grafiklar — faqat shifokorda (sababi yuqorida, isDoctor yonida) */}
+      {isDoctor && (<>
+        <TrendCharts appointments={filteredAppointments} transactions={filteredTransactions} showFinance={showFinance} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-6">
           <Card className="p-8 lg:col-span-2 rounded-[2rem]">
@@ -826,6 +638,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDateTime')}</th>
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colPatient')}</th>
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDoctor')}</th>
+                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colService')}</th>
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colStatus')}</th>
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Baho</th>
                   </tr>
@@ -958,88 +771,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </Card >
         </div >
 
-        {/* Seasonal Intensity Chart */}
-        <Card className="p-8 rounded-[2rem]">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
-            <div>
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">
-                Qabullar <span className="text-danger">Intensivligi</span>
-              </h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
-                {intensityView === 'month' ? t('dashboard.byMonthDays') : t('dashboard.byLast12')}
-              </p>
-            </div>
-
-            {/* View Toggle */}
-            <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
-              <button
-                onClick={() => setIntensityView('month')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${intensityView === 'month'
-                  ? 'bg-white dark:bg-gray-700 text-danger shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-              >
-                OYLIK
-              </button>
-              <button
-                onClick={() => setIntensityView('year')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${intensityView === 'year'
-                  ? 'bg-white dark:bg-gray-700 text-danger shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-              >
-                YILLIK
-              </button>
-            </div>
-          </div>
-
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={intensityData}>
-                <defs>
-                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#FB7185" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#E11D48" stopOpacity={1} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" dark:stroke="#374151" strokeOpacity={0.4} />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#9CA3AF', fontSize: 9, fontWeight: 700 }}
-                  interval={intensityView === 'month' ? 1 : 0}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#9CA3AF', fontSize: 10, fontWeight: 700 }}
-                />
-                <Tooltip
-                  cursor={{ fill: 'rgba(0,0,0,0.05)', radius: [8, 8, 4, 4] }}
-                  contentStyle={{ backgroundColor: '#1F2937', borderRadius: '12px', border: 'none', color: '#fff' }}
-                  labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
-                />
-                <Bar
-                  dataKey="count"
-                  fill="url(#barGradient)"
-                  radius={[8, 8, 4, 4]}
-                  barSize={intensityView === 'month' ? 12 : 32}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-6 flex items-start gap-3 text-xs text-gray-500 font-medium bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
-            <div className="p-1.5 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
-              <AlertCircle className="w-4 h-4 text-rose-500" />
-            </div>
-            <p className="leading-relaxed">
-              {intensityView === 'year'
-                ? "Yillik tahlil klinika faolligini oylar kesimida ko'rsatadi. Kunlik tahlilga o'tish uchun tepadan 'OYLIK' tugmasini bosing."
-                : "Joriy oy uchun kunlik qabullar soni. Bu qaysi kunlarda klinika yuklamasi yuqori ekanini ko'rsatadi."}
-            </p>
-          </div>
-        </Card>
+        <IntensityChart appointments={appointments} />
       </>)}
 
       {/* Qarz to'lash modali — qisman yoki to'liq */}

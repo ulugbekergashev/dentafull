@@ -397,11 +397,11 @@ export const Leads: React.FC<LeadsProps> = ({
                             </div>
                         ) : (
                             /* Facebook endi to'g'ridan-to'g'ri emas, yuboraman.uz orqali ulanadi —
-                               shuning uchun tugma Sozlamalardagi lid integratsiyasiga olib boradi. */
+                               shuning uchun tugma Sozlamalar → Integratsiyalar → Lid API ga olib boradi. */
                             <button
                                 onClick={() => navigate('/settings?tab=leadApi')}
                                 className="flex items-center gap-2 px-4 py-2 bg-[#1877F2] hover:bg-primary-600 text-white rounded-xl text-sm font-bold shadow-md transition-all active:scale-95"
-                                title="Lid manbalarini Sozlamalar > Lid integratsiyasi bo'limida ulaysiz"
+                                title="Lid manbalarini Sozlamalar > Integratsiyalar > Lid API bo'limida ulaysiz"
                             >
                                 <Facebook className="w-4 h-4 fill-current" />
                                 <span>{t('leads.connectFb')}</span>

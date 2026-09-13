@@ -228,7 +228,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           // alert("Individual tarif bo'yicha shifokor profili avtomatik yaratildi.");
         } catch (err) {
           console.error('Failed to auto-create doctor', err);
-          alert("Xatolik: Shifokor profilini avtomatik yaratib bo'lmadi. Iltimos, Sozlamalar bo'limida yarating.");
+          alert("Xatolik: Shifokor profilini avtomatik yaratib bo'lmadi. Iltimos, Xodimlar bo'limida yarating.");
           return;
         }
       } else if (doctors.length > 0) {
@@ -236,7 +236,7 @@ export const Calendar: React.FC<CalendarProps> = ({
         finalDoctorId = doctors[0].id;
         finalDoctorName = `Dr. ${doctors[0].lastName}`;
       } else {
-        alert("Tizimda shifokor mavjud emas! Iltimos, 'Sozlamalar' bo'limiga o'tib, kamida bitta shifokor profilini yarating.");
+        alert("Tizimda shifokor mavjud emas! Iltimos, 'Xodimlar' bo'limiga o'tib, kamida bitta shifokor profilini yarating.");
         return;
       }
     }

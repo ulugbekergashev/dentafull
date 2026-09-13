@@ -15,6 +15,7 @@ import {
 import type { PaymentMethod } from '../types';
 
 import { ReceiptModal } from '../components/ReceiptModal';
+import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
 
 interface FinanceProps {
   userRole: UserRole;
@@ -829,6 +830,15 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             </div>
           </Card>
         </div>
+
+        {/* Qabullar tahlili — ilgari Bosh sahifada turardi. Bosh sahifa kunlik ish
+            uchun; davr bo'yicha grafiklar shu hisobot va uning davr filtri bilan birga. */}
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest pt-2 flex items-center gap-2">
+          <span className="w-6 h-0.5 bg-gray-300 dark:bg-gray-600 rounded" />
+          {t('finance.appointmentAnalytics')}
+        </h3>
+        <TrendCharts appointments={filteredAppointments} transactions={dateFilteredTransactions} />
+        <IntensityChart appointments={filteredAppointmentsByDoctor} />
 
         {/* To'lovlar / Xarajatlar (tablar) */}
         <Card className="overflow-hidden">

@@ -1,49 +1,56 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Calendar, DollarSign, Activity, Package, Settings, MoreHorizontal, MessageSquare, Wallet } from 'lucide-react';
-import { UserRole, AccessControl } from '../types';
-import { isModuleHidden, canSeeFinance } from '../utils/accessControl';
+import { MoreHorizontal } from 'lucide-react';
+import { UserRole } from '../types';
+import { useLanguage } from '../context/LanguageContext';
+import type { TranslationKey } from '../i18n/translations';
+
+export interface BottomNavItem {
+    id: string;
+    labelKey: string;
+    icon: React.ElementType;
+}
 
 interface BottomNavProps {
     userRole: UserRole;
+    /**
+     * Yon menyudagi ro'yxatning o'zi — rol, ruxsatlar va moliya ko'rinishi
+     * bo'yicha App'da allaqachon filtrlangan. Ilgari bu yerda alohida, qo'lda
+     * yozilgan ro'yxat bor edi: nomlari boshqacha ("Bosh Paneli") va tarjimasiz.
+     */
+    items: BottomNavItem[];
     isSidebarOpen: boolean;
     setIsSidebarOpen: (open: boolean) => void;
-    accessControl?: AccessControl;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, setIsSidebarOpen, accessControl = {} }) => {
+// Telefonda eng ko'p ochiladigan bo'limlar pastki qatorga birinchi chiqadi.
+// Qolganlari yon menyudagi tartibida, "Barchasi" ortida.
+const MOBILE_PRIORITY = ['dashboard', 'patients', 'calendar', 'finance'];
+
+const pathOf = (id: string) => (id === 'dashboard' ? '/' : `/${id}`);
+
+export const BottomNav: React.FC<BottomNavProps> = ({ userRole, items, isSidebarOpen, setIsSidebarOpen }) => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { t } = useLanguage();
 
-    if (userRole === UserRole.SUPER_ADMIN) return null;
+    if (userRole === UserRole.SUPER_ADMIN || userRole === UserRole.SALES_AGENT || items.length === 0) return null;
 
-    // Full list of available items for clinic roles
-    const allItems = [
-        { id: 'dashboard', path: '/', label: 'Bosh Paneli', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
-        { id: 'patients', path: '/patients', label: 'Bemorlar', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
-        { id: 'calendar', path: '/calendar', label: 'Kalendar', icon: Calendar, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
-        { id: 'finance', path: '/finance', label: 'Moliya', icon: Wallet, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-        { id: 'doctors', path: '/doctors', label: 'Shifokorlar', icon: Activity, roles: [UserRole.CLINIC_ADMIN] },
-        { id: 'inventory', path: '/inventory', label: 'Ombor', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-        { id: 'messages', path: '/messages', label: 'Xabarlar', icon: MessageSquare, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-        { id: 'settings', path: '/settings', label: 'Sozlamalar', icon: Settings, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-    ];
+    const rank = (id: string) => {
+        const index = MOBILE_PRIORITY.indexOf(id);
+        return index === -1 ? MOBILE_PRIORITY.length : index;
+    };
+    // sort barqaror: ustuvor bo'lmaganlar yon menyudagi tartibini saqlaydi
+    const ordered = [...items].sort((a, b) => rank(a.id) - rank(b.id));
 
-    // Filter items based on role + ruxsatlar (Sozlamalar → Ruxsatlar)
-    const allowedItems = allItems.filter(item =>
-        item.roles.includes(userRole)
-        && !isModuleHidden(accessControl, userRole, item.id)
-        && (item.id !== 'finance' || canSeeFinance(accessControl, userRole))
-    );
+    // 5 tagacha bo'lsa hammasi ko'rinadi, ko'p bo'lsa birinchi 4 tasi va "Barchasi"
+    const showMore = ordered.length > 5;
+    const visibleItems = showMore ? ordered.slice(0, 4) : ordered;
 
-    // If items <= 5, show all. If > 5, show first 4 and a "More" button.
-    const showMore = allowedItems.length > 5;
-    const visibleItems = showMore ? allowedItems.slice(0, 4) : allowedItems;
-
-    const isActive = (item: typeof allItems[0]) => {
-        if (item.id === 'dashboard') return location.pathname === '/';
-        if (item.id === 'patients') return location.pathname.startsWith('/patients');
-        return location.pathname === item.path;
+    const isActive = (id: string) => {
+        if (id === 'dashboard') return location.pathname === '/';
+        const path = pathOf(id);
+        return location.pathname === path || location.pathname.startsWith(`${path}/`);
     };
 
     return (
@@ -51,12 +58,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
             <div className="flex justify-around items-center h-16">
                 {visibleItems.map((item) => {
                     const Icon = item.icon;
-                    const active = isActive(item);
+                    const active = isActive(item.id);
 
                     return (
                         <button
                             key={item.id}
-                            onClick={() => navigate(item.path)}
+                            onClick={() => navigate(pathOf(item.id))}
                             className={`flex flex-col items-center justify-center w-full h-full transition-all duration-200 relative ${active
                                 ? 'text-primary-600 dark:text-primary-400'
                                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -65,7 +72,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
                             <div className={`p-1.5 rounded-xl transition-all duration-300 ${active ? 'bg-primary-50 dark:bg-primary-900/30 scale-110' : ''}`}>
                                 <Icon className={`w-5 h-5 ${active ? 'fill-current' : ''}`} />
                             </div>
-                            <span className="text-[10px] font-medium mt-1 truncate max-w-full px-1">{item.label}</span>
+                            <span className="text-[10px] font-medium mt-1 truncate max-w-full px-1">{t(item.labelKey as TranslationKey)}</span>
                             {active && (
                                 <div className="absolute bottom-1 w-1 h-1 bg-primary-600 dark:bg-primary-400 rounded-full" />
                             )}
@@ -84,7 +91,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, isSidebarOpen, s
                         <div className={`p-1.5 rounded-xl transition-all duration-300 ${isSidebarOpen ? 'bg-primary-50 dark:bg-primary-900/30 scale-110' : ''}`}>
                             <MoreHorizontal className="w-5 h-5" />
                         </div>
-                        <span className="text-[10px] font-medium mt-1">Barchasi</span>
+                        <span className="text-[10px] font-medium mt-1">{t('nav.more')}</span>
                     </button>
                 )}
             </div>

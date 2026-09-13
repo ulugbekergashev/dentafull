@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -20,7 +20,7 @@ import { SignIn } from './pages/SignIn';
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { SalesDashboard } from './pages/SalesDashboard';
-import { DoctorsAnalytics } from './pages/DoctorsAnalytics';
+import { Staff } from './pages/Staff';
 import { DoctorDetails } from './pages/DoctorDetails';
 import { Inventory } from './pages/Inventory';
 import { OnlineQueue } from './pages/OnlineQueue';
@@ -43,11 +43,14 @@ import { Language } from './i18n/translations';
 // Navigation config for Clinic Admin and Doctors
 const CLINIC_NAVIGATION = [
   { id: 'dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
-  { id: 'leads', labelKey: 'nav.leads', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
+  // Lidlar va Bemorlar ilgari bir xil ikonkada edi — menyuda ajratib bo'lmasdi
+  { id: 'leads', labelKey: 'nav.leads', icon: Target, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'patients', labelKey: 'nav.patients', icon: Users, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarIcon, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST] },
   { id: 'finance', labelKey: 'nav.finance', icon: Wallet, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
-  { id: 'doctors', labelKey: 'nav.doctors', icon: Activity, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
+  // "Xodimlar": ro'yxat, statistika va ruxsatlar. id "doctors" ataylab qoldi —
+  // klinikalarning saqlangan ruxsatlarida (yashirilgan modullar) shu id yozilgan.
+  { id: 'doctors', labelKey: 'nav.staff', icon: IdCard, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'inventory', labelKey: 'inventory.title', icon: Package, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST] },
   { id: 'queue', labelKey: 'nav.queue', icon: ListOrdered, roles: [UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST, UserRole.DOCTOR] },
   { id: 'lab', labelKey: 'nav.lab', icon: FlaskConical, roles: [UserRole.CLINIC_ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.LAB_TECHNICIAN] },
@@ -86,7 +89,7 @@ const getPageLabelKey = (pathname: string): any => {
   if (pathname === '/patients') return 'nav.patients';
   if (pathname === '/calendar') return 'nav.calendar';
   if (pathname === '/finance') return 'nav.finance';
-  if (pathname === '/doctors') return 'nav.doctors';
+  if (pathname === '/doctors' || pathname.startsWith('/doctors/')) return 'nav.staff';
   if (pathname === '/inventory') return 'inventory.title';
   if (pathname === '/queue') return 'nav.queue';
   if (pathname === '/lab') return 'nav.lab';
@@ -1101,7 +1104,7 @@ const AppContent: React.FC = () => {
     : userRole === UserRole.SALES_AGENT ? SALES_NAVIGATION
       : CLINIC_NAVIGATION;
 
-  // Ruxsatlar (Sozlamalar в†’ Ruxsatlar): rol bo'yicha modul/moliya/telefon ko'rinishi
+  // Ruxsatlar (Xodimlar → Ruxsatlar): rol bo'yicha modul/moliya/telefon ko'rinishi
   const accessControl = parseAccessControl(currentClinic);
   const showFinanceForRole = canSeeFinance(accessControl, userRole);
   // Bo'lim ko'rsatilmagan bo'lsa qaysi biri ochiladi — SuperAdminDashboard
@@ -1777,9 +1780,26 @@ const AppContent: React.FC = () => {
 
               {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
                 <>
+                  {/* Xodimlar: ro'yxat (ilgari Sozlamalarda edi), statistika va ruxsatlar */}
                   <Route path="/doctors" element={
-                    <DoctorsAnalytics
-                      doctors={scopedDoctors}
+                    <Staff
+                      userRole={userRole}
+                      doctors={doctors}
+                      analyticsDoctors={scopedDoctors}
+                      receptionists={receptionists}
+                      labTechnicians={labTechnicians}
+                      onAddDoctor={addDoctor}
+                      onUpdateDoctor={updateDoctor}
+                      onDeleteDoctor={deleteDoctor}
+                      onAddReceptionist={addReceptionist}
+                      onUpdateReceptionist={updateReceptionist}
+                      onDeleteReceptionist={deleteReceptionist}
+                      onAddLabTechnician={addLabTechnician}
+                      onUpdateLabTechnician={updateLabTechnician}
+                      onDeleteLabTechnician={deleteLabTechnician}
+                      branches={branches}
+                      currentClinic={currentClinic}
+                      plans={plans}
                       appointments={scopedAppointments}
                       services={services}
                       transactions={scopedTransactions}
@@ -1825,22 +1845,11 @@ const AppContent: React.FC = () => {
                       services={services}
                       categories={categories}
                       doctors={doctors}
-                      receptionists={receptionists}
-                      labTechnicians={labTechnicians}
                       onAddService={addService}
                       onUpdateService={updateService}
                       onDeleteService={deleteService}
                       onAddCategory={addCategory}
                       onDeleteCategory={deleteCategory}
-                      onAddDoctor={addDoctor}
-                      onUpdateDoctor={updateDoctor}
-                      onDeleteDoctor={deleteDoctor}
-                      onAddReceptionist={addReceptionist}
-                      onUpdateReceptionist={updateReceptionist}
-                      onDeleteReceptionist={deleteReceptionist}
-                      onAddLabTechnician={addLabTechnician}
-                      onUpdateLabTechnician={updateLabTechnician}
-                      onDeleteLabTechnician={deleteLabTechnician}
                       branches={branches}
                       patientCountByBranch={patients.reduce((acc, p) => {
                         const key = p.branchId || '';
@@ -1852,7 +1861,6 @@ const AppContent: React.FC = () => {
                       onDeleteBranch={deleteBranch}
                       currentClinic={currentClinic}
                       plans={plans}
-                      reviews={reviews}
                     />
                   } />
                 </>
@@ -1867,9 +1875,9 @@ const AppContent: React.FC = () => {
 
       <BottomNav
         userRole={userRole}
+        items={visibleNavigation}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
-        accessControl={accessControl}
       />
 
       {isSidebarOpen && (

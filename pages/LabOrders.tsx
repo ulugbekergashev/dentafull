@@ -185,7 +185,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-6 text-center">
           <FlaskConical className="w-10 h-10 text-amber-500 mx-auto mb-3" />
           <p className="font-semibold text-amber-800 dark:text-amber-400">Texniklar qo'shilmagan</p>
-          <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">Buyurtma yaratish uchun avval Sozlamalar → Texniklar bo'limida texnik qo'shing.</p>
+          <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">Buyurtma yaratish uchun avval Xodimlar bo'limida texnik qo'shing.</p>
         </div>
       )}
 

@@ -1095,13 +1095,13 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     {(manualChannel === 'sms' || manualChannel === 'telegram_first') && !smsConnected && (
                         <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-400">
                             <AlertTriangle className="w-4 h-4 shrink-0" />
-                            <span>Eskiz SMS ulanmagan. <strong>Sozlamalar → SMS va Telegram</strong> bo'limida login va parolni kiriting.</span>
+                            <span>Eskiz SMS ulanmagan. <strong>Sozlamalar → Integratsiyalar → Telegram va SMS</strong> bo'limida login va parolni kiriting.</span>
                         </div>
                     )}
                     {manualChannel === 'telegram' && !telegramConnected && (
                         <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-400">
                             <AlertTriangle className="w-4 h-4 shrink-0" />
-                            <span>Telegram bot ulanmagan. <strong>Sozlamalar → SMS va Telegram</strong> bo'limida bot tokenini kiriting.</span>
+                            <span>Telegram bot ulanmagan. <strong>Sozlamalar → Integratsiyalar → Telegram va SMS</strong> bo'limida bot tokenini kiriting.</span>
                         </div>
                     )}
 
