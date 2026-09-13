@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UpgradePlanModal } from '../components/UpgradePlanModal';
 
 import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, ChevronRight, Sparkles, AlertTriangle, CreditCard, Plug, IdCard } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { parseAccessControl, isModuleHidden } from '../utils/accessControl';
 
 // Sozlamalar — klinikaning o'z sozlamalari, to'rt guruhda:
 //   Klinika         — ma'lumotlar va ish vaqti, filiallar, bron to'lovi, kassa smenalari
@@ -682,10 +680,6 @@ export const Settings: React.FC<SettingsProps> = ({
       ] : []),
    ];
 
-   // Xodimlarni odat bo'yicha shu yerdan qidirgan odamga yo'l — agar bu bo'lim
-   // uning roliga Ruxsatlarda yashirilmagan bo'lsa.
-   const canOpenStaff = !isModuleHidden(parseAccessControl(currentClinic), userRole, 'doctors');
-
    return (
       <div className="space-y-6 animate-fade-in">
          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
@@ -705,19 +699,6 @@ export const Settings: React.FC<SettingsProps> = ({
                      {item.name}
                   </button>
                ))}
-               {canOpenStaff && (
-                  <div className="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700/60">
-                     <Link
-                        to="/doctors"
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-colors text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800"
-                     >
-                        <IdCard className="w-4 h-4" />
-                        {/* Ruxsatlar tabi faqat klinika egasiga ko'rinadi */}
-                        <span className="flex-1">{isAdmin ? t('settings.staffLink') : t('nav.staff')}</span>
-                        <ChevronRight className="w-4 h-4" />
-                     </Link>
-                  </div>
-               )}
             </Card>
 
             <div className="lg:col-span-3 space-y-6">

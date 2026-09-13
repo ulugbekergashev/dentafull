@@ -7,7 +7,7 @@ import { DoctorsAnalytics } from './DoctorsAnalytics';
 import { useLanguage } from '../context/LanguageContext';
 import {
    UserRole, Doctor, Receptionist, LabTechnician, Clinic, SubscriptionPlan, Branch,
-   Appointment, Service, Transaction, Review,
+   Appointment, Service, Transaction, Review, Expense, LabOrder,
 } from '../types';
 
 // Xodimlar bo'limi — bitta menyu punkti, uchta tab:
@@ -45,9 +45,12 @@ interface StaffProps {
    services: Service[];
    transactions: Transaction[];
    reviews: Review[];
+   /** Ro'yxatdagi maosh va texnik ko'rsatkichlari uchun */
+   expenses?: Expense[];
+   labOrders?: LabOrder[];
 }
 
-export const Staff: React.FC<StaffProps> = ({ userRole, analyticsDoctors, appointments, services, transactions, reviews, ...management }) => {
+export const Staff: React.FC<StaffProps> = ({ userRole, analyticsDoctors, appointments, services, transactions, reviews, expenses, labOrders, ...management }) => {
    const { t } = useLanguage();
    const isAdmin = userRole === UserRole.CLINIC_ADMIN;
 
@@ -101,7 +104,7 @@ export const Staff: React.FC<StaffProps> = ({ userRole, analyticsDoctors, appoin
             </div>
          </div>
 
-         {activeTab === 'list' && <StaffManagement {...management} />}
+         {activeTab === 'list' && <StaffManagement {...management} appointments={appointments} transactions={transactions} expenses={expenses} labOrders={labOrders} />}
          {activeTab === 'stats' && (
             <DoctorsAnalytics
                embedded

@@ -21,7 +21,7 @@ const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { SalesDashboard } from './pages/SalesDashboard';
 import { Staff } from './pages/Staff';
-import { DoctorDetails } from './pages/DoctorDetails';
+import { StaffProfile } from './pages/StaffProfile';
 import { Inventory } from './pages/Inventory';
 import { OnlineQueue } from './pages/OnlineQueue';
 import { LabOrders } from './pages/LabOrders';
@@ -1194,6 +1194,36 @@ const AppContent: React.FC = () => {
 
   const pageLabel = t(getPageLabelKey(location.pathname));
 
+  // Xodim profili sahifasi: uch xil rol uchun bitta komponent
+  const renderStaffProfile = (kind: 'doctor' | 'receptionist' | 'labTech') => (
+    <StaffProfile
+      kind={kind}
+      userRole={userRole}
+      doctors={doctors}
+      receptionists={receptionists}
+      labTechnicians={labTechnicians}
+      appointments={appointments}
+      transactions={transactions}
+      patients={patients}
+      expenses={expenses}
+      labOrders={labOrders}
+      reviews={reviews}
+      branches={branches}
+      currentClinic={currentClinic}
+      plans={plans}
+      onAddDoctor={addDoctor}
+      onUpdateDoctor={updateDoctor}
+      onDeleteDoctor={deleteDoctor}
+      onAddReceptionist={addReceptionist}
+      onUpdateReceptionist={updateReceptionist}
+      onDeleteReceptionist={deleteReceptionist}
+      onAddLabTechnician={addLabTechnician}
+      onUpdateLabTechnician={updateLabTechnician}
+      onDeleteLabTechnician={deleteLabTechnician}
+      onPatientClick={handlePatientClick}
+    />
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
@@ -1786,6 +1816,8 @@ const AppContent: React.FC = () => {
                       userRole={userRole}
                       doctors={doctors}
                       analyticsDoctors={scopedDoctors}
+                      expenses={scopedExpenses}
+                      labOrders={labOrders}
                       receptionists={receptionists}
                       labTechnicians={labTechnicians}
                       onAddDoctor={addDoctor}
@@ -1807,18 +1839,10 @@ const AppContent: React.FC = () => {
                     />
                   } />
 
-                  <Route path="/doctors/:doctorId" element={
-                    <DoctorDetails
-                      doctorId="" // Will be handled by useParams in a wrapper or directly if we use useParams inside DoctorDetails, but wait, let's just make DoctorDetails use useParams or pass a wrapper.
-                      doctors={doctors}
-                      appointments={appointments}
-                      transactions={transactions}
-                      patients={patients}
-                      services={services}
-                      onBack={() => navigate('/doctors')}
-                      onPatientClick={handlePatientClick}
-                    />
-                  } />
+                  {/* Xodim profili: shifokor, resepshn yoki texnik */}
+                  <Route path="/doctors/receptionist/:staffId" element={renderStaffProfile('receptionist')} />
+                  <Route path="/doctors/technician/:staffId" element={renderStaffProfile('labTech')} />
+                  <Route path="/doctors/:staffId" element={renderStaffProfile('doctor')} />
 
                   <Route path="/inventory" element={
                     <Inventory
