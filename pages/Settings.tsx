@@ -3,12 +3,14 @@ import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UpgradePlanModal } from '../components/UpgradePlanModal';
 
 import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 
-// Sozlamalar — klinikaning o'z sozlamalari, to'rt guruhda:
-//   Klinika         — ma'lumotlar va ish vaqti, filiallar, bron to'lovi, kassa smenalari
+// Sozlamalar — klinikaning o'z sozlamalari:
+//   Klinika             — ma'lumotlar va ish vaqti
+//   Filiallar           — faqat klinika egasiga
+//   Maxsus imkoniyatlar — chek chiqarish, oldindan to'lov, kassa smenalari
 //   Xizmatlar       — kategoriyalar va narxlar
 //   Integratsiyalar — Telegram va SMS, DMED, AI kaliti, lid API
 //   Tarif           — obuna, muddat va cheklovlar
@@ -42,14 +44,16 @@ export const Settings: React.FC<SettingsProps> = ({
 }) => {
    const { t } = useLanguage();
    const isAdmin = userRole === UserRole.CLINIC_ADMIN;
-   type SettingsTab = 'clinic' | 'services' | 'integrations' | 'plan';
+   type SettingsTab = 'clinic' | 'branches' | 'services' | 'features' | 'integrations' | 'plan';
    type IntegrationTab = 'messaging' | 'dmed' | 'ai' | 'leadApi';
    // Boshqa sahifadan aniq bo'limga yo'naltirish uchun: /settings?tab=leadApi.
    // Eski bo'lim nomlari (general, branches, messaging, dmed...) ham ishlaydi.
    const [initialTab, initialIntegration] = ((): [SettingsTab, IntegrationTab] => {
       try {
          const tab = new URLSearchParams(window.location.search).get('tab') || '';
-         if (tab === 'clinic' || tab === 'general' || tab === 'branches') return ['clinic', 'messaging'];
+         if (tab === 'clinic' || tab === 'general') return ['clinic', 'messaging'];
+         if (tab === 'branches' && isAdmin) return ['branches', 'messaging'];
+         if (tab === 'features') return ['features', 'messaging'];
          if (tab === 'services' || tab === 'integrations' || tab === 'plan') return [tab, 'messaging'];
          if (tab === 'messaging' || tab === 'dmed') return ['integrations', tab];
          // AI va lid kalitini faqat klinika egasi ko'radi
@@ -665,7 +669,10 @@ export const Settings: React.FC<SettingsProps> = ({
 
    const tabs: { id: SettingsTab; name: string; icon: React.ElementType }[] = [
       { id: 'clinic', name: t('settings.tabs.clinic'), icon: Building2 },
+      // Filiallarni faqat klinika egasi boshqaradi
+      ...(isAdmin ? [{ id: 'branches' as const, name: t('branches.title'), icon: MapPin }] : []),
       { id: 'services', name: t('settings.tabs.servicesPrices'), icon: DollarSign },
+      { id: 'features', name: t('settings.tabs.features'), icon: SlidersHorizontal },
       { id: 'integrations', name: t('settings.tabs.integrations'), icon: Plug },
       { id: 'plan', name: t('settings.tabs.plan'), icon: CreditCard },
    ];
@@ -703,7 +710,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
             <div className="lg:col-span-3 space-y-6">
 
-               {/* Klinika: ma'lumotlar va ish vaqti, filiallar, bron to'lovi, kassa smenalari */}
+               {/* Klinika: ma'lumotlar va ish vaqti */}
                {activeTab === 'clinic' && (
                   <div className="space-y-6">
                      <Card className="p-6">
@@ -740,22 +747,6 @@ export const Settings: React.FC<SettingsProps> = ({
                                  />
                               </div>
                            </div>
-                           
-                           {/* Receipt Printing Toggle */}
-                           <div className="pt-2">
-                              <label className="flex items-center space-x-3 cursor-pointer">
-                                 <input
-                                    type="checkbox"
-                                    checked={generalForm.enableReceipts}
-                                    onChange={(e) => setGeneralForm({ ...generalForm, enableReceipts: e.target.checked })}
-                                    className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
-                                 />
-                                 <div>
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white">Chek chiqarish funksiyasi</p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">Yoqilsa, to'lov qabul qilinganda avtomatik ravishda chek oynasi ochiladi.</p>
-                                 </div>
-                              </label>
-                           </div>
 
                            <div className="pt-4 flex items-center gap-4">
                               <Button type="submit">{t('common.save')}</Button>
@@ -763,9 +754,11 @@ export const Settings: React.FC<SettingsProps> = ({
                            </div>
                         </form>
                      </Card>
+                  </div>
+               )}
 
-                     {/* Filiallar — ilgari alohida bo'lim edi. Ularni faqat klinika egasi boshqaradi, backend ham shuni talab qiladi. */}
-                     {isAdmin && (
+               {/* Filiallar — faqat klinika egasi boshqaradi, backend ham shuni talab qiladi */}
+               {activeTab === 'branches' && isAdmin && (
                      <Card className="p-6">
                         <div className="flex justify-between items-start gap-4 mb-6">
                            <div>
@@ -851,7 +844,35 @@ export const Settings: React.FC<SettingsProps> = ({
                            </div>
                         )}
                      </Card>
-                     )}
+               )}
+
+               {/* Maxsus imkoniyatlar: yoqib-o'chiriladigan qo'shimcha funksiyalar */}
+               {activeTab === 'features' && (
+                  <div className="space-y-6">
+                     {/* Chek chiqarish — umumiy ma'lumotlar bilan bitta so'rovda saqlanadi */}
+                     <Card className="p-6">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Chek chiqarish</h3>
+                        <form onSubmit={handleGeneralSave} className="space-y-4">
+                           <div className="pt-2">
+                              <label className="flex items-center space-x-3 cursor-pointer">
+                                 <input
+                                    type="checkbox"
+                                    checked={generalForm.enableReceipts}
+                                    onChange={(e) => setGeneralForm({ ...generalForm, enableReceipts: e.target.checked })}
+                                    className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
+                                 />
+                                 <div>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white">Chek chiqarish funksiyasi</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Yoqilsa, to'lov qabul qilinganda avtomatik ravishda chek oynasi ochiladi.</p>
+                                 </div>
+                              </label>
+                           </div>
+                           <div className="pt-4 flex items-center gap-4">
+                              <Button type="submit">{t('common.save')}</Button>
+                              {generalSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
+                           </div>
+                        </form>
+                     </Card>
 
                      {/* Prepayment Settings Card */}
                      <Card className="p-6">
