@@ -1,4 +1,4 @@
-import { Appointment, Clinic, Doctor, Expense, LabOrder, Receptionist, LabTechnician, Transaction } from '../types';
+import { Appointment, Clinic, Doctor, Expense, LabOrder, Receptionist, LabTechnician, Review, Transaction } from '../types';
 import { transactionBelongsToDoctor } from './financialCalculations';
 
 // Xodimlar ro'yxati va xodim profili uchun umumiy hisoblar. Hammasi bazada
@@ -111,4 +111,112 @@ export const technicianStats = (tech: LabTechnician, labOrders: LabOrder[], expe
         payments,
         paid: payments.reduce((s, e) => s + e.amount, 0),
     };
+};
+
+// ---- Davr bo'yicha hisoblar (Xodimlar → Statistika) ----
+
+export const inRange = (day: string, start: string, end: string) => !!day && day >= start && day <= end;
+
+const parseDay = (day: string) => {
+    const [y, m, d] = day.split('-').map(Number);
+    return new Date(y, m - 1, d);
+};
+
+/** Davrdagi ish kunlari soni: yakshanbadan tashqari hamma kun */
+export const workDaysInRange = (start: string, end: string) => {
+    if (!start || !end || start > end) return 0;
+    let count = 0;
+    const day = parseDay(start);
+    const last = parseDay(end);
+    for (let guard = 0; day <= last && guard < 4000; guard++) {
+        if (day.getDay() !== 0) count++;
+        day.setDate(day.getDate() + 1);
+    }
+    return count;
+};
+
+/** Davr nechta kalendar oyiga tegadi — fix maosh shu songa ko'paytiriladi */
+export const monthsInRange = (start: string, end: string) => {
+    if (!start || !end || start > end) return 0;
+    const [y1, m1] = start.split('-').map(Number);
+    const [y2, m2] = end.split('-').map(Number);
+    return (y2 - y1) * 12 + (m2 - m1) + 1;
+};
+
+export type PeriodPreset = 'month' | 'lastMonth' | 'quarter' | 'year' | 'custom';
+
+export const presetRange = (preset: PeriodPreset) => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const lastDay = (yy: number, mm: number) => isoDay(new Date(yy, mm + 1, 0));
+    if (preset === 'lastMonth') return { start: isoDay(new Date(y, m - 1, 1)), end: lastDay(y, m - 1) };
+    if (preset === 'quarter') return { start: isoDay(new Date(y, m - 2, 1)), end: lastDay(y, m) };
+    if (preset === 'year') return { start: `${y}-01-01`, end: `${y}-12-31` };
+    return { start: isoDay(new Date(y, m, 1)), end: lastDay(y, m) };
+};
+
+export const doctorPeriodStats = (
+    doctor: Doctor, appointments: Appointment[], transactions: Transaction[], expenses: Expense[],
+    reviews: Review[], clinic: Clinic | undefined, start: string, end: string,
+) => {
+    const today = todayIso();
+    const appts = appointments.filter(a => a.doctorId === doctor.id && inRange(toDay(a.date), start, end));
+    const done = appts.filter(a => a.status === 'Completed').length;
+    // Bajarilish — faqat kuni o'tgan (yoki bugungi) qabullar ichida; kelajakdagilar hisobni buzmasin
+    const pastCount = appts.filter(a => toDay(a.date) <= today && a.status !== 'Cancelled').length;
+    const bookedMinutes = appts.filter(countsAsBooked).reduce((s, a) => s + (a.duration || 30), 0);
+    const capacityMinutes = doctorHours(doctor, clinic).perDay * 60 * workDaysInRange(start, end);
+    const revenueTx = transactions.filter(tx => tx.status === 'Paid' && inRange(toDay(tx.date), start, end) && transactionBelongsToDoctor(tx, doctor));
+    const revenue = revenueTx.reduce((s, tx) => s + tx.amount, 0);
+    const type = doctor.salaryType || 'none';
+    const fixed = type === 'fixed' || type === 'fixed_kpi' ? (doctor.fixedSalary || 0) * monthsInRange(start, end) : 0;
+    const kpi = type === 'kpi' || type === 'fixed_kpi' ? Math.round((revenue * (doctor.percentage || 0)) / 100) : 0;
+    const paid = expenses
+        .filter(e => e.doctorId === doctor.id && (e.category === 'Salary' || e.category === 'DoctorShare') && inRange(toDay(e.date), start, end))
+        .reduce((s, e) => s + e.amount, 0);
+    const apptIds = new Set(appointments.filter(a => a.doctorId === doctor.id).map(a => a.id));
+    const ratings = reviews.filter(r => apptIds.has(r.appointmentId) && inRange(toDay(r.createdAt), start, end)).map(r => r.rating);
+    return {
+        total: appts.length, done, pastCount,
+        completion: pastCount ? Math.round((done / pastCount) * 100) : 0,
+        patients: new Set(appts.map(a => a.patientId)).size,
+        revenue, revenueCount: revenueTx.length,
+        avgCheck: done ? Math.round(revenue / done) : 0,
+        bookedMinutes, capacityMinutes,
+        load: capacityMinutes ? Math.min(100, Math.round((bookedMinutes / capacityMinutes) * 100)) : 0,
+        type, fixed, kpi, accrued: fixed + kpi, paid, balance: fixed + kpi - paid,
+        rating: ratings.length ? ratings.reduce((s, v) => s + v, 0) / ratings.length : 0,
+        ratingCount: ratings.length,
+    };
+};
+
+export const receptionistPeriodStats = (rec: Receptionist, transactions: Transaction[], expenses: Expense[], start: string, end: string) => {
+    const received = transactions.filter(tx => tx.receivedById === rec.id && tx.status === 'Paid' && inRange(toDay(tx.createdAt || tx.date), start, end));
+    const paid = expenses.filter(e => e.receptionistId === rec.id && inRange(toDay(e.date), start, end)).reduce((s, e) => s + e.amount, 0);
+    return { count: received.length, sum: received.reduce((s, tx) => s + tx.amount, 0), paid };
+};
+
+export const technicianPeriodStats = (tech: LabTechnician, labOrders: LabOrder[], expenses: Expense[], start: string, end: string) => {
+    const today = todayIso();
+    const orders = labOrders.filter(o => o.technicianId === tech.id);
+    const active = orders.filter(o => o.status === 'Pending' || o.status === 'In-Progress');
+    const delivered = orders.filter(o => o.status === 'Delivered' && inRange(toDay(o.deliveredAt || o.orderedAt), start, end));
+    const ids = new Set(orders.map(o => o.id));
+    const paid = expenses.filter(e => !!e.labOrderId && ids.has(e.labOrderId) && inRange(toDay(e.date), start, end)).reduce((s, e) => s + e.amount, 0);
+    return {
+        active: active.length,
+        overdue: active.filter(o => o.deadline < today).length,
+        delivered: delivered.length,
+        deliveredSum: delivered.reduce((s, o) => s + (o.price || 0), 0),
+        paid,
+    };
+};
+
+/** Maosh holati yorlig'i: hisoblangan va to'langan summaga qarab */
+export const payState = (accrued: number, paid: number): { label: string; tone: 'green' | 'amber' | 'red' | 'gray' } => {
+    if (accrued <= 0 && paid <= 0) return { label: '—', tone: 'gray' };
+    if (paid >= accrued) return { label: "To'langan", tone: 'green' };
+    if (paid > 0) return { label: 'Qisman', tone: 'amber' };
+    return { label: "To'lanmagan", tone: 'red' };
 };

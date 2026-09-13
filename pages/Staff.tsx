@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Users, BarChart3, Shield } from 'lucide-react';
 import { StaffManagement } from '../components/StaffManagement';
 import { AccessControlSettings } from '../components/AccessControlSettings';
-import { DoctorsAnalytics } from './DoctorsAnalytics';
+import { StaffStatistics } from '../components/StaffStatistics';
 import { useLanguage } from '../context/LanguageContext';
 import {
    UserRole, Doctor, Receptionist, LabTechnician, Clinic, SubscriptionPlan, Branch,
@@ -104,15 +104,18 @@ export const Staff: React.FC<StaffProps> = ({ userRole, analyticsDoctors, appoin
             </div>
          </div>
 
-         {activeTab === 'list' && <StaffManagement {...management} appointments={appointments} transactions={transactions} expenses={expenses} labOrders={labOrders} />}
+         {activeTab === 'list' && <StaffManagement {...management} />}
          {activeTab === 'stats' && (
-            <DoctorsAnalytics
-               embedded
+            <StaffStatistics
                doctors={analyticsDoctors}
+               receptionists={management.receptionists || []}
+               labTechnicians={management.labTechnicians || []}
                appointments={appointments}
-               services={services}
                transactions={transactions}
+               expenses={expenses || []}
+               labOrders={labOrders || []}
                reviews={reviews}
+               currentClinic={management.currentClinic}
             />
          )}
          {activeTab === 'access' && <AccessControlSettings currentClinic={management.currentClinic} />}
