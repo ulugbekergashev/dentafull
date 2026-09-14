@@ -3,7 +3,17 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan, LeadApiKeyInfo } from '../types';
-import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, Infinity as InfinityIcon, Repeat } from 'lucide-react';
+
+// Reklama formalaridan (/lifetime, /monthly) kelgan lidlar kartada rang bilan ajralib turadi.
+// source: "ad-lifetime" yoki "ad-monthly", oxirida ixtiyoriy "-<utm_campaign>".
+const getAdLeadPlan = (source?: string | null) => {
+   const m = source?.match(/^ad-(lifetime|monthly)(?:-(.+))?$/);
+   if (!m) return null;
+   return m[1] === 'lifetime'
+      ? { label: 'LIFETIME', campaign: m[2], Icon: InfinityIcon, border: 'border-l-4 border-l-amber-400', badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' }
+      : { label: 'OYLIK', campaign: m[2], Icon: Repeat, border: 'border-l-4 border-l-sky-500', badge: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' };
+};
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 
@@ -1549,8 +1559,20 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            draggable
                            onDragStart={() => setDraggingLeadId(req.id)}
                            onDragEnd={() => { setDraggingLeadId(null); setDragOverStage(null); }}
-                           className={`relative p-4 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${draggingLeadId === req.id ? 'opacity-40' : ''}`}
+                           className={`relative p-4 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${getAdLeadPlan(req.source)?.border ?? ''} ${draggingLeadId === req.id ? 'opacity-40' : ''}`}
                         >
+                           {(() => {
+                              const plan = getAdLeadPlan(req.source);
+                              if (!plan) return null;
+                              return (
+                                 <div className="flex items-center gap-2 mb-3">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-extrabold tracking-wide ${plan.badge}`}>
+                                       <plan.Icon className="w-3.5 h-3.5" /> {plan.label}
+                                    </span>
+                                    {plan.campaign && <span className="text-[11px] text-gray-400 truncate">{plan.campaign}</span>}
+                                 </div>
+                              );
+                           })()}
                            <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-3">
                                  <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold text-sm">
@@ -1559,8 +1581,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  <div>
                                     <p className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-1.5">
                                        {req.name}
-                                       {req.source === 'Facebook' && <Facebook className="w-3.5 h-3.5 text-blue-500" />}
-                                    </p>
+                                       {req.source === 'Facebook' && <Facebook className="w-3.5 h-3.5 text-blue-500" />}                                    </p>
                                     <p className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleDateString('uz-UZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
                                  </div>
                               </div>

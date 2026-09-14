@@ -18,6 +18,9 @@ import { SignIn } from './pages/SignIn';
 // Landing faqat tizimga kirmagan mehmonga kerak — alohida chunk sifatida
 // yuklanadi, shunda CRM foydalanuvchisi marketing sahifasi kodini tortmaydi.
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
+// Reklamadan keladigan qisqa forma sahifalari (/lifetime, /monthly)
+const AdLeadPage = React.lazy(() => import('./pages/AdLeadPage'));
+const AD_LEAD_PATHS = { '/lifetime': 'lifetime', '/monthly': 'monthly' } as const;
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { SalesDashboard } from './pages/SalesDashboard';
 import { Staff } from './pages/Staff';
@@ -1121,6 +1124,16 @@ const AppContent: React.FC = () => {
   const showPatientPhoneForRole = canSeePatientPhone(accessControl, userRole);
 
   // --- Main Render ---
+  // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
+  const adPlan = AD_LEAD_PATHS[location.pathname.replace(/\/+$/, '') as keyof typeof AD_LEAD_PATHS];
+  if (adPlan) {
+    return (
+      <React.Suspense fallback={null}>
+        <AdLeadPage plan={adPlan} />
+      </React.Suspense>
+    );
+  }
+
   if (!isAuthenticated) {
     if (!authChecked) return null;
     return (
