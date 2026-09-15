@@ -276,6 +276,22 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       }
    }, [activeTab]);
 
+   // Lidlar ochiq turganda ro'yxat o'zi yangilanadi: superadmin lid o'tkazsa,
+   // sotuvchida hech narsa bosmasdan paydo bo'ladi. Yashirin tabda so'rov ketmaydi.
+   useEffect(() => {
+      if (activeTab !== 'leads') return;
+      const refresh = () => {
+         if (document.hidden) return;
+         api.demoRequests.getAll().then(setDemoRequests).catch(() => { /* keyingi urinishda */ });
+      };
+      const timer = setInterval(refresh, 30000);
+      document.addEventListener('visibilitychange', refresh);
+      return () => {
+         clearInterval(timer);
+         document.removeEventListener('visibilitychange', refresh);
+      };
+   }, [activeTab]);
+
    const copyLeadValue = async (value: string, marker: string) => {
       try {
          await navigator.clipboard.writeText(value);
