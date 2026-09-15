@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, CalendarPlus, ChevronRight, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
@@ -506,6 +506,31 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       return t.patientName === fullName || t.patientName === fullNameReverse;
    });
 
+   // Chap panel va Umumiy tab uchun hisoblangan qiymatlar
+   const patientAge = calcAge(patient.dob);
+   const patientBalance = patient.balance || 0;
+   const balanceLabel = patientBalance > 0
+      ? t('patients.details.balanceAdvance')
+      : patientBalance < 0 ? t('patients.details.balanceDebt') : t('patients.details.balanceSettled');
+   const balanceTone = patientBalance > 0
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300'
+      : patientBalance < 0
+         ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300'
+         : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300';
+   // "Sog'lom" belgisi ogohlantirish emas — faqat haqiqiy kasallik/allergiyalar ko'rsatiladi
+   const healthAlerts = (patient.medicalHistory || '')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !/^SOG'LOM/i.test(line));
+   const completedVisits = patientAppointments.filter(a => a.status === 'Completed' || a.status === 'Checked-In').length;
+   const nowTs = Date.now();
+   const nextAppointment = patientAppointments
+      .filter(a => a.status !== 'Cancelled' && a.status !== 'Completed' && new Date(`${a.date}T${a.time}`).getTime() >= nowTs)
+      .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime())[0];
+   const lastVisitLabel = patient.lastVisit && patient.lastVisit !== 'Never'
+      ? formatDobDDMMYYYY(patient.lastVisit)
+      : t('patients.details.noVisits');
+
    const handleEditOpen = () => {
       setEditFormData(patient);
       setIsEditModalOpen(true);
@@ -903,147 +928,158 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    return (
       <>
          <div className="space-y-6 animate-fade-in pb-10 print:hidden">
-            {/* Top Nav */}
-            <div className="flex items-center gap-4">
-               <Button variant="ghost" onClick={onBack} className="!p-2">
-                  <ArrowLeft className="w-5 h-5" />
-               </Button>
-               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('patients.details.title')}</h1>
-               <div className="ml-auto">
-                  <Button
-                     variant="secondary"
-                     onClick={() => printPatientCard({
-                        patient,
-                        clinic: currentClinic,
-                        doctor: doctors.find(d => d.id === patient.doctorId) || myDoctor || doctors[0],
-                        teeth: teethData,
-                        diagnoses,
-                        procedures: allProceduresHistory,
-                     })}
-                  >
-                     <Printer className="w-4 h-4 mr-2" /> Karta (vipiska)
-                  </Button>
-               </div>
+            {/* Yuqori qator: orqaga (bemorlar ro'yxati) + bemor ismi */}
+            <div className="flex items-center gap-2 text-sm">
+               <button
+                  type="button"
+                  onClick={onBack}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-800 transition-colors"
+               >
+                  <ArrowLeft className="w-4 h-4" /> {t('patients.details.backToList')}
+               </button>
+               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600" />
+               <span className="font-medium text-gray-900 dark:text-white truncate">{patient.firstName} {patient.lastName}</span>
             </div>
 
-            {/* Header Card */}
-            <Card className="p-6">
-               <div className="flex flex-col md:flex-row gap-6 items-start">
-                  <div className="relative group flex-shrink-0">
-                     <div className="w-24 h-24 rounded-full bg-primary-100 dark:bg-primary-900 border-2 border-white dark:border-gray-700 shadow-md overflow-hidden flex items-center justify-center text-3xl font-bold">
-                        {patient.avatarUrl ? (
-                           <img src={patient.avatarUrl} alt={patient.firstName} className="w-full h-full object-cover" />
-                        ) : (
-                           <span className="text-primary-600 dark:text-primary-200">{patient.firstName[0]}{patient.lastName[0]}</span>
-                        )}
-                     </div>
-                     <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                        <Edit className="w-6 h-6" />
-                        <input 
-                           type="file" 
-                           className="hidden" 
-                           accept="image/*" 
-                           onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload('avatar', file);
-                           }} 
-                        />
-                     </label>
-                  </div>
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
-                     <div className="space-y-1">
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{patient.firstName} {patient.lastName}</h2>
-                        <p className="text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                           <span className="capitalize">{patient.gender === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}</span> • {calcAge(patient.dob) ?? 'N/A'} {t('patients.details.age')}{patient.dob && ` (${formatDobDDMMYYYY(patient.dob)})`}
-                        </p>
-                        <div className="pt-2 flex items-center gap-3">
-                           <Badge status={patient.status} />
-                           {patient.balance !== undefined && (
-                              <div className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                                 patient.balance > 0 
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
-                                    : patient.balance < 0
-                                       ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
-                                       : 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
-                              }`}>
-                                 {patient.balance > 0 
-                                    ? `Avans: ${patient.balance.toLocaleString()} UZS` 
-                                    : patient.balance < 0 
-                                       ? `Qarz: ${Math.abs(patient.balance).toLocaleString()} UZS`
-                                       : `Hisob: 0 UZS`}
-                              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-6 items-start">
+            {/* Chap panel: bemor haqida umumiy ma'lumot. Kompyuterda scroll paytida joyida turadi */}
+            <aside className="lg:sticky lg:top-32">
+               <Card className="p-5">
+                  <div className="flex items-center gap-4">
+                     <div className="relative group flex-shrink-0">
+                        <div className="w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900 ring-4 ring-primary-50 dark:ring-primary-900/40 overflow-hidden flex items-center justify-center text-xl font-bold">
+                           {patient.avatarUrl ? (
+                              <img src={patient.avatarUrl} alt={patient.firstName} className="w-full h-full object-cover" />
+                           ) : (
+                              <span className="text-primary-600 dark:text-primary-200">{patient.firstName?.[0]}{patient.lastName?.[0]}</span>
                            )}
                         </div>
+                        <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                           <Edit className="w-5 h-5" />
+                           <input
+                              type="file"
+                              className="hidden"
+                              accept="image/*"
+                              onChange={(e) => {
+                                 const file = e.target.files?.[0];
+                                 if (file) handleImageUpload('avatar', file);
+                              }}
+                           />
+                        </label>
                      </div>
-
-                     <div className="space-y-3 text-sm">
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                           <Phone className="w-4 h-4" /> {showPatientPhone ? patient.phone : maskPhone(patient.phone)}
-                        </div>
-                        {patient.secondaryPhone && (
-                           <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                              <Phone className="w-4 h-4 text-gray-400" /> {showPatientPhone ? patient.secondaryPhone : maskPhone(patient.secondaryPhone)} (Qo'shimcha)
-                           </div>
-                        )}
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                           <MapPin className="w-4 h-4" /> {patient.address || t('patients.details.noAddress')}
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                           <Clock className="w-4 h-4" /> {t('patients.details.lastVisit')} {patient.lastVisit}
-                        </div>
-                        {patient.doctorName && (
-                           <div className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-medium">
-                              <User className="w-4 h-4" /> {t('patients.details.doctor')} {patient.doctorName}
-                           </div>
-                        )}
-                     </div>
-
-                     <div className="flex xl:flex-col md:flex-row flex-col justify-end items-start xl:items-end gap-2 text-right">
-                        <Button variant="secondary" size="sm" onClick={() => setIsAssignDoctorModalOpen(true)}>
-                           <UserPlus className="w-4 h-4 mr-2" /> {patient.doctorId ? t('patients.details.changeDoctor') : t('patients.details.assignDoctor')}
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => {
-                           setMessageType('Custom');
-                           setMessageText('');
-                           setIsMessageModalOpen(true);
-                        }}>
-                           <Send className="w-4 h-4 mr-2" /> {t('patients.details.sendMessage')}
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={handleEditOpen}>
-                           <Edit className="w-4 h-4 mr-2" /> {t('patients.details.editProfile')}
-                        </Button>
+                     <div className="min-w-0 space-y-1">
+                        <h2 className="text-lg font-bold text-gray-900 dark:text-white leading-tight break-words">{patient.firstName} {patient.lastName}</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                           {patient.gender === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}
+                           {patientAge !== null && patientAge !== undefined && <> · {patientAge} {t('patients.details.age')}</>}
+                           {patient.dob && <span className="text-gray-400"> ({formatDobDDMMYYYY(patient.dob)})</span>}
+                        </p>
+                        <div className="flex"><Badge status={patient.status} /></div>
                      </div>
                   </div>
-               </div>
-            </Card>
 
-            {/* Tabs */}
+                  {/* Hisob: qabulxona birinchi ko'rishi kerak bo'lgan raqam */}
+                  <div className={`mt-4 rounded-xl border px-4 py-2.5 ${balanceTone}`}>
+                     <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{balanceLabel}</p>
+                     <p className="text-2xl font-bold tabular-nums">{Math.abs(patient.balance || 0).toLocaleString()} <span className="text-sm font-semibold">UZS</span></p>
+                  </div>
+
+                  {healthAlerts.length > 0 && (
+                     <button
+                        type="button"
+                        onClick={() => setActiveTab('overview')}
+                        className="mt-3 w-full text-left rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-800/60 dark:bg-amber-900/20"
+                     >
+                        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                           <AlertTriangle className="w-4 h-4" /> {t('patients.details.healthWarning')}
+                        </p>
+                        <ul className="mt-1.5 space-y-0.5 text-sm text-amber-900 dark:text-amber-100">
+                           {healthAlerts.slice(0, 3).map(line => <li key={line} className="truncate">{line}</li>)}
+                           {healthAlerts.length > 3 && <li className="text-xs text-amber-700 dark:text-amber-300">+{healthAlerts.length - 3}</li>}
+                        </ul>
+                     </button>
+                  )}
+
+                  <div className="mt-4 space-y-2 text-sm">
+                     <a
+                        href={showPatientPhone ? `tel:${patient.phone}` : undefined}
+                        className="flex items-center gap-2.5 text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
+                     >
+                        <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" /> <span className="tabular-nums">{showPatientPhone ? patient.phone : maskPhone(patient.phone)}</span>
+                     </a>
+                     {patient.secondaryPhone && (
+                        <a
+                           href={showPatientPhone ? `tel:${patient.secondaryPhone}` : undefined}
+                           className="flex items-center gap-2.5 text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
+                        >
+                           <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                           <span className="tabular-nums">{showPatientPhone ? patient.secondaryPhone : maskPhone(patient.secondaryPhone)}</span>
+                           <span className="text-xs text-gray-400">{t('patients.details.secondaryPhone')}</span>
+                        </a>
+                     )}
+                     <div className={`flex items-start gap-2.5 ${patient.address ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400'}`}>
+                        <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" /> <span className="break-words">{patient.address || t('patients.details.noAddress')}</span>
+                     </div>
+                     <div className={`flex items-center gap-2.5 ${patient.doctorName ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400'}`}>
+                        <UserCheck className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <span className="truncate">{patient.doctorName || t('patients.details.noDoctor')}</span>
+                     </div>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-0.5">
+                     <Button className="w-full mb-2" onClick={openApptModal}>
+                        <CalendarPlus className="w-4 h-4 mr-2" /> {t('patients.details.newAppointment')}
+                     </Button>
+                     {[
+                        { icon: Edit, label: t('patients.details.editProfile'), onClick: handleEditOpen },
+                        { icon: Send, label: t('patients.details.sendMessage'), onClick: () => { setMessageType('Custom'); setMessageText(''); setIsMessageModalOpen(true); } },
+                        { icon: UserPlus, label: patient.doctorId ? t('patients.details.changeDoctor') : t('patients.details.assignDoctor'), onClick: () => setIsAssignDoctorModalOpen(true) },
+                        {
+                           icon: Printer, label: t('patients.details.printCard'), onClick: () => printPatientCard({
+                              patient,
+                              clinic: currentClinic,
+                              doctor: doctors.find(d => d.id === patient.doctorId) || myDoctor || doctors[0],
+                              teeth: teethData,
+                              diagnoses,
+                              procedures: allProceduresHistory,
+                           })
+                        },
+                     ].map(action => (
+                        <button
+                           key={action.label}
+                           type="button"
+                           onClick={action.onClick}
+                           className="w-full flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/60 transition-colors"
+                        >
+                           <action.icon className="w-4 h-4 text-gray-400" /> {action.label}
+                        </button>
+                     ))}
+                  </div>
+               </Card>
+            </aside>
+
+            {/* O'ng tomon: tablar va ularning mazmuni */}
+            <div className="min-w-0 space-y-6">
             <div className="border-b border-gray-200 dark:border-gray-700">
-               <nav className="-mb-px flex space-x-8 overflow-x-auto">
+               <nav className="-mb-px flex gap-6 overflow-x-auto">
                   {[
                      { id: 'overview', label: t('patients.details.tabs.overview'), icon: User },
                      { id: 'chart', label: t('patients.details.tabs.chart'), icon: Activity },
                      { id: 'photos', label: t('patients.details.tabs.photos'), icon: FileText },
                      { id: 'appointments', label: t('patients.details.tabs.appointments'), icon: Calendar },
                      { id: 'payments', label: t('patients.details.tabs.payments'), icon: CreditCard },
-                     { id: 'installments', label: "Bo'lib to'lash", icon: Clock },
+                     { id: 'installments', label: t('patients.details.tabs.installments'), icon: Clock },
                      { id: 'materials', label: t('patients.details.tabs.materials'), icon: Package },
                   ].map(tab => (
                      <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
-                        className={`
-                  group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors
-                  ${activeTab === tab.id
-                              ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                           }
-                `}
+                        className={`group inline-flex items-center py-3.5 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === tab.id
+                           ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                        }`}
                      >
-                        <tab.icon className={`
-                  -ml-0.5 mr-2 h-4 w-4
-                  ${activeTab === tab.id ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'}
-                `} />
+                        <tab.icon className={`-ml-0.5 mr-2 h-4 w-4 ${activeTab === tab.id ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'}`} />
                         {tab.label}
                      </button>
                   ))}
@@ -1054,7 +1090,34 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <div className="min-h-[400px]">
 
                {activeTab === 'overview' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  <div className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                     {[
+                        { icon: Activity, label: t('patients.details.stats.visits'), value: String(completedVisits), sub: null as string | null, onClick: () => setActiveTab('appointments') },
+                        { icon: Clock, label: t('patients.details.stats.lastVisit'), value: lastVisitLabel, sub: null, onClick: () => setActiveTab('appointments') },
+                        {
+                           icon: Calendar,
+                           label: t('patients.details.stats.nextAppointment'),
+                           value: nextAppointment ? `${formatDobDDMMYYYY(nextAppointment.date)} · ${nextAppointment.time}` : t('patients.details.stats.notScheduled'),
+                           sub: nextAppointment?.doctorName || null,
+                           onClick: nextAppointment ? () => setActiveTab('appointments') : openApptModal,
+                        },
+                     ].map(stat => (
+                        <button
+                           key={stat.label}
+                           type="button"
+                           onClick={stat.onClick}
+                           className="text-left bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm px-4 py-3.5 hover:border-primary-300 dark:hover:border-primary-700 transition-colors"
+                        >
+                           <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                              <stat.icon className="w-3.5 h-3.5" /> {stat.label}
+                           </p>
+                           <p className="mt-1 text-lg font-bold text-gray-900 dark:text-white tabular-nums truncate">{stat.value}</p>
+                           {stat.sub && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{stat.sub}</p>}
+                        </button>
+                     ))}
+                  </div>
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                      <VisitWorkflow
                         key={visitKey}
                         services={services}
@@ -1137,6 +1200,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </Card>
 
 
+                  </div>
                   </div>
                )}
 
@@ -1521,6 +1585,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      {materialLogs.length === 0 && <div className="p-8 text-center text-gray-500">{t('patients.details.materials.empty')}</div>}
                   </Card>
                )}
+            </div>
+            </div>
             </div>
 
             {/* Edit Modal */}

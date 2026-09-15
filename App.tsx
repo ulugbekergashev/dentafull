@@ -1630,7 +1630,7 @@ const AppContent: React.FC = () => {
       />
 
       <main className="flex-1 lg:pt-28 min-h-screen flex flex-col items-center">
-        <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 sm:py-6 lg:py-8 flex-1 overflow-x-hidden pb-24 lg:pb-8">
+        <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 sm:py-6 lg:py-8 flex-1 overflow-x-clip pb-24 lg:pb-8">
           <Routes>
 
             <>
