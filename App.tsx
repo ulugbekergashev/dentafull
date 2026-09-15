@@ -1288,7 +1288,15 @@ const AppContent: React.FC = () => {
 
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {visibleNavigation.map((item) => {
-              const to = item.id === 'dashboard' ? '/' : `/${item.id}`;
+              // Superadmin/sotuvchi bo'limlari `?tab=` li havola. Ilgari bu yerda
+              // `/${item.id}` yasalardi: telefonda "Lidlar" /leads ga, u esa
+              // mavjud bo'lmagani uchun standart "Klinikalar" bo'limiga otardi.
+              const to = (item as any).to || (item.id === 'dashboard' ? '/' : `/${item.id}`);
+              const tabOf = (item as any).to
+                ? new URLSearchParams(String((item as any).to).split('?')[1] || '').get('tab')
+                : null;
+              const tabActive = tabOf !== null
+                && (new URLSearchParams(location.search).get('tab') || defaultAdminTab) === tabOf;
               return (
                 <NavLink
                   key={item.id}
@@ -1296,13 +1304,13 @@ const AppContent: React.FC = () => {
                   end={item.id === 'dashboard'}
                   onClick={() => setIsSidebarOpen(false)}
                   className={({ isActive }) =>
-                    `flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-colors group ${isActive || (item.id === 'patients' && location.pathname.startsWith('/patients'))
+                    `flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg transition-colors group ${(tabOf !== null ? tabActive : isActive) || (item.id === 'patients' && location.pathname.startsWith('/patients'))
                       ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
                       : 'text-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'
                     }`
                   }
                 >
-                  <item.icon className={`w-5 h-5 mr-3 ${location.pathname === to || (item.id === 'patients' && location.pathname.startsWith('/patients'))
+                  <item.icon className={`w-5 h-5 mr-3 ${(tabOf !== null ? tabActive : location.pathname === to) || (item.id === 'patients' && location.pathname.startsWith('/patients'))
                     ? 'text-primary dark:text-primary-400'
                     : 'text-gray-400 group-hover:text-gray-500'
                     }`} />
