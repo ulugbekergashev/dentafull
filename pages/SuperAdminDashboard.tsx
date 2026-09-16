@@ -491,52 +491,93 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // Sales Agents State
    const [salesAgents, setSalesAgents] = useState<any[]>([]);
 
-   // Lidlar statistikasi: bugungi oqim, sotuvchilar bo'yicha taqsimot va
-   // bosqichlar. Hammasi allaqachon yuklangan ro'yxatdan hisoblanadi —
+   /** Statistika davri. Standart — oxirgi 7 kun. */
+   const [leadPeriod, setLeadPeriod] = useState<'today' | 'yesterday' | '7d' | '30d' | 'all'>('7d');
+
+   // Lidlar statistikasi. Hammasi allaqachon yuklangan ro'yxatdan hisoblanadi —
    // yangi so'rov yo'q.
+   //
+   // Kun mahalliy vaqt bo'yicha olinadi: toISOString() UTC beradi va
+   // Toshkentda ertalab tushgan lid "kecha" ga tushib qolardi.
+   //
+   // Eslatma: lid qachon biriktirilgani saqlanmaydi, shuning uchun
+   // "kecha tushgan, falonchiga tegishli" — lidning BUGUNGI egasi.
    const leadStats = React.useMemo(() => {
-      const dayKey = (d: any) => new Date(d).toISOString().split('T')[0];
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+      const dayKey = (d: any) => {
+         const dt = new Date(d);
+         const m = `${dt.getMonth() + 1}`.padStart(2, '0');
+         const day = `${dt.getDate()}`.padStart(2, '0');
+         return `${dt.getFullYear()}-${m}-${day}`;
+      };
+      const todayKey = dayKey(Date.now());
+      const yesterdayKey = dayKey(Date.now() - 86400000);
+      const startOf = (daysBack: number) => dayKey(Date.now() - daysBack * 86400000);
+
+      const inPeriod = (r: any) => {
+         const d = dayKey(r.createdAt);
+         if (leadPeriod === 'today') return d === todayKey;
+         if (leadPeriod === 'yesterday') return d === yesterdayKey;
+         if (leadPeriod === '7d') return d >= startOf(6);
+         if (leadPeriod === '30d') return d >= startOf(29);
+         return true;
+      };
+      const scoped = demoRequests.filter(inPeriod);
 
       const byStage: Record<string, number> = {};
-      let todayCount = 0, yesterdayCount = 0, weekCount = 0, unassigned = 0;
-      demoRequests.forEach((r: any) => {
+      let unassigned = 0;
+      scoped.forEach((r: any) => {
          const stage = leadStage(r);
          byStage[stage] = (byStage[stage] || 0) + 1;
          if (!r.salesAgentId) unassigned++;
-         const day = dayKey(r.createdAt);
-         if (day === today) todayCount++;
-         if (day === yesterday) yesterdayCount++;
-         if (day >= weekAgo) weekCount++;
       });
 
       const byAgent = salesAgents.map((a: any) => {
-         const mine = demoRequests.filter((r: any) => r.salesAgentId === a.id);
+         const mine = scoped.filter((r: any) => r.salesAgentId === a.id);
          const stages: Record<string, number> = {};
          mine.forEach((r: any) => { const st = leadStage(r); stages[st] = (stages[st] || 0) + 1; });
          return {
             id: a.id,
             name: a.name,
             total: mine.length,
-            today: mine.filter((r: any) => dayKey(r.createdAt) === today).length,
+            today: mine.filter((r: any) => dayKey(r.createdAt) === todayKey).length,
             stages,
          };
       }).sort((x, y) => y.total - x.total);
 
+      // Kunlar bo'yicha: har bir kunda nechta lid tushgan va ular kimga tegishli
+      const dayCount = leadPeriod === 'today' || leadPeriod === 'yesterday' ? 7
+         : leadPeriod === '30d' || leadPeriod === 'all' ? 30 : 7;
+      const byDay = Array.from({ length: dayCount }, (_, i) => {
+         const key = dayKey(Date.now() - i * 86400000);
+         const rows = demoRequests.filter((r: any) => dayKey(r.createdAt) === key);
+         const perAgent: Record<string, number> = {};
+         salesAgents.forEach((a: any) => {
+            perAgent[a.id] = rows.filter((r: any) => r.salesAgentId === a.id).length;
+         });
+         return {
+            key,
+            label: key === todayKey ? 'Bugun' : key === yesterdayKey ? 'Kecha' : key.split('-').reverse().join('.'),
+            total: rows.length,
+            unassigned: rows.filter((r: any) => !r.salesAgentId).length,
+            perAgent,
+         };
+      });
+
       const booked = byStage['Booked'] || 0;
       return {
-         today: todayCount,
-         yesterday: yesterdayCount,
-         week: weekCount,
+         scopedTotal: scoped.length,
+         today: demoRequests.filter((r: any) => dayKey(r.createdAt) === todayKey).length,
+         yesterday: demoRequests.filter((r: any) => dayKey(r.createdAt) === yesterdayKey).length,
+         week: demoRequests.filter((r: any) => dayKey(r.createdAt) >= startOf(6)).length,
          total: demoRequests.length,
          unassigned,
          byStage,
          byAgent,
-         conversion: demoRequests.length ? Math.round((booked / demoRequests.length) * 100) : 0,
+         byDay,
+         conversion: scoped.length ? Math.round((booked / scoped.length) * 100) : 0,
       };
-   }, [demoRequests, salesAgents]);
+   }, [demoRequests, salesAgents, leadPeriod]);
+
    const [isAddSalesModalOpen, setIsAddSalesModalOpen] = useState(false);
    const [newSalesForm, setNewSalesForm] = useState({
       name: '',
@@ -1628,12 +1669,29 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <p className="text-sm text-gray-500">Lidlar oqimi, sotuvchilar bo'yicha taqsimot va tashqi manba sozlamasi</p>
                </div>
 
+               {/* Davr tanlagich: kartalar, bosqichlar va sotuvchilar jadvali shu davrga qaraydi */}
+               <div className="flex flex-wrap items-center gap-2">
+                  {([
+                     ['today', 'Bugun'], ['yesterday', 'Kecha'], ['7d', '7 kun'], ['30d', '30 kun'], ['all', 'Hammasi'],
+                  ] as const).map(([id, label]) => (
+                     <button
+                        key={id}
+                        onClick={() => setLeadPeriod(id)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${leadPeriod === id
+                           ? 'bg-primary-600 text-white'
+                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
+                     >
+                        {label}
+                     </button>
+                  ))}
+               </div>
+
                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
-                     { label: 'Bugun tushgan', value: leadStats.today, hint: 'Kecha: ' + leadStats.yesterday, tone: 'text-primary-600 dark:text-primary-400' },
-                     { label: "Oxirgi 7 kun", value: leadStats.week, hint: 'Jami: ' + leadStats.total, tone: 'text-indigo-600 dark:text-indigo-400' },
+                     { label: 'Davrda tushgan', value: leadStats.scopedTotal, hint: `Bugun: ${leadStats.today} · Kecha: ${leadStats.yesterday}`, tone: 'text-primary-600 dark:text-primary-400' },
                      { label: 'Taqsimlanmagan', value: leadStats.unassigned, hint: 'Sotuvchi kutmoqda', tone: 'text-amber-600 dark:text-amber-400' },
                      { label: 'Oldi (sotuv)', value: leadStats.byStage['Booked'] || 0, hint: leadStats.conversion + '% konversiya', tone: 'text-emerald-600 dark:text-emerald-400' },
+                     { label: 'Jami (butun vaqt)', value: leadStats.total, hint: `Oxirgi 7 kun: ${leadStats.week}`, tone: 'text-indigo-600 dark:text-indigo-400' },
                   ].map(card => (
                      <Card key={card.label} className="p-4">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{card.label}</p>
@@ -1643,13 +1701,50 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   ))}
                </div>
 
+               {/* Kunlar bo'yicha: qaysi kuni nechta lid tushgan va ular kimga tegishli */}
+               <Card className="overflow-hidden">
+                  <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                     <h4 className="font-bold text-gray-900 dark:text-white">Kunlar bo'yicha</h4>
+                     <p className="text-xs text-gray-500">Har kuni nechta lid tushgan va ulardan nechtasi qaysi sotuvchida</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                     <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 dark:bg-gray-800">
+                           <tr>
+                              <th className="p-3 font-medium text-gray-500">Sana</th>
+                              <th className="p-3 font-medium text-gray-500 text-right">Tushgan</th>
+                              <th className="p-3 font-medium text-gray-500 text-right whitespace-nowrap">Taqsimlanmagan</th>
+                              {leadStats.byAgent.map(a => (
+                                 <th key={a.id} className="p-3 font-medium text-gray-500 text-right whitespace-nowrap">{a.name}</th>
+                              ))}
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                           {leadStats.byDay.map(day => (
+                              <tr key={day.key} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${day.total === 0 ? 'text-gray-400' : ''}`}>
+                                 <td className="p-3 font-medium whitespace-nowrap text-gray-900 dark:text-white">{day.label}</td>
+                                 <td className="p-3 text-right font-bold tabular-nums text-gray-900 dark:text-white">{day.total}</td>
+                                 <td className="p-3 text-right tabular-nums text-amber-600 dark:text-amber-400">{day.unassigned || ''}</td>
+                                 {leadStats.byAgent.map(a => (
+                                    <td key={a.id} className="p-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{day.perAgent[a.id] || ''}</td>
+                                 ))}
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+                  {leadStats.byAgent.length === 0 && (
+                     <p className="p-3 text-xs text-gray-400 border-t border-gray-100 dark:border-gray-700">Sotuvchi qo'shilmagan — taqsimot ustunlari sotuvchilar qo'shilgach paydo bo'ladi</p>
+                  )}
+               </Card>
+
                {/* Bosqichlar bo'yicha */}
                <Card className="p-5">
                   <h4 className="font-bold text-gray-900 dark:text-white mb-3">Bosqichlar bo'yicha</h4>
                   <div className="space-y-2">
                      {DEMO_STAGES.map(stage => {
                         const count = stage === 'Inbox' ? leadStats.unassigned : (leadStats.byStage[stage] || 0);
-                        const share = leadStats.total ? Math.round((count / leadStats.total) * 100) : 0;
+                        const share = leadStats.scopedTotal ? Math.round((count / leadStats.scopedTotal) * 100) : 0;
                         return (
                            <div key={stage} className="flex items-center gap-3">
                               <span className="w-40 shrink-0 text-sm text-gray-600 dark:text-gray-300">{DEMO_STAGE_LABELS[stage]}</span>
