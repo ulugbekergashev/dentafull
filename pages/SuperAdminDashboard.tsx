@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan, LeadApiKeyInfo } from '../types';
-import { BarChart3, Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, Infinity as InfinityIcon, Repeat } from 'lucide-react';
+import { BarChart3, StickyNote, Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, Infinity as InfinityIcon, Repeat } from 'lucide-react';
 
 // Reklama formalaridan (/lifetime, /monthly) kelgan lidlar kartada rang bilan ajralib turadi.
 // source: "ad-lifetime" yoki "ad-monthly", oxirida ixtiyoriy "-<utm_campaign>".
@@ -459,6 +459,35 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    /** Integratsiya kaliti paneli ochiqmi. Standart: yopiq. */
    const [leadApiOpen, setLeadApiOpen] = useState(false);
    const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+
+   /**
+    * Lid izohi. Izoh DemoRequest.notes ustunida turadi — bazaga yangi
+    * maydon kerak emas. Facebook lidlarida shu ustunda forma javoblari
+    * yotadi, shuning uchun oyna mavjud matnni ochib beradi: sotuvchi uni
+    * o'chirib yubormasdan, ostiga o'z izohini yozadi.
+    */
+   const [noteLead, setNoteLead] = useState<any | null>(null);
+   const [noteText, setNoteText] = useState('');
+   const [noteSaving, setNoteSaving] = useState(false);
+
+   const openLeadNote = (req: any) => {
+      setNoteLead(req);
+      setNoteText(req.notes || '');
+   };
+
+   const saveLeadNote = async () => {
+      if (!noteLead) return;
+      setNoteSaving(true);
+      try {
+         await api.demoRequests.update(noteLead.id, { notes: noteText });
+         setDemoRequests(prev => prev.map((r: any) => r.id === noteLead.id ? { ...r, notes: noteText } : r));
+         setNoteLead(null);
+      } catch (err: any) {
+         alert(err?.message || 'Izohni saqlashda xatolik');
+      } finally {
+         setNoteSaving(false);
+      }
+   };
 
    const moveLeadToStage = (leadId: string, stage: string) => {
       const lead = demoRequests.find((r: any) => r.id === leadId);
@@ -1571,9 +1600,22 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     <span>{req.city}{req.doctorsCount ? ` · ${req.doctorsCount} ta shifokor` : ''}</span>
                                  </div>
                               )}
-                              {req.notes && req.source === 'Facebook' && (
-                                 <p className="text-xs text-gray-400 whitespace-pre-line max-h-20 overflow-y-auto border-t border-gray-100 dark:border-gray-700 pt-1.5 mt-1.5" title={req.notes}>{req.notes}</p>
-                              )}
+                              {/* Izoh — har qanday manba uchun. Bosilsa tahrirlanadi. */}
+                              <button
+                                 type="button"
+                                 onClick={() => openLeadNote(req)}
+                                 className="w-full text-left border-t border-gray-100 dark:border-gray-700 pt-1.5 mt-1.5 group/note"
+                              >
+                                 {req.notes ? (
+                                    <span className="block text-xs text-gray-500 dark:text-gray-400 whitespace-pre-line max-h-20 overflow-y-auto group-hover/note:text-primary-600 dark:group-hover/note:text-primary-400" title={req.notes}>
+                                       {req.notes}
+                                    </span>
+                                 ) : (
+                                    <span className="flex items-center gap-1.5 text-xs text-gray-400 group-hover/note:text-primary-600 dark:group-hover/note:text-primary-400">
+                                       <StickyNote className="w-3.5 h-3.5" /> Izoh qo'shish
+                                    </span>
+                                 )}
+                              </button>
                            </div>
 
                            {/* Lidni sotuvchiga taqsimlash. Superadmin o'zgartiradi, sotuvchi faqat
@@ -1905,6 +1947,32 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                </Card>
             </div>
          )}
+
+         {/* Lid izohi */}
+         <Modal isOpen={!!noteLead} onClose={() => setNoteLead(null)} title="Lid izohi">
+            <div className="space-y-3">
+               <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <span className="font-semibold text-gray-900 dark:text-white">{noteLead?.name}</span>
+                  {noteLead?.phone ? ` · ${noteLead.phone}` : ''}
+               </p>
+               {noteLead?.source === 'Facebook' && (
+                  <p className="text-xs px-3 py-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-200 dark:border-amber-800">
+                     Bu lid Facebook formasidan kelgan. Quyidagi matn — forma javoblari; o'chirmasdan, ostiga o'z izohingizni yozing.
+                  </p>
+               )}
+               <textarea
+                  rows={7}
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  placeholder="Masalan: ertaga soat 15:00 da qayta qo'ng'iroq qilish kerak"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 outline-none resize-y"
+               />
+               <div className="flex justify-end gap-2">
+                  <Button variant="secondary" onClick={() => setNoteLead(null)} disabled={noteSaving}>Bekor qilish</Button>
+                  <Button onClick={saveLeadNote} disabled={noteSaving}>{noteSaving ? 'Saqlanmoqda...' : 'Saqlash'}</Button>
+               </div>
+            </div>
+         </Modal>
 
          {/* Add Clinic Modal */}
          <Modal isOpen={isAddClinicModalOpen} onClose={() => setIsAddClinicModalOpen(false)} title={t('superAdmin.modals.addClinic')}>
