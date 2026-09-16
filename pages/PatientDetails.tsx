@@ -160,7 +160,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    // Manual Payment Selection State
    const [manualPaymentCategoryId, setManualPaymentCategoryId] = useState<string>('');
-   const [manualPaymentServiceId, setManualPaymentServiceId] = useState<number | null>(null);
+   // Qo'lda to'lovda bir nechta xizmat tanlanadi; har birining narxi alohida tahrirlanadi
+   const [manualPaymentServiceIds, setManualPaymentServiceIds] = useState<number[]>([]);
+   const [manualPaymentPrices, setManualPaymentPrices] = useState<Record<number, string>>({});
 
    // Receipt Modal State
    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -610,24 +612,53 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       setDiscountType('percent');
       setManualPaymentCategoryId('');
-      setManualPaymentServiceId(null);
+      setManualPaymentServiceIds([]);
+      setManualPaymentPrices({});
 
       setIsPaymentModalOpen(true);
    };
 
-   const handleManualServiceChange = (serviceId: number) => {
-      setManualPaymentServiceId(serviceId);
+   // Tanlangan xizmatlardan to'lov summasi va xizmat matnini quradi.
+   // Bitta xizmat — oddiy nom (avvalgidek). Bir nechta — qabul yakunlanganda
+   // ishlatiladigan "nom|narx||...||TOTAL|jami" formati: uni moliya, bosh sahifa
+   // va tarix allaqachon tushunadi.
+   const applyManualServices = (ids: number[], priceMap: Record<number, string>) => {
+      const rows = ids
+         .map(id => services.find(s => s.id === id))
+         .filter((s): s is NonNullable<typeof s> => !!s)
+         .map(s => ({ name: s.name, price: Number(priceMap[s.id]) || 0 }));
+      const total = rows.reduce((sum, r) => sum + r.price, 0);
+      const service = rows.length === 0 ? ''
+         : rows.length === 1 ? rows[0].name
+            : rows.map(r => `${r.name}|${r.price}`).join('||') + `||TOTAL|${total}`;
+      setPaymentData(prev => ({
+         ...prev,
+         service,
+         amount: rows.length ? total.toString() : '',
+         paidAmount: rows.length ? total.toString() : '',
+         debtAmount: '0',
+         discountPercent: ''
+      }));
+   };
+
+   const toggleManualService = (serviceId: number) => {
       const service = services.find(s => s.id === serviceId);
-      if (service) {
-         setPaymentData({
-            ...paymentData,
-            service: service.name,
-            amount: service.price.toString(),
-            paidAmount: service.price.toString(),
-            debtAmount: '0',
-            discountPercent: ''
-         });
-      }
+      if (!service) return;
+      const ids = manualPaymentServiceIds.includes(serviceId)
+         ? manualPaymentServiceIds.filter(id => id !== serviceId)
+         : [...manualPaymentServiceIds, serviceId];
+      const priceMap = { ...manualPaymentPrices };
+      if (ids.includes(serviceId)) priceMap[serviceId] = service.price.toString();
+      else delete priceMap[serviceId];
+      setManualPaymentServiceIds(ids);
+      setManualPaymentPrices(priceMap);
+      applyManualServices(ids, priceMap);
+   };
+
+   const changeManualServicePrice = (serviceId: number, value: string) => {
+      const priceMap = { ...manualPaymentPrices, [serviceId]: value };
+      setManualPaymentPrices(priceMap);
+      applyManualServices(manualPaymentServiceIds, priceMap);
    };
 
    const handlePaymentSave = async (e: React.FormEvent) => {
@@ -749,6 +780,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          // Cleanup only on SUCCESS
          setIsPaymentModalOpen(false);
          setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: defaultDoctorId, appointmentDate: '', discountPercent: '' });
+         setManualPaymentServiceIds([]);
+         setManualPaymentPrices({});
          setVisitKey(prev => prev + 1);
       } catch (error: any) {
          console.error('Payment processing failed', error);
@@ -985,6 +1018,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          if (total > 0) {
             const breakdown = procedures.map(p => `${p.serviceName}|${p.price}`).join('||') + `||TOTAL|${total}`;
             setDiscountType('percent');
+            // Oldingi qo'lda tanlov qolib ketsa, oyna tayyor ro'yxat o'rniga tanlash maydonini ko'rsatardi
+            setManualPaymentServiceIds([]);
+            setManualPaymentPrices({});
             setPaymentData({
                amount: total.toString(),
                paidAmount: total.toString(),
@@ -1008,7 +1044,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    return (
       <>
-         <div className="space-y-4 animate-fade-in pb-10 print:hidden">
+         <div className="space-y-2 animate-fade-in pb-10 print:hidden">
             {/* Yuqori qator: orqaga (bemorlar ro'yxati) + bemor ismi */}
             <div className="flex items-center gap-2 text-sm">
                <button
@@ -1194,7 +1230,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
-                        className={`group inline-flex items-center pt-1.5 pb-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === tab.id
+                        className={`group inline-flex items-center pt-0 pb-2.5 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === tab.id
                            ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                         }`}
@@ -1787,7 +1823,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📋 {t('patients.details.modals.doneServices')}</label>
                         <div className="border-2 border-primary-100 dark:border-primary-800 rounded-lg bg-gradient-to-br from-primary-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-4 space-y-0.5">
-                           {paymentData.service && paymentData.service.includes('|') ? (
+                           {/* Tayyor ro'yxat faqat qabuldan kelganda. Qo'lda bir nechta xizmat
+                               tanlanganda ham matnda "|" bo'ladi — u holda tanlash maydoni qoladi. */}
+                           {paymentData.service && paymentData.service.includes('|') && manualPaymentServiceIds.length === 0 ? (
                               paymentData.service.split('||').filter(Boolean).map((item, idx) => {
                                  const parts = item.split('|');
                                  if (parts[0] === 'TOTAL') {
@@ -1813,11 +1851,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     <Select
                                        label="Kategoriya"
                                        value={manualPaymentCategoryId}
-                                       onChange={(e) => {
-                                          setManualPaymentCategoryId(e.target.value);
-                                          setManualPaymentServiceId(null);
-                                          setPaymentData({ ...paymentData, service: '', paidAmount: '' });
-                                       }}
+                                       onChange={(e) => setManualPaymentCategoryId(e.target.value)}
                                     >
                                        <option value="">Barcha kategoriyalar</option>
                                        {categories.map(cat => (
@@ -1826,24 +1860,51 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     </Select>
                                  )}
 
-                                 <Select
-                                    label="Xizmat"
-                                    value={manualPaymentServiceId?.toString() || ''}
-                                    onChange={(e) => handleManualServiceChange(parseInt(e.target.value))}
-                                 >
-                                    <option value="">Xizmatni tanlang...</option>
-                                    {(services || [])
-                                       .filter(s => {
-                                          if (!manualPaymentCategoryId) return true;
-                                          const serviceCatId = (s as any).categoryId?.toString();
-                                          return serviceCatId === manualPaymentCategoryId.toString();
-                                       })
-                                       .map(service => (
-                                          <option key={service.id} value={service.id}>
-                                             {service.name} - {service.price.toLocaleString()} UZS
-                                          </option>
-                                       ))}
-                                 </Select>
+                                 <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                       Xizmat{manualPaymentServiceIds.length > 0 && <span className="ml-1 text-primary-600">({manualPaymentServiceIds.length})</span>}
+                                    </label>
+                                    <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800">
+                                       {(services || [])
+                                          .filter(s => {
+                                             if (!manualPaymentCategoryId) return true;
+                                             const serviceCatId = (s as any).categoryId?.toString();
+                                             return serviceCatId === manualPaymentCategoryId.toString();
+                                          })
+                                          .map(service => {
+                                             const checked = manualPaymentServiceIds.includes(service.id);
+                                             return (
+                                                <div key={service.id} className={`flex items-center gap-3 px-3 py-2 ${checked ? 'bg-primary-50/60 dark:bg-primary-900/20' : ''}`}>
+                                                   <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                                                      <input
+                                                         type="checkbox"
+                                                         checked={checked}
+                                                         onChange={() => toggleManualService(service.id)}
+                                                         className="h-4 w-4 shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                                      />
+                                                      <span className="text-sm text-gray-900 dark:text-white truncate">{service.name}</span>
+                                                   </label>
+                                                   {checked ? (
+                                                      <input
+                                                         type="number"
+                                                         value={manualPaymentPrices[service.id] ?? ''}
+                                                         onChange={(e) => changeManualServicePrice(service.id, e.target.value)}
+                                                         aria-label={`Narx: ${service.name}`}
+                                                         className="w-28 h-8 px-2 text-sm text-right rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                                                      />
+                                                   ) : (
+                                                      <span className="text-xs text-gray-500 whitespace-nowrap">{service.price.toLocaleString()} UZS</span>
+                                                   )}
+                                                </div>
+                                             );
+                                          })}
+                                    </div>
+                                    {manualPaymentServiceIds.length > 1 && (
+                                       <p className="mt-2 text-sm text-right text-gray-600 dark:text-gray-300">
+                                          Jami: <strong className="text-primary-600 dark:text-primary-400">{(Number(paymentData.amount) || 0).toLocaleString()} UZS</strong>
+                                       </p>
+                                    )}
+                                 </div>
                               </div>
                            )}
                         </div>
