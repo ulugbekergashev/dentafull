@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
 import { StatCard } from '../components/StatCard';
+import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
 import { Search, Plus, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity, MapPin } from 'lucide-react';
 import { Patient, Doctor, Appointment, Transaction, Clinic, Branch } from '../types';
 import { api } from '../services/api';
@@ -74,6 +75,9 @@ export const Patients: React.FC<PatientsProps> = ({
     secondaryPhone: '',
     doctorId: '',
     pinfl: '',
+    passport: '',
+    regionCode: '',
+    districtCode: '',
     branchId: '',
   });
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -286,7 +290,7 @@ export const Patients: React.FC<PatientsProps> = ({
       }
 
       setIsAddModalOpen(false);
-      setFormData({ firstName: '', lastName: '', phone: '', dob: '', gender: 'Male', medicalHistory: '', address: '', secondaryPhone: '', doctorId: '', pinfl: '', branchId: '' });
+      setFormData({ firstName: '', lastName: '', phone: '', dob: '', gender: 'Male', medicalHistory: '', address: '', secondaryPhone: '', doctorId: '', pinfl: '', passport: '', regionCode: '', districtCode: '', branchId: '' });
       setSelectedPhoto(null);
     } catch {
       // handled by parent
@@ -730,8 +734,12 @@ export const Patients: React.FC<PatientsProps> = ({
             <Input label="Asosiy Telefon" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
             <Input label="Qo'shimcha Telefon" name="secondaryPhone" value={formData.secondaryPhone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" />
           </div>
-          <Input label="Tug'ilgan sana" type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText="Sanani qo'lda kiritish uchun maydonga bosing" />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Tug'ilgan sana" type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText="Sanani qo'lda kiritish uchun maydonga bosing" />
+            <Input label={t('patients.modal.passport')} name="passport" value={formData.passport} onChange={handleInputChange} placeholder="AA1234567" />
+          </div>
           <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder="Toshkent sh., Chilonzor t..." />
+          <RegionDistrictSelect regionCode={formData.regionCode} districtCode={formData.districtCode} onChange={v => setFormData(prev => ({ ...prev, ...v }))} />
 
           <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-primary-200 dark:border-primary-800 rounded-xl bg-primary-50/50 dark:bg-primary-900/20 hover:bg-primary-100/50 dark:hover:bg-primary-900/30 transition-colors group cursor-pointer relative overflow-hidden">
             <input

@@ -26,6 +26,14 @@ model Doctor {
   secondaryPhone   String?
   startHour        Int?
   endHour          Int?
+  /// Davlat platformasi (DHP) Practitioner profili uchun: tug'ilgan sana, jins,
+  /// JSHSHIR; argosId — SSV HRM tizimidagi xodim raqami; specialtyCode —
+  /// dmed-specialties-cs kodi (masalan 595 stomatolog-terapevt).
+  birthDate        String?
+  gender           String?
+  pinfl            String?
+  argosId          String?
+  specialtyCode    String?
   /// Shifokor qaysi filialda ishlaydi. Bo'sh — barcha filiallarda ko'rinadi.
   branchId         String?
   branch           Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
@@ -72,6 +80,11 @@ model Patient {
   balance          Float              @default(0)
   doctorId         String?
   pinfl            String?
+  /// DHP uchun: pasport — JSHSHIR bo'lmaganda zaxira identifikator;
+  /// regionCode/districtCode — viloyat va tuman SOATO kodi (manzil kodlangan bo'lishi shart).
+  passport         String?
+  regionCode       String?
+  districtCode     String?
   branchId         String?
   branch           Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
   appointments     Appointment[]
@@ -254,6 +267,8 @@ model Service {
   cost       Float            @default(0)
   /// Necha oydan keyin nazoratga chaqirish (null — kerak emas)
   recallMonths Int?
+  /// DHP Procedure.code uchun SNOMED CT kodi (null — moslashtirilmagan)
+  snomedCode String?
   categoryId String?
   category   ServiceCategory? @relation(fields: [categoryId], references: [id])
   clinic     Clinic           @relation(fields: [clinicId], references: [id])
@@ -296,6 +311,8 @@ model Clinic {
   startHour               Int                @default(8)
   address                 String?
   email                   String?
+  /// STIR — DHP Organization identifikatori (sid/org/uz/soliq)
+  inn                     String?
   enableReceipts          Boolean            @default(false)
   notificationMode        String             @default("telegram_only")
   eskizEmail              String?

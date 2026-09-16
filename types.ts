@@ -45,6 +45,12 @@ export interface Doctor {
   startHour?: number | null;
   endHour?: number | null;
   branchId?: string | null; // Bo'sh — shifokor barcha filiallarda ko'rinadi
+  // Davlat platformasi (DHP) Practitioner profili uchun — hammasi ixtiyoriy
+  birthDate?: string | null; // YYYY-MM-DD
+  gender?: 'Male' | 'Female' | '' | null;
+  pinfl?: string | null;
+  argosId?: string | null; // SSV HRM tizimidagi xodim raqami
+  specialtyCode?: string | null; // DHP_DENTAL_SPECIALTIES kodi
 }
 
 /**
@@ -94,6 +100,9 @@ export interface Patient {
   portraitUrl?: string;
   balance?: number;
   pinfl?: string;
+  passport?: string | null; // DHP: JSHSHIR bo'lmaganda zaxira identifikator
+  regionCode?: string | null; // DHP viloyat SOATO kodi (utils/dhpCodes)
+  districtCode?: string | null; // DHP tuman SOATO kodi
   branchId?: string | null;
 }
 
@@ -455,6 +464,7 @@ export interface Service {
   cost?: number; // Service cost (e.g., technician fee)
   duration?: number; // Optional, defaults to 60 minutes
   recallMonths?: number | null; // Necha oydan keyin nazoratga chaqirish (null — kerak emas)
+  snomedCode?: string | null; // DHP Procedure.code uchun SNOMED CT kodi
 
   clinicId: string;
   categoryId?: string;
@@ -500,6 +510,7 @@ export interface Clinic {
   phone: string;
   address?: string; // New field
   email?: string; // New field
+  inn?: string | null; // STIR — DHP Organization identifikatori
   ownerPhone?: string; // Dedicated phone for clinic owner to receive reports
   status: 'Active' | 'Blocked' | 'Pending';
   planId: string;

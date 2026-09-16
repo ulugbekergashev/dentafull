@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Button, Input, Modal, Select } from '../components/Common';
 import { UpgradePlanModal } from '../components/UpgradePlanModal';
 import { Doctor, Receptionist, LabTechnician, Clinic, SubscriptionPlan, Branch } from '../types';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import { DHP_DENTAL_SPECIALTIES } from '../utils/dhpCodes';
 
 // Xodim qo'shish, tahrirlash va o'chirish oynalari. Ro'yxat ham, profil sahifasi
 // ham shu bitta manbadan foydalanadi — oynalar ikki joyda takrorlanmasin.
@@ -40,12 +41,15 @@ export interface StaffEditorsProps {
 export function useStaffEditors({
    doctors, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddReceptionist, onUpdateReceptionist, onDeleteReceptionist, onAddLabTechnician, onUpdateLabTechnician, onDeleteLabTechnician, branches = [], currentClinic, plans, onDeleted
 }: StaffEditorsProps) {
-   const { t } = useLanguage();
+   const { t, language } = useLanguage();
 
    // Doctor Modal State
    const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
    const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
-   const [doctorForm, setDoctorForm] = useState({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none' as 'none' | 'fixed' | 'fixed_kpi' | 'kpi', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '', branchId: '' });
+   const emptyDoctorForm = { firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none' as 'none' | 'fixed' | 'fixed_kpi' | 'kpi', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '', branchId: '', birthDate: '', gender: '', pinfl: '', argosId: '', specialtyCode: '' };
+   const [doctorForm, setDoctorForm] = useState(emptyDoctorForm);
+   // DHP maydonlari yig'ilgan turadi — kundalik ishda kerak emas, faqat davlat tizimiga ulanganda
+   const [showDhpFields, setShowDhpFields] = useState(false);
 
    // Receptionist Modal State
    const [isReceptionistModalOpen, setIsReceptionistModalOpen] = useState(false);
@@ -95,10 +99,18 @@ export function useStaffEditors({
             startHour: doctor.startHour != null ? String(doctor.startHour) : '',
             endHour: doctor.endHour != null ? String(doctor.endHour) : '',
             branchId: doctor.branchId || '',
+            birthDate: doctor.birthDate || '',
+            gender: doctor.gender || '',
+            pinfl: doctor.pinfl || '',
+            argosId: doctor.argosId || '',
+            specialtyCode: doctor.specialtyCode || '',
          });
+         // To'ldirilgan bo'lsa ochiq ko'rsatamiz — bo'lmasa yashirin qoladi
+         setShowDhpFields(!!(doctor.birthDate || doctor.pinfl || doctor.argosId || doctor.specialtyCode));
       } else {
          setEditingDoctorId(null);
-         setDoctorForm({ firstName: '', lastName: '', specialty: '', phone: '', secondaryPhone: '', username: '', password: '', percentage: '', salaryType: 'none', fixedSalary: '', color: DOCTOR_COLORS[0].value, startHour: '', endHour: '', branchId: '' });
+         setDoctorForm(emptyDoctorForm);
+         setShowDhpFields(false);
       }
       setIsDoctorModalOpen(true);
    };
@@ -228,6 +240,50 @@ export function useStaffEditors({
                      ]}
                   />
                )}
+
+               {/* Davlat platformasi (DHP): Practitioner profili tug'ilgan sana, jins va
+                   identifikatorlarni talab qiladi. Yig'iladigan — oddiy ish oqimiga xalaqit bermasin. */}
+               <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                  <button
+                     type="button"
+                     onClick={() => setShowDhpFields(s => !s)}
+                     className="flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
+                  >
+                     <ChevronDown className={`w-4 h-4 transition-transform ${showDhpFields ? 'rotate-180' : ''}`} />
+                     {t('settings.staff.dhpSection')}
+                  </button>
+                  {showDhpFields && (
+                     <div className="space-y-3 mt-3">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.staff.dhpHint')}</p>
+                        <div className="grid grid-cols-2 gap-4">
+                           <Input label={t('settings.staff.birthDate')} type="date" value={doctorForm.birthDate} onChange={e => setDoctorForm({ ...doctorForm, birthDate: e.target.value })} />
+                           <Select
+                              label={t('settings.staff.gender')}
+                              value={doctorForm.gender}
+                              onChange={e => setDoctorForm({ ...doctorForm, gender: e.target.value })}
+                              options={[
+                                 { value: '', label: '—' },
+                                 { value: 'Male', label: t('settings.staff.genderMale') },
+                                 { value: 'Female', label: t('settings.staff.genderFemale') },
+                              ]}
+                           />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                           <Input label={t('settings.staff.pinfl')} value={doctorForm.pinfl} maxLength={14} placeholder="14 raqam" onChange={e => setDoctorForm({ ...doctorForm, pinfl: e.target.value })} />
+                           <Input label={t('settings.staff.argosId')} value={doctorForm.argosId} helperText={t('settings.staff.argosHelp')} onChange={e => setDoctorForm({ ...doctorForm, argosId: e.target.value })} />
+                        </div>
+                        <Select
+                           label={t('settings.staff.dhpSpecialty')}
+                           value={doctorForm.specialtyCode}
+                           onChange={e => setDoctorForm({ ...doctorForm, specialtyCode: e.target.value })}
+                           options={[
+                              { value: '', label: '—' },
+                              ...DHP_DENTAL_SPECIALTIES.map(s => ({ value: s.code, label: language === 'ru' ? s.ru : s.uz })),
+                           ]}
+                        />
+                     </div>
+                  )}
+               </div>
 
                <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
                   <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">{t('settings.staff.authTitle')}</h4>

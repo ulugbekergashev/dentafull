@@ -269,6 +269,7 @@ export const Settings: React.FC<SettingsProps> = ({
    const [generalForm, setGeneralForm] = useState({
       clinicName: '',
       address: '',
+      inn: '',
       phone: '',
       email: '',
       ownerPhone: '',
@@ -327,6 +328,7 @@ export const Settings: React.FC<SettingsProps> = ({
          setGeneralForm({
             clinicName: currentClinic.name || '',
             address: (currentClinic as any).address || '',
+            inn: currentClinic.inn || '',
             phone: currentClinic.phone || '',
             email: (currentClinic as any).email || '',
             ownerPhone: currentClinic.ownerPhone || '',
@@ -586,6 +588,7 @@ export const Settings: React.FC<SettingsProps> = ({
          const response = await api.clinics.updateGeneral(currentClinic.id, {
             name: generalForm.clinicName,
             address: generalForm.address,
+            inn: generalForm.inn,
             phone: generalForm.phone,
             email: generalForm.email,
             ownerPhone: generalForm.ownerPhone,
@@ -725,6 +728,14 @@ export const Settings: React.FC<SettingsProps> = ({
                               <Input label={t('settings.general.phone')} value={generalForm.phone} onChange={e => setGeneralForm({ ...generalForm, phone: e.target.value })} />
                               <Input label={t('settings.general.email')} value={generalForm.email} onChange={e => setGeneralForm({ ...generalForm, email: e.target.value })} />
                            </div>
+                           <Input
+                              label={t('settings.general.inn')}
+                              value={generalForm.inn}
+                              onChange={e => setGeneralForm({ ...generalForm, inn: e.target.value.replace(/\D/g, '') })}
+                              placeholder="123456789"
+                              maxLength={9}
+                              helperText={t('settings.general.innHelp')}
+                           />
                            <Input
                               label={t('settings.general.ownerPhone')}
                               value={generalForm.ownerPhone}

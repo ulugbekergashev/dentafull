@@ -6,6 +6,7 @@ import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
 import { VisitWorkflow, ProceduresSection } from '../components/ProceduresSection';
 import { InstallmentsTab } from '../components/InstallmentsTab';
+import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
 import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
@@ -1783,6 +1784,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <Input label={t('patients.modal.secondaryPhone')} value={editFormData.secondaryPhone || ''} onChange={(e) => setEditFormData({ ...editFormData, secondaryPhone: e.target.value })} />
                   </div>
                   <Input label={t('patients.modal.address')} value={editFormData.address || ''} onChange={e => setEditFormData({ ...editFormData, address: e.target.value })} placeholder="Bemor manzilini kiriting..." />
+                  <RegionDistrictSelect regionCode={editFormData.regionCode} districtCode={editFormData.districtCode} onChange={v => setEditFormData({ ...editFormData, ...v })} />
+                  <div className="grid grid-cols-2 gap-4">
+                     <Input label="JSHSHIR (PINFL)" value={editFormData.pinfl || ''} maxLength={14} placeholder="14 raqam" onChange={e => setEditFormData({ ...editFormData, pinfl: e.target.value })} />
+                     <Input label={t('patients.modal.passport')} value={editFormData.passport || ''} placeholder="AA1234567" onChange={e => setEditFormData({ ...editFormData, passport: e.target.value })} />
+                  </div>
                   <div className="flex justify-end gap-2 pt-4">
                      <Button type="button" variant="secondary" onClick={() => setIsEditModalOpen(false)}>{t('common.cancel')}</Button>
                      <Button type="submit">{t('common.save')}</Button>

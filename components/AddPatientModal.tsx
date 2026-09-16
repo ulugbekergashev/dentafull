@@ -3,6 +3,7 @@ import { Modal, Input, Button } from './Common';
 import { Patient, Doctor, UserRole } from '../types';
 import { api } from '../services/api';
 import { ChevronDown, Search, Loader2 } from 'lucide-react';
+import { RegionDistrictSelect } from './RegionDistrictSelect';
 
 interface AddPatientModalProps {
     isOpen: boolean;
@@ -18,6 +19,7 @@ interface AddPatientModalProps {
 const emptyForm = {
     firstName: '', lastName: '', phone: '', secondaryPhone: '',
     dob: '', gender: 'Male', address: '', medicalHistory: '', doctorId: '', pinfl: '',
+    passport: '', regionCode: '', districtCode: '',
 };
 
 // Barcha joylar uchun yagona bemor qo'shish modali.
@@ -77,6 +79,9 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                 medicalHistory: form.medicalHistory || '',
                 doctorId: isDoctor ? doctorId : (form.doctorId || undefined),
                 pinfl: form.pinfl || undefined,
+                passport: form.passport || undefined,
+                regionCode: form.regionCode || undefined,
+                districtCode: form.districtCode || undefined,
                 status: 'Active',
                 lastVisit: 'Never',
             } as Omit<Patient, 'id' | 'clinicId'>);
@@ -112,17 +117,21 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
 
                 {showMore && (
                     <div className="space-y-4 pt-1">
-                        <div className="flex gap-2 items-end">
-                            <Input label="JSHSHIR (PINFL)" containerClassName="flex-1" value={form.pinfl} onChange={e => setForm(f => ({ ...f, pinfl: e.target.value }))} placeholder="14 raqam" maxLength={14} />
-                            <Button type="button" variant="secondary" onClick={handleLookupPinfl} disabled={lookupLoading} className="h-10">
-                                {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                            </Button>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex gap-2 items-end">
+                                <Input label="JSHSHIR (PINFL)" containerClassName="flex-1" value={form.pinfl} onChange={e => setForm(f => ({ ...f, pinfl: e.target.value }))} placeholder="14 raqam" maxLength={14} />
+                                <Button type="button" variant="secondary" onClick={handleLookupPinfl} disabled={lookupLoading} className="h-10">
+                                    {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                </Button>
+                            </div>
+                            <Input label="Pasport (seriya, raqam)" value={form.passport} onChange={e => setForm(f => ({ ...f, passport: e.target.value }))} placeholder="AA1234567" />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <Input label="Qo'shimcha telefon" value={form.secondaryPhone} onChange={e => setForm(f => ({ ...f, secondaryPhone: e.target.value }))} />
                             <Input label="Tug'ilgan sana" type="date" value={form.dob} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))} />
                         </div>
                         <Input label="Manzil" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+                        <RegionDistrictSelect regionCode={form.regionCode} districtCode={form.districtCode} onChange={v => setForm(f => ({ ...f, ...v }))} />
 
                         {!isDoctor && doctors.length > 0 && (
                             <div>

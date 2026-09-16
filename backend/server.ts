@@ -1669,9 +1669,33 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
     }
 });
 
+// --- DHP (davlat platformasi) identifikatorlari ---
+// JSHSHIR: faqat raqamlar, 14 ta. Bo'sh — null. Noto'g'ri uzunlik — xato, chunki
+// DHP bemorni aynan shu raqam bo'yicha taniydi; xato raqam keyin sinxronda qaytadi.
+function normalizePinfl(raw: unknown): { value: string | null; error?: string } {
+    if (raw === undefined || raw === null) return { value: null };
+    const digits = String(raw).replace(/\D/g, '');
+    if (!digits) return { value: null };
+    if (digits.length !== 14) return { value: null, error: "JSHSHIR 14 ta raqamdan iborat bo'lishi kerak" };
+    return { value: digits };
+}
+// Pasport: bo'shliqsiz, katta harf (AA1234567). Bo'sh — null.
+function normalizePassport(raw: unknown): string | null {
+    const s = String(raw ?? '').replace(/\s+/g, '').toUpperCase();
+    return s || null;
+}
+// Viloyat (4 raqam) va tuman (7 raqam, viloyat kodi bilan boshlanadi) — DHP SOATO kodlari.
+// Mos kelmasa tuman tashlab yuboriladi, xato emas: manzil ixtiyoriy.
+function normalizeRegion(regionCode: unknown, districtCode: unknown): { regionCode: string | null; districtCode: string | null } {
+    const region = /^\d{4}$/.test(String(regionCode ?? '')) ? String(regionCode) : null;
+    const district = region && /^\d{7}$/.test(String(districtCode ?? '')) && String(districtCode).startsWith(region)
+        ? String(districtCode) : null;
+    return { regionCode: region, districtCode: district };
+}
+
 app.post('/api/patients', authenticateToken, async (req, res) => {
     try {
-        const { firstName, lastName, phone, clinicId, dob, gender, medicalHistory, pinfl, address, secondaryPhone } = req.body;
+        const { firstName, lastName, phone, clinicId, dob, gender, medicalHistory, pinfl, address, secondaryPhone, passport, regionCode, districtCode } = req.body;
 
         // 1. Validate required fields
         if (!firstName || !lastName || !phone) {
@@ -1682,8 +1706,9 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Klinika aniqlanmadi (Tizim xatoligi). Iltimos, sahifani yangilab qayta urining.' });
         }
 
-        // 2. Validate format (optional but recommended)
-        // Basic phone validation could go here
+        // 2. Validate format
+        const pinflCheck = normalizePinfl(pinfl);
+        if (pinflCheck.error) return res.status(400).json({ error: pinflCheck.error });
 
         // 3. Create Patient
         const user = (req as any).user;
@@ -1706,7 +1731,9 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
                 status: 'Active',
                 lastVisit: 'Never',
                 doctorId: assignedDoctorId,
-                pinfl: pinfl || '',
+                pinfl: pinflCheck.value ?? '',
+                passport: normalizePassport(passport),
+                ...normalizeRegion(regionCode, districtCode),
                 address: address || null,
                 secondaryPhone: secondaryPhone || null
             }
@@ -1784,7 +1811,7 @@ app.post('/api/patients/assign-branch', authenticateToken, async (req, res) => {
 app.put('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'patient', req.params.id))) return;
-        const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId, avatarUrl, portraitUrl, doctorId, pinfl } = req.body;
+        const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId, avatarUrl, portraitUrl, doctorId, pinfl, passport, regionCode, districtCode } = req.body;
         const updateData: any = {};
         if (firstName !== undefined) updateData.firstName = firstName;
         if (lastName !== undefined) updateData.lastName = lastName;
@@ -1801,7 +1828,13 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
         if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
         if (portraitUrl !== undefined) updateData.portraitUrl = portraitUrl;
         if (doctorId !== undefined) updateData.doctorId = doctorId === "" ? null : doctorId;
-        if (pinfl !== undefined) updateData.pinfl = pinfl;
+        if (pinfl !== undefined) {
+            const pinflCheck = normalizePinfl(pinfl);
+            if (pinflCheck.error) return res.status(400).json({ error: pinflCheck.error });
+            updateData.pinfl = pinflCheck.value ?? '';
+        }
+        if (passport !== undefined) updateData.passport = normalizePassport(passport);
+        if (regionCode !== undefined || districtCode !== undefined) Object.assign(updateData, normalizeRegion(regionCode, districtCode));
         // Filialni o'zgartirish faqat aniq so'ralganda (body), sarlavhadan emas:
         // aks holda boshqa filialda turib bemor ismini tahrirlash uni ko'chirib yuborardi.
         if (req.body.branchId !== undefined) {
@@ -2858,11 +2891,19 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
             const salt = await bcrypt.genSalt(10);
             passwordData = await bcrypt.hash(password, salt);
         }
+        // DHP Practitioner maydonlari — ixtiyoriy, bo'sh qator null bo'lib saqlanadi
+        const doctorPinfl = normalizePinfl(req.body.pinfl);
+        if (doctorPinfl.error) return res.status(400).json({ error: doctorPinfl.error });
         const data: any = {
             firstName, lastName, specialty, phone, status, clinicId, username, password: passwordData,
             percentage: percentage || 0,
             salaryType: salaryType || 'none',
-            fixedSalary: fixedSalary ? Number(fixedSalary) : 0
+            fixedSalary: fixedSalary ? Number(fixedSalary) : 0,
+            birthDate: req.body.birthDate || null,
+            gender: req.body.gender || null,
+            pinfl: doctorPinfl.value,
+            argosId: String(req.body.argosId || '').trim() || null,
+            specialtyCode: String(req.body.specialtyCode || '').trim() || null,
         };
         if (email) data.email = email;
         // Shifokor filiali faqat aniq tanlanganda (body), sarlavhadan emas —
@@ -2893,8 +2934,18 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
             }
         }
         // Sanitize body to only include valid Doctor fields
-        const { firstName, lastName, specialty, phone, email, status, password, percentage, salaryType, fixedSalary, secondaryPhone, color, clinicId, startHour, endHour } = req.body;
+        const { firstName, lastName, specialty, phone, email, status, password, percentage, salaryType, fixedSalary, secondaryPhone, color, clinicId, startHour, endHour, birthDate, gender, pinfl, argosId, specialtyCode } = req.body;
         const updateData: any = {};
+        // DHP Practitioner maydonlari — bo'sh qator null bo'lib saqlanadi
+        if (birthDate !== undefined) updateData.birthDate = birthDate || null;
+        if (gender !== undefined) updateData.gender = gender || null;
+        if (pinfl !== undefined) {
+            const doctorPinfl = normalizePinfl(pinfl);
+            if (doctorPinfl.error) return res.status(400).json({ error: doctorPinfl.error });
+            updateData.pinfl = doctorPinfl.value;
+        }
+        if (argosId !== undefined) updateData.argosId = String(argosId || '').trim() || null;
+        if (specialtyCode !== undefined) updateData.specialtyCode = String(specialtyCode || '').trim() || null;
         if (firstName !== undefined) updateData.firstName = firstName;
         if (lastName !== undefined) updateData.lastName = lastName;
         if (specialty !== undefined) updateData.specialty = specialty;
@@ -4553,7 +4604,11 @@ app.post('/api/visits/:id/dmed-sync', authenticateToken, async (req, res) => {
 app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
     try {
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
-        const { name, address, phone, email, ownerPhone, startHour, endHour, enableReceipts } = req.body;
+        const { name, address, phone, email, ownerPhone, startHour, endHour, enableReceipts, inn } = req.body;
+        // STIR: faqat raqamlar (9 ta) — DHP Organization identifikatori
+        if (inn !== undefined && inn && !/^\d{9}$/.test(String(inn).trim())) {
+            return res.status(400).json({ error: "STIR 9 ta raqamdan iborat bo'lishi kerak" });
+        }
         const clinic = await prisma.clinic.update({
             where: { id: req.params.id },
             data: {
@@ -4561,6 +4616,7 @@ app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
                 address: address !== undefined ? (address || null) : undefined,
                 phone: phone !== undefined ? phone : undefined,
                 email: email !== undefined ? (email || null) : undefined,
+                inn: inn !== undefined ? (String(inn).trim() || null) : undefined,
                 ownerPhone: ownerPhone !== undefined ? (ownerPhone || null) : undefined,
                 startHour: startHour !== undefined ? Number(startHour) : undefined,
                 endHour: endHour !== undefined ? Number(endHour) : undefined,
@@ -7754,6 +7810,20 @@ async function runStartupMigrations() {
     for (const table of ['Doctor', 'Patient', 'Appointment', 'Transaction', 'Expense', 'Lead']) {
         await migrationStep(`${table}.branchId`, `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "branchId" TEXT`);
         await migrationStep(`${table} branch index`, `CREATE INDEX IF NOT EXISTS "${table}_branchId_idx" ON "${table}" ("branchId")`);
+    }
+
+    // --- DHP (Raqamli sog'liqni saqlash platformasi) uchun maydonlar ---
+    // Bemor: pasport (JSHSHIR bo'lmaganda identifikator), viloyat/tuman SOATO kodi.
+    // Shifokor: Practitioner profili tug'ilgan sana, jins, JSHSHIR; Argos — HRM xodim ID; mutaxassislik kodi.
+    // Klinika: STIR (Organization identifikatori). Xizmat: SNOMED CT muolaja kodi.
+    // Hammasi NULL bo'lishi mumkin — mavjud klinikalar uchun hech narsa o'zgarmaydi.
+    for (const [table, col] of [
+        ['Patient', 'passport'], ['Patient', 'regionCode'], ['Patient', 'districtCode'],
+        ['Doctor', 'birthDate'], ['Doctor', 'gender'], ['Doctor', 'pinfl'], ['Doctor', 'argosId'], ['Doctor', 'specialtyCode'],
+        ['Clinic', 'inn'],
+        ['Service', 'snomedCode'],
+    ] as const) {
+        await migrationStep(`${table}.${col}`, `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" TEXT`);
     }
 
     console.log('✅ Startup migrations applied');
