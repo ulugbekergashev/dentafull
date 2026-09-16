@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan, LeadApiKeyInfo } from '../types';
-import { Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, Infinity as InfinityIcon, Repeat } from 'lucide-react';
+import { BarChart3, Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, Infinity as InfinityIcon, Repeat } from 'lucide-react';
 
 // Reklama formalaridan (/lifetime, /monthly) kelgan lidlar kartada rang bilan ajralib turadi.
 // source: "ad-lifetime" yoki "ad-monthly", oxirida ixtiyoriy "-<utm_campaign>".
@@ -193,12 +193,17 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // brauzerning "orqaga" tugmasi ishlaydi va bo'limga havola yuborsa
    // bo'ladi.
    const [searchParams, setSearchParams] = useSearchParams();
-   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads'] as const;
+   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads', 'leadStats'] as const;
    type TabId = typeof TABS[number];
 
    const fallbackTab: TabId = salesAgentMode ? 'clinics' : 'overview';
    const urlTab = searchParams.get('tab') as TabId | null;
-   const activeTab: TabId = urlTab && TABS.includes(urlTab) ? urlTab : fallbackTab;
+   // Lidlar statistikasi — faqat superadmin bo'limi. Sotuvchi shu havolani
+   // ochsa, bo'sh sahifa ko'rinmasin: o'zining odatdagi bo'limiga tushadi.
+   const requestedTab: TabId | null = urlTab && TABS.includes(urlTab) ? urlTab : null;
+   const activeTab: TabId = !requestedTab || (salesAgentMode && requestedTab === 'leadStats')
+      ? fallbackTab
+      : requestedTab;
 
    // Bo'lim almashganda qidiruv, filtr va sahifa raqami tozalanadi.
    //
@@ -263,7 +268,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    };
 
    useEffect(() => {
-      if (activeTab === 'leads') {
+      if (activeTab === 'leads' || activeTab === 'leadStats') {
          setDemoLoading(true);
          api.demoRequests.getAll()
             .then(setDemoRequests)
@@ -279,7 +284,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // Lidlar ochiq turganda ro'yxat o'zi yangilanadi: superadmin lid o'tkazsa,
    // sotuvchida hech narsa bosmasdan paydo bo'ladi. Yashirin tabda so'rov ketmaydi.
    useEffect(() => {
-      if (activeTab !== 'leads') return;
+      if (activeTab !== 'leads' && activeTab !== 'leadStats') return;
       const refresh = () => {
          if (document.hidden) return;
          api.demoRequests.getAll().then(setDemoRequests).catch(() => { /* keyingi urinishda */ });
@@ -406,21 +411,24 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    //
    // Sotuvchiga bu ustun ko'rinmaydi (backend ham unga faqat o'ziga
    // biriktirilgan lidlarni beradi).
-   const DEMO_STAGES = ['Inbox', 'New', 'Contacted', 'Thinking', 'Booked', 'Cancelled'];
+   const DEMO_STAGES = ['Inbox', 'New', 'Contacted', 'NoAnswer', 'Thinking', 'Booked', 'Cancelled'];
    const ADMIN_ONLY_STAGES = ['Inbox'];
    const DEMO_STAGE_LABELS: Record<string, string> = {
       Inbox: 'Taqsimlanmagan', New: 'Yangi lidlar', Contacted: "Bog'lashildi",
+      NoAnswer: "Trubkani ko'tarmadi",
       Thinking: "O'ylamoqda", Booked: 'Oldi', Cancelled: 'Bekor'
    };
    const DEMO_STAGE_COLORS: Record<string, string> = {
       Inbox: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
       New: 'bg-primary-100 text-primary-700', Contacted: 'bg-amber-100 text-amber-700',
+      NoAnswer: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
       Thinking: 'bg-purple-100 text-purple-700', Booked: 'bg-emerald-100 text-emerald-700',
       Cancelled: 'bg-red-100 text-red-700'
    };
    // Ustun sarlavhasidagi rang chizig'i
    const DEMO_STAGE_BAR: Record<string, string> = {
       Inbox: 'bg-slate-400', New: 'bg-primary-500', Contacted: 'bg-amber-500',
+      NoAnswer: 'bg-orange-500',
       Thinking: 'bg-purple-500', Booked: 'bg-emerald-500', Cancelled: 'bg-red-500'
    };
 
@@ -480,9 +488,55 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          setDemoRequests(prev => prev.map((r: any) => r.id === leadId ? { ...r, status: lead.status } : r));
       });
    };
-
    // Sales Agents State
    const [salesAgents, setSalesAgents] = useState<any[]>([]);
+
+   // Lidlar statistikasi: bugungi oqim, sotuvchilar bo'yicha taqsimot va
+   // bosqichlar. Hammasi allaqachon yuklangan ro'yxatdan hisoblanadi —
+   // yangi so'rov yo'q.
+   const leadStats = React.useMemo(() => {
+      const dayKey = (d: any) => new Date(d).toISOString().split('T')[0];
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+
+      const byStage: Record<string, number> = {};
+      let todayCount = 0, yesterdayCount = 0, weekCount = 0, unassigned = 0;
+      demoRequests.forEach((r: any) => {
+         const stage = leadStage(r);
+         byStage[stage] = (byStage[stage] || 0) + 1;
+         if (!r.salesAgentId) unassigned++;
+         const day = dayKey(r.createdAt);
+         if (day === today) todayCount++;
+         if (day === yesterday) yesterdayCount++;
+         if (day >= weekAgo) weekCount++;
+      });
+
+      const byAgent = salesAgents.map((a: any) => {
+         const mine = demoRequests.filter((r: any) => r.salesAgentId === a.id);
+         const stages: Record<string, number> = {};
+         mine.forEach((r: any) => { const st = leadStage(r); stages[st] = (stages[st] || 0) + 1; });
+         return {
+            id: a.id,
+            name: a.name,
+            total: mine.length,
+            today: mine.filter((r: any) => dayKey(r.createdAt) === today).length,
+            stages,
+         };
+      }).sort((x, y) => y.total - x.total);
+
+      const booked = byStage['Booked'] || 0;
+      return {
+         today: todayCount,
+         yesterday: yesterdayCount,
+         week: weekCount,
+         total: demoRequests.length,
+         unassigned,
+         byStage,
+         byAgent,
+         conversion: demoRequests.length ? Math.round((booked / demoRequests.length) * 100) : 0,
+      };
+   }, [demoRequests, salesAgents]);
    const [isAddSalesModalOpen, setIsAddSalesModalOpen] = useState(false);
    const [newSalesForm, setNewSalesForm] = useState({
       name: '',
@@ -1377,29 +1431,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            ))}
                         </select>
                      )}
-                     {!salesAgentMode && (
-                        fbStatus?.connected ? (
-                           <div className="flex items-center gap-2">
-                              <span className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg font-medium">
-                                 <Facebook className="w-4 h-4" /> {fbStatus.pageName}
-                              </span>
-                              <button
-                                 onClick={handleDisconnectFB}
-                                 className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                              >
-                                 Uzish
-                              </button>
-                           </div>
-                        ) : (
-                           <button
-                              onClick={handleConnectFB}
-                              disabled={isFBLoading}
-                              className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                           >
-                              <Facebook className="w-4 h-4" /> Facebook ulash
-                           </button>
-                        )
-                     )}
                      <button
                         onClick={() => { setDemoLoading(true); api.demoRequests.getAll().then(setDemoRequests).finally(() => setDemoLoading(false)); }}
                         className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
@@ -1408,118 +1439,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </button>
                   </div>
                </div>
-               {/* Tashqi lid manbasi uchun platforma kaliti.
-                   Klinika kalitlaridan farqi: bu kalit bilan kelgan lid klinikaning
-                   doskasiga emas, shu ro'yxatga (DemoRequest) tushadi. */}
-               {/* Integratsiya kaliti amalda bir marta sozlanadi va keyin
-                   deyarli ochilmaydi. Lekin u ekran yuqorisidan katta joy
-                   egallab, asosiy ish maydonini — lidlar taxtasini — pastga
-                   surib yuborardi. Endi yig'ilgan holda turadi. */}
-               {!salesAgentMode && !leadApiOpen && (
-                  <button
-                     onClick={() => setLeadApiOpen(true)}
-                     className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-left
-                                bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800
-                                border border-gray-200 dark:border-gray-700 transition-colors"
-                  >
-                     <Link2 className="w-4 h-4 text-primary-500 shrink-0" />
-                     <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                        Tashqi lid manbasi
-                     </span>
-                     {leadApiInfo?.apiKey && (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700
-                                         dark:bg-emerald-900/40 dark:text-emerald-300">
-                           ulangan
-                        </span>
-                     )}
-                     <span className="ml-auto flex items-center gap-1 text-xs text-gray-400">
-                        ochish <ChevronDown className="w-3.5 h-3.5" />
-                     </span>
-                  </button>
-               )}
-
-               {!salesAgentMode && leadApiOpen && (
-                  <Card className="p-5">
-                     <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                        <div className="flex items-center gap-2">
-                           <Link2 className="w-5 h-5 text-primary-500" />
-                           <div>
-                              <h4 className="font-bold text-gray-900 dark:text-white">Tashqi lid manbasi (yuboraman.uz)</h4>
-                              <p className="text-xs text-gray-500">Bu kalit orqali kelgan lidlar shu ro'yxatga tushadi</p>
-                           </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                           {leadApiInfo?.apiKey ? (
-                              <>
-                                 <Button variant="secondary" onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
-                                    <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} /> Yangilash
-                                 </Button>
-                                 <Button variant="danger" onClick={handleRevokePlatformKey} disabled={leadApiLoading}>
-                                    <Trash2 className="w-4 h-4 mr-2" /> O'chirish
-                                 </Button>
-                              </>
-                           ) : (
-                              <Button onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
-                                 <KeyRound className="w-4 h-4 mr-2" /> Kalit yaratish
-                              </Button>
-                           )}
-
-                           {/* Yopish "ochish" bilan BIR XIL joyda — o'ng chekkada.
-                               Ilgari u sarlavha yonidagi kichkina havola edi va
-                               ko'zga tashlanmasdi: panelni ochish oson, yopish esa
-                               qidirishni talab qilardi. */}
-                           <button
-                              onClick={() => setLeadApiOpen(false)}
-                              aria-label="Yopish"
-                              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm
-                                         text-gray-500 dark:text-gray-400
-                                         hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                           >
-                              yopish
-                              <ChevronUp className="w-4 h-4" />
-                           </button>
-                        </div>
-                     </div>
-
-                     <label className="block text-xs font-medium text-gray-500 mb-1">So'rov manzili</label>
-                     <div className="flex gap-2 mb-3">
-                        <code className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-900 dark:text-gray-100 break-all">
-                           POST {leadApiInfo?.endpoint || '—'}
-                        </code>
-                        <Button variant="secondary" onClick={() => leadApiInfo?.endpoint && copyLeadValue(leadApiInfo.endpoint, 'endpoint')} disabled={!leadApiInfo?.endpoint}>
-                           {leadCopied === 'endpoint' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                        </Button>
-                     </div>
-
-                     <label className="block text-xs font-medium text-gray-500 mb-1">API kalit (X-API-Key)</label>
-                     {leadApiInfo?.apiKey ? (
-                        <>
-                           <div className="flex gap-2">
-                              <code className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-900 dark:text-gray-100 break-all">
-                                 {leadKeyVisible
-                                    ? leadApiInfo.apiKey
-                                    : `${leadApiInfo.apiKey.slice(0, 8)}${'•'.repeat(24)}${leadApiInfo.apiKey.slice(-4)}`}
-                              </code>
-                              <Button variant="secondary" onClick={() => setLeadKeyVisible(v => !v)}>
-                                 {leadKeyVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                              </Button>
-                              <Button variant="secondary" onClick={() => copyLeadValue(leadApiInfo.apiKey as string, 'key')}>
-                                 {leadCopied === 'key' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                              </Button>
-                           </div>
-                           <p className="text-xs text-gray-400 mt-2">
-                              Tanib olinadigan maydonlar: ism, telefon, klinika nomi, shahar, shifokorlar soni.
-                              Boshqa har qanday maydon lid izohida saqlanadi.
-                           </p>
-                        </>
-                     ) : (
-                        <p className="text-sm text-gray-500 px-3 py-2 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
-                           Kalit yaratilmagan — tashqi manbadan lid qabul qilinmaydi.
-                        </p>
-                     )}
-                  </Card>
-               )}
-
                {demoLoading ? (
                   <Card className="p-10 text-center text-gray-400">Yuklanmoqda...</Card>
                ) : visibleDemoRequests.length === 0 ? (
@@ -1693,6 +1612,236 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      })}
                   </div>
                )}
+            </div>
+         )}
+
+         {/* --- Lidlar statistikasi --- */}
+         {/* Lidlar taxtasi kundalik ish uchun; raqamlar va sozlamalar esa
+             shu yerda. Ilgari kalit taxtaning tepasida turib, ish maydonini
+             pastga surib yuborardi. */}
+         {activeTab === 'leadStats' && !salesAgentMode && (
+            <div className="space-y-4">
+               <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                     <BarChart3 className="w-5 h-5 text-primary-500" /> Lidlar statistikasi
+                  </h3>
+                  <p className="text-sm text-gray-500">Lidlar oqimi, sotuvchilar bo'yicha taqsimot va tashqi manba sozlamasi</p>
+               </div>
+
+               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                     { label: 'Bugun tushgan', value: leadStats.today, hint: 'Kecha: ' + leadStats.yesterday, tone: 'text-primary-600 dark:text-primary-400' },
+                     { label: "Oxirgi 7 kun", value: leadStats.week, hint: 'Jami: ' + leadStats.total, tone: 'text-indigo-600 dark:text-indigo-400' },
+                     { label: 'Taqsimlanmagan', value: leadStats.unassigned, hint: 'Sotuvchi kutmoqda', tone: 'text-amber-600 dark:text-amber-400' },
+                     { label: 'Oldi (sotuv)', value: leadStats.byStage['Booked'] || 0, hint: leadStats.conversion + '% konversiya', tone: 'text-emerald-600 dark:text-emerald-400' },
+                  ].map(card => (
+                     <Card key={card.label} className="p-4">
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{card.label}</p>
+                        <p className={`mt-1 text-2xl font-bold tabular-nums ${card.tone}`}>{card.value}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{card.hint}</p>
+                     </Card>
+                  ))}
+               </div>
+
+               {/* Bosqichlar bo'yicha */}
+               <Card className="p-5">
+                  <h4 className="font-bold text-gray-900 dark:text-white mb-3">Bosqichlar bo'yicha</h4>
+                  <div className="space-y-2">
+                     {DEMO_STAGES.map(stage => {
+                        const count = stage === 'Inbox' ? leadStats.unassigned : (leadStats.byStage[stage] || 0);
+                        const share = leadStats.total ? Math.round((count / leadStats.total) * 100) : 0;
+                        return (
+                           <div key={stage} className="flex items-center gap-3">
+                              <span className="w-40 shrink-0 text-sm text-gray-600 dark:text-gray-300">{DEMO_STAGE_LABELS[stage]}</span>
+                              <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                                 <div className={`h-full rounded-full ${DEMO_STAGE_BAR[stage]}`} style={{ width: `${share}%` }} />
+                              </div>
+                              <span className="w-16 text-right text-sm font-bold text-gray-900 dark:text-white tabular-nums">{count}</span>
+                              <span className="w-12 text-right text-xs text-gray-400 tabular-nums">{share}%</span>
+                           </div>
+                        );
+                     })}
+                  </div>
+               </Card>
+
+               {/* Sotuvchilar bo'yicha */}
+               <Card className="overflow-hidden">
+                  <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                     <h4 className="font-bold text-gray-900 dark:text-white">Sotuvchilar bo'yicha</h4>
+                     <p className="text-xs text-gray-500">Kimga nechta lid berilgan va ular qaysi bosqichda</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                     <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 dark:bg-gray-800">
+                           <tr>
+                              <th className="p-3 font-medium text-gray-500">Sotuvchi</th>
+                              <th className="p-3 font-medium text-gray-500 text-right">Jami</th>
+                              <th className="p-3 font-medium text-gray-500 text-right">Bugun</th>
+                              {['Contacted', 'NoAnswer', 'Thinking', 'Booked', 'Cancelled'].map(st => (
+                                 <th key={st} className="p-3 font-medium text-gray-500 text-right whitespace-nowrap">{DEMO_STAGE_LABELS[st]}</th>
+                              ))}
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                           {leadStats.byAgent.map(row => (
+                              <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                 <td className="p-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{row.name}</td>
+                                 <td className="p-3 text-right font-bold tabular-nums text-gray-900 dark:text-white">{row.total}</td>
+                                 <td className="p-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{row.today}</td>
+                                 {['Contacted', 'NoAnswer', 'Thinking', 'Booked', 'Cancelled'].map(st => (
+                                    <td key={st} className="p-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{row.stages[st] || 0}</td>
+                                 ))}
+                              </tr>
+                           ))}
+                           {leadStats.byAgent.length === 0 && (
+                              <tr><td colSpan={8} className="p-6 text-center text-gray-400">Sotuvchi qo'shilmagan</td></tr>
+                           )}
+                        </tbody>
+                     </table>
+                  </div>
+               </Card>
+
+               {/* Lid manbalari sozlamasi — taxtadan shu yerga ko'chirildi */}
+               <Card className="p-5">
+                  <h4 className="font-bold text-gray-900 dark:text-white mb-1">Lid manbalari</h4>
+                  <p className="text-xs text-gray-500 mb-3">Facebook sahifasi va tashqi manba (yuboraman.uz) kaliti</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                     {!salesAgentMode && (
+                        fbStatus?.connected ? (
+                           <div className="flex items-center gap-2">
+                              <span className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg font-medium">
+                                 <Facebook className="w-4 h-4" /> {fbStatus.pageName}
+                              </span>
+                              <button
+                                 onClick={handleDisconnectFB}
+                                 className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                              >
+                                 Uzish
+                              </button>
+                           </div>
+                        ) : (
+                           <button
+                              onClick={handleConnectFB}
+                              disabled={isFBLoading}
+                              className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                           >
+                              <Facebook className="w-4 h-4" /> Facebook ulash
+                           </button>
+                        )
+                     )}
+                  </div>
+               {/* Tashqi lid manbasi uchun platforma kaliti.
+                   Klinika kalitlaridan farqi: bu kalit bilan kelgan lid klinikaning
+                   doskasiga emas, shu ro'yxatga (DemoRequest) tushadi. */}
+               {/* Integratsiya kaliti amalda bir marta sozlanadi va keyin
+                   deyarli ochilmaydi. Lekin u ekran yuqorisidan katta joy
+                   egallab, asosiy ish maydonini — lidlar taxtasini — pastga
+                   surib yuborardi. Endi yig'ilgan holda turadi. */}
+               {!salesAgentMode && !leadApiOpen && (
+                  <button
+                     onClick={() => setLeadApiOpen(true)}
+                     className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-left
+                                bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800
+                                border border-gray-200 dark:border-gray-700 transition-colors"
+                  >
+                     <Link2 className="w-4 h-4 text-primary-500 shrink-0" />
+                     <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                        Tashqi lid manbasi
+                     </span>
+                     {leadApiInfo?.apiKey && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700
+                                         dark:bg-emerald-900/40 dark:text-emerald-300">
+                           ulangan
+                        </span>
+                     )}
+                     <span className="ml-auto flex items-center gap-1 text-xs text-gray-400">
+                        ochish <ChevronDown className="w-3.5 h-3.5" />
+                     </span>
+                  </button>
+               )}
+
+               {!salesAgentMode && leadApiOpen && (
+                  <Card className="p-5">
+                     <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-2">
+                           <Link2 className="w-5 h-5 text-primary-500" />
+                           <div>
+                              <h4 className="font-bold text-gray-900 dark:text-white">Tashqi lid manbasi (yuboraman.uz)</h4>
+                              <p className="text-xs text-gray-500">Bu kalit orqali kelgan lidlar shu ro'yxatga tushadi</p>
+                           </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                           {leadApiInfo?.apiKey ? (
+                              <>
+                                 <Button variant="secondary" onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
+                                    <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} /> Yangilash
+                                 </Button>
+                                 <Button variant="danger" onClick={handleRevokePlatformKey} disabled={leadApiLoading}>
+                                    <Trash2 className="w-4 h-4 mr-2" /> O'chirish
+                                 </Button>
+                              </>
+                           ) : (
+                              <Button onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
+                                 <KeyRound className="w-4 h-4 mr-2" /> Kalit yaratish
+                              </Button>
+                           )}
+
+                           {/* Yopish "ochish" bilan BIR XIL joyda — o'ng chekkada.
+                               Ilgari u sarlavha yonidagi kichkina havola edi va
+                               ko'zga tashlanmasdi: panelni ochish oson, yopish esa
+                               qidirishni talab qilardi. */}
+                           <button
+                              onClick={() => setLeadApiOpen(false)}
+                              aria-label="Yopish"
+                              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm
+                                         text-gray-500 dark:text-gray-400
+                                         hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                           >
+                              yopish
+                              <ChevronUp className="w-4 h-4" />
+                           </button>
+                        </div>
+                     </div>
+
+                     <label className="block text-xs font-medium text-gray-500 mb-1">So'rov manzili</label>
+                     <div className="flex gap-2 mb-3">
+                        <code className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-900 dark:text-gray-100 break-all">
+                           POST {leadApiInfo?.endpoint || '—'}
+                        </code>
+                        <Button variant="secondary" onClick={() => leadApiInfo?.endpoint && copyLeadValue(leadApiInfo.endpoint, 'endpoint')} disabled={!leadApiInfo?.endpoint}>
+                           {leadCopied === 'endpoint' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </Button>
+                     </div>
+
+                     <label className="block text-xs font-medium text-gray-500 mb-1">API kalit (X-API-Key)</label>
+                     {leadApiInfo?.apiKey ? (
+                        <>
+                           <div className="flex gap-2">
+                              <code className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-900 dark:text-gray-100 break-all">
+                                 {leadKeyVisible
+                                    ? leadApiInfo.apiKey
+                                    : `${leadApiInfo.apiKey.slice(0, 8)}${'•'.repeat(24)}${leadApiInfo.apiKey.slice(-4)}`}
+                              </code>
+                              <Button variant="secondary" onClick={() => setLeadKeyVisible(v => !v)}>
+                                 {leadKeyVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </Button>
+                              <Button variant="secondary" onClick={() => copyLeadValue(leadApiInfo.apiKey as string, 'key')}>
+                                 {leadCopied === 'key' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                              </Button>
+                           </div>
+                           <p className="text-xs text-gray-400 mt-2">
+                              Tanib olinadigan maydonlar: ism, telefon, klinika nomi, shahar, shifokorlar soni.
+                              Boshqa har qanday maydon lid izohida saqlanadi.
+                           </p>
+                        </>
+                     ) : (
+                        <p className="text-sm text-gray-500 px-3 py-2 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
+                           Kalit yaratilmagan — tashqi manbadan lid qabul qilinmaydi.
+                        </p>
+                     )}
+                  </Card>
+               )}
+               </Card>
             </div>
          )}
 

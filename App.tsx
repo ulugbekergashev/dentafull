@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -75,6 +75,7 @@ const SUPER_ADMIN_NAVIGATION = [
   { id: 'sales', labelKey: 'nav.salesAgents', icon: UserCheck, to: '/admin?tab=sales', roles: [UserRole.SUPER_ADMIN] },
   { id: 'blocked', labelKey: 'superAdmin.tabs.blocked', icon: Shield, to: '/admin?tab=blocked', roles: [UserRole.SUPER_ADMIN] },
   { id: 'leads', labelKey: 'nav.leads', icon: MessageSquare, to: '/admin?tab=leads', roles: [UserRole.SUPER_ADMIN] },
+  { id: 'leadStats', labelKey: 'nav.leadStats', icon: BarChart3, to: '/admin?tab=leadStats', roles: [UserRole.SUPER_ADMIN] },
 ];
 
 const SALES_NAVIGATION = [
