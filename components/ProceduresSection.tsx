@@ -18,7 +18,7 @@ interface VisitWorkflowProps {
     services: Service[];
     categories: ServiceCategory[];
     doctors: any[];
-    onCompleteVisit: (procedures: ProcedureItem[], total: number) => Promise<void>;
+    onCompleteVisit: (procedures: ProcedureItem[], total: number, recallMonths: number | null) => Promise<void>;
     onProceduresChange?: (procedures: ProcedureItem[]) => void;
     initialProcedures?: ProcedureItem[];
 }
@@ -42,6 +42,20 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
         }
     }, [initialProcedures]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Keyingi nazorat: xizmatda ko'rsatilgan muddat (Sozlamalar → Xizmatlar)
+    // avtomatik taklif qilinadi — shifokor faqat tasdiqlaydi yoki o'zgartiradi.
+    // Bir marta qo'lda o'zgartirilgach, ro'yxat yangilanganda qayta yozilmaydi.
+    const [recallMonths, setRecallMonths] = useState<number | null>(null);
+    const [recallTouched, setRecallTouched] = useState(false);
+    useEffect(() => {
+        if (recallTouched) return;
+        const suggested = procedures
+            .map(p => services.find(s => s.id === p.serviceId)?.recallMonths || 0)
+            .reduce((max, m) => Math.max(max, m), 0);
+        setRecallMonths(suggested > 0 ? suggested : null);
+    }, [procedures, services, recallTouched]);
+    const chooseRecall = (months: number | null) => { setRecallTouched(true); setRecallMonths(months); };
 
     const handleAddProcedure = (procedure: Omit<ProcedureItem, 'id'>) => {
         const newProcedure: ProcedureItem = {
@@ -79,7 +93,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
 
         setIsSubmitting(true);
         try {
-            await onCompleteVisit(procedures, total);
+            await onCompleteVisit(procedures, total, recallMonths);
         } catch (error) {
             console.error("Error completing visit:", error);
         } finally {
@@ -155,6 +169,31 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                             <span className="text-2xl font-bold text-primary-600 dark:text-primary-400">
                                 {total.toLocaleString()} UZS
                             </span>
+                        </div>
+                        {/* Keyingi nazorat — bitta qator, bitta bosish */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm text-gray-600 dark:text-gray-300 mr-1">{t('patients.details.recall.next')}</span>
+                            {[3, 6, 12].map(m => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => chooseRecall(m)}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallMonths === m
+                                        ? 'bg-primary-600 text-white'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
+                                >
+                                    {m} {t('patients.details.recall.months')}
+                                </button>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() => chooseRecall(null)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallMonths === null
+                                    ? 'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
+                            >
+                                {t('patients.details.recall.none')}
+                            </button>
                         </div>
                         <Button
                             onClick={handleCompleteVisit}

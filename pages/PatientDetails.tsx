@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Calendar, CalendarPlus, ChevronRight, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, CalendarClock, CalendarPlus, ChevronRight, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
 import { VisitWorkflow, ProceduresSection } from '../components/ProceduresSection';
 import { InstallmentsTab } from '../components/InstallmentsTab';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
@@ -91,6 +91,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    // Medical History State
    const [historyText, setHistoryText] = useState('');
+
+   // Nazorat (qayta tashrif): shifokor qabulda belgilaydi, muddati kelganda
+   // avtomatika bemorga yozadi, resepshn bosh sahifadan qo'ng'iroq qiladi.
+   const [recalls, setRecalls] = useState<Recall[]>([]);
+   const [isRecallModalOpen, setIsRecallModalOpen] = useState(false);
+   const [recallForm, setRecallForm] = useState({ dueDate: '', reason: '' });
+   const [recallSaving, setRecallSaving] = useState(false);
 
    useEffect(() => {
       if (patient) {
@@ -257,6 +264,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    useEffect(() => {
       if (patientId) {
          api.diagnoses.getByPatient(patientId).then(setDiagnoses).catch(console.error);
+         api.recalls.getByPatient(patientId).then(setRecalls).catch(() => setRecalls([]));
          api.teeth.getAll(patientId).then(setTeethData).catch(console.error);
 
          // Fetch inventory data
@@ -531,6 +539,56 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       ? formatDobDDMMYYYY(patient.lastVisit)
       : t('patients.details.noVisits');
 
+   // Ochiq nazorat: eng yaqin sanali rejalashtirilgan / eslatilgan / yozilgan
+   const activeRecall = recalls
+      .filter(r => r.status === 'planned' || r.status === 'reminded' || r.status === 'booked')
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+   const recallStatusLabel: Record<string, string> = {
+      planned: t('patients.details.recall.status.planned'),
+      reminded: t('patients.details.recall.status.reminded'),
+      booked: t('patients.details.recall.status.booked'),
+   };
+   /** Bugundan N oy keyingi sana, mahalliy vaqt bo'yicha (YYYY-MM-DD) */
+   const addMonthsStr = (months: number) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() + months);
+      const m = `${d.getMonth() + 1}`.padStart(2, '0');
+      const day = `${d.getDate()}`.padStart(2, '0');
+      return `${d.getFullYear()}-${m}-${day}`;
+   };
+   const openRecallModal = () => {
+      setRecallForm({ dueDate: addMonthsStr(6), reason: '' });
+      setIsRecallModalOpen(true);
+   };
+   const saveRecall = async () => {
+      if (!recallForm.dueDate) return;
+      setRecallSaving(true);
+      try {
+         const created = await api.recalls.create({
+            patientId: patient.id,
+            clinicId: patient.clinicId,
+            doctorId: myDoctor?.id || patient.doctorId || null,
+            dueDate: recallForm.dueDate,
+            reason: recallForm.reason.trim() || undefined,
+         });
+         setRecalls(prev => [created, ...prev.filter(r => r.id !== created.id)]);
+         setIsRecallModalOpen(false);
+      } catch (err: any) {
+         alert(err?.message || t('patients.details.alerts.error'));
+      } finally {
+         setRecallSaving(false);
+      }
+   };
+   const cancelRecall = async (id: string) => {
+      if (!window.confirm(t('patients.details.recall.cancelConfirm'))) return;
+      try {
+         await api.recalls.update(id, { status: 'cancelled' });
+         setRecalls(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as const } : r));
+      } catch (err: any) {
+         alert(err?.message || t('patients.details.alerts.error'));
+      }
+   };
+
    const handleEditOpen = () => {
       setEditFormData(patient);
       setIsEditModalOpen(true);
@@ -779,17 +837,21 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setApptData({ doctorId: defaultDoctorId, date: new Date().toISOString().split('T')[0], time: '09:00', type: 'Konsultatsiya', categoryId: '', duration: 60, notes: '' });
    };
 
-   const openApptModal = () => {
+   const openApptModal = (presetDate?: unknown) => {
+      // Nazoratdan kelganda sana tayyor qo'yiladi; onClick dan kelganda esa
+      // birinchi argument hodisa bo'ladi — uni e'tiborsiz qoldiramiz.
+      const date = typeof presetDate === 'string' ? presetDate : undefined;
       const assignedDoctorId = patient?.doctorId && doctors.some(d => d.id === patient.doctorId) ? patient.doctorId : '';
       setApptData(prev => ({
          ...prev,
+         ...(date ? { date } : {}),
          doctorId: defaultDoctorId || assignedDoctorId || (doctors.length > 0 ? doctors[0].id : ''),
          categoryId: categories.length > 0 ? categories[0].id : '', // Set default category
       }));
       setIsApptModalOpen(true);
    };
 
-   const handleCompleteVisit = async (procedures: any[], total: number) => {
+   const handleCompleteVisit = async (procedures: any[], total: number, recallMonths: number | null = null) => {
       // 1. Double-check if we are already processing or have processed this exact content recently
       const today = new Date().toISOString().split('T')[0];
 
@@ -889,6 +951,26 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                status: 'Completed'
             });
             alert(t('patients.details.alerts.visitUpdated'));
+         }
+
+         // Keyingi nazorat: shifokor tanlagan (yoki xizmat taklif qilgan) bo'lsa
+         if (recallMonths) {
+            try {
+               const reason = procedures
+                  .map(p => p.toothNumber ? `${p.serviceName} #${p.toothNumber}` : p.serviceName)
+                  .join(', ')
+                  .slice(0, 200);
+               const created = await api.recalls.create({
+                  patientId: patient.id,
+                  clinicId: patient.clinicId,
+                  doctorId: finalDoctorId || null,
+                  dueDate: addMonthsStr(recallMonths),
+                  reason,
+               });
+               setRecalls(prev => [created, ...prev.filter(r => r.id !== created.id)]);
+            } catch (err) {
+               console.error('Nazoratni saqlab bo\'lmadi:', err);
+            }
          }
 
          // 2. Cleanup only on SUCCESS
@@ -1026,12 +1108,35 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </div>
                   </div>
 
+                  {activeRecall && (
+                     <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 dark:border-sky-800/60 dark:bg-sky-900/20">
+                        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                           <CalendarClock className="w-3.5 h-3.5" /> {t('patients.details.recall.title')}
+                        </p>
+                        <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">
+                           {formatDobDDMMYYYY(activeRecall.dueDate)}
+                           <span className="ml-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">· {recallStatusLabel[activeRecall.status] || activeRecall.status}</span>
+                        </p>
+                        {activeRecall.reason && <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={activeRecall.reason}>{activeRecall.reason}</p>}
+                        {activeRecall.status !== 'booked' && (
+                           <div className="mt-2 flex items-center gap-3">
+                              <button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-xs font-semibold text-sky-700 hover:underline dark:text-sky-300">
+                                 {t('patients.details.recall.book')}
+                              </button>
+                              <button type="button" onClick={() => cancelRecall(activeRecall.id)} className="text-xs font-semibold text-gray-500 hover:text-red-600">
+                                 {t('patients.details.recall.cancel')}
+                              </button>
+                           </div>
+                        )}
+                     </div>
+                  )}
                   <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-0.5">
                      <Button className="w-full mb-2" onClick={openApptModal}>
                         <CalendarPlus className="w-4 h-4 mr-2" /> {t('patients.details.newAppointment')}
                      </Button>
                      {[
                         { icon: Edit, label: t('patients.details.editProfile'), onClick: handleEditOpen },
+                        { icon: CalendarClock, label: t('patients.details.recall.schedule'), onClick: openRecallModal },
                         { icon: Send, label: t('patients.details.sendMessage'), onClick: () => { setMessageType('Custom'); setMessageText(''); setIsMessageModalOpen(true); } },
                         { icon: UserPlus, label: patient.doctorId ? t('patients.details.changeDoctor') : t('patients.details.assignDoctor'), onClick: () => setIsAssignDoctorModalOpen(true) },
                         {
@@ -1588,6 +1693,35 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             </div>
             </div>
             </div>
+
+            {/* Nazoratga chaqirish */}
+            <Modal isOpen={isRecallModalOpen} onClose={() => setIsRecallModalOpen(false)} title={t('patients.details.recall.modalTitle')}>
+               <div className="space-y-4">
+                  <div>
+                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('patients.details.recall.after')}</label>
+                     <div className="flex flex-wrap gap-2">
+                        {[1, 3, 6, 12].map(m => (
+                           <button
+                              key={m}
+                              type="button"
+                              onClick={() => setRecallForm(f => ({ ...f, dueDate: addMonthsStr(m) }))}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallForm.dueDate === addMonthsStr(m)
+                                 ? 'bg-primary-600 text-white'
+                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
+                           >
+                              {m} {t('patients.details.recall.months')}
+                           </button>
+                        ))}
+                     </div>
+                  </div>
+                  <Input label={t('patients.details.recall.date')} type="date" value={recallForm.dueDate} onChange={e => setRecallForm(f => ({ ...f, dueDate: e.target.value }))} />
+                  <Input label={t('patients.details.recall.reason')} value={recallForm.reason} onChange={e => setRecallForm(f => ({ ...f, reason: e.target.value }))} placeholder={t('patients.details.recall.reasonPlaceholder')} />
+                  <div className="flex justify-end gap-2 pt-2">
+                     <Button variant="secondary" onClick={() => setIsRecallModalOpen(false)} disabled={recallSaving}>{t('common.cancel')}</Button>
+                     <Button onClick={saveRecall} disabled={recallSaving || !recallForm.dueDate}>{recallSaving ? '...' : t('common.save')}</Button>
+                  </div>
+               </div>
+            </Modal>
 
             {/* Edit Modal */}
             <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={t('patients.details.modals.editProfile')}>

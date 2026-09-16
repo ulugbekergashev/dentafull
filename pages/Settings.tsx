@@ -210,7 +210,7 @@ export const Settings: React.FC<SettingsProps> = ({
    // Service Modal State
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
    const [editingServiceId, setEditingServiceId] = useState<number | null>(null);
-   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '' });
+   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '', recallMonths: '' });
 
    // Filial modali
    const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -449,11 +449,12 @@ export const Settings: React.FC<SettingsProps> = ({
             name: service.name,
             price: service.price.toString(),
             cost: (service.cost || 0).toString(),
-            categoryId: service.categoryId || ''
+            categoryId: service.categoryId || '',
+            recallMonths: service.recallMonths ? String(service.recallMonths) : ''
          });
       } else {
          setEditingServiceId(null);
-         setServiceForm({ name: '', price: '', cost: '', categoryId: selectedCategory || '' });
+         setServiceForm({ name: '', price: '', cost: '', categoryId: selectedCategory || '', recallMonths: '' });
       }
       setIsServiceModalOpen(true);
    };
@@ -465,7 +466,9 @@ export const Settings: React.FC<SettingsProps> = ({
          price: Number(serviceForm.price),
          cost: Number(serviceForm.cost) || 0,
          duration: 60,
-         categoryId: serviceForm.categoryId || undefined
+         categoryId: serviceForm.categoryId || undefined,
+         // Nazorat: necha oydan keyin bemorni qayta chaqirish (bo'sh — kerak emas)
+         recallMonths: serviceForm.recallMonths === '' ? null : Number(serviceForm.recallMonths)
       };
 
       if (editingServiceId !== null) {
@@ -1024,6 +1027,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                     <tr>
                                        <th className="px-4 py-3 font-medium text-gray-500">{t('settings.services.thName')}</th>
                                        <th className="px-4 py-3 font-medium text-gray-500">{t('settings.services.thPrice')}</th>
+                                       <th className="px-4 py-3 font-medium text-gray-500">{t('settings.services.thRecall')}</th>
                                        <th className="px-4 py-3 font-medium text-gray-500 text-right">{t('settings.services.thAction')}</th>
                                     </tr>
                                  </thead>
@@ -1034,6 +1038,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                           <tr key={s.id ?? s.name} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
                                              <td className="px-4 py-3 text-gray-900 dark:text-gray-200 font-medium">{s.name}</td>
                                              <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
+                                             <td className="px-4 py-3 text-gray-500">{s.recallMonths ? `${s.recallMonths} ${t('patients.details.recall.months')}` : '—'}</td>
                                              <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-1">
                                                    <button
@@ -1685,6 +1690,19 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                <div className="grid grid-cols-2 gap-4">
                   <Input label={t('settings.services.thPrice')} type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
                   <Input label="Texniklar xarajati" type="number" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} placeholder="0" />
+               </div>
+               {/* Nazorat: shu xizmatdan keyin bemor necha oydan so'ng qayta kelishi kerak.
+                   Shifokor qabulni yakunlaganda shu muddat o'zi taklif qilinadi. */}
+               <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('settings.services.thRecall')}</label>
+                  <select
+                     value={serviceForm.recallMonths}
+                     onChange={e => setServiceForm({ ...serviceForm, recallMonths: e.target.value })}
+                     className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 outline-none"
+                  >
+                     <option value="">{t('settings.services.recallNone')}</option>
+                     {[1, 3, 6, 12].map(m => <option key={m} value={m}>{m} {t('patients.details.recall.months')}</option>)}
+                  </select>
                </div>
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsServiceModalOpen(false)}>{t('common.cancel')}</Button>

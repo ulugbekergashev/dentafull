@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, CashRegisterDay, CashMovement, CashAuditLog } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, CashRegisterDay, CashMovement, CashAuditLog, Recall } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -1122,6 +1122,37 @@ export const api = {
             }),
         disconnect: () =>
             fetchJson<{ success: true }>('/admin/facebook/disconnect', { method: 'POST' }),
+    },
+    // Nazorat (qayta tashrif): shifokor "N oydan keyin kelsin" deb belgilaydi
+    recalls: {
+        getByPatient: (patientId: string) => {
+            if (isDemoMode()) return Promise.resolve([] as Recall[]);
+            return fetchJson<Recall[]>(`/recalls?patientId=${patientId}`);
+        },
+        // Resepshn ro'yxati: muddati kelgan yoki `days` kun ichida keladiganlar
+        getDue: (clinicId: string, days = 14) => {
+            if (isDemoMode()) return Promise.resolve([] as Recall[]);
+            return fetchJson<Recall[]>(`/recalls?clinicId=${clinicId}&due=${days}`);
+        },
+        create: (data: { patientId: string; clinicId: string; doctorId?: string | null; dueDate: string; reason?: string }) => {
+            if (isDemoMode()) {
+                const now = new Date().toISOString();
+                return Promise.resolve({ id: `demo-recall-${Date.now()}`, status: 'planned', createdAt: now, updatedAt: now, ...data } as Recall);
+            }
+            return fetchJson<Recall>('/recalls', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        update: (id: string, data: Partial<Pick<Recall, 'status' | 'dueDate' | 'reason'>>) => {
+            if (isDemoMode()) return Promise.resolve({ id, ...data } as Recall);
+            return fetchJson<Recall>(`/recalls/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
     },
     diagnoses: {
         searchCodes: (query: string) => fetchJson<ICD10Code[]>(`/icd10?query=${query}`),

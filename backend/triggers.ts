@@ -441,6 +441,52 @@ export const TRIGGERS: TriggerDef[] = [
             }));
         },
     },
+    // ── 9. Nazorat vaqti (qayta tashrif) ────────────────────────────────────
+    // Shifokor qabulda "6 oydan keyin kelsin" deb belgilagan (Recall jadvali).
+    // Muddatdan N kun oldin bemorga xabar ketadi; yuborilgach yozuv
+    // 'reminded' bo'ladi (server.ts dvigatelida), shuning uchun qayta
+    // yuborilmaydi. Bemor yozilsa yoki kelsa — 'booked' / 'done'.
+    {
+        id: 'recall_due',
+        label: 'Nazorat vaqti (qayta tashrif)',
+        // Shifokor o'zi belgilagan — chastota chegarasi to'sqinlik qilmasin
+        respectCooldown: false,
+        sendWindow: { fromHour: 9, toHour: 20 },
+        offset: { label: 'Necha kun oldin', unit: 'day', options: [0, 3, 7, 14], default: 7 },
+        supportsDoctorFilter: true,
+        async findDue(rule, clinic) {
+            const days = rule.hoursBefore ?? 7;
+            const recalls = await prisma.recall.findMany({
+                where: {
+                    clinicId: rule.clinicId,
+                    status: 'planned',
+                    dueDate: { lte: tashkentDateStr(days) },
+                    ...(rule.doctorId ? { doctorId: rule.doctorId } : {}),
+                },
+                include: { patient: true },
+            });
+            if (recalls.length === 0) return [];
+            const doctors = await prisma.doctor.findMany({ where: { clinicId: rule.clinicId } });
+            const doctorById = new Map<string, any>(doctors.map((d: any) => [d.id, d] as [string, any]));
+            return recalls
+                .filter((r: any) => r.patient && r.patient.status === 'Active')
+                .map((r: any) => ({
+                    patient: r.patient,
+                    refId: r.id,
+                    type: 'RecallDue',
+                    vars: {
+                        ...patientName(r.patient),
+                        date: String(r.dueDate).split('-').reverse().join('.'),
+                        clinicName: clinic.name,
+                        doctorName: doctorName(r.doctorId ? doctorById.get(r.doctorId) : null),
+                        // Qavs ichida, shablonda "...kerak{sabab}." deb ishlatiladi; bo'sh bo'lsa hech narsa
+                        reason: r.reason ? ` (${r.reason})` : '',
+                    },
+                    replyMarkup: { inline_keyboard: [[{ text: '📅 Qabulga yozilish', callback_data: 'start_booking' }]] },
+                }));
+        },
+    },
+
 ];
 
 /** Hozir Toshkent bo'yicha soat nechada */

@@ -1913,6 +1913,8 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
                 branchId
             }
         });
+        // Bemorning ochiq nazorati bo'lsa — shu qabulga bog'lanadi
+        await linkRecallToAppointment(appointment);
         res.json(appointment);
     } catch (error) {
         console.error('Failed to create appointment:', error);
@@ -1949,6 +1951,11 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
                 }
             }
         });
+
+        // Qabul yakunlandi — bemorning ochiq nazorati (bo'lsa) bajarildi
+        if (status === 'Completed') {
+            await linkRecallToAppointment({ id: appointment.id, patientId: appointment.patientId, date: appointment.date, status: 'Completed' });
+        }
 
         // Kelmagan bemorga xabar.
         // MUHIM: klinikada faol 'no_show' qoidasi bo'lsa, bu yerdan YUBORMAYMIZ —
@@ -3443,6 +3450,170 @@ app.get('/api/services', authenticateToken, async (req, res) => {
         res.json(services);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch services' });
+    }
+});
+
+/**
+ * Klinikada "Nazorat vaqti" qoidasi bo'lmasa — birinchi nazorat yaratilganda
+ * standart shablon + qoida o'zi qo'shiladi (7 kun oldin, avval Telegram,
+ * keyin SMS). Administrator uni Xabarlar → Avtomatika bo'limida o'zgartiradi
+ * yoki o'chiradi. Shifokor hech narsa sozlamaydi.
+ */
+async function ensureRecallRule(clinicId: string) {
+    try {
+        const existing = await prisma.automationRule.findFirst({
+            where: { clinicId, trigger: 'recall_due' },
+            select: { id: true },
+        });
+        if (existing) return;
+        const text = "Hurmatli {bemor_ismi}! {klinika_nomi} klinikasidan eslatma: {sana} kuni nazorat ko'rigiga kelishingiz kerak{sabab}. Qabulga yozilish uchun javob yozing yoki qo'ng'iroq qiling.";
+        const template = await prisma.messageTemplate.create({
+            data: { clinicId, name: 'Nazorat eslatmasi', text },
+        });
+        void submitTemplateToEskizModeration(template.id, clinicId, text);
+        await prisma.automationRule.create({
+            data: {
+                clinicId,
+                name: 'Nazorat vaqti (qayta tashrif)',
+                templateId: template.id,
+                trigger: 'recall_due',
+                hoursBefore: 7,
+                channel: 'telegram_first',
+                doctorId: null,
+            },
+        });
+        console.log(`🔔 Klinika ${clinicId} uchun nazorat qoidasi avtomatik yaratildi`);
+    } catch (err: any) {
+        console.error('Nazorat qoidasini yaratib bo\'lmadi:', err?.message || err);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// NAZORAT (QAYTA TASHRIF)
+// Shifokor qabulni yakunlaganda "N oydan keyin kelsin" deb belgilaydi.
+// Aniq vaqti yo'q, kalendarga tushmaydi. Muddati yaqinlashganda avtomatika
+// (triggers.ts → 'recall_due') bemorga xabar yuboradi, resepshn esa bosh
+// sahifadagi ro'yxatdan qo'ng'iroq qiladi. Bemor yozilganda qabulga
+// bog'lanadi (linkRecallToAppointment), qabul yakunlanganda "done" bo'ladi.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Toshkent bo'yicha YYYY-MM-DD; `offsetDays` bilan siljitiladi */
+const recallDateStr = (offsetDays = 0) =>
+    new Date(Date.now() + 5 * 3600000 + offsetDays * 86400000).toISOString().split('T')[0];
+
+/**
+ * Yangi yoki yakunlangan qabulni bemorning ochiq nazoratiga bog'laydi.
+ * Oyna: nazorat sanasidan ±45 kun. Qabul yakunlangan bo'lsa nazorat "done",
+ * aks holda "booked". Xato bo'lsa jim — qabul yaratish to'xtamasligi kerak.
+ */
+async function linkRecallToAppointment(appt: { id: string; patientId: string; date: string; status?: string | null }) {
+    try {
+        if (!appt?.patientId || !appt?.date) return;
+        const base = Date.parse(`${appt.date}T00:00:00Z`);
+        if (isNaN(base)) return;
+        const from = new Date(base - 45 * 86400000).toISOString().split('T')[0];
+        const to = new Date(base + 45 * 86400000).toISOString().split('T')[0];
+        const open = await prisma.recall.findMany({
+            where: {
+                patientId: appt.patientId,
+                status: { in: ['planned', 'reminded', 'booked'] },
+                dueDate: { gte: from, lte: to },
+            },
+            select: { id: true },
+        });
+        if (open.length === 0) return;
+        await prisma.recall.updateMany({
+            where: { id: { in: open.map((r: any) => r.id) } },
+            data: { status: appt.status === 'Completed' ? 'done' : 'booked', appointmentId: appt.id },
+        });
+    } catch (err: any) {
+        console.error('Nazoratni qabulga bog\'lab bo\'lmadi:', err?.message || err);
+    }
+}
+
+app.get('/api/recalls', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const { patientId, due, status } = req.query as Record<string, string | undefined>;
+        const where: any = { clinicId: String(clinicId) };
+        if (patientId) where.patientId = patientId;
+        if (status) where.status = { in: status.split(',') };
+        else if (due !== undefined) {
+            // Resepshn ro'yxati: muddati kelgan yoki N kun ichida keladiganlar
+            const days = Math.max(0, parseInt(due) || 0);
+            where.status = { in: ['planned', 'reminded'] };
+            where.dueDate = { lte: recallDateStr(days) };
+        }
+        const recalls = await prisma.recall.findMany({
+            where,
+            include: { patient: { select: { id: true, firstName: true, lastName: true, phone: true, doctorId: true } } },
+            orderBy: { dueDate: 'asc' },
+        });
+        res.json(recalls);
+    } catch (error: any) {
+        console.error('Nazorat ro\'yxati xatosi:', error);
+        res.status(500).json({ error: 'Failed to load recalls' });
+    }
+});
+
+app.post('/api/recalls', authenticateToken, async (req, res) => {
+    try {
+        const u = (req as any).user;
+        const { patientId, doctorId, dueDate, reason } = req.body || {};
+        const clinicId = u?.role === 'SUPER_ADMIN' ? req.body?.clinicId : u?.clinicId;
+        if (!clinicId || !patientId || !dueDate) return res.status(400).json({ error: 'patientId va dueDate kerak' });
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDate))) return res.status(400).json({ error: 'dueDate YYYY-MM-DD bo\'lishi kerak' });
+        const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+        if (!patient || patient.clinicId !== clinicId) return res.status(404).json({ error: 'Bemor topilmadi' });
+
+        // Bir sanaga ikki marta bosilsa — ikkinchi yozuv yaratilmaydi
+        const duplicate = await prisma.recall.findFirst({
+            where: { patientId, dueDate: String(dueDate), status: { in: ['planned', 'reminded'] } },
+        });
+        if (duplicate) return res.json(duplicate);
+
+        const recall = await prisma.recall.create({
+            data: {
+                clinicId,
+                patientId,
+                doctorId: doctorId || patient.doctorId || null,
+                dueDate: String(dueDate),
+                reason: reason ? String(reason).slice(0, 200) : null,
+                status: 'planned',
+            },
+        });
+        await ensureRecallRule(clinicId);
+        res.json(recall);
+    } catch (error: any) {
+        console.error('Nazorat yaratish xatosi:', error);
+        res.status(500).json({ error: 'Failed to create recall' });
+    }
+});
+
+app.put('/api/recalls/:id', authenticateToken, async (req, res) => {
+    try {
+        const u = (req as any).user;
+        const existing = await prisma.recall.findUnique({ where: { id: req.params.id } });
+        if (!existing) return res.status(404).json({ error: 'Topilmadi' });
+        if (u?.role !== 'SUPER_ADMIN' && existing.clinicId !== u?.clinicId) return res.status(403).json({ error: 'Ruxsat yo\'q' });
+        const { status, dueDate, reason, appointmentId } = req.body || {};
+        const data: any = {};
+        if (status !== undefined) {
+            if (!['planned', 'reminded', 'booked', 'done', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Noto\'g\'ri status' });
+            data.status = status;
+        }
+        if (dueDate !== undefined) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDate))) return res.status(400).json({ error: 'dueDate YYYY-MM-DD bo\'lishi kerak' });
+            data.dueDate = String(dueDate);
+        }
+        if (reason !== undefined) data.reason = reason ? String(reason).slice(0, 200) : null;
+        if (appointmentId !== undefined) data.appointmentId = appointmentId || null;
+        const recall = await prisma.recall.update({ where: { id: req.params.id }, data });
+        res.json(recall);
+    } catch (error: any) {
+        console.error('Nazorat yangilash xatosi:', error);
+        res.status(500).json({ error: 'Failed to update recall' });
     }
 });
 
@@ -5574,6 +5745,13 @@ async function runTrigger(triggerDef: any, ignoreWindow = false) {
                         .update({ where: { id: item.refId }, data: { reminderSent: true } })
                         .catch(() => { });
                 }
+                // Nazorat eslatmasi ketdi — yozuv 'reminded' bo'ladi: resepshn
+                // ro'yxatida "eslatma yuborildi" deb ko'rinadi va qayta ketmaydi
+                if (triggerDef.id === 'recall_due') {
+                    await prisma.recall
+                        .update({ where: { id: item.refId }, data: { status: 'reminded', remindedAt: new Date() } })
+                        .catch(() => { });
+                }
             } catch (err) {
                 console.error(`❌ [${triggerDef.id}] yuborishda xatolik (rule ${rule.id}):`, err);
             }
@@ -5609,6 +5787,7 @@ function processTemplate(template: string, data: { [key: string]: any }) {
         '{klinika_nomi}': data.clinicName || '',
         '{shifokor_ismi}': data.doctorName || '',
         '{qarz}': data.amount !== undefined ? Number(data.amount).toLocaleString() : '',
+        '{sabab}': data.reason || '',
         // Eski tokenlar (moslik uchun)
         '{BEMOR}': data.patientName || '',
         '{VAQT}': data.time || '',
@@ -7462,6 +7641,29 @@ async function runStartupMigrations() {
             "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    // --- Nazorat (qayta tashrif) ---
+    // Xizmatga "necha oydan keyin chaqirish" va rejalashtirilgan tashriflar jadvali.
+    await migrationStep('Service.recallMonths', `ALTER TABLE "Service" ADD COLUMN IF NOT EXISTS "recallMonths" INTEGER`);
+    await migrationStep('Recall table', `
+        CREATE TABLE IF NOT EXISTS "Recall" (
+            "id"            TEXT NOT NULL PRIMARY KEY,
+            "clinicId"      TEXT NOT NULL,
+            "patientId"     TEXT NOT NULL,
+            "doctorId"      TEXT,
+            "dueDate"       TEXT NOT NULL,
+            "reason"        TEXT,
+            "status"        TEXT NOT NULL DEFAULT 'planned',
+            "appointmentId" TEXT,
+            "remindedAt"    TIMESTAMP(3),
+            "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "Recall_clinicId_fkey" FOREIGN KEY ("clinicId") REFERENCES "Clinic"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+            CONSTRAINT "Recall_patientId_fkey" FOREIGN KEY ("patientId") REFERENCES "Patient"("id") ON DELETE CASCADE ON UPDATE CASCADE
+        )
+    `);
+    await migrationStep('Recall index (clinic, status, dueDate)', `CREATE INDEX IF NOT EXISTS "Recall_clinicId_status_dueDate_idx" ON "Recall"("clinicId", "status", "dueDate")`);
+    await migrationStep('Recall index (patient)', `CREATE INDEX IF NOT EXISTS "Recall_patientId_idx" ON "Recall"("patientId")`);
 
     // --- AI jurnali va suhbatlar ---
     // Jadval bo'lmasa AI baribir ishlaydi (ai/log.ts xatolikni yutadi), lekin

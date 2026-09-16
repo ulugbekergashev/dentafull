@@ -1,14 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Card, Badge, Input, Modal, Button } from '../components/Common';
 import { StatCard } from '../components/StatCard';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
-  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot
+  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot, Phone
 } from 'lucide-react';
 import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
-import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod } from '../types';
+import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { transactionBelongsToDoctor, calculateAppointmentTotal, isAppointmentPaid } from '../utils/financialCalculations';
@@ -16,6 +16,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { AddPatientModal } from '../components/AddPatientModal';
 import { QuickPaymentModal } from '../components/QuickPaymentModal';
+import { api } from '../services/api';
 
 interface DashboardProps {
   patients: Patient[];
@@ -170,7 +171,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
    * O'ng ustunda ko'rsatiladigan "hali olinmagan pul" ro'yxatlari bormi.
    * Bo'lmasa, kunlik jadval butun kenglikni egallaydi.
    */
+  // Nazoratga chaqirish: muddati kelgan yoki 14 kun ichida keladigan qayta
+  // tashriflar. Shifokor faqat o'z bemorlarini ko'radi.
+  const [dueRecalls, setDueRecalls] = useState<Recall[]>([]);
+  const [showAllRecalls, setShowAllRecalls] = useState(false);
+  useEffect(() => {
+    if (!clinicId) return;
+    api.recalls.getDue(clinicId, 14).then(setDueRecalls).catch(() => setDueRecalls([]));
+  }, [clinicId]);
+  const visibleRecalls = useMemo(
+    () => (doctorId ? dueRecalls.filter(r => r.doctorId === doctorId) : dueRecalls),
+    [dueRecalls, doctorId]);
+  const recallToday = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const dismissRecall = async (id: string) => {
+    try {
+      await api.recalls.update(id, { status: 'cancelled' });
+      setDueRecalls(prev => prev.filter(r => r.id !== id));
+    } catch { /* ro'yxat keyingi yuklashda yangilanadi */ }
+  };
+
   const hasMoneyCards = (showFinance && pendingDebts.length > 0) || unpaidCompleted.length > 0;
+  // O'ng ustunda nazorat ro'yxati ham turadi
+  const hasSideCards = hasMoneyCards || visibleRecalls.length > 0;
 
   const pendingDebtsTotal = useMemo(() =>
     pendingDebts.reduce((acc, t) => acc + t.amount, 0)
@@ -345,7 +370,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
 
       {/* Bugungi Qabullar */}
-      <Card className={`p-6 rounded-[2rem] ${hasMoneyCards ? 'xl:col-span-8' : 'xl:col-span-12'}`}>
+      <Card className={`p-6 rounded-[2rem] ${hasSideCards ? 'xl:col-span-8' : 'xl:col-span-12'}`}>
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-xl font-black text-gray-900 dark:text-white">
@@ -487,8 +512,77 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       {/* Yig'ilmagan pul — o'ng ustunda ustma-ust.
           Ikkalasi ham "hali olinmagan pul" bo'lgani uchun bir joyda turadi. */}
-      {hasMoneyCards && (
+      {hasSideCards && (
         <div className="xl:col-span-4 space-y-6">
+
+          {/* Nazoratga chaqirish — muddati kelgan qayta tashriflar */}
+          {visibleRecalls.length > 0 && (
+            <Card className="p-6 rounded-[2rem] border border-sky-200 dark:border-sky-800/50">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                    {t('dashboard.recall.titleA')} <span className="text-sky-500">{t('dashboard.recall.titleB')}</span>
+                  </h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                    {t('dashboard.recall.desc')}
+                  </p>
+                </div>
+                <span className="px-3 py-1 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 text-xs font-black rounded-full flex-shrink-0">
+                  {visibleRecalls.length} {t('dashboard.count')}
+                </span>
+              </div>
+
+              <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
+                {(showAllRecalls ? visibleRecalls : visibleRecalls.slice(0, DASH_ROW_LIMIT)).map(recall => {
+                  const overdue = recall.dueDate < recallToday;
+                  const name = recall.patient ? `${recall.patient.lastName} ${recall.patient.firstName}` : '—';
+                  return (
+                    <div key={recall.id} className="flex items-center gap-3 py-3">
+                      <div className="min-w-0 flex-1">
+                        <button
+                          onClick={() => onPatientClick && onPatientClick(recall.patientId)}
+                          className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                        >
+                          {name}
+                        </button>
+                        <p className="text-[11px] text-gray-400 truncate">
+                          <span className={overdue ? 'text-red-500 font-semibold' : ''}>{recall.dueDate.split('-').reverse().join('.')}</span>
+                          {overdue && <span className="text-red-500"> · {t('dashboard.recall.overdue')}</span>}
+                          {recall.status === 'reminded' && <span> · {t('dashboard.recall.reminded')}</span>}
+                          {recall.reason && <span> · {recall.reason}</span>}
+                        </p>
+                      </div>
+                      {recall.patient?.phone && (
+                        <a
+                          href={`tel:${recall.patient.phone}`}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
+                        >
+                          <Phone className="w-3.5 h-3.5" /> {t('dashboard.recall.call')}
+                        </a>
+                      )}
+                      <button
+                        onClick={() => dismissRecall(recall.id)}
+                        title={t('dashboard.recall.dismiss')}
+                        className="p-1.5 text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {visibleRecalls.length > DASH_ROW_LIMIT && (
+                <button
+                  onClick={() => setShowAllRecalls(v => !v)}
+                  className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
+                >
+                  {showAllRecalls ? t('dashboard.recall.less') : `${t('dashboard.moreAll')} ${visibleRecalls.length - DASH_ROW_LIMIT} ${t('dashboard.count')}`}
+                  <ChevronRight className={`w-3.5 h-3.5 ${showAllRecalls ? '-rotate-90' : ''}`} />
+                </button>
+              )}
+            </Card>
+          )}
 
           {/* Qarzdorlar — qarzga yozilgan, yopilmagan to'lovlar */}
           {showFinance && pendingDebts.length > 0 && (

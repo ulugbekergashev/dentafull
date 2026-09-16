@@ -454,6 +454,7 @@ export interface Service {
   price: number;
   cost?: number; // Service cost (e.g., technician fee)
   duration?: number; // Optional, defaults to 60 minutes
+  recallMonths?: number | null; // Necha oydan keyin nazoratga chaqirish (null — kerak emas)
 
   clinicId: string;
   categoryId?: string;
@@ -673,6 +674,22 @@ export interface Lead {
   updatedAt: string;
   clinicId: string;
   branchId?: string | null;
+}
+
+// Nazorat (qayta tashrif): protseduradan keyin N oydan so'ng bemorni chaqirish
+export interface Recall {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  doctorId?: string | null;
+  dueDate: string;            // YYYY-MM-DD
+  reason?: string | null;     // "Plomba #36, Tozalash"
+  status: 'planned' | 'reminded' | 'booked' | 'done' | 'cancelled';
+  appointmentId?: string | null;
+  remindedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  patient?: { id: string; firstName: string; lastName: string; phone: string; doctorId?: string | null };
 }
 
 // Tashqi lid manbalari (yuboraman.uz va h.k.) uchun integratsiya ma'lumotlari.

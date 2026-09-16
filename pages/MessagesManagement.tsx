@@ -22,6 +22,7 @@ interface MessagesManagementProps {
 // Shablon o'zgaruvchilari (backend processTemplate bilan mos)
 const TEMPLATE_VARS: { token: string; label: string }[] = [
     { token: '{bemor_ismi}', label: '+ Bemor ismi' },
+    { token: '{sabab}', label: '+ Nazorat sababi' },
     { token: '{bemor_familyasi}', label: '+ Familya' },
     { token: '{sana}', label: '+ Sana' },
     { token: '{vaqt}', label: '+ Vaqt' },
@@ -301,7 +302,9 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             name: ruleForm.name,
             templateId: ruleForm.templateId,
             trigger: ruleForm.trigger,
-            hoursBefore: ruleForm.trigger === 'before_appointment' ? ruleForm.hoursBefore : null,
+            // Offset shkalasi bor har qanday trigger uchun saqlanadi (ilgari faqat
+            // "Qabuldan oldin" uchun edi — qolganlari standart qiymatga tushib qolardi)
+            hoursBefore: activeTriggerDef?.offset ? ruleForm.hoursBefore : null,
             channel: ruleForm.channel,
             doctorId: ruleForm.doctorId || null,
             // Faqat qo'llab-quvvatlaydigan triggerlar uchun yuboriladi

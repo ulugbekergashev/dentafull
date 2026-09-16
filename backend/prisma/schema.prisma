@@ -85,6 +85,7 @@ model Patient {
   teeth            ToothData[]
   transactions     Transaction[]
   visits           Visit[]
+  recalls          Recall[]
 
   @@unique([clinicId, telegramChatId])
   @@index([phone])
@@ -251,6 +252,8 @@ model Service {
   duration   Int
   clinicId   String
   cost       Float            @default(0)
+  /// Necha oydan keyin nazoratga chaqirish (null — kerak emas)
+  recallMonths Int?
   categoryId String?
   category   ServiceCategory? @relation(fields: [categoryId], references: [id])
   clinic     Clinic           @relation(fields: [clinicId], references: [id])
@@ -341,6 +344,7 @@ model Clinic {
   labTechnicians          LabTechnician[]
   labOrders               LabOrder[]
   expenses                Expense[]
+  recalls                 Recall[]
   messageTemplates        MessageTemplate[]
   automationRules         AutomationRule[]
   cashRegisterDays        CashRegisterDay[]
@@ -635,6 +639,31 @@ model AutomationRule {
   template    MessageTemplate @relation(fields: [templateId], references: [id])
 
   @@index([clinicId])
+}
+
+/// Nazorat (qayta tashrif): protseduradan keyin N oydan so'ng bemorni
+/// chaqirish. Aniq vaqti yo'q — kalendarga tushmaydi; bemor yozilganda
+/// `appointmentId` orqali qabulga bog'lanadi.
+model Recall {
+  id            String    @id @default(uuid())
+  clinicId      String
+  patientId     String
+  doctorId      String?
+  /// YYYY-MM-DD — bemor shu sana atrofida kelishi kerak
+  dueDate       String
+  /// Nima uchun: "Plomba #36, Tozalash"
+  reason        String?
+  /// planned | reminded | booked | done | cancelled
+  status        String    @default("planned")
+  appointmentId String?
+  remindedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  clinic        Clinic    @relation(fields: [clinicId], references: [id])
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, status, dueDate])
+  @@index([patientId])
 }
 
 model InstallmentPlan {
