@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UpgradePlanModal } from '../components/UpgradePlanModal';
 
-import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch } from '../types';
+import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
@@ -12,7 +12,7 @@ import { useLanguage } from '../context/LanguageContext';
 //   Filiallar           — faqat klinika egasiga
 //   Maxsus imkoniyatlar — chek chiqarish, oldindan to'lov, kassa smenalari
 //   Xizmatlar       — kategoriyalar va narxlar
-//   Integratsiyalar — Telegram va SMS, DMED, AI kaliti, lid API
+//   Integratsiyalar — Telegram va SMS, DHP (davlat platformasi), AI kaliti, lid API
 //   Tarif           — obuna, muddat va cheklovlar
 // Ilgari o'n bitta bo'lim aralash turardi: tarif "Xizmatlar" ichida, reyting
 // "Umumiy" tepasida, xodimlar uch bo'lakka bo'lingan edi. Xodimlar va ruxsatlar
@@ -301,13 +301,17 @@ export const Settings: React.FC<SettingsProps> = ({
    const [smsTestPhone, setSmsTestPhone] = useState('');
    const [smsSaved, setSmsSaved] = useState(false);
    
-   // DMED Settings State
+   // DHP (davlat platformasi) sozlamalari. Ustun/marshrut nomlari eski "dmed":
+   // dmedApiKey = client_id, dmedApiSecret = client_secret, dmedClinicId = Organization id.
    const [dmedEnabled, setDmedEnabled] = useState(false);
    const [dmedApiKey, setDmedApiKey] = useState('');
    const [dmedApiSecret, setDmedApiSecret] = useState('');
    const [dmedClinicId, setDmedClinicId] = useState('');
+   const [dhpEnvironment, setDhpEnvironment] = useState<'playground' | 'production'>('playground');
    const [dmedSaved, setDmedSaved] = useState(false);
    const [isCheckingDmed, setIsCheckingDmed] = useState(false);
+   const [dhpStatus, setDhpStatus] = useState<DhpStatus | null>(null);
+   const [dhpBusy, setDhpBusy] = useState<'' | 'status' | 'sync' | 'retry'>('');
 
    // Prepayment Settings State
    const [prepaymentForm, setPrepaymentForm] = useState({
@@ -344,10 +348,25 @@ export const Settings: React.FC<SettingsProps> = ({
       if (currentClinic) {
          setDmedEnabled(currentClinic.dmedEnabled || false);
          setDmedApiKey(currentClinic.dmedApiKey || '');
-         setDmedApiSecret(currentClinic.dmedApiSecret || '');
+         // Secret ekranga qaytarilmaydi — bo'sh qolsa serverda saqlangani o'zgarmaydi
+         setDmedApiSecret('');
          setDmedClinicId(currentClinic.dmedClinicId || '');
+         setDhpEnvironment(currentClinic.dhpEnvironment === 'production' ? 'production' : 'playground');
       }
    }, [currentClinic]);
+
+   // DHP holati — tab ochilganda va yuborish/qayta urinishdan keyin
+   const loadDhpStatus = React.useCallback(async () => {
+      if (!currentClinic?.dmedEnabled) { setDhpStatus(null); return; }
+      setDhpBusy('status');
+      try { setDhpStatus(await api.clinics.dhpStatus()); }
+      catch (e) { console.error('DHP status:', e); }
+      finally { setDhpBusy(''); }
+   }, [currentClinic?.dmedEnabled]);
+
+   React.useEffect(() => {
+      if (activeTab === 'integrations' && integrationTab === 'dmed') loadDhpStatus();
+   }, [activeTab, integrationTab, loadDhpStatus]);
 
    // Sync prepayment settings
    React.useEffect(() => {
@@ -548,15 +567,17 @@ export const Settings: React.FC<SettingsProps> = ({
          await api.clinics.updateDmedSettings(currentClinic.id, {
             dmedEnabled,
             dmedApiKey,
-            dmedApiSecret,
-            dmedClinicId
+            // bo'sh — serverdagi secret saqlanib qoladi
+            dmedApiSecret: dmedApiSecret || undefined,
+            dmedClinicId,
+            dhpEnvironment,
          });
          setDmedSaved(true);
          setTimeout(() => setDmedSaved(false), 3000);
-         window.location.reload(); 
+         window.location.reload();
       } catch (error) {
-         console.error('Failed to save DMED settings:', error);
-         alert('DMED sozlamalarini saqlashda xatolik yuz berdi');
+         console.error('Failed to save DHP settings:', error);
+         alert('DHP sozlamalarini saqlashda xatolik yuz berdi');
       }
    };
 
@@ -564,19 +585,47 @@ export const Settings: React.FC<SettingsProps> = ({
       if (!currentClinic?.id) return;
       setIsCheckingDmed(true);
       try {
-         const res = await api.clinics.testDmed(currentClinic.id, {
-            dmedApiKey,
-            dmedApiSecret
-         });
+         const res = await api.clinics.testDmed(currentClinic.id, { dmedApiKey, dmedApiSecret: dmedApiSecret || undefined, dhpEnvironment });
          if (res.valid) {
-            alert('DMED ulanishi muvaffaqiyatli!');
+            // STIR bo'yicha tashkilot topilsa — Organization ID'ni o'zi to'ldiradi
+            if (res.organization?.id && !dmedClinicId) setDmedClinicId(res.organization.id);
+            alert(
+               (res.mock ? 'Mock rejim: haqiqiy ulanish emas, tashqariga hech narsa ketmaydi.\n' : 'DHP bilan ulanish muvaffaqiyatli.\n') +
+               (res.organization ? `Tashkilot topildi: ${res.organization.name || res.organization.id}` : (currentClinic.inn ? 'STIR bo\'yicha tashkilot topilmadi — Organization ID\'ni qo\'lda kiriting.' : 'Klinika STIR\'i kiritilmagan (Klinika bo\'limi) — tashkilot qidirilmadi.'))
+            );
          } else {
-            alert('Ulanishda xatolik: ' + ((res as any).error || 'Noma\'lum xatolik'));
+            alert('Ulanishda xatolik: ' + (res.error || 'Noma\'lum xatolik'));
          }
       } catch (error: any) {
-         alert('DMED test xatosi: ' + error.message);
+         alert('DHP tekshiruv xatosi: ' + error.message);
       } finally {
          setIsCheckingDmed(false);
+      }
+   };
+
+   const handleDhpSyncNow = async () => {
+      setDhpBusy('sync');
+      try {
+         const r = await api.clinics.dhpSyncNow();
+         alert(`Yuborildi: ${r.sent}, xato: ${r.failed}, kutmoqda: ${r.deferred}, o'tkazildi: ${r.skipped}`);
+      } catch (e: any) {
+         alert('Yuborishda xatolik: ' + (e?.message || ''));
+      } finally {
+         setDhpBusy('');
+         loadDhpStatus();
+      }
+   };
+
+   const handleDhpRetry = async () => {
+      setDhpBusy('retry');
+      try {
+         await api.clinics.dhpRetry();
+         await api.clinics.dhpSyncNow();
+      } catch (e: any) {
+         alert('Qayta urinishda xatolik: ' + (e?.message || ''));
+      } finally {
+         setDhpBusy('');
+         loadDhpStatus();
       }
    };
 
@@ -685,7 +734,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
    const integrationTabs: { id: IntegrationTab; name: string; icon: React.ElementType }[] = [
       { id: 'messaging', name: t('settings.integrations.messaging'), icon: MessageSquare },
-      { id: 'dmed', name: 'DMED', icon: Activity },
+      { id: 'dmed', name: 'DHP', icon: Activity },
       // Kalitlarni faqat klinika egasi ko'radi — backend ham shu rolni talab qiladi.
       ...(isAdmin ? [
          { id: 'ai' as const, name: t('settings.integrations.ai'), icon: Sparkles },
@@ -1262,27 +1311,29 @@ export const Settings: React.FC<SettingsProps> = ({
                               <Activity className="w-8 h-8" />
                            </div>
                            <div>
-                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">DMED (IT-MED) Integratsiyasi</h3>
-                              <p className="text-sm text-gray-500">O'zbekiston milliy tibbiy axborot tizimi bilan bog'lanish va ma'lumotlarni sinxronizatsiya qilish.</p>
+                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Davlat platformasi (DHP)</h3>
+                              <p className="text-sm text-gray-500">
+                                 Raqamli sog'liqni saqlash platformasi (dhp.uz). Bemor, shifokor, qabul, tashxis va muolajalar
+                                 avtomatik yuboriladi. 2027-yil 1-apreldan litsenziya sharti.
+                              </p>
                            </div>
                         </div>
 
-                        <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-100 dark:border-primary-800/40 mb-6">
-                           <p className="text-sm text-primary-800 dark:text-primary-200">
-                              <strong>Eslatma:</strong> DMED tizimiga ulanish uchun klinika rasmiy ravishda SSV (Uzinfocom) orqali Client ID va Client Secret kalitlarini olgan bo'lishi shart.
-                           </p>
+                        <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-100 dark:border-primary-800/40 mb-6 text-sm text-primary-800 dark:text-primary-200 space-y-1">
+                           <p><strong>Kalitlar</strong> (client_id / client_secret) platforma operatori UZINFOCOM'dan olinadi. Avval sinov muhiti (playground), keyin ishchi.</p>
+                           <p>Klinika STIR'i <strong>Klinika</strong> bo'limida kiritiladi — tekshiruv shu bo'yicha tashkilotni topadi. Shifokorlarga tug'ilgan sana, jins va mutaxassislik kodi <strong>Xodimlar</strong> bo'limida.</p>
                         </div>
 
-                        <form onSubmit={handleDmedSave} className="space-y-6">
+                        <form onSubmit={handleDmedSave} className="space-y-5">
                            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
                               <div>
-                                 <h4 className="font-medium text-gray-900 dark:text-white">DMED Integratsiyasini yoqish</h4>
-                                 <p className="text-sm text-gray-500">Agar yoqilsa, bemorlar profilida DMED ma'lumotlari paydo bo'ladi.</p>
+                                 <h4 className="font-medium text-gray-900 dark:text-white">DHP'ga yuborishni yoqish</h4>
+                                 <p className="text-sm text-gray-500">Yoqilganda yangi va o'zgargan yozuvlar navbatga tushadi va har daqiqa yuboriladi.</p>
                               </div>
                               <label className="relative inline-flex items-center cursor-pointer">
-                                 <input 
-                                    type="checkbox" 
-                                    className="sr-only peer" 
+                                 <input
+                                    type="checkbox"
+                                    className="sr-only peer"
                                     checked={dmedEnabled}
                                     onChange={(e) => setDmedEnabled(e.target.checked)}
                                  />
@@ -1290,41 +1341,52 @@ export const Settings: React.FC<SettingsProps> = ({
                               </label>
                            </div>
 
-                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <Input 
-                                 label="DMED Client ID (API Key)" 
-                                 value={dmedApiKey} 
-                                 onChange={e => setDmedApiKey(e.target.value)} 
-                                 placeholder="Masalan: denta_clinic_123"
+                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <Select
+                                 label="Muhit"
+                                 value={dhpEnvironment}
+                                 onChange={e => setDhpEnvironment(e.target.value === 'production' ? 'production' : 'playground')}
+                                 disabled={!dmedEnabled}
+                                 options={[
+                                    { value: 'playground', label: 'Sinov (playground.dhp.uz)' },
+                                    { value: 'production', label: 'Ishchi (fhir.dhp.uz)' },
+                                 ]}
+                              />
+                              <Input
+                                 label="Client ID"
+                                 value={dmedApiKey}
+                                 onChange={e => setDmedApiKey(e.target.value)}
+                                 placeholder="UZINFOCOM bergan client_id"
                                  disabled={!dmedEnabled}
                               />
-                              <Input 
-                                 label="DMED Client Secret" 
-                                 value={dmedApiSecret} 
-                                 onChange={e => setDmedApiSecret(e.target.value)} 
+                              <Input
+                                 label="Client Secret"
+                                 value={dmedApiSecret}
+                                 onChange={e => setDmedApiSecret(e.target.value)}
                                  type="password"
-                                 placeholder="••••••••••••••••"
+                                 placeholder={currentClinic?.dmedApiSecret ? 'Saqlangan — o\'zgartirish uchun kiriting' : '••••••••••••'}
                                  disabled={!dmedEnabled}
                               />
                            </div>
-                           
-                           <Input 
-                              label="Klinika ID (DMED tizimidagi)" 
-                              value={dmedClinicId} 
-                              onChange={e => setDmedClinicId(e.target.value)} 
-                              placeholder="Masalan: 69213aa6-b1f2-11ee-9cc3..."
+
+                           <Input
+                              label="Organization ID (DHP'dagi klinika)"
+                              value={dmedClinicId}
+                              onChange={e => setDmedClinicId(e.target.value)}
+                              placeholder="Ulanishni tekshirish STIR bo'yicha o'zi topadi"
                               disabled={!dmedEnabled}
+                              helperText={currentClinic?.inn ? `STIR: ${currentClinic.inn}` : 'STIR kiritilmagan — Klinika bo\'limida kiriting'}
                            />
 
-                           <div className="flex items-center gap-4 pt-4">
+                           <div className="flex items-center gap-4 pt-2">
                               <Button type="submit" disabled={!dmedEnabled}>
                                  {t('common.save')}
                               </Button>
-                              <Button 
-                                 type="button" 
-                                 variant="secondary" 
+                              <Button
+                                 type="button"
+                                 variant="secondary"
                                  onClick={handleDmedTest}
-                                 disabled={!dmedEnabled || isCheckingDmed || !dmedApiKey || !dmedApiSecret}
+                                 disabled={!dmedEnabled || isCheckingDmed || !dmedApiKey}
                               >
                                  {isCheckingDmed ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
                                  Ulanishni tekshirish
@@ -1333,6 +1395,73 @@ export const Settings: React.FC<SettingsProps> = ({
                            </div>
                         </form>
                      </Card>
+
+                     {/* Sinxron holati — faqat yoqilgan va saqlangan klinikada */}
+                     {currentClinic?.dmedEnabled && (
+                        <Card className="p-6">
+                           <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-2">
+                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Yuborish holati</h3>
+                                 {dhpStatus?.mock && (
+                                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" title="sandbox_key: tashqariga hech narsa ketmaydi">Mock</span>
+                                 )}
+                                 {dhpStatus?.environment && (
+                                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                       {dhpStatus.environment === 'production' ? 'Ishchi' : 'Sinov'}
+                                    </span>
+                                 )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 <Button type="button" variant="secondary" size="sm" onClick={loadDhpStatus} disabled={dhpBusy !== ''} title="Yangilash">
+                                    <RefreshCw className={`w-4 h-4 ${dhpBusy === 'status' ? 'animate-spin' : ''}`} />
+                                 </Button>
+                                 <Button type="button" variant="secondary" size="sm" onClick={handleDhpSyncNow} disabled={dhpBusy !== ''}>
+                                    {dhpBusy === 'sync' ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+                                    Hozir yuborish
+                                 </Button>
+                                 {(dhpStatus?.counts.error ?? 0) > 0 && (
+                                    <Button type="button" variant="secondary" size="sm" onClick={handleDhpRetry} disabled={dhpBusy !== ''}>
+                                       Xatolarni qayta urinish
+                                    </Button>
+                                 )}
+                              </div>
+                           </div>
+
+                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                              {([
+                                 ['Kutmoqda', dhpStatus?.counts.pending ?? 0, 'text-amber-600'],
+                                 ['Yuborilgan', dhpStatus?.counts.synced ?? 0, 'text-green-600'],
+                                 ['Xato', dhpStatus?.counts.error ?? 0, 'text-red-600'],
+                                 ["O'tkazilgan", dhpStatus?.counts.skipped ?? 0, 'text-gray-500'],
+                              ] as const).map(([label, value, color]) => (
+                                 <div key={label} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
+                                    <div className={`text-2xl font-bold tabular-nums ${color}`}>{value}</div>
+                                 </div>
+                              ))}
+                           </div>
+
+                           <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Oxirgi yuborilgan: {dhpStatus?.lastSyncedAt ? new Date(dhpStatus.lastSyncedAt).toLocaleString('uz-UZ') : '—'}
+                              {!dhpStatus?.organizationId && ' · Organization ID yo\'q — shifokor lavozimi (PractitionerRole) yuborilmaydi'}
+                           </p>
+
+                           {(dhpStatus?.recentErrors.length ?? 0) > 0 && (
+                              <div className="mt-4">
+                                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Oxirgi xatolar</h4>
+                                 <ul className="space-y-1.5 text-xs">
+                                    {dhpStatus!.recentErrors.map(e => (
+                                       <li key={`${e.resourceType}-${e.localId}`} className="flex gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 px-3 py-2 text-red-700 dark:text-red-300">
+                                          <span className="font-semibold shrink-0">{e.resourceType}</span>
+                                          <span className="flex-1 break-words">{e.lastError || '—'}</span>
+                                          <span className="shrink-0 text-red-400">{e.attempts}/5</span>
+                                       </li>
+                                    ))}
+                                 </ul>
+                              </div>
+                           )}
+                        </Card>
+                     )}
                   </div>
                      )}
 

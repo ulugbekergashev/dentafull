@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, CashRegisterDay, CashMovement, CashAuditLog, Recall } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -943,15 +943,16 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
-        testDmed: (id: string, data: { dmedApiKey: string, dmedApiSecret: string }) => {
-            if (isDemoMode()) return Promise.resolve({ valid: true });
-            return fetchJson<{ valid: boolean; error?: string }>(`/clinics/${id}/dmed-test`, {
+        // DHP (davlat platformasi). Marshrut nomlari eski "dmed" — ustunlar ham shu nomda.
+        testDmed: (id: string, data: { dmedApiKey: string; dmedApiSecret?: string; dhpEnvironment?: string }) => {
+            if (isDemoMode()) return Promise.resolve({ valid: true, mock: true, organization: null } as DhpTestResult);
+            return fetchJson<DhpTestResult>(`/clinics/${id}/dmed-test`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
         },
-        updateDmedSettings: (id: string, data: any) => {
+        updateDmedSettings: (id: string, data: { dmedEnabled?: boolean; dmedApiKey?: string; dmedApiSecret?: string; dmedClinicId?: string; dhpEnvironment?: string }) => {
             if (isDemoMode()) {
                 Object.assign(DEMO_CLINIC, data);
                 saveDemoData();
@@ -962,6 +963,23 @@ export const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
+        },
+        dhpStatus: () => {
+            if (isDemoMode()) {
+                return Promise.resolve<DhpStatus>({
+                    enabled: !!DEMO_CLINIC.dmedEnabled, environment: 'playground', mock: true, organizationId: DEMO_CLINIC.dmedClinicId || null,
+                    counts: { pending: 0, synced: 12, error: 0, skipped: 1 }, recentErrors: [], lastSyncedAt: new Date().toISOString(),
+                });
+            }
+            return fetchJson<DhpStatus>('/dhp/status');
+        },
+        dhpSyncNow: () => {
+            if (isDemoMode()) return Promise.resolve({ sent: 0, failed: 0, deferred: 0, skipped: 0 });
+            return fetchJson<{ sent: number; failed: number; deferred: number; skipped: number }>('/dhp/sync-now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        },
+        dhpRetry: () => {
+            if (isDemoMode()) return Promise.resolve({ retried: 0 });
+            return fetchJson<{ retried: number }>('/dhp/retry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         },
         getPrepaymentSettings: (id: string) => {
             if (isDemoMode()) return Promise.resolve({ prepaymentEnabled: false, prepaymentCardNumber: '', prepaymentAmount: 0 });

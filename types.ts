@@ -531,10 +531,13 @@ export interface Clinic {
   hasPassword?: boolean;
   isConnected?: boolean;
   eskizTokenExpiry?: string;
+  // DHP (davlat platformasi): dmedApiKey = client_id, dmedApiSecret = client_secret,
+  // dmedClinicId = DHP Organization id. Ustun nomlari eski IT-MED davridan qolgan.
   dmedEnabled?: boolean;
   dmedApiKey?: string;
   dmedApiSecret?: string;
   dmedClinicId?: string;
+  dhpEnvironment?: 'playground' | 'production' | null;
   dmedToken?: string;
   dmedTokenExpiry?: string;
   prepaymentEnabled?: boolean;
@@ -622,6 +625,25 @@ export interface SMSCampaign {
 }
 
 // Workflow System Types
+/** DHP sinxron holati (GET /api/dhp/status) */
+export interface DhpStatus {
+  enabled: boolean;
+  environment: 'playground' | 'production' | null;
+  mock: boolean;
+  organizationId: string | null;
+  counts: { pending: number; synced: number; error: number; skipped: number };
+  recentErrors: { resourceType: string; localId: string; lastError: string | null; attempts: number; updatedAt: string }[];
+  lastSyncedAt: string | null;
+}
+
+/** DHP ulanish tekshiruvi (POST /api/clinics/:id/dmed-test) */
+export interface DhpTestResult {
+  valid: boolean;
+  error?: string;
+  mock?: boolean;
+  organization?: { id: string; name?: string } | null;
+}
+
 export interface Visit {
   id: string;
   patientId: string;
