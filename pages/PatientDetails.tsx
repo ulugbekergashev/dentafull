@@ -98,6 +98,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [isRecallModalOpen, setIsRecallModalOpen] = useState(false);
    const [recallForm, setRecallForm] = useState({ dueDate: '', reason: '' });
    const [recallSaving, setRecallSaving] = useState(false);
+   /** Kasallik tarixi: tayyor ro'yxat (chiplar) ochiqmi. Standart: yopiq. */
+   const [showQuickSelect, setShowQuickSelect] = useState(false);
 
    useEffect(() => {
       if (patient) {
@@ -520,17 +522,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const balanceLabel = patientBalance > 0
       ? t('patients.details.balanceAdvance')
       : patientBalance < 0 ? t('patients.details.balanceDebt') : t('patients.details.balanceSettled');
-   const balanceTone = patientBalance > 0
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-300'
-      : patientBalance < 0
-         ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300'
-         : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300';
+   const balanceText = patientBalance > 0
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : patientBalance < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white';
    // "Sog'lom" belgisi ogohlantirish emas — faqat haqiqiy kasallik/allergiyalar ko'rsatiladi
    const healthAlerts = (patient.medicalHistory || '')
       .split('\n')
       .map(line => line.trim())
       .filter(line => line && !/^SOG'LOM/i.test(line));
-   const completedVisits = patientAppointments.filter(a => a.status === 'Completed' || a.status === 'Checked-In').length;
    const nowTs = Date.now();
    const nextAppointment = patientAppointments
       .filter(a => a.status !== 'Cancelled' && a.status !== 'Completed' && new Date(`${a.date}T${a.time}`).getTime() >= nowTs)
@@ -1027,6 +1026,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             {/* Chap panel: bemor haqida umumiy ma'lumot. Kompyuterda scroll paytida joyida turadi */}
             <aside className="lg:sticky lg:top-32">
                <Card className="p-5">
+                  {/* Kim: avatar, ism, yosh, holat. Anamnez bo'lsa — kichik belgi, matni Umumiy tabda */}
                   <div className="flex items-center gap-4">
                      <div className="relative group flex-shrink-0">
                         <div className="w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900 ring-4 ring-primary-50 dark:ring-primary-900/40 overflow-hidden flex items-center justify-center text-xl font-bold">
@@ -1056,33 +1056,65 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            {patientAge !== null && patientAge !== undefined && <> · {patientAge} {t('patients.details.age')}</>}
                            {patient.dob && <span className="text-gray-400"> ({formatDobDDMMYYYY(patient.dob)})</span>}
                         </p>
-                        <div className="flex"><Badge status={patient.status} /></div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                           <Badge status={patient.status} />
+                           {healthAlerts.length > 0 && (
+                              <button
+                                 type="button"
+                                 onClick={() => setActiveTab('overview')}
+                                 title={healthAlerts.join(', ')}
+                                 className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                              >
+                                 <AlertTriangle className="w-3 h-3" /> {t('patients.details.anamnesisChip')}
+                              </button>
+                           )}
+                        </div>
                      </div>
                   </div>
 
-                  {/* Hisob: qabulxona birinchi ko'rishi kerak bo'lgan raqam */}
-                  <div className={`mt-4 rounded-xl border px-4 py-2.5 ${balanceTone}`}>
-                     <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{balanceLabel}</p>
-                     <p className="text-2xl font-bold tabular-nums">{Math.abs(patient.balance || 0).toLocaleString()} <span className="text-sm font-semibold">UZS</span></p>
-                  </div>
+                  {/* Raqamlar: qutisiz, qator-qator */}
+                  <dl className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-1.5 text-sm">
+                     <div className="flex items-center justify-between gap-3">
+                        <dt className="text-gray-500 dark:text-gray-400">{balanceLabel}</dt>
+                        <dd className={`font-bold tabular-nums ${balanceText}`}>{Math.abs(patientBalance).toLocaleString()} UZS</dd>
+                     </div>
+                     <div className="flex items-center justify-between gap-3">
+                        <dt className="text-gray-500 dark:text-gray-400">{t('patients.details.stats.lastVisit')}</dt>
+                        <dd className="text-gray-900 dark:text-white tabular-nums">{lastVisitLabel}</dd>
+                     </div>
+                     {nextAppointment && (
+                        <div className="flex items-center justify-between gap-3">
+                           <dt className="text-gray-500 dark:text-gray-400">{t('patients.details.stats.nextAppointment')}</dt>
+                           <dd>
+                              <button type="button" onClick={() => setActiveTab('appointments')} className="font-semibold tabular-nums text-primary-600 hover:underline dark:text-primary-400">
+                                 {formatDobDDMMYYYY(nextAppointment.date)} · {nextAppointment.time}
+                              </button>
+                           </dd>
+                        </div>
+                     )}
+                     {activeRecall && (
+                        <div className="flex items-start justify-between gap-3">
+                           <dt className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                              <CalendarClock className="w-3.5 h-3.5" /> {t('patients.details.recall.title')}
+                           </dt>
+                           <dd className="text-right">
+                              <span className="font-semibold tabular-nums text-sky-700 dark:text-sky-300" title={activeRecall.reason || undefined}>
+                                 {formatDobDDMMYYYY(activeRecall.dueDate)}
+                              </span>
+                              {activeRecall.status !== 'booked' && (
+                                 <span className="block text-xs">
+                                    <button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-sky-700 hover:underline dark:text-sky-300">{t('patients.details.recall.book')}</button>
+                                    <span className="mx-1 text-gray-300">·</span>
+                                    <button type="button" onClick={() => cancelRecall(activeRecall.id)} className="text-gray-500 hover:text-red-600">{t('patients.details.recall.cancel')}</button>
+                                 </span>
+                              )}
+                           </dd>
+                        </div>
+                     )}
+                  </dl>
 
-                  {healthAlerts.length > 0 && (
-                     <button
-                        type="button"
-                        onClick={() => setActiveTab('overview')}
-                        className="mt-3 w-full text-left rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-800/60 dark:bg-amber-900/20"
-                     >
-                        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                           <AlertTriangle className="w-4 h-4" /> {t('patients.details.healthWarning')}
-                        </p>
-                        <ul className="mt-1.5 space-y-0.5 text-sm text-amber-900 dark:text-amber-100">
-                           {healthAlerts.slice(0, 3).map(line => <li key={line} className="truncate">{line}</li>)}
-                           {healthAlerts.length > 3 && <li className="text-xs text-amber-700 dark:text-amber-300">+{healthAlerts.length - 3}</li>}
-                        </ul>
-                     </button>
-                  )}
-
-                  <div className="mt-4 space-y-2 text-sm">
+                  {/* Kontaktlar */}
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-2 text-sm">
                      <a
                         href={showPatientPhone ? `tel:${patient.phone}` : undefined}
                         className="flex items-center gap-2.5 text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400"
@@ -1108,57 +1140,40 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </div>
                   </div>
 
-                  {activeRecall && (
-                     <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 dark:border-sky-800/60 dark:bg-sky-900/20">
-                        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
-                           <CalendarClock className="w-3.5 h-3.5" /> {t('patients.details.recall.title')}
-                        </p>
-                        <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">
-                           {formatDobDDMMYYYY(activeRecall.dueDate)}
-                           <span className="ml-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">· {recallStatusLabel[activeRecall.status] || activeRecall.status}</span>
-                        </p>
-                        {activeRecall.reason && <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={activeRecall.reason}>{activeRecall.reason}</p>}
-                        {activeRecall.status !== 'booked' && (
-                           <div className="mt-2 flex items-center gap-3">
-                              <button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-xs font-semibold text-sky-700 hover:underline dark:text-sky-300">
-                                 {t('patients.details.recall.book')}
-                              </button>
-                              <button type="button" onClick={() => cancelRecall(activeRecall.id)} className="text-xs font-semibold text-gray-500 hover:text-red-600">
-                                 {t('patients.details.recall.cancel')}
-                              </button>
-                           </div>
-                        )}
-                     </div>
-                  )}
-                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-0.5">
-                     <Button className="w-full mb-2" onClick={openApptModal}>
+                  {/* Amallar: bitta asosiy tugma + ikonkalar qatori (nomi hover da) */}
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                     <Button className="w-full" onClick={() => openApptModal()}>
                         <CalendarPlus className="w-4 h-4 mr-2" /> {t('patients.details.newAppointment')}
                      </Button>
-                     {[
-                        { icon: Edit, label: t('patients.details.editProfile'), onClick: handleEditOpen },
-                        { icon: CalendarClock, label: t('patients.details.recall.schedule'), onClick: openRecallModal },
-                        { icon: Send, label: t('patients.details.sendMessage'), onClick: () => { setMessageType('Custom'); setMessageText(''); setIsMessageModalOpen(true); } },
-                        { icon: UserPlus, label: patient.doctorId ? t('patients.details.changeDoctor') : t('patients.details.assignDoctor'), onClick: () => setIsAssignDoctorModalOpen(true) },
-                        {
-                           icon: Printer, label: t('patients.details.printCard'), onClick: () => printPatientCard({
-                              patient,
-                              clinic: currentClinic,
-                              doctor: doctors.find(d => d.id === patient.doctorId) || myDoctor || doctors[0],
-                              teeth: teethData,
-                              diagnoses,
-                              procedures: allProceduresHistory,
-                           })
-                        },
-                     ].map(action => (
-                        <button
-                           key={action.label}
-                           type="button"
-                           onClick={action.onClick}
-                           className="w-full flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/60 transition-colors"
-                        >
-                           <action.icon className="w-4 h-4 text-gray-400" /> {action.label}
-                        </button>
-                     ))}
+                     <div className="mt-2 grid grid-cols-5 gap-1">
+                        {[
+                           { icon: Edit, label: t('patients.details.editProfile'), onClick: handleEditOpen },
+                           { icon: CalendarClock, label: t('patients.details.recall.schedule'), onClick: openRecallModal },
+                           { icon: Send, label: t('patients.details.sendMessage'), onClick: () => { setMessageType('Custom'); setMessageText(''); setIsMessageModalOpen(true); } },
+                           { icon: UserPlus, label: patient.doctorId ? t('patients.details.changeDoctor') : t('patients.details.assignDoctor'), onClick: () => setIsAssignDoctorModalOpen(true) },
+                           {
+                              icon: Printer, label: t('patients.details.printCard'), onClick: () => printPatientCard({
+                                 patient,
+                                 clinic: currentClinic,
+                                 doctor: doctors.find(d => d.id === patient.doctorId) || myDoctor || doctors[0],
+                                 teeth: teethData,
+                                 diagnoses,
+                                 procedures: allProceduresHistory,
+                              })
+                           },
+                        ].map(action => (
+                           <button
+                              key={action.label}
+                              type="button"
+                              onClick={action.onClick}
+                              title={action.label}
+                              aria-label={action.label}
+                              className="flex items-center justify-center rounded-lg py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700/60 dark:hover:text-white transition-colors"
+                           >
+                              <action.icon className="w-4 h-4" />
+                           </button>
+                        ))}
+                     </div>
                   </div>
                </Card>
             </aside>
@@ -1195,33 +1210,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <div className="min-h-[400px]">
 
                {activeTab === 'overview' && (
-                  <div className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                     {[
-                        { icon: Activity, label: t('patients.details.stats.visits'), value: String(completedVisits), sub: null as string | null, onClick: () => setActiveTab('appointments') },
-                        { icon: Clock, label: t('patients.details.stats.lastVisit'), value: lastVisitLabel, sub: null, onClick: () => setActiveTab('appointments') },
-                        {
-                           icon: Calendar,
-                           label: t('patients.details.stats.nextAppointment'),
-                           value: nextAppointment ? `${formatDobDDMMYYYY(nextAppointment.date)} · ${nextAppointment.time}` : t('patients.details.stats.notScheduled'),
-                           sub: nextAppointment?.doctorName || null,
-                           onClick: nextAppointment ? () => setActiveTab('appointments') : openApptModal,
-                        },
-                     ].map(stat => (
-                        <button
-                           key={stat.label}
-                           type="button"
-                           onClick={stat.onClick}
-                           className="text-left bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm px-4 py-3.5 hover:border-primary-300 dark:hover:border-primary-700 transition-colors"
-                        >
-                           <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-                              <stat.icon className="w-3.5 h-3.5" /> {stat.label}
-                           </p>
-                           <p className="mt-1 text-lg font-bold text-gray-900 dark:text-white tabular-nums truncate">{stat.value}</p>
-                           {stat.sub && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{stat.sub}</p>}
-                        </button>
-                     ))}
-                  </div>
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                      <VisitWorkflow
                         key={visitKey}
@@ -1233,37 +1221,41 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         onCompleteVisit={handleCompleteVisit}
                      />
 
-                     <Card className="p-6 space-y-4">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                           <Activity className="w-5 h-5" /> {t('patients.details.medicalHistory.title')}
-                        </h3>
-                        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-100 dark:border-yellow-800">
-                           <div className="flex justify-between items-center mb-2">
-                              <p className="text-yellow-800 dark:text-yellow-200 font-medium">{t('patients.details.medicalHistory.subtitle')}</p>
-                              <Button
-                                 size="sm"
-                                 variant="secondary"
-                                 className="h-7 text-xs"
-                                 onClick={() => {
-                                    onUpdatePatient(patient.id, { medicalHistory: historyText });
-                                    alert(t('common.save'));
-                                 }}
-                              >
-                                 {t('common.save')}
-                              </Button>
-                           </div>
-                           <textarea
-                              className="w-full bg-transparent border-none p-0 text-sm text-yellow-900 dark:text-yellow-100 focus:ring-0 resize-none"
-                              rows={4}
-                              value={historyText}
-                              onChange={(e) => setHistoryText(e.target.value)}
-                              placeholder={t('patients.details.medicalHistory.placeholder')}
-                           />
+                     {/* Kasallik tarixi: oddiy matn maydoni. Tayyor ro'yxat (14 ta chip)
+                         faqat so'ralganda ochiladi — birinchi ko'rgan odamni cho'chitmasin. */}
+                     <Card className="p-6 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                           <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                              <Activity className="w-5 h-5" /> {t('patients.details.medicalHistory.title')}
+                           </h3>
+                           <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-8 text-xs"
+                              onClick={() => {
+                                 onUpdatePatient(patient.id, { medicalHistory: historyText });
+                                 alert(t('common.save'));
+                              }}
+                           >
+                              {t('common.save')}
+                           </Button>
                         </div>
-
-
-                        <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
-                           <p className="font-medium mb-3 text-gray-700 dark:text-gray-300">{t('patients.details.medicalHistory.quickSelect')}</p>
+                        <textarea
+                           className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/40 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary-300 outline-none resize-y"
+                           rows={5}
+                           value={historyText}
+                           onChange={(e) => setHistoryText(e.target.value)}
+                           placeholder={t('patients.details.medicalHistory.placeholder')}
+                        />
+                        <button
+                           type="button"
+                           onClick={() => setShowQuickSelect(v => !v)}
+                           className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
+                        >
+                           {t('patients.details.medicalHistory.pickFromList')}
+                           <ChevronRight className={`w-4 h-4 transition-transform ${showQuickSelect ? 'rotate-90' : ''}`} />
+                        </button>
+                        {showQuickSelect && (
                            <div className="flex flex-wrap gap-2">
                               {[
                                  "SOG'LOM(SHIKOYATI YO'Q )",
@@ -1283,14 +1275,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               ].map((disease) => (
                                  <button
                                     key={disease}
+                                    type="button"
                                     onClick={() => {
-                                       // Avoid duplicates if possible, or just append
                                        if (!historyText.includes(disease)) {
                                           const newHistory = historyText ? historyText + '\n' + disease : disease;
                                           setHistoryText(newHistory);
-                                          onUpdatePatient(patient.id, {
-                                             medicalHistory: newHistory
-                                          });
+                                          onUpdatePatient(patient.id, { medicalHistory: newHistory });
                                        } else {
                                           alert(t('patients.details.medicalHistory.alreadyAdded'));
                                        }
@@ -1301,11 +1291,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  </button>
                               ))}
                            </div>
-                        </div>
+                        )}
                      </Card>
-
-
-                  </div>
                   </div>
                )}
 

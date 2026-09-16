@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, ClipboardList, Trash2 } from 'lucide-react';
+import { Activity, Trash2 } from 'lucide-react';
 import { Button, Card, Badge } from '../components/Common';
 import { Transaction, Service, ServiceCategory } from '../types';
 import { AddProcedureModal } from './AddProcedureModal';
@@ -117,13 +117,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                 {/* Procedures List */}
                 <div className="space-y-2">
                     {procedures.length === 0 && (
-                        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 py-8 px-4 text-center">
-                            <div className="w-11 h-11 rounded-full bg-primary-50 dark:bg-primary-900/30 flex items-center justify-center">
-                                <ClipboardList className="w-5 h-5 text-primary-500" />
-                            </div>
-                            <p className="font-medium text-gray-700 dark:text-gray-200">{t('patients.details.procedures.emptyHint')}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{t('patients.details.procedures.clickToAdd')}</p>
-                        </div>
+                        <p className="py-3 text-sm text-gray-400 dark:text-gray-500">{t('patients.details.procedures.clickToAdd')}</p>
                     )}
 
                     {procedures.map(proc => (
