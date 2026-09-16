@@ -685,6 +685,7 @@ export interface Recall {
   dueDate: string;            // YYYY-MM-DD
   reason?: string | null;     // "Plomba #36, Tozalash"
   status: 'planned' | 'reminded' | 'booked' | 'done' | 'cancelled';
+  kind?: 'checkup' | 'treatment'; // nazorat ko'rigi | davolash davomi
   appointmentId?: string | null;
   remindedAt?: string | null;
   createdAt: string;

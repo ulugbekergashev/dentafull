@@ -3466,7 +3466,7 @@ async function ensureRecallRule(clinicId: string) {
             select: { id: true },
         });
         if (existing) return;
-        const text = "Hurmatli {bemor_ismi}! {klinika_nomi} klinikasidan eslatma: {sana} kuni nazorat ko'rigiga kelishingiz kerak{sabab}. Qabulga yozilish uchun javob yozing yoki qo'ng'iroq qiling.";
+        const text = "Hurmatli {bemor_ismi}! {klinika_nomi} klinikasidan eslatma: {sana} kuni {tashrif} uchun kelishingiz kerak{sabab}. Qabulga yozilish uchun javob yozing yoki qo'ng'iroq qiling.";
         const template = await prisma.messageTemplate.create({
             data: { clinicId, name: 'Nazorat eslatmasi', text },
         });
@@ -3560,7 +3560,9 @@ app.get('/api/recalls', authenticateToken, async (req, res) => {
 app.post('/api/recalls', authenticateToken, async (req, res) => {
     try {
         const u = (req as any).user;
-        const { patientId, doctorId, dueDate, reason } = req.body || {};
+        const { patientId, doctorId, dueDate, reason, kind } = req.body || {};
+        // 'treatment' — davolash davom etadi (kunlar), aks holda nazorat ko'rigi
+        const visitKind = kind === 'treatment' ? 'treatment' : 'checkup';
         const clinicId = u?.role === 'SUPER_ADMIN' ? req.body?.clinicId : u?.clinicId;
         if (!clinicId || !patientId || !dueDate) return res.status(400).json({ error: 'patientId va dueDate kerak' });
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDate))) return res.status(400).json({ error: 'dueDate YYYY-MM-DD bo\'lishi kerak' });
@@ -3580,6 +3582,7 @@ app.post('/api/recalls', authenticateToken, async (req, res) => {
                 doctorId: doctorId || patient.doctorId || null,
                 dueDate: String(dueDate),
                 reason: reason ? String(reason).slice(0, 200) : null,
+                kind: visitKind,
                 status: 'planned',
             },
         });
@@ -5788,6 +5791,7 @@ function processTemplate(template: string, data: { [key: string]: any }) {
         '{shifokor_ismi}': data.doctorName || '',
         '{qarz}': data.amount !== undefined ? Number(data.amount).toLocaleString() : '',
         '{sabab}': data.reason || '',
+        '{tashrif}': data.visitKind || "nazorat ko'rigi",
         // Eski tokenlar (moslik uchun)
         '{BEMOR}': data.patientName || '',
         '{VAQT}': data.time || '',
@@ -7664,6 +7668,8 @@ async function runStartupMigrations() {
     `);
     await migrationStep('Recall index (clinic, status, dueDate)', `CREATE INDEX IF NOT EXISTS "Recall_clinicId_status_dueDate_idx" ON "Recall"("clinicId", "status", "dueDate")`);
     await migrationStep('Recall index (patient)', `CREATE INDEX IF NOT EXISTS "Recall_patientId_idx" ON "Recall"("patientId")`);
+    // Tashrif turi: nazorat ko'rigi yoki davolash davomi (mavjud yozuvlar — checkup)
+    await migrationStep('Recall.kind', `ALTER TABLE "Recall" ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'checkup'`);
 
     // --- AI jurnali va suhbatlar ---
     // Jadval bo'lmasa AI baribir ishlaydi (ai/log.ts xatolikni yutadi), lekin

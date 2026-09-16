@@ -1139,7 +1139,7 @@ export const api = {
             if (isDemoMode()) return Promise.resolve([] as Recall[]);
             return fetchJson<Recall[]>(`/recalls?clinicId=${clinicId}&status=planned,reminded,booked,done,cancelled`);
         },
-        create: (data: { patientId: string; clinicId: string; doctorId?: string | null; dueDate: string; reason?: string }) => {
+        create: (data: { patientId: string; clinicId: string; doctorId?: string | null; dueDate: string; reason?: string; kind?: 'checkup' | 'treatment' }) => {
             if (isDemoMode()) {
                 const now = new Date().toISOString();
                 return Promise.resolve({ id: `demo-recall-${Date.now()}`, status: 'planned', createdAt: now, updatedAt: now, ...data } as Recall);

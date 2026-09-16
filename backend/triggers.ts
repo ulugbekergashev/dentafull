@@ -460,7 +460,8 @@ export const TRIGGERS: TriggerDef[] = [
                 where: {
                     clinicId: rule.clinicId,
                     status: 'planned',
-                    dueDate: { lte: tashkentDateStr(days) },
+                    // Davolash davomi (kunlar) — darhol; nazorat ko'rigi — N kun oldin
+                    OR: [{ kind: 'treatment' }, { dueDate: { lte: tashkentDateStr(days) } }],
                     ...(rule.doctorId ? { doctorId: rule.doctorId } : {}),
                 },
                 include: { patient: true },
@@ -481,6 +482,7 @@ export const TRIGGERS: TriggerDef[] = [
                         doctorName: doctorName(r.doctorId ? doctorById.get(r.doctorId) : null),
                         // Qavs ichida, shablonda "...kerak{sabab}." deb ishlatiladi; bo'sh bo'lsa hech narsa
                         reason: r.reason ? ` (${r.reason})` : '',
+                        visitKind: r.kind === 'treatment' ? 'davolashni davom ettirish' : "nazorat ko'rigi",
                     },
                     replyMarkup: { inline_keyboard: [[{ text: '📅 Qabulga yozilish', callback_data: 'start_booking' }]] },
                 }));
@@ -525,6 +527,7 @@ export const TRIGGERS: TriggerDef[] = [
                         clinicName: clinic.name,
                         doctorName: doctorName(r.doctorId ? doctorById.get(r.doctorId) : null),
                         reason: r.reason ? ` (${r.reason})` : '',
+                        visitKind: r.kind === 'treatment' ? 'davolashni davom ettirish' : "nazorat ko'rigi",
                     },
                     replyMarkup: { inline_keyboard: [[{ text: '📅 Qabulga yozilish', callback_data: 'start_booking' }]] },
                 }));

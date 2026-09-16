@@ -96,7 +96,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // avtomatika bemorga yozadi, resepshn bosh sahifadan qo'ng'iroq qiladi.
    const [recalls, setRecalls] = useState<Recall[]>([]);
    const [isRecallModalOpen, setIsRecallModalOpen] = useState(false);
-   const [recallForm, setRecallForm] = useState({ dueDate: '', reason: '' });
+   const [recallForm, setRecallForm] = useState<{ dueDate: string; reason: string; kind: 'checkup' | 'treatment' }>({ dueDate: '', reason: '', kind: 'checkup' });
    const [recallSaving, setRecallSaving] = useState(false);
    /** Kasallik tarixi: tayyor ro'yxat (chiplar) ochiqmi. Standart: yopiq. */
    const [showQuickSelect, setShowQuickSelect] = useState(false);
@@ -557,8 +557,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       const day = `${d.getDate()}`.padStart(2, '0');
       return `${d.getFullYear()}-${m}-${day}`;
    };
+   /** Bugundan N kun keyingi sana (YYYY-MM-DD) */
+   const addDaysStr = (days: number) => {
+      const d = new Date(Date.now() + days * 86400000);
+      return `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}-${`${d.getDate()}`.padStart(2, '0')}`;
+   };
    const openRecallModal = () => {
-      setRecallForm({ dueDate: addMonthsStr(6), reason: '' });
+      setRecallForm({ dueDate: addMonthsStr(6), reason: '', kind: 'checkup' });
       setIsRecallModalOpen(true);
    };
    const saveRecall = async () => {
@@ -571,6 +576,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             doctorId: myDoctor?.id || patient.doctorId || null,
             dueDate: recallForm.dueDate,
             reason: recallForm.reason.trim() || undefined,
+            kind: recallForm.kind,
          });
          setRecalls(prev => [created, ...prev.filter(r => r.id !== created.id)]);
          setIsRecallModalOpen(false);
@@ -883,7 +889,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setIsApptModalOpen(true);
    };
 
-   const handleCompleteVisit = async (procedures: any[], total: number, recallMonths: number | null = null) => {
+   const handleCompleteVisit = async (procedures: any[], total: number, nextVisit: { kind: 'checkup' | 'treatment'; days: number } | null = null) => {
       // 1. Double-check if we are already processing or have processed this exact content recently
       const today = new Date().toISOString().split('T')[0];
 
@@ -986,7 +992,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          }
 
          // Keyingi nazorat: shifokor tanlagan (yoki xizmat taklif qilgan) bo'lsa
-         if (recallMonths) {
+         if (nextVisit) {
             try {
                const reason = procedures
                   .map(p => p.toothNumber ? `${p.serviceName} #${p.toothNumber}` : p.serviceName)
@@ -996,8 +1002,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   patientId: patient.id,
                   clinicId: patient.clinicId,
                   doctorId: finalDoctorId || null,
-                  dueDate: addMonthsStr(recallMonths),
+                  dueDate: addDaysStr(nextVisit.days),
                   reason,
+                  kind: nextVisit.kind,
                });
                setRecalls(prev => [created, ...prev.filter(r => r.id !== created.id)]);
             } catch (err) {
@@ -1137,6 +1144,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               <span className="font-semibold tabular-nums text-sky-700 dark:text-sky-300" title={activeRecall.reason || undefined}>
                                  {formatDobDDMMYYYY(activeRecall.dueDate)}
                               </span>
+                              <span className="block text-[11px] text-gray-500 dark:text-gray-400">{activeRecall.kind === 'treatment' ? t('patients.details.recall.kindTreatment') : t('patients.details.recall.kindCheckup')}</span>
                               {activeRecall.status !== 'booked' && (
                                  <span className="block text-xs">
                                     <button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-sky-700 hover:underline dark:text-sky-300">{t('patients.details.recall.book')}</button>
@@ -1721,14 +1729,31 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <Modal isOpen={isRecallModalOpen} onClose={() => setIsRecallModalOpen(false)} title={t('patients.details.recall.modalTitle')}>
                <div className="space-y-4">
                   <div>
-                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('patients.details.recall.after')}</label>
+                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('patients.details.recall.treatment')}</label>
+                     <div className="flex flex-wrap gap-2">
+                        {[{ days: 3, label: `3 ${t('patients.details.recall.days')}` }, { days: 7, label: `1 ${t('patients.details.recall.week')}` }, { days: 14, label: `2 ${t('patients.details.recall.week')}` }].map(o => (
+                           <button
+                              key={o.days}
+                              type="button"
+                              onClick={() => setRecallForm(f => ({ ...f, kind: 'treatment', dueDate: addDaysStr(o.days) }))}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallForm.kind === 'treatment' && recallForm.dueDate === addDaysStr(o.days)
+                                 ? 'bg-primary-600 text-white'
+                                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
+                           >
+                              {o.label}
+                           </button>
+                        ))}
+                     </div>
+                  </div>
+                  <div>
+                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('patients.details.recall.checkup')}</label>
                      <div className="flex flex-wrap gap-2">
                         {[1, 3, 6, 12].map(m => (
                            <button
                               key={m}
                               type="button"
-                              onClick={() => setRecallForm(f => ({ ...f, dueDate: addMonthsStr(m) }))}
-                              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallForm.dueDate === addMonthsStr(m)
+                              onClick={() => setRecallForm(f => ({ ...f, kind: 'checkup', dueDate: addMonthsStr(m) }))}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallForm.kind === 'checkup' && recallForm.dueDate === addMonthsStr(m)
                                  ? 'bg-primary-600 text-white'
                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
                            >

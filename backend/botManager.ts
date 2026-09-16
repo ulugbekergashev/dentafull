@@ -1003,7 +1003,7 @@ class BotManager {
             dueRecalls.slice(0, 10).forEach((r: any) => {
                 const overdue = r.dueDate < todayDateString ? ' ⚠️' : '';
                 const who = r.patient ? `${r.patient.lastName} ${r.patient.firstName}` : 'Bemor';
-                const reminded = r.status === 'reminded' ? ' · xabar yuborilgan' : '';
+                const reminded = (r.kind === 'treatment' ? ' · davolash davomi' : ' · nazorat') + (r.status === 'reminded' ? ', xabar yuborilgan' : '');
                 recallBlock += `• ${String(r.dueDate).split('-').reverse().join('.')}${overdue} — ${who}${r.reason ? ` (${r.reason})` : ''}${reminded}\n`;
             });
             if (dueRecalls.length > 10) recallBlock += `… yana ${dueRecalls.length - 10} ta\n`;

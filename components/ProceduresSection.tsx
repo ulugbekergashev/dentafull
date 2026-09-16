@@ -14,11 +14,14 @@ interface ProcedureItem {
     notes?: string;
 }
 
+/** Keyingi tashrif: davolash davomi (kunlar) yoki nazorat ko'rigi (oylar, kunlarda) */
+export type NextVisitChoice = { kind: 'checkup' | 'treatment'; days: number };
+
 interface VisitWorkflowProps {
     services: Service[];
     categories: ServiceCategory[];
     doctors: any[];
-    onCompleteVisit: (procedures: ProcedureItem[], total: number, recallMonths: number | null) => Promise<void>;
+    onCompleteVisit: (procedures: ProcedureItem[], total: number, nextVisit: NextVisitChoice | null) => Promise<void>;
     onProceduresChange?: (procedures: ProcedureItem[]) => void;
     initialProcedures?: ProcedureItem[];
 }
@@ -43,19 +46,24 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     }, [initialProcedures]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Keyingi nazorat: xizmatda ko'rsatilgan muddat (Sozlamalar → Xizmatlar)
-    // avtomatik taklif qilinadi — shifokor faqat tasdiqlaydi yoki o'zgartiradi.
+    // Keyingi tashrif: "davolash davom etadi" (kunlar) yoki "nazorat ko'rigi" (oylar).
+    // Xizmatda ko'rsatilgan nazorat muddati (Sozlamalar → Xizmatlar) avtomatik
+    // taklif qilinadi — shifokor faqat tasdiqlaydi yoki o'zgartiradi.
     // Bir marta qo'lda o'zgartirilgach, ro'yxat yangilanganda qayta yozilmaydi.
-    const [recallMonths, setRecallMonths] = useState<number | null>(null);
+    const [nextVisit, setNextVisit] = useState<NextVisitChoice | null>(null);
     const [recallTouched, setRecallTouched] = useState(false);
     useEffect(() => {
         if (recallTouched) return;
         const suggested = procedures
             .map(p => services.find(s => s.id === p.serviceId)?.recallMonths || 0)
             .reduce((max, m) => Math.max(max, m), 0);
-        setRecallMonths(suggested > 0 ? suggested : null);
+        setNextVisit(suggested > 0 ? { kind: 'checkup', days: suggested * 30 } : null);
     }, [procedures, services, recallTouched]);
-    const chooseRecall = (months: number | null) => { setRecallTouched(true); setRecallMonths(months); };
+    const chooseNext = (choice: NextVisitChoice | null) => { setRecallTouched(true); setNextVisit(choice); };
+    const isChosen = (kind: NextVisitChoice['kind'], days: number) => nextVisit?.kind === kind && nextVisit.days === days;
+    const chipCls = (active: boolean) => `px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${active
+        ? 'bg-primary-600 text-white'
+        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`;
 
     const handleAddProcedure = (procedure: Omit<ProcedureItem, 'id'>) => {
         const newProcedure: ProcedureItem = {
@@ -93,7 +101,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
 
         setIsSubmitting(true);
         try {
-            await onCompleteVisit(procedures, total, recallMonths);
+            await onCompleteVisit(procedures, total, nextVisit);
         } catch (error) {
             console.error("Error completing visit:", error);
         } finally {
@@ -164,30 +172,33 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                 {total.toLocaleString()} UZS
                             </span>
                         </div>
-                        {/* Keyingi nazorat — bitta qator, bitta bosish */}
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm text-gray-600 dark:text-gray-300 mr-1">{t('patients.details.recall.next')}</span>
-                            {[3, 6, 12].map(m => (
+                        {/* Keyingi tashrif — ikki qator: davolash davomi (kunlar) / nazorat ko'rigi (oylar) */}
+                        <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="w-40 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.treatment')}</span>
+                                {[{ days: 3, label: `3 ${t('patients.details.recall.days')}` }, { days: 7, label: `1 ${t('patients.details.recall.week')}` }, { days: 14, label: `2 ${t('patients.details.recall.week')}` }].map(o => (
+                                    <button key={o.days} type="button" onClick={() => chooseNext({ kind: 'treatment', days: o.days })} className={chipCls(isChosen('treatment', o.days))}>
+                                        {o.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="w-40 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.checkup')}</span>
+                                {[3, 6, 12].map(m => (
+                                    <button key={m} type="button" onClick={() => chooseNext({ kind: 'checkup', days: m * 30 })} className={chipCls(isChosen('checkup', m * 30))}>
+                                        {m} {t('patients.details.recall.months')}
+                                    </button>
+                                ))}
                                 <button
-                                    key={m}
                                     type="button"
-                                    onClick={() => chooseRecall(m)}
-                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallMonths === m
-                                        ? 'bg-primary-600 text-white'
+                                    onClick={() => chooseNext(null)}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${nextVisit === null
+                                        ? 'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900'
                                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
                                 >
-                                    {m} {t('patients.details.recall.months')}
+                                    {t('patients.details.recall.none')}
                                 </button>
-                            ))}
-                            <button
-                                type="button"
-                                onClick={() => chooseRecall(null)}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallMonths === null
-                                    ? 'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
-                            >
-                                {t('patients.details.recall.none')}
-                            </button>
+                            </div>
                         </div>
                         <Button
                             onClick={handleCompleteVisit}

@@ -549,6 +549,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                           <span className={overdue ? 'text-red-500 font-semibold' : ''}>{recall.dueDate.split('-').reverse().join('.')}</span>
                           {overdue && <span className="text-red-500"> · {t('dashboard.recall.overdue')}</span>}
                           {recall.status === 'reminded' && <span> · {t('dashboard.recall.reminded')}</span>}
+                          <span> · {recall.kind === 'treatment' ? t('dashboard.recall.kindTreatment') : t('dashboard.recall.kindCheckup')}</span>
                           {recall.reason && <span> · {recall.reason}</span>}
                         </p>
                       </div>
