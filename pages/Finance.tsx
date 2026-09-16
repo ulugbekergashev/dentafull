@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, Button, Badge, Select, Modal, Input } from '../components/Common';
 import { StatCard } from '../components/StatCard';
-import { UserRole, Transaction, Expense, ExpenseCategory, EXPENSE_CATEGORY_LABELS, Appointment, Patient, Clinic, LabOrder, Receptionist } from '../types';
+import { UserRole, Transaction, Expense, ExpenseCategory, EXPENSE_CATEGORY_LABELS, Appointment, Patient, Clinic, LabOrder, Receptionist, Recall } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer, Plus, Banknote, Pencil, Trash2, HandCoins } from 'lucide-react';
 import { api } from '../services/api';
@@ -66,6 +66,23 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
 
   // To'lovlar | Xarajatlar tab
   const [activeTab, setActiveTab] = useState<'payments' | 'expenses'>('payments');
+
+  // Nazorat samaradorligi: barcha nazoratlar (davr filtridan tashqari — soni kichik)
+  const [recalls, setRecalls] = useState<Recall[]>([]);
+  useEffect(() => {
+    if (!currentClinic?.id) return;
+    api.recalls.list(currentClinic.id).then(setRecalls).catch(() => setRecalls([]));
+  }, [currentClinic?.id]);
+  const recallStats = useMemo(() => {
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const active = recalls.filter(r => r.status === 'planned' || r.status === 'reminded');
+    const returned = recalls.filter(r => r.status === 'booked' || r.status === 'done').length;
+    const cancelled = recalls.filter(r => r.status === 'cancelled').length;
+    const overdue = active.filter(r => r.dueDate < today).length;
+    const resolved = returned + cancelled;
+    return { total: recalls.length, active: active.length, returned, cancelled, overdue, rate: resolved ? Math.round((returned / resolved) * 100) : 0 };
+  }, [recalls]);
 
   // Add Payment Modal State
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
@@ -830,6 +847,34 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             </div>
           </Card>
         </div>
+
+        {/* Nazorat samaradorligi — protseduradan keyin chaqirilgan bemorlarning nechtasi qaytdi */}
+        {recallStats.total > 0 && (
+          <Card className="p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white">{t('finance.recall.title')}</h3>
+                <p className="text-xs text-gray-500">{t('finance.recall.hint')}</p>
+              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                {t('finance.recall.rate')}: {recallStats.rate}%
+              </span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: t('finance.recall.active'), value: recallStats.active, tone: 'text-primary-600 dark:text-primary-400' },
+                { label: t('finance.recall.overdue'), value: recallStats.overdue, tone: 'text-red-600 dark:text-red-400' },
+                { label: t('finance.recall.returned'), value: recallStats.returned, tone: 'text-emerald-600 dark:text-emerald-400' },
+                { label: t('finance.recall.cancelled'), value: recallStats.cancelled, tone: 'text-gray-500 dark:text-gray-400' },
+              ].map(s => (
+                <div key={s.label} className="rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
+                  <p className={`mt-1 text-2xl font-bold tabular-nums ${s.tone}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* Qabullar tahlili — ilgari Bosh sahifada turardi. Bosh sahifa kunlik ish
             uchun; davr bo'yicha grafiklar shu hisobot va uning davr filtri bilan birga. */}

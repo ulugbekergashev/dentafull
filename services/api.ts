@@ -1134,6 +1134,11 @@ export const api = {
             if (isDemoMode()) return Promise.resolve([] as Recall[]);
             return fetchJson<Recall[]>(`/recalls?clinicId=${clinicId}&due=${days}`);
         },
+        // Hisobot uchun: barcha holatlar (bekor qilinganlar bilan)
+        list: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve([] as Recall[]);
+            return fetchJson<Recall[]>(`/recalls?clinicId=${clinicId}&status=planned,reminded,booked,done,cancelled`);
+        },
         create: (data: { patientId: string; clinicId: string; doctorId?: string | null; dueDate: string; reason?: string }) => {
             if (isDemoMode()) {
                 const now = new Date().toISOString();

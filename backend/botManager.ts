@@ -984,13 +984,38 @@ class BotManager {
             orderBy: { time: 'asc' }
         });
 
+        // Nazoratga chaqirish kerak bo'lgan bemorlar: muddati kelgan yoki 7 kun ichida.
+        // Shifokor ertalab kimga qo'ng'iroq qilish (yoki resepshnga aytish) kerakligini ko'radi.
+        const weekAhead = formatter.format(new Date(Date.now() + 7 * 86400000));
+        const dueRecalls = await prisma.recall.findMany({
+            where: {
+                clinicId: clinicId,
+                doctorId: doctorId,
+                status: { in: ['planned', 'reminded'] },
+                dueDate: { lte: weekAhead }
+            },
+            include: { patient: true },
+            orderBy: { dueDate: 'asc' }
+        });
+        let recallBlock = '';
+        if (dueRecalls.length > 0) {
+            recallBlock = `\n🔁 *NAZORATGA CHAQIRISH* — ${dueRecalls.length} ta bemor\n`;
+            dueRecalls.slice(0, 10).forEach((r: any) => {
+                const overdue = r.dueDate < todayDateString ? ' ⚠️' : '';
+                const who = r.patient ? `${r.patient.lastName} ${r.patient.firstName}` : 'Bemor';
+                const reminded = r.status === 'reminded' ? ' · xabar yuborilgan' : '';
+                recallBlock += `• ${String(r.dueDate).split('-').reverse().join('.')}${overdue} — ${who}${r.reason ? ` (${r.reason})` : ''}${reminded}\n`;
+            });
+            if (dueRecalls.length > 10) recallBlock += `… yana ${dueRecalls.length - 10} ta\n`;
+        }
+
         const doctorName = doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : 'Shifokor';
         const clinicName = doctor?.clinic?.name || 'Klinika';
 
         if (appointments.length === 0) {
             return `📅 *BUGUNGI JADVALINGIZ* (${todayDateString})\n\n` +
                 `👨‍⚕️ ${doctorName} — ${clinicName}\n\n` +
-                `✅ Bugun qabulingiz yo'q. Dam oling! 😊`;
+                `✅ Bugun qabulingiz yo'q. Dam oling! 😊` + recallBlock;
         }
 
         let message = `📅 *BUGUNGI JADVALINGIZ* (${todayDateString})\n\n` +
@@ -1009,7 +1034,7 @@ class BotManager {
             message += `\n`;
         });
 
-        message += `\nXayrli kun deb tilaymiz! 🌟`;
+        message += recallBlock + `\nXayrli kun deb tilaymiz! 🌟`;
         return message;
     }
 
@@ -1059,10 +1084,23 @@ class BotManager {
 
         const totalRevenue = dailyRevenue._sum.amount || 0;
 
+        // Nazorat: muddati kelgan / o'tgan chaqiruvlar — egasi resepshnga eslatib qo'yadi
+        const weekAhead = formatter.format(new Date(Date.now() + 7 * 86400000));
+        const recallDue = await prisma.recall.count({
+            where: { clinicId, status: { in: ['planned', 'reminded'] }, dueDate: { lte: weekAhead } }
+        });
+        const recallOverdue = await prisma.recall.count({
+            where: { clinicId, status: { in: ['planned', 'reminded'] }, dueDate: { lt: todayDateString } }
+        });
+        const recallLine = recallDue > 0
+            ? `🔁 *Nazoratga chaqirish:* ${recallDue} ta${recallOverdue > 0 ? ` (${recallOverdue} ta muddati o'tgan)` : ''}\n`
+            : '';
+
         return `📊 *KUNLIK HISOBOT* (${todayDateString})\n\n` +
             `👤 *Yangi bemorlar:* ${newPatientsCount}\n` +
             `📅 *Qabullar soni:* ${appointmentsCount}\n` +
-            `💰 *Jami tushum:* ${totalRevenue.toLocaleString()} so'm\n\n` +
+            `💰 *Jami tushum:* ${totalRevenue.toLocaleString()} so'm\n` +
+            recallLine + `\n` +
             `Xizmatingiz barakali bo'lsin! 😊`;
     }
 }

@@ -487,6 +487,50 @@ export const TRIGGERS: TriggerDef[] = [
         },
     },
 
+    // ── 10. Nazorat: javob bo'lmadi (qayta eslatma) ─────────────────────────
+    // Birinchi eslatma ketgan ('reminded'), lekin muddat o'tib ham bemor
+    // yozilmadi. Bitta nazorat uchun bir marta (refId ":overdue" bilan).
+    // Standart qoida yaratilmaydi — SMS xarajati uchun administrator o'zi
+    // yoqadi (Xabarlar → Avtomatika).
+    {
+        id: 'recall_overdue',
+        label: "Nazorat: javob bo'lmadi (qayta eslatma)",
+        respectCooldown: true,
+        sendWindow: { fromHour: 10, toHour: 19 },
+        offset: { label: "Muddat o'tganiga necha kun", unit: 'day', options: [3, 7, 14], default: 7 },
+        supportsDoctorFilter: true,
+        async findDue(rule, clinic) {
+            const days = rule.hoursBefore ?? 7;
+            const recalls = await prisma.recall.findMany({
+                where: {
+                    clinicId: rule.clinicId,
+                    status: 'reminded',
+                    dueDate: { lte: tashkentDateStr(-days) },
+                    ...(rule.doctorId ? { doctorId: rule.doctorId } : {}),
+                },
+                include: { patient: true },
+            });
+            if (recalls.length === 0) return [];
+            const doctors = await prisma.doctor.findMany({ where: { clinicId: rule.clinicId } });
+            const doctorById = new Map<string, any>(doctors.map((d: any) => [d.id, d] as [string, any]));
+            return recalls
+                .filter((r: any) => r.patient && r.patient.status === 'Active')
+                .map((r: any) => ({
+                    patient: r.patient,
+                    refId: `${r.id}:overdue`,
+                    type: 'RecallOverdue',
+                    vars: {
+                        ...patientName(r.patient),
+                        date: String(r.dueDate).split('-').reverse().join('.'),
+                        clinicName: clinic.name,
+                        doctorName: doctorName(r.doctorId ? doctorById.get(r.doctorId) : null),
+                        reason: r.reason ? ` (${r.reason})` : '',
+                    },
+                    replyMarkup: { inline_keyboard: [[{ text: '📅 Qabulga yozilish', callback_data: 'start_booking' }]] },
+                }));
+        },
+    },
+
 ];
 
 /** Hozir Toshkent bo'yicha soat nechada */

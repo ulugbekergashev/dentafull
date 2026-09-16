@@ -122,6 +122,13 @@ export const translations = {
     'dashboard.serviceDistribution': 'Xizmatlar taqsimoti',
     'dashboard.todayLabel': 'BUGUN',
     'finance.appointmentAnalytics': 'Qabullar tahlili',
+    'finance.recall.title': 'Nazorat samaradorligi',
+    'finance.recall.hint': 'Protseduradan keyin chaqirilgan bemorlarning nechtasi qaytdi',
+    'finance.recall.rate': 'Qaytish',
+    'finance.recall.active': 'Kutilmoqda',
+    'finance.recall.overdue': 'Muddati o\'tgan',
+    'finance.recall.returned': 'Qaytdi',
+    'finance.recall.cancelled': 'Bekor qilindi',
 
     // Common
     'common.search': 'Qidirish...',
@@ -992,6 +999,13 @@ export const translations = {
     'dashboard.serviceDistribution': 'Распределение услуг',
     'dashboard.todayLabel': 'СЕГОДНЯ',
     'finance.appointmentAnalytics': 'Анализ записей',
+    'finance.recall.title': 'Контрольные визиты',
+    'finance.recall.hint': 'Сколько приглашённых пациентов вернулось',
+    'finance.recall.rate': 'Возврат',
+    'finance.recall.active': 'Ожидают',
+    'finance.recall.overdue': 'Срок прошёл',
+    'finance.recall.returned': 'Вернулись',
+    'finance.recall.cancelled': 'Отменены',
 
     // Common
     'common.search': 'Поиск...',
