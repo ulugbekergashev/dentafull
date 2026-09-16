@@ -491,37 +491,46 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // Sales Agents State
    const [salesAgents, setSalesAgents] = useState<any[]>([]);
 
-   /** Statistika davri. Standart — oxirgi 7 kun. */
-   const [leadPeriod, setLeadPeriod] = useState<'today' | 'yesterday' | '7d' | '30d' | 'all'>('7d');
+   /**
+    * Sana kaliti mahalliy vaqt bo'yicha ("YYYY-MM-DD").
+    * toISOString() UTC beradi — Toshkentda ertalab tushgan lid kechagi kunga
+    * tushib qolardi.
+    */
+   const localDayKey = (d: any) => {
+      const dt = new Date(d);
+      const m = `${dt.getMonth() + 1}`.padStart(2, '0');
+      const day = `${dt.getDate()}`.padStart(2, '0');
+      return `${dt.getFullYear()}-${m}-${day}`;
+   };
+   const shiftDay = (daysBack: number) => localDayKey(Date.now() - daysBack * 86400000);
 
-   // Lidlar statistikasi. Hammasi allaqachon yuklangan ro'yxatdan hisoblanadi —
-   // yangi so'rov yo'q.
+   /** Tayyor oraliqlar: tugma bosilganda sanalar shunga qo'yiladi. */
+   const LEAD_RANGE_PRESETS: { id: string; label: string; from: () => string; to: () => string }[] = [
+      { id: 'today', label: 'Bugun', from: () => shiftDay(0), to: () => shiftDay(0) },
+      { id: 'yesterday', label: 'Kecha', from: () => shiftDay(1), to: () => shiftDay(1) },
+      { id: '7d', label: '7 kun', from: () => shiftDay(6), to: () => shiftDay(0) },
+      { id: '30d', label: '30 kun', from: () => shiftDay(29), to: () => shiftDay(0) },
+      { id: 'all', label: 'Hammasi', from: () => '2000-01-01', to: () => shiftDay(0) },
+   ];
+
+   // Statistika oralig'i. Standart — oxirgi 7 kun.
+   const [leadFrom, setLeadFrom] = useState<string>(() => shiftDay(6));
+   const [leadTo, setLeadTo] = useState<string>(() => shiftDay(0));
+
+   // Lidlar statistikasi: tanlangan sana oralig'i bo'yicha. Hammasi allaqachon
+   // yuklangan ro'yxatdan hisoblanadi — yangi so'rov yo'q.
    //
-   // Kun mahalliy vaqt bo'yicha olinadi: toISOString() UTC beradi va
-   // Toshkentda ertalab tushgan lid "kecha" ga tushib qolardi.
-   //
-   // Eslatma: lid qachon biriktirilgani saqlanmaydi, shuning uchun
-   // "kecha tushgan, falonchiga tegishli" — lidning BUGUNGI egasi.
+   // Eslatma: lid qachon biriktirilgani saqlanmaydi, shuning uchun sotuvchi
+   // ustunidagi raqam lidning BUGUNGI egasini bildiradi.
    const leadStats = React.useMemo(() => {
-      const dayKey = (d: any) => {
-         const dt = new Date(d);
-         const m = `${dt.getMonth() + 1}`.padStart(2, '0');
-         const day = `${dt.getDate()}`.padStart(2, '0');
-         return `${dt.getFullYear()}-${m}-${day}`;
-      };
-      const todayKey = dayKey(Date.now());
-      const yesterdayKey = dayKey(Date.now() - 86400000);
-      const startOf = (daysBack: number) => dayKey(Date.now() - daysBack * 86400000);
+      const todayKey = localDayKey(Date.now());
+      const yesterdayKey = localDayKey(Date.now() - 86400000);
+      const weekStart = localDayKey(Date.now() - 6 * 86400000);
 
-      const inPeriod = (r: any) => {
-         const d = dayKey(r.createdAt);
-         if (leadPeriod === 'today') return d === todayKey;
-         if (leadPeriod === 'yesterday') return d === yesterdayKey;
-         if (leadPeriod === '7d') return d >= startOf(6);
-         if (leadPeriod === '30d') return d >= startOf(29);
-         return true;
-      };
-      const scoped = demoRequests.filter(inPeriod);
+      const scoped = demoRequests.filter((r: any) => {
+         const d = localDayKey(r.createdAt);
+         return d >= leadFrom && d <= leadTo;
+      });
 
       const byStage: Record<string, number> = {};
       let unassigned = 0;
@@ -535,48 +544,22 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          const mine = scoped.filter((r: any) => r.salesAgentId === a.id);
          const stages: Record<string, number> = {};
          mine.forEach((r: any) => { const st = leadStage(r); stages[st] = (stages[st] || 0) + 1; });
-         return {
-            id: a.id,
-            name: a.name,
-            total: mine.length,
-            today: mine.filter((r: any) => dayKey(r.createdAt) === todayKey).length,
-            stages,
-         };
+         return { id: a.id, name: a.name, total: mine.length, stages };
       }).sort((x, y) => y.total - x.total);
-
-      // Kunlar bo'yicha: har bir kunda nechta lid tushgan va ular kimga tegishli
-      const dayCount = leadPeriod === 'today' || leadPeriod === 'yesterday' ? 7
-         : leadPeriod === '30d' || leadPeriod === 'all' ? 30 : 7;
-      const byDay = Array.from({ length: dayCount }, (_, i) => {
-         const key = dayKey(Date.now() - i * 86400000);
-         const rows = demoRequests.filter((r: any) => dayKey(r.createdAt) === key);
-         const perAgent: Record<string, number> = {};
-         salesAgents.forEach((a: any) => {
-            perAgent[a.id] = rows.filter((r: any) => r.salesAgentId === a.id).length;
-         });
-         return {
-            key,
-            label: key === todayKey ? 'Bugun' : key === yesterdayKey ? 'Kecha' : key.split('-').reverse().join('.'),
-            total: rows.length,
-            unassigned: rows.filter((r: any) => !r.salesAgentId).length,
-            perAgent,
-         };
-      });
 
       const booked = byStage['Booked'] || 0;
       return {
          scopedTotal: scoped.length,
-         today: demoRequests.filter((r: any) => dayKey(r.createdAt) === todayKey).length,
-         yesterday: demoRequests.filter((r: any) => dayKey(r.createdAt) === yesterdayKey).length,
-         week: demoRequests.filter((r: any) => dayKey(r.createdAt) >= startOf(6)).length,
+         today: demoRequests.filter((r: any) => localDayKey(r.createdAt) === todayKey).length,
+         yesterday: demoRequests.filter((r: any) => localDayKey(r.createdAt) === yesterdayKey).length,
+         week: demoRequests.filter((r: any) => localDayKey(r.createdAt) >= weekStart).length,
          total: demoRequests.length,
          unassigned,
          byStage,
          byAgent,
-         byDay,
          conversion: scoped.length ? Math.round((booked / scoped.length) * 100) : 0,
       };
-   }, [demoRequests, salesAgents, leadPeriod]);
+   }, [demoRequests, salesAgents, leadFrom, leadTo]);
 
    const [isAddSalesModalOpen, setIsAddSalesModalOpen] = useState(false);
    const [newSalesForm, setNewSalesForm] = useState({
@@ -1669,26 +1652,48 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <p className="text-sm text-gray-500">Lidlar oqimi, sotuvchilar bo'yicha taqsimot va tashqi manba sozlamasi</p>
                </div>
 
-               {/* Davr tanlagich: kartalar, bosqichlar va sotuvchilar jadvali shu davrga qaraydi */}
-               <div className="flex flex-wrap items-center gap-2">
-                  {([
-                     ['today', 'Bugun'], ['yesterday', 'Kecha'], ['7d', '7 kun'], ['30d', '30 kun'], ['all', 'Hammasi'],
-                  ] as const).map(([id, label]) => (
-                     <button
-                        key={id}
-                        onClick={() => setLeadPeriod(id)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${leadPeriod === id
-                           ? 'bg-primary-600 text-white'
-                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
-                     >
-                        {label}
-                     </button>
-                  ))}
-               </div>
+               {/* Sana oralig'i: kartalar, bosqichlar va sotuvchilar jadvali shunga qaraydi */}
+               <Card className="p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                     <div className="flex flex-wrap items-center gap-2">
+                        {LEAD_RANGE_PRESETS.map(p => {
+                           const active = leadFrom === p.from() && leadTo === p.to();
+                           return (
+                              <button
+                                 key={p.id}
+                                 onClick={() => { setLeadFrom(p.from()); setLeadTo(p.to()); }}
+                                 className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${active
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
+                              >
+                                 {p.label}
+                              </button>
+                           );
+                        })}
+                     </div>
+                     <div className="flex items-center gap-2 sm:ml-auto">
+                        <input
+                           type="date"
+                           value={leadFrom}
+                           max={leadTo}
+                           onChange={e => setLeadFrom(e.target.value)}
+                           className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200"
+                        />
+                        <span className="text-gray-400">—</span>
+                        <input
+                           type="date"
+                           value={leadTo}
+                           min={leadFrom}
+                           onChange={e => setLeadTo(e.target.value)}
+                           className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200"
+                        />
+                     </div>
+                  </div>
+               </Card>
 
                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
-                     { label: 'Davrda tushgan', value: leadStats.scopedTotal, hint: `Bugun: ${leadStats.today} · Kecha: ${leadStats.yesterday}`, tone: 'text-primary-600 dark:text-primary-400' },
+                     { label: 'Oraliqda tushgan', value: leadStats.scopedTotal, hint: `Bugun: ${leadStats.today} · Kecha: ${leadStats.yesterday}`, tone: 'text-primary-600 dark:text-primary-400' },
                      { label: 'Taqsimlanmagan', value: leadStats.unassigned, hint: 'Sotuvchi kutmoqda', tone: 'text-amber-600 dark:text-amber-400' },
                      { label: 'Oldi (sotuv)', value: leadStats.byStage['Booked'] || 0, hint: leadStats.conversion + '% konversiya', tone: 'text-emerald-600 dark:text-emerald-400' },
                      { label: 'Jami (butun vaqt)', value: leadStats.total, hint: `Oxirgi 7 kun: ${leadStats.week}`, tone: 'text-indigo-600 dark:text-indigo-400' },
@@ -1700,43 +1705,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </Card>
                   ))}
                </div>
-
-               {/* Kunlar bo'yicha: qaysi kuni nechta lid tushgan va ular kimga tegishli */}
-               <Card className="overflow-hidden">
-                  <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                     <h4 className="font-bold text-gray-900 dark:text-white">Kunlar bo'yicha</h4>
-                     <p className="text-xs text-gray-500">Har kuni nechta lid tushgan va ulardan nechtasi qaysi sotuvchida</p>
-                  </div>
-                  <div className="overflow-x-auto">
-                     <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 dark:bg-gray-800">
-                           <tr>
-                              <th className="p-3 font-medium text-gray-500">Sana</th>
-                              <th className="p-3 font-medium text-gray-500 text-right">Tushgan</th>
-                              <th className="p-3 font-medium text-gray-500 text-right whitespace-nowrap">Taqsimlanmagan</th>
-                              {leadStats.byAgent.map(a => (
-                                 <th key={a.id} className="p-3 font-medium text-gray-500 text-right whitespace-nowrap">{a.name}</th>
-                              ))}
-                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                           {leadStats.byDay.map(day => (
-                              <tr key={day.key} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${day.total === 0 ? 'text-gray-400' : ''}`}>
-                                 <td className="p-3 font-medium whitespace-nowrap text-gray-900 dark:text-white">{day.label}</td>
-                                 <td className="p-3 text-right font-bold tabular-nums text-gray-900 dark:text-white">{day.total}</td>
-                                 <td className="p-3 text-right tabular-nums text-amber-600 dark:text-amber-400">{day.unassigned || ''}</td>
-                                 {leadStats.byAgent.map(a => (
-                                    <td key={a.id} className="p-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{day.perAgent[a.id] || ''}</td>
-                                 ))}
-                              </tr>
-                           ))}
-                        </tbody>
-                     </table>
-                  </div>
-                  {leadStats.byAgent.length === 0 && (
-                     <p className="p-3 text-xs text-gray-400 border-t border-gray-100 dark:border-gray-700">Sotuvchi qo'shilmagan — taqsimot ustunlari sotuvchilar qo'shilgach paydo bo'ladi</p>
-                  )}
-               </Card>
 
                {/* Bosqichlar bo'yicha */}
                <Card className="p-5">
@@ -1771,7 +1739,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            <tr>
                               <th className="p-3 font-medium text-gray-500">Sotuvchi</th>
                               <th className="p-3 font-medium text-gray-500 text-right">Jami</th>
-                              <th className="p-3 font-medium text-gray-500 text-right">Bugun</th>
                               {['Contacted', 'NoAnswer', 'Thinking', 'Booked', 'Cancelled'].map(st => (
                                  <th key={st} className="p-3 font-medium text-gray-500 text-right whitespace-nowrap">{DEMO_STAGE_LABELS[st]}</th>
                               ))}
@@ -1782,14 +1749,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                  <td className="p-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{row.name}</td>
                                  <td className="p-3 text-right font-bold tabular-nums text-gray-900 dark:text-white">{row.total}</td>
-                                 <td className="p-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{row.today}</td>
                                  {['Contacted', 'NoAnswer', 'Thinking', 'Booked', 'Cancelled'].map(st => (
                                     <td key={st} className="p-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{row.stages[st] || 0}</td>
                                  ))}
                               </tr>
                            ))}
                            {leadStats.byAgent.length === 0 && (
-                              <tr><td colSpan={8} className="p-6 text-center text-gray-400">Sotuvchi qo'shilmagan</td></tr>
+                              <tr><td colSpan={7} className="p-6 text-center text-gray-400">Sotuvchi qo'shilmagan</td></tr>
                            )}
                         </tbody>
                      </table>
