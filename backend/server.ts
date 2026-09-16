@@ -96,7 +96,7 @@ if (CRON_DISABLED) {
 }
 const { botManager } = require('./botManager');
 const { smsService, normalizeUzPhone } = require('./smsService');
-const { dmedService } = require('./dmedService');
+const dhp = require('./dhp');
 const cors = require('cors');
 const axios = require('axios');
 const { prisma } = require('./db');
@@ -1738,6 +1738,7 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
                 secondaryPhone: secondaryPhone || null
             }
         });
+        dhp.enqueueSafe(clinicId, 'Patient', patient.id);
         res.json(patient);
     } catch (error: any) {
         console.error('Patient creation error:', error);
@@ -1847,6 +1848,7 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
             where: { id: req.params.id },
             data: updateData
         });
+        dhp.enqueueSafe(patient.clinicId, 'Patient', patient.id);
         res.json(patient);
     } catch (error) {
         res.status(500).json({ error: 'Failed to update patient' });
@@ -1988,6 +1990,8 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
         // Qabul yakunlandi — bemorning ochiq nazorati (bo'lsa) bajarildi
         if (status === 'Completed') {
             await linkRecallToAppointment({ id: appointment.id, patientId: appointment.patientId, date: appointment.date, status: 'Completed' });
+            // Davlat platformasiga tashrif (Encounter) — o'sha kungi tashxis va muolajalar ketidan
+            dhp.enqueueSafe(appointment.clinicId, 'Encounter', appointment.id);
         }
 
         // Kelmagan bemorga xabar.
@@ -2217,6 +2221,8 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
             }
         }
 
+        // Muolaja (xizmat) davlat platformasiga — avans/balans emas, faqat klinik xizmat
+        dhp.enqueueSafe(transaction.clinicId, 'Procedure', transaction.id);
         res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: 'Failed to create transaction' });
@@ -2913,6 +2919,7 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
         }
 
         const newDoctor = await prisma.doctor.create({ data });
+        dhp.enqueueSafe(clinicId, 'Practitioner', newDoctor.id);
         res.json(newDoctor);
     } catch (error: any) {
         console.error('Doctor creation error:', error);
@@ -2976,6 +2983,7 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
             where: { id: req.params.id },
             data: updateData
         });
+        dhp.enqueueSafe(doctor.clinicId, 'Practitioner', doctor.id);
         res.json(doctor);
     } catch (error: any) {
         console.error('Doctor update error:', error);
@@ -4550,51 +4558,113 @@ app.put('/api/plans/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (
     }
 });
 
-// --- DMED Integration ---
+// --- DHP (Raqamli sog'liqni saqlash platformasi) integratsiyasi ---
+// Eski IT-MED (DMED) API o'rnida — jadval ustunlari (dmed*) va marshrut nomlari
+// saqlab qolindi, ma'nosi: dmedApiKey = client_id, dmedApiSecret = client_secret,
+// dmedClinicId = DHP Organization id. Mantiq backend/dhp/ ichida.
+const DHP_ENVIRONMENTS = ['playground', 'production'];
+
 app.post('/api/clinics/:id/dmed-settings', authenticateToken, async (req, res) => {
     try {
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
-        const { dmedEnabled, dmedApiKey, dmedApiSecret, dmedClinicId } = req.body;
-        const clinic = await prisma.clinic.update({
-            where: { id: req.params.id },
-            data: { dmedEnabled, dmedApiKey, dmedApiSecret, dmedClinicId }
-        });
-        res.json(clinic);
+        const { dmedEnabled, dmedApiKey, dmedApiSecret, dmedClinicId, dhpEnvironment } = req.body;
+        const data: any = {};
+        if (dmedEnabled !== undefined) data.dmedEnabled = !!dmedEnabled;
+        if (dmedApiKey !== undefined) data.dmedApiKey = String(dmedApiKey || '').trim() || null;
+        // Bo'sh secret yuborilsa mavjudini saqlab qolamiz — foydalanuvchi har safar qayta kiritmasin
+        if (dmedApiSecret) data.dmedApiSecret = String(dmedApiSecret).trim();
+        if (dmedClinicId !== undefined) data.dmedClinicId = String(dmedClinicId || '').trim() || null;
+        if (dhpEnvironment !== undefined) data.dhpEnvironment = DHP_ENVIRONMENTS.includes(dhpEnvironment) ? dhpEnvironment : 'playground';
+        const clinic = await prisma.clinic.update({ where: { id: req.params.id }, data });
+        dhp.invalidateClinicConfig(req.params.id);
+        const { dmedApiSecret: _s, ...safe } = clinic as any;
+        res.json({ ...safe, hasDhpSecret: !!clinic.dmedApiSecret });
     } catch (error) {
-        res.status(500).json({ error: 'DMED sozlamalarini saqlashda xatolik' });
+        res.status(500).json({ error: 'DHP sozlamalarini saqlashda xatolik' });
     }
 });
 
+// Kalitlarni tekshirish: token olinadimi, STIR bo'yicha tashkilot topiladimi
 app.post('/api/clinics/:id/dmed-test', authenticateToken, async (req, res) => {
     try {
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
-        const { dmedApiKey, dmedApiSecret } = req.body;
-        const result = await dmedService.validateCredentials(dmedApiKey, dmedApiSecret);
+        const clinic = await prisma.clinic.findUnique({ where: { id: req.params.id }, select: { dmedApiKey: true, dmedApiSecret: true, dhpEnvironment: true, inn: true } });
+        const clientId = String(req.body?.dmedApiKey || clinic?.dmedApiKey || '').trim();
+        const clientSecret = String(req.body?.dmedApiSecret || clinic?.dmedApiSecret || '').trim();
+        const environment = DHP_ENVIRONMENTS.includes(req.body?.dhpEnvironment) ? req.body.dhpEnvironment : (clinic?.dhpEnvironment || 'playground');
+        if (!clientId) return res.json({ valid: false, error: 'client_id kiritilmagan' });
+        if (!clientSecret && !dhp.isMockConfig(clientId)) return res.json({ valid: false, error: 'client_secret kiritilmagan' });
+        const result = await dhp.testConnection({ clientId, clientSecret, environment, inn: clinic?.inn || null });
         res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: 'Ulanishni tekshirishda xatolik' });
+    } catch (error: any) {
+        res.status(500).json({ valid: false, error: error?.message || 'Ulanishni tekshirishda xatolik' });
     }
 });
 
+// Platformada ro'yxatdan o'tgan bemorni JSHSHIR bo'yicha topish — kartani to'ldirish uchun
 app.get('/api/patients/lookup/:pinfl', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
-        const result = await dmedService.findPatientByPinfl(clinicId as string, req.params.pinfl);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: 'Bemor ma\'lumotlarini olishda xatolik' });
+        const pinfl = normalizePinfl(req.params.pinfl);
+        if (pinfl.error || !pinfl.value) return res.status(400).json({ error: pinfl.error || 'JSHSHIR kiritilmagan' });
+        const result = await dhp.lookupPatientByPinfl(clinicId as string, pinfl.value);
+        if (!result.data) return res.status(404).json({ error: result.error || 'Topilmadi' });
+        res.json(result.data);
+    } catch (error: any) {
+        res.status(500).json({ error: error?.message || 'Bemor ma\'lumotlarini olishda xatolik' });
     }
 });
 
-// Manual sync Visit to DMED
-app.post('/api/visits/:id/dmed-sync', authenticateToken, async (req, res) => {
+// Sinxron holati: nechta kutmoqda / yuborilgan / xato, oxirgi xatolar
+app.get('/api/dhp/status', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
-        await dmedService.syncEncounter(clinicId, req.params.id);
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: 'DMEDga yuborishda xatolik' });
+        if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
+        res.json(await dhp.status(clinicId));
+    } catch (error: any) {
+        res.status(500).json({ error: error?.message || 'DHP holatini olishda xatolik' });
+    }
+});
+
+// Navbatni hozir o'tkazish (cron'ni kutmasdan)
+app.post('/api/dhp/sync-now', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
+        res.json(await dhp.processClinic(clinicId));
+    } catch (error: any) {
+        res.status(500).json({ error: error?.message || 'DHP sinxronida xatolik' });
+    }
+});
+
+// Xato bo'lganlarni qayta navbatga qo'yish
+app.post('/api/dhp/retry', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
+        res.json({ retried: await dhp.retryErrors(clinicId) });
+    } catch (error: any) {
+        res.status(500).json({ error: error?.message || 'Qayta urinishda xatolik' });
+    }
+});
+
+// Bitta yozuvni qo'lda navbatga qo'yish (masalan, bemor kartasidan)
+app.post('/api/dhp/enqueue', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
+        const { resourceType, localId } = req.body || {};
+        if (!dhp.RESOURCE_TYPES.includes(resourceType) || !localId) return res.status(400).json({ error: 'resourceType/localId noto\'g\'ri' });
+        // Yozuv shu klinikaga tegishliligini tekshiramiz
+        const table: Record<string, string> = { Patient: 'patient', Practitioner: 'doctor', PractitionerRole: 'doctor', Encounter: 'appointment', Condition: 'patientDiagnosis', Procedure: 'transaction' };
+        const row = await (prisma as any)[table[resourceType]].findFirst({ where: { id: String(localId), clinicId }, select: { id: true } });
+        if (!row) return res.status(404).json({ error: 'Yozuv topilmadi' });
+        const queued = await dhp.enqueue(clinicId, resourceType, String(localId));
+        if (!queued) return res.status(400).json({ error: 'DHP ulanmagan (Sozlamalar → Integratsiyalar)' });
+        res.json(await dhp.processClinic(clinicId, { limit: 10 }));
+    } catch (error: any) {
+        res.status(500).json({ error: error?.message || 'DHP navbatiga qo\'shishda xatolik' });
     }
 });
 
@@ -4794,6 +4864,7 @@ app.post('/api/diagnoses', authenticateToken, async (req, res) => {
             },
             include: { icd10: true }
         });
+        dhp.enqueueSafe(clinicId, 'Condition', diagnosis.id);
         res.json(diagnosis);
     } catch (error) {
         console.error('Create diagnosis error:', error);
@@ -5967,6 +6038,12 @@ cron.schedule('0 22 * * *', () => {
 });
 
 // Doctor Morning Schedules - Every day at 8:00 AM
+// DHP navbati: ulangan klinikalar uchun har daqiqa. Ulanmagan klinikalarda
+// navbat bo'sh — bitta select bilan tugaydi.
+cron.schedule('* * * * *', () => {
+    dhp.processAll().catch((e: any) => console.error('[DHP] cron xatolik:', e?.message || e));
+}, { timezone: 'Asia/Tashkent' });
+
 cron.schedule('0 8 * * *', () => {
     console.log('⏰ Cron: Doctor morning schedule job triggered');
     botManager.sendDoctorMorningSchedules();
@@ -7825,6 +7902,32 @@ async function runStartupMigrations() {
     ] as const) {
         await migrationStep(`${table}.${col}`, `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" TEXT`);
     }
+    // DHP muhiti (playground/production) va sinxron navbati.
+    // dmedEnabled/dmedApiKey/dmedApiSecret/dmedClinicId ustunlari DHP uchun qayta ishlatiladi.
+    await migrationStep('Clinic.dhpEnvironment', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "dhpEnvironment" TEXT`);
+    await migrationStep('DhpResourceLink table', `
+        CREATE TABLE IF NOT EXISTS "DhpResourceLink" (
+            "id"           TEXT NOT NULL PRIMARY KEY,
+            "clinicId"     TEXT NOT NULL,
+            "resourceType" TEXT NOT NULL,
+            "localId"      TEXT NOT NULL,
+            "remoteId"     TEXT,
+            "versionId"    TEXT,
+            "status"       TEXT NOT NULL DEFAULT 'pending',
+            "attempts"     INTEGER NOT NULL DEFAULT 0,
+            "lastError"    TEXT,
+            "syncedAt"     TIMESTAMP(3),
+            "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('DhpResourceLink unique', `
+        CREATE UNIQUE INDEX IF NOT EXISTS "DhpResourceLink_clinicId_resourceType_localId_key"
+        ON "DhpResourceLink" ("clinicId", "resourceType", "localId")
+    `);
+    await migrationStep('DhpResourceLink status index', `
+        CREATE INDEX IF NOT EXISTS "DhpResourceLink_clinicId_status_idx" ON "DhpResourceLink" ("clinicId", "status")
+    `);
 
     console.log('✅ Startup migrations applied');
 }

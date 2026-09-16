@@ -253,13 +253,15 @@ export const Patients: React.FC<PatientsProps> = ({
           ...prev,
           firstName: data.firstName || prev.firstName,
           lastName: data.lastName || prev.lastName,
-          dob: data.birthDate || prev.dob,
-          gender: data.gender === 'male' ? 'Male' : data.gender === 'female' ? 'Female' : prev.gender,
+          dob: data.birthDate || data.dob || prev.dob,
+          gender: data.gender === 'Male' || data.gender === 'Female' ? data.gender : prev.gender,
           address: data.address || prev.address,
+          regionCode: data.regionCode || prev.regionCode,
+          districtCode: data.districtCode || prev.districtCode,
         }));
       }
     } catch (error: any) {
-      alert('DMED orqali topilmadi: ' + (error.message || 'Xatolik'));
+      alert('DHP orqali topilmadi: ' + (error.message || 'Xatolik'));
     } finally {
       setIsLookingUp(false);
     }

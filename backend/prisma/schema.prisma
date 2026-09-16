@@ -28,7 +28,7 @@ model Doctor {
   endHour          Int?
   /// Davlat platformasi (DHP) Practitioner profili uchun: tug'ilgan sana, jins,
   /// JSHSHIR; argosId — SSV HRM tizimidagi xodim raqami; specialtyCode —
-  /// dmed-specialties-cs kodi (masalan 595 stomatolog-terapevt).
+  /// profession-specialization-cs kodi (backend/dhp/codes.ts DENTAL_SPECIALTIES).
   birthDate        String?
   gender           String?
   pinfl            String?
@@ -313,6 +313,10 @@ model Clinic {
   email                   String?
   /// STIR — DHP Organization identifikatori (sid/org/uz/soliq)
   inn                     String?
+  /// DHP muhiti: 'playground' (sinov) yoki 'production'. null = playground.
+  /// dmedApiKey/dmedApiSecret/dmedClinicId/dmedEnabled ustunlari ham DHP uchun
+  /// ishlatiladi (client_id, client_secret, Organization id, yoqilgan).
+  dhpEnvironment          String?
   enableReceipts          Boolean            @default(false)
   notificationMode        String             @default("telegram_only")
   eskizEmail              String?
@@ -583,6 +587,31 @@ model InventoryLog {
 
   @@index([itemId])
   @@index([patientId])
+}
+
+/// DHP (davlat platformasi) bilan sinxron holati: bizning yozuv ↔ platformadagi
+/// resurs. Bir vaqtning o'zida navbat (pending/error) va bog'lanish reestri
+/// (remoteId, versionId — If-Match uchun). FK yo'q: yozuv o'chirilsa keyingi
+/// urinishda 'skipped' bo'ladi.
+model DhpResourceLink {
+  id           String    @id @default(uuid())
+  clinicId     String
+  /// Patient | Practitioner | PractitionerRole | Encounter | Condition | Procedure
+  resourceType String
+  /// Bizning jadvaldagi id (Encounter → Appointment.id, Procedure → Transaction.id)
+  localId      String
+  remoteId     String?
+  versionId    String?
+  /// pending | synced | error | skipped
+  status       String    @default("pending")
+  attempts     Int       @default(0)
+  lastError    String?
+  syncedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([clinicId, resourceType, localId])
+  @@index([clinicId, status])
 }
 
 model ServiceCategory {

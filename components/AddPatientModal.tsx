@@ -47,9 +47,11 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                     ...f,
                     firstName: data.firstName || f.firstName,
                     lastName: data.lastName || f.lastName,
-                    dob: data.dob || f.dob,
-                    gender: data.gender || f.gender,
+                    dob: data.dob || data.birthDate || f.dob,
+                    gender: data.gender === 'Male' || data.gender === 'Female' ? data.gender : f.gender,
                     address: data.address || f.address,
+                    regionCode: data.regionCode || f.regionCode,
+                    districtCode: data.districtCode || f.districtCode,
                 }));
                 setShowMore(true);
             }

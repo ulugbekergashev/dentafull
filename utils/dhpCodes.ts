@@ -232,16 +232,21 @@ export const DHP_DISTRICTS: DhpCode[] = [
 ];
 
 /**
- * Stomatologiyaga tegishli DHP mutaxassislik kodlari (dmed-specialties-cs).
- * IG'da 194 va 595 ikkalasi ham "Tish shifokori" deb yozilgan — ajratish uchun
- * o'zbekcha nomlar ruscha displaydan olindi.
+ * Stomatologiyaga tegishli DHP mutaxassislik kodlari —
+ * PractitionerRole.specialty uchun profession-specialization-cs (SNOMED CT asosida).
+ * Lavozim kodi (position-and-profession-cs) backendda shu koddan chiqariladi:
+ * backend/dhp/codes.ts DENTAL_SPECIALTIES — ikkalasi bir xil bo'lishi kerak.
  */
 export const DHP_DENTAL_SPECIALTIES: DhpCode[] = [
-  { code: "194", uz: "Stomatolog (umumiy)", ru: "Стоматолог" },
-  { code: "595", uz: "Stomatolog-terapevt", ru: "Стоматолог-терапевт" },
-  { code: "417", uz: "Jarroh-stomatolog", ru: "Хирург-стоматолог" },
-  { code: "594", uz: "Ortodont", ru: "Ортодонт" },
-  { code: "388", uz: "Bolalar stomatologi", ru: "Детский стоматолог" },
+  { code: "408444009", uz: "Umumiy stomatologiya amaliyoti", ru: "Общая стоматологическая практика" },
+  { code: "394606000", uz: "Restorativ (terapevtik) stomatologiya", ru: "Терапевтическая (восстановительная) стоматология" },
+  { code: "408441001", uz: "Endodontiya", ru: "Эндодонтия" },
+  { code: "408461007", uz: "Periodontologiya", ru: "Пародонтология" },
+  { code: "394605001", uz: "Og'iz bo'shlig'i jarrohligi", ru: "Хирургия полости рта" },
+  { code: "408465003", uz: "Og'iz-jag' jarrohligi", ru: "Челюстно-лицевая хирургия" },
+  { code: "394608004", uz: "Ortodontiya", ru: "Ортодонтия" },
+  { code: "408460008", uz: "Protezlash (ortopedik stomatologiya)", ru: "Ортопедическая стоматология (протезирование)" },
+  { code: "394607009", uz: "Bolalar stomatologiyasi", ru: "Детская стоматология" },
 ];
 
 /** Viloyat kodi bo'yicha tumanlar. */
