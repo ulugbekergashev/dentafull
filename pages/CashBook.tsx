@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 import {
     ChevronLeft, ChevronRight, Download, Wallet, Banknote, CreditCard,
     TrendingDown, Users, CalendarDays, AlertCircle, Coins, Lock, LockOpen, Check,
@@ -125,6 +126,7 @@ const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => (
 
 // ── To'lov usullari qatori ───────────────────────────────────────────────────
 const MethodStrip: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
+    const { t } = useLanguage();
     const shown = PAYMENT_METHODS.filter(m => (totals.byMethod[m.key] || 0) !== 0);
     if (shown.length === 0) return null;
     return (
@@ -144,7 +146,7 @@ const MethodStrip: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
                 {totals.fromBalance > 0 && (
                     <div className="flex items-center gap-2.5 pl-4 border-l border-dashed border-gray-300 dark:border-gray-600">
                         <div>
-                            <p className="text-[11px] text-gray-400 leading-tight">Avansdan yechilgan</p>
+                            <p className="text-[11px] text-gray-400 leading-tight">{t('cashbook.advanceDeducted')}</p>
                             <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">
                                 {num(totals.fromBalance)} <span className="text-[10px] font-normal">· kassaga kirmagan</span>
                             </p>
@@ -309,16 +311,16 @@ const CashFlowPanel: React.FC<{
                         <p className="text-3xl font-black tabular-nums text-amber-600 dark:text-amber-400 leading-tight mt-1">
                             {num(t.drawer)}
                         </p>
-                        <p className="text-[10px] text-gray-400">UZS</p>
+                        <p className="text-[10px] text-gray-400">{t('cashbook.uzs')}</p>
 
                         {closure.closed && closure.closure && (
                             <div className="mt-3 pt-3 border-t border-dashed border-gray-200 dark:border-gray-700 space-y-1">
                                 <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                                    <span>Kassir sanagan</span>
+                                    <span>{t('cashbook.cashierCounted')}</span>
                                     <span className="font-semibold tabular-nums">{num(closure.closure.countedCash)}</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
-                                    <span className="font-bold text-gray-700 dark:text-gray-200">Farq</span>
+                                    <span className="font-bold text-gray-700 dark:text-gray-200">{t('cashbook.difference')}</span>
                                     <span className={`font-black tabular-nums ${exact
                                         ? 'text-emerald-600 dark:text-emerald-400'
                                         : 'text-red-600 dark:text-red-400'}`}>
@@ -454,6 +456,7 @@ export const CashBook: React.FC<CashBookProps> = ({
     movements = [], onAddCashMovement, onDeleteCashMovement,
     onUpdateTransaction, onDeleteTransaction,
 }) => {
+    const { t } = useLanguage();
     const today = formatDateToISO(new Date());
     const [view, setView] = useState<'day' | 'month'>('day');
     const [date, setDate] = useState(today);
@@ -824,7 +827,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             <div className={`flex flex-col lg:flex-row items-start lg:items-center gap-4 ${embedded ? 'lg:justify-end' : 'justify-between'}`}>
                 {!embedded && (
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kassa</h1>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('cashbook.title')}</h1>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
                             Kassaga tushgan va kassadan chiqqan haqiqiy pul
                         </p>
@@ -916,7 +919,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                 <ChevronRight className="w-4 h-4 text-gray-500" />
                             </button>
                             {date !== today && (
-                                <Button variant="ghost" size="sm" onClick={() => changeDate(today)}>Bugun</Button>
+                                <Button variant="ghost" size="sm" onClick={() => changeDate(today)}>{t('cashbook.btnToday')}</Button>
                             )}
                         </div>
                     ) : (
@@ -1014,7 +1017,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                         {day.rows.length === 0 ? (
                             <div className="px-5 py-12 text-center">
                                 <Wallet className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Bu kunda to'lov qayd etilmagan</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{t('cashbook.noPayments')}</p>
                             </div>
                         ) : (
                             <div className="overflow-auto max-h-[65vh]">
@@ -1024,13 +1027,13 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 dark:bg-gray-700 z-30 min-w-[180px]">
                                                 Bemor
                                             </th>
-                                            <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase w-20 sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Vaqt</th>
+                                            <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase w-20 sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.thTime')}</th>
                                             {doctorCols.map(col => (
                                                 <th key={col.id} className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap min-w-[110px] sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">
                                                     {col.name}
                                                 </th>
                                             ))}
-                                            <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Usul</th>
+                                            <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.thMethod')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -1108,7 +1111,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     <Card className="overflow-hidden">
                         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
                             <ListOrdered className="w-4 h-4 text-gray-400" />
-                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">Kun to'lovlari</h3>
+                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.dayPayments')}</h3>
                             <span className="text-xs text-gray-400">({day.rows.length} ta)</span>
                         </div>
                         {day.rows.length === 0 ? (
@@ -1181,7 +1184,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 min-w-0">
                                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                                <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate">To'lanmagan</h3>
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate">{t('cashbook.unpaid')}</h3>
                                 <span className="text-xs text-gray-400">({unpaidItems.length} ta)</span>
                             </div>
                             <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums shrink-0">
@@ -1205,8 +1208,8 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             </p>
                                             <p className="text-[11px] text-gray-400 truncate">
                                                 {item.kind === 'debt'
-                                                    ? <span className="text-amber-600 dark:text-amber-400 font-bold">Qarzga yozilgan</span>
-                                                    : <span className="text-gray-500">Qabul yakunlandi, to'lov yo'q</span>}
+                                                    ? <span className="text-amber-600 dark:text-amber-400 font-bold">{t('cashbook.writtenToDebt')}</span>
+                                                    : <span className="text-gray-500">{t('cashbook.visitFinishedNoPay')}</span>}
                                                 {item.doctorName && <><span className="mx-1.5">.</span>{item.doctorName}</>}
                                                 {item.service && <><span className="mx-1.5">.</span>{item.service}</>}
                                             </p>
@@ -1242,7 +1245,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <TrendingDown className="w-4 h-4 text-gray-400" />
-                                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Xarajatlar</h3>
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.expenses')}</h3>
                                 <span className="text-xs text-gray-400">({day.expenses.length} ta)</span>
                             </div>
                             <span className="text-sm font-black text-red-600 dark:text-red-400 tabular-nums">
@@ -1251,7 +1254,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                         </div>
                         {day.expenses.length === 0 ? (
                             <div className="px-5 py-8 text-center">
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Bu kunda xarajat yo'q</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{t('cashbook.noExpenses')}</p>
                                 {onAddExpense && (
                                     <button
                                         onClick={openExpenseModal}
@@ -1286,7 +1289,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     <Card className="overflow-hidden">
                             <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
                                 <ArrowDownToLine className="w-4 h-4 text-gray-400" />
-                                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Kassa harakatlari</h3>
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.cashMovements')}</h3>
                                 <span className="text-xs text-gray-400">({day.movements.length} ta)</span>
                             </div>
                             {day.movements.length === 0 ? (
@@ -1357,14 +1360,14 @@ export const CashBook: React.FC<CashBookProps> = ({
                             className="w-full px-5 py-4 flex items-center gap-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
                         >
                             <History className="w-4 h-4 text-gray-400" />
-                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">O'zgarishlar izi</h3>
+                            <h3 className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.auditTrail')}</h3>
                             <span className="text-xs text-gray-400">kim nimani o'chirgan yoki tuzatgan</span>
                             <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto transition-transform ${auditOpen ? 'rotate-180' : ''}`} />
                         </button>
                         {auditOpen && (
                             <div className="border-t border-gray-100 dark:border-gray-700">
                                 {auditLoading ? (
-                                    <p className="px-5 py-6 text-center text-sm text-gray-400">Yuklanmoqda...</p>
+                                    <p className="px-5 py-6 text-center text-sm text-gray-400">{t('cashbook.loading')}</p>
                                 ) : auditLogs.length === 0 ? (
                                     <p className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                                         Bu kunda o'zgarish qilinmagan
@@ -1406,20 +1409,20 @@ export const CashBook: React.FC<CashBookProps> = ({
                 <Card className="overflow-hidden">
                     <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
                         <CalendarDays className="w-4 h-4 text-gray-400" />
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Kunlik daftar</h3>
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.dailyBook')}</h3>
                         <span className="text-xs text-gray-400">kunni bosing — o'sha kun varag'i ochiladi</span>
                     </div>
                     <div className="overflow-auto max-h-[70vh]">
                         <table className="w-full text-sm">
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 dark:bg-gray-700 z-30">Kun</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Naqd</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Naqdsiz</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Jami</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Xarajat</th>
-                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Kassada qoldi</th>
-                                    <th className="px-3 py-3 text-center text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">Holat</th>
+                                    <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 dark:bg-gray-700 z-30">{t('cashbook.thDay')}</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.thCash')}</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.thCard')}</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.thTotal')}</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.btnExpense')}</th>
+                                    <th className="px-3 py-3 text-right text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.thRemains')}</th>
+                                    <th className="px-3 py-3 text-center text-[11px] font-bold text-gray-500 uppercase whitespace-nowrap sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.thStatus')}</th>
                                     {doctorCols.map(col => (
                                         <th key={col.id} className="px-3 py-3 text-right text-[11px] font-bold text-gray-400 uppercase whitespace-nowrap min-w-[100px] sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">
                                             {col.name}
@@ -1467,7 +1470,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </tbody>
                             <tfoot className="bg-gray-50 dark:bg-gray-700 border-t-2 border-gray-200 dark:border-gray-600">
                                 <tr>
-                                    <td className="px-4 py-3 font-black text-gray-900 dark:text-white sticky left-0 bottom-0 bg-gray-50 dark:bg-gray-700 z-30">JAMI</td>
+                                    <td className="px-4 py-3 font-black text-gray-900 dark:text-white sticky left-0 bottom-0 bg-gray-50 dark:bg-gray-700 z-30">{t('cashbook.total')}</td>
                                     <td className="px-3 py-3 text-right font-black tabular-nums text-emerald-600 dark:text-emerald-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.cashIn)}</td>
                                     <td className="px-3 py-3 text-right font-black tabular-nums text-blue-600 dark:text-blue-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.nonCashIn)}</td>
                                     <td className="px-3 py-3 text-right font-black tabular-nums text-gray-900 dark:text-white sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.gross)}</td>
@@ -1584,14 +1587,14 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </p>
 
                     <div className="flex gap-2">
-                        <Button variant="secondary" className="flex-1" onClick={() => setIsExpenseOpen(false)}>Bekor</Button>
+                        <Button variant="secondary" className="flex-1" onClick={() => setIsExpenseOpen(false)}>{t('cashbook.cancel')}</Button>
                         <button
                             onClick={handleSaveExpense}
                             disabled={expenseSaving || !canSaveExpense}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 disabled:cursor-not-allowed transition-all"
                         >
                             {expenseSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {expenseSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                            {expenseSaving ? t('cashbook.saving') : t('cashbook.save')}
                         </button>
                     </div>
                 </div>
@@ -1606,7 +1609,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             >
                 <div className="space-y-4">
                     <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4 flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-300">Hozir yashikda bo'lishi kerak</span>
+                        <span className="text-gray-600 dark:text-gray-300">{t('cashbook.nowShouldBe')}</span>
                         <span className="font-black tabular-nums text-amber-600 dark:text-amber-400">
                             {num(day.totals.drawer)}
                         </span>
@@ -1638,7 +1641,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             value={movementForm.patientId}
                             onChange={e => setMovementForm(f => ({ ...f, patientId: e.target.value }))}
                             options={[
-                                { value: '', label: 'Tanlanmagan' },
+                                { value: '', label: t('cashbook.notSelected') },
                                 ...patients.map(pt => ({ value: pt.id, label: `${pt.lastName} ${pt.firstName}` })),
                             ]}
                         />
@@ -1652,7 +1655,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             value={movementForm.note}
                             onChange={e => setMovementForm(f => ({ ...f, note: e.target.value }))}
                             rows={2}
-                            placeholder={movementType === 'Encashment' ? 'Kimga topshirildi' : 'Nima uchun qaytarildi'}
+                            placeholder={movementType === 'Encashment' ? t('cashbook.whoReceived') : t('cashbook.whyRefunded')}
                             className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
                         />
                     </div>
@@ -1662,14 +1665,14 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </p>
 
                     <div className="flex gap-2">
-                        <Button variant="secondary" className="flex-1" onClick={() => setMovementType(null)}>Bekor</Button>
+                        <Button variant="secondary" className="flex-1" onClick={() => setMovementType(null)}>{t('cashbook.cancel')}</Button>
                         <button
                             onClick={handleSaveMovement}
                             disabled={movementSaving || !canSaveMovement}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/50 disabled:cursor-not-allowed transition-all"
                         >
                             {movementSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {movementSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                            {movementSaving ? t('cashbook.saving') : t('cashbook.save')}
                         </button>
                     </div>
                 </div>
@@ -1698,7 +1701,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                         O'chirish izda qoladi: kim, qachon va qaysi to'lovni o'chirgani yozib qo'yiladi.
                     </p>
                     <div className="flex gap-2">
-                        <Button variant="secondary" className="flex-1" onClick={() => setDeletingRow(null)}>Bekor</Button>
+                        <Button variant="secondary" className="flex-1" onClick={() => setDeletingRow(null)}>{t('cashbook.cancel')}</Button>
                         <button
                             onClick={handleDeleteRow}
                             disabled={deleting}
@@ -1766,14 +1769,14 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </p>
 
                     <div className="flex gap-2">
-                        <Button variant="secondary" className="flex-1" onClick={() => setPayingDebt(null)}>Bekor</Button>
+                        <Button variant="secondary" className="flex-1" onClick={() => setPayingDebt(null)}>{t('cashbook.cancel')}</Button>
                         <button
                             onClick={handlePayDebt}
                             disabled={debtSaving || !(Number(debtAmount) > 0)}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/50 transition-all"
                         >
                             {debtSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {debtSaving ? 'Saqlanmoqda...' : 'To\'lovni qabul qilish'}
+                            {debtSaving ? t('cashbook.saving') : 'To\'lovni qabul qilish'}
                         </button>
                     </div>
                 </div>
@@ -1834,9 +1837,9 @@ export const CashBook: React.FC<CashBookProps> = ({
                     )}
 
                     <div className="flex gap-2">
-                        <Button variant="secondary" className="flex-1" onClick={() => setEditingTx(null)}>Bekor</Button>
+                        <Button variant="secondary" className="flex-1" onClick={() => setEditingTx(null)}>{t('cashbook.cancel')}</Button>
                         <Button className="flex-1" onClick={handleSaveEdit} disabled={editSaving || !canSaveEdit}>
-                            {editSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                            {editSaving ? t('cashbook.saving') : t('cashbook.save')}
                         </Button>
                     </div>
                 </div>
@@ -1859,19 +1862,19 @@ export const CashBook: React.FC<CashBookProps> = ({
                 <div className="space-y-5">
                     <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4 space-y-2 text-sm">
                         <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                            <span>Kun boshida qoldiq</span>
+                            <span>{t('cashbook.balanceStart')}</span>
                             <span className="font-semibold tabular-nums">{num(day.totals.openingCash)}</span>
                         </div>
                         <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                            <span>Naqd tushum</span>
+                            <span>{t('cashbook.cashIn')}</span>
                             <span className="font-semibold tabular-nums">{num(day.totals.cashIn)}</span>
                         </div>
                         <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                            <span>Naqd xarajat</span>
+                            <span>{t('cashbook.cashOut')}</span>
                             <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">−{num(day.totals.cashExpense)}</span>
                         </div>
                         <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700 text-base">
-                            <span className="font-bold text-gray-900 dark:text-white">Hisob bo'yicha kassada</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{t('cashbook.accountedCash')}</span>
                             <span className="font-black tabular-nums text-amber-600 dark:text-amber-400">{num(day.totals.drawer)}</span>
                         </div>
                     </div>
@@ -1900,7 +1903,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20'
                             : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20'}`}>
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-gray-900 dark:text-white">Farq</span>
+                                <span className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.difference')}</span>
                                 <span className={`text-lg font-black tabular-nums ${Math.abs(previewDifference) < 1
                                     ? 'text-emerald-600 dark:text-emerald-400'
                                     : 'text-red-600 dark:text-red-400'}`}>
@@ -1964,13 +1967,13 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </p>
 
                     <div className="flex gap-2">
-                        <Button variant="secondary" className="flex-1" onClick={() => setIsCloseOpen(false)}>Bekor</Button>
+                        <Button variant="secondary" className="flex-1" onClick={() => setIsCloseOpen(false)}>{t('cashbook.cancel')}</Button>
                         <Button
                             className="flex-1"
                             onClick={handleCloseDay}
                             disabled={closeSaving || countedInput.trim() === '' || !isFinite(countedValue)}
                         >
-                            {closeSaving ? 'Saqlanmoqda...' : closureStatus.closed ? 'Yangilash' : 'Kunni yopish'}
+                            {closeSaving ? t('cashbook.saving') : closureStatus.closed ? 'Yangilash' : 'Kunni yopish'}
                         </Button>
                     </div>
                 </div>

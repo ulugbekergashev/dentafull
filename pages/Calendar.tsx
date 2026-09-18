@@ -195,7 +195,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
     // Validation check
     if (!formData.patientId) {
-      alert("Iltimos, avval bemorni tanlang!");
+      alert(t('patients.details.alerts.selectPatient'));
       return;
     }
 
@@ -236,13 +236,13 @@ export const Calendar: React.FC<CalendarProps> = ({
         finalDoctorId = doctors[0].id;
         finalDoctorName = `Dr. ${doctors[0].lastName}`;
       } else {
-        alert("Tizimda shifokor mavjud emas! Iltimos, 'Xodimlar' bo'limiga o'tib, kamida bitta shifokor profilini yarating.");
+        alert(t('calendar.alerts.noDoctorSys'));
         return;
       }
     }
 
     if (!isIndividualPlan && !finalDoctorId) {
-      alert("Iltimos, shifokorni tanlang!");
+      alert(t('patients.details.alerts.selectDoctorReq'));
       return;
     }
 
@@ -260,14 +260,14 @@ export const Calendar: React.FC<CalendarProps> = ({
     // but we have finalDoctorId and finalDoctorName now.
 
     if (!patient) {
-      alert("Bemor topilmadi.");
+      alert(t('calendar.alerts.patientNotFound'));
       return;
     }
 
     // Only check for doctor object if we didn't just create it
     if (!doctor && !finalDoctorName) {
       // Should not match here if we handled creation
-      alert("Shifokor topilmadi.");
+      alert(t('patients.details.alerts.doctorNotFound'));
       return;
     }
 
@@ -286,7 +286,7 @@ export const Calendar: React.FC<CalendarProps> = ({
     );
 
     if (doctorConflict) {
-      alert('Ushbu vaqtda shifokorda boshqa qabul mavjud! Iltimos, boshqa vaqt tanlang.');
+      alert(t('patients.details.alerts.doctorConflict'));
       return;
     }
 
@@ -300,7 +300,7 @@ export const Calendar: React.FC<CalendarProps> = ({
     );
 
     if (patientConflict) {
-      alert('Ushbu vaqtda bemorda boshqa qabul mavjud! Iltimos, boshqa vaqt tanlang.');
+      alert(t('patients.details.alerts.patientConflict'));
       return;
     }
 
@@ -356,17 +356,17 @@ export const Calendar: React.FC<CalendarProps> = ({
 
     try {
       await api.patients.sendMessage(messagePatientId, messageText);
-      alert('Xabar muvaffaqiyatli yuborildi!');
+      alert(t('patients.details.alerts.messageSent'));
       setIsMessageModalOpen(false);
       setMessageText('');
     } catch (error: any) {
       console.error('Error sending message:', error);
       if (error.message === 'Bot not configured' || error.error === 'Bot not configured') {
-        alert('⚠️ Bot sozlanmagan. Iltimos, Sozlamalar bo\'limida bot tokenini kiriting.');
+        alert('⚠️ ' + t('patients.details.alerts.botNotConfigured'));
       } else if (error.message === 'Patient telegram not linked' || error.error === 'Patient telegram not linked') {
-        alert('⚠️ Bemor Telegram botga ulanmagan. Iltimos, bemorga bot havolasini yuboring.');
+        alert('⚠️ ' + t('calendar.alerts.tgNotLinked'));
       } else {
-        alert(`Xatolik: ${error.message || 'Xabar yuborishda xatolik yuz berdi.'}`);
+        alert(`Xatolik: ${error.message || t('calendar.alerts.msgError')}`);
       }
     }
   };
@@ -374,7 +374,7 @@ export const Calendar: React.FC<CalendarProps> = ({
   const handlePatientSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientFormData.firstName || !patientFormData.lastName) {
-      alert("Iltimos, bemor ismi va familiyasini kiriting!");
+      alert(t('calendar.alerts.enterName'));
       return;
     }
 
