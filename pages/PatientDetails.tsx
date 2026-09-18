@@ -1407,7 +1407,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               return apptDateTime >= now && a.status !== 'Cancelled' && a.status !== 'Completed';
                            }).length === 0 && (
                                  <div className="text-center py-8 text-gray-500">
-                                    Kutilayotgan qabullar yo'q
+                                    {t('auto.Kutilayotgan qabullar yo\'q')}
                                  </div>
                               )}
                         </div>
@@ -1518,12 +1518,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                    discountPercent: ''
                                                 });
                                                 setIsPaymentModalOpen(true);
-                                             }}>To'lov</Button>
+                                             }}>{t('auto.To\'lov')}</Button>
                                              <Button size="sm" variant="secondary" className="bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800" onClick={() => {
                                                 const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
                                                 setInstallmentQuickOpen({ service: breakdown || app.type, amount: total, doctorId: app.doctorId });
                                                 setActiveTab('installments');
-                                             }}>Bo'lib to'lash</Button>
+                                             }}>{t('auto.Bo\'lib to\'lash')}</Button>
                                              {(patient.balance || 0) > 0 && (
                                                 <Button size="sm" variant="secondary" className="bg-primary-50 text-primary-700 border-primary-100" onClick={async () => {
                                                    const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
@@ -1543,7 +1543,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                       });
                                                       alert("To'lov avans hisobidan muvaffaqiyatli amalga oshirildi!");
                                                    }
-                                                }}>Hisobdan</Button>
+                                                }}>{t('auto.Hisobdan')}</Button>
                                              )}
                                           </td>
                                        </tr>
@@ -1709,7 +1709,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                              }
                                           }}
                                           className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                          title="O'chirish"
+                                          title={t('auto.O\'chirish')}
                                        >
                                           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                        </button>
@@ -1783,11 +1783,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <Input label={t('patients.modal.phone')} value={editFormData.phone || ''} onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })} required />
                      <Input label={t('patients.modal.secondaryPhone')} value={editFormData.secondaryPhone || ''} onChange={(e) => setEditFormData({ ...editFormData, secondaryPhone: e.target.value })} />
                   </div>
-                  <Input label={t('patients.modal.address')} value={editFormData.address || ''} onChange={e => setEditFormData({ ...editFormData, address: e.target.value })} placeholder="Bemor manzilini kiriting..." />
+                  <Input label={t('patients.modal.address')} value={editFormData.address || ''} onChange={e => setEditFormData({ ...editFormData, address: e.target.value })} placeholder={t('auto.Bemor manzilini kiriting...')} />
                   <RegionDistrictSelect regionCode={editFormData.regionCode} districtCode={editFormData.districtCode} onChange={v => setEditFormData({ ...editFormData, ...v })} />
                   <div className="grid grid-cols-2 gap-4">
                      <Input label="JSHSHIR (PINFL)" value={editFormData.pinfl || ''} maxLength={14} placeholder="14 raqam" onChange={e => setEditFormData({ ...editFormData, pinfl: e.target.value })} />
-                     <Input label={t('patients.modal.passport')} value={editFormData.passport || ''} placeholder="AA1234567" onChange={e => setEditFormData({ ...editFormData, passport: e.target.value })} />
+                     <Input label={t('patients.modal.passport')} value={editFormData.passport || ''} placeholder={t('auto.AA1234567')} onChange={e => setEditFormData({ ...editFormData, passport: e.target.value })} />
                   </div>
                   <div className="flex justify-end gap-2 pt-4">
                      <Button type="button" variant="secondary" onClick={() => setIsEditModalOpen(false)}>{t('common.cancel')}</Button>
@@ -1825,11 +1825,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      label={t('patients.details.materials.table.note')}
                      value={materialData.note}
                      onChange={e => setMaterialData({ ...materialData, note: e.target.value })}
-                     placeholder="Qo'shimcha izoh..."
+                     placeholder={t('auto.Qo\'shimcha izoh...')}
                   />
                   <div className="flex justify-end gap-2 pt-4">
-                     <Button type="button" variant="secondary" onClick={() => setIsMaterialModalOpen(false)}>Bekor qilish</Button>
-                     <Button type="submit">Saqlash</Button>
+                     <Button type="button" variant="secondary" onClick={() => setIsMaterialModalOpen(false)}>{t('auto.Bekor qilish')}</Button>
+                     <Button type="submit">{t('auto.Saqlash')}</Button>
                   </div>
                </form>
             </Modal>
@@ -1880,11 +1880,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               <div className="space-y-4">
                                  {categories && categories.length > 0 && (
                                     <Select
-                                       label="Kategoriya"
+                                       label={t('auto.Kategoriya')}
                                        value={manualPaymentCategoryId}
                                        onChange={(e) => setManualPaymentCategoryId(e.target.value)}
                                     >
-                                       <option value="">Barcha kategoriyalar</option>
+                                       <option value="">{t('auto.Barcha kategoriyalar')}</option>
                                        {categories.map(cat => (
                                           <option key={cat.id} value={cat.id}>{cat.name}</option>
                                        ))}
@@ -1943,7 +1943,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   )}
                   {paymentData.service !== 'Avans' && (
                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Chegirma</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('auto.Chegirma')}</label>
                         <div className="flex gap-2">
                            {/* Discount type selector */}
                            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shrink-0">
@@ -1970,7 +1970,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     setDiscountType('amount');
                                     setPaymentData({ ...paymentData, discountPercent: '' });
                                  }}
-                              >Summa</button>
+                              >{t('auto.Summa')}</button>
                            </div>
                            {/* Discount input */}
                            <div className="flex-1">
@@ -2055,7 +2055,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                   <div className={paymentData.service === 'Avans' ? "grid grid-cols-1" : "grid grid-cols-2 gap-4"}>
                      <Input
-                        label="To'lanayotgan Summa"
+                        label={t('auto.To\'lanayotgan Summa')}
                         type="number"
                         value={paymentData.paidAmount}
                         onChange={e => {
@@ -2073,7 +2073,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      />
                      {paymentData.service !== 'Avans' && (
                         <Input
-                           label="Qolgan Qarzdorlik"
+                           label={t('auto.Qolgan Qarzdorlik')}
                            type="number"
                            value={paymentData.debtAmount}
                            onChange={e => {
@@ -2103,7 +2103,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                   <div className="grid grid-cols-1 gap-4">
                      <Select
-                        label="To'lov Usuli"
+                        label={t('auto.To\'lov Usuli')}
                         value={paymentData.type}
                         onChange={e => setPaymentData({ ...paymentData, type: e.target.value })}
                         options={paymentData.service === 'Avans'
@@ -2119,7 +2119,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      />
                   </div>
                   <div className="flex justify-end gap-2 pt-4">
-                     <Button type="button" variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isPaymentSubmitting}>Bekor qilish</Button>
+                     <Button type="button" variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isPaymentSubmitting}>{t('auto.Bekor qilish')}</Button>
                      <Button type="submit" disabled={isPaymentSubmitting}>
                         {isPaymentSubmitting ? 'Saqlanmoqda...' : 'Saqlash'}
                      </Button>
@@ -2128,7 +2128,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             </Modal>
 
             {/* Payment Edit Modal */}
-            <Modal isOpen={isPaymentEditModalOpen} onClose={() => setIsPaymentEditModalOpen(false)} title="To'lovni Tahrirlash">
+            <Modal isOpen={isPaymentEditModalOpen} onClose={() => setIsPaymentEditModalOpen(false)} title={t('auto.To\'lovni Tahrirlash')}>
                <form onSubmit={handleEditPaymentSave} className="space-y-4">
                   <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg mb-4">
                      <p className="text-sm text-gray-500">Xizmat:</p>
@@ -2138,7 +2138,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                      <Input
-                        label="Summa"
+                        label={t('auto.Summa')}
                         type="number"
                         value={editPaymentAmount}
                         onChange={e => setEditPaymentAmount(e.target.value)}
@@ -2146,7 +2146,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         required
                      />
                      <Select
-                        label="Status"
+                        label={t('auto.Status')}
                         value={editPaymentStatus}
                         onChange={e => setEditPaymentStatus(e.target.value)}
                         options={[
@@ -2156,14 +2156,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      />
                   </div>
                   <Select
-                     label="To'lov Usuli"
+                     label={t('auto.To\'lov Usuli')}
                      value={editPaymentMethod}
                      onChange={e => setEditPaymentMethod(e.target.value)}
                      options={INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: getPaymentMethodLabel(m) }))}
                   />
                   <div className="flex justify-end gap-2 pt-4">
-                     <Button type="button" variant="secondary" onClick={() => setIsPaymentEditModalOpen(false)}>Bekor qilish</Button>
-                     <Button type="submit">Saqlash</Button>
+                     <Button type="button" variant="secondary" onClick={() => setIsPaymentEditModalOpen(false)}>{t('auto.Bekor qilish')}</Button>
+                     <Button type="submit">{t('auto.Saqlash')}</Button>
                   </div>
                </form>
             </Modal>
@@ -2389,19 +2389,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          {/* Print Template */}
          < div className="hidden print:block print:p-8 bg-white text-black" >
             <div className="text-center mb-8 border-b-2 border-gray-800 pb-4">
-               <h1 className="text-3xl font-bold uppercase tracking-wider mb-2">DentalFlow Clinic</h1>
-               <p className="text-sm text-gray-600">Tish davolash va diagnostika markazi</p>
+               <h1 className="text-3xl font-bold uppercase tracking-wider mb-2">{t('auto.DentalFlow Clinic')}</h1>
+               <p className="text-sm text-gray-600">{t('auto.Tish davolash va diagnostika markazi')}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-8 mb-8">
                <div>
-                  <h2 className="text-xs font-bold uppercase text-gray-500 mb-1">Bemor</h2>
+                  <h2 className="text-xs font-bold uppercase text-gray-500 mb-1">{t('auto.Bemor')}</h2>
                   <p className="text-xl font-bold">{patient.lastName} {patient.firstName}</p>
                   <p className="text-sm">{showPatientPhone ? patient.phone : maskPhone(patient.phone)}</p>
                   <p className="text-sm">{formatDobDDMMYYYY(patient.dob)} ({calcAge(patient.dob) ?? ''} yosh)</p>
                </div>
                <div className="text-right">
-                  <h2 className="text-xs font-bold uppercase text-gray-500 mb-1">Sana</h2>
+                  <h2 className="text-xs font-bold uppercase text-gray-500 mb-1">{t('auto.Sana')}</h2>
                   <p className="text-xl font-bold">{new Date().toLocaleDateString('uz-UZ')}</p>
                   <p className="text-sm">{new Date().toLocaleTimeString('uz-UZ')}</p>
                </div>
@@ -2411,7 +2411,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             {
                diagnoses.length > 0 && (
                   <div className="mb-8">
-                     <h3 className="text-lg font-bold border-b border-gray-400 mb-4 pb-1">Tashxislar</h3>
+                     <h3 className="text-lg font-bold border-b border-gray-400 mb-4 pb-1">{t('auto.Tashxislar')}</h3>
                      <div className="space-y-4">
                         {diagnoses.map(d => (
                            <div key={d.id} className="mb-4">
@@ -2431,7 +2431,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
             {/* Teeth Chart Section */}
             <div className="mb-8 break-inside-avoid">
-               <h3 className="text-lg font-bold border-b border-gray-400 mb-4 pb-1">Tish Kartasi</h3>
+               <h3 className="text-lg font-bold border-b border-gray-400 mb-4 pb-1">{t('auto.Tish Kartasi')}</h3>
                <div className="scale-75 origin-top-left">
                   <TeethChart
                      initialData={teethData}
@@ -2447,7 +2447,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <p className="mt-8 border-t border-black w-48 pt-1 text-xs text-center">(Imzo)</p>
                </div>
                <div className="text-right">
-                  <p className="text-sm italic">DentalFlow orqali chop etildi</p>
+                  <p className="text-sm italic">{t('auto.DentalFlow orqali chop etildi')}</p>
                </div>
             </div>
          </div >

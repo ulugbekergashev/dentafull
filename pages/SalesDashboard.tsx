@@ -1,3 +1,4 @@
+import { useLanguage } from '../context/LanguageContext';
 import React, { useEffect, useState } from 'react';
 import { Building2, TrendingUp, CheckCircle, Clock, LogOut, Plus, X, Lock, CreditCard, Calendar, ArrowRight, RefreshCw, Search } from 'lucide-react';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
@@ -31,6 +32,8 @@ interface SalesDashboardProps {
 }
 
 const getDaysRemaining = (expiryDate: string) => {
+    const { t } = useLanguage();
+
   if (!expiryDate) return 0;
   const expiry = new Date(expiryDate);
   const today = new Date();
@@ -45,6 +48,7 @@ const EMPTY_FORM = {
 };
 
 function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose: () => void; onSuccess: () => void }) {
+  const { t } = useLanguage();
   const [form, setForm] = useState({ ...EMPTY_FORM, planId: plans.length > 0 ? plans[0].id : '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -57,6 +61,7 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+  const { t } = useLanguage();
     e.preventDefault();
     if (!form.planId) { setError('Tarif tanlang'); return; }
     setLoading(true);
@@ -91,36 +96,36 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Yangi Klinika Qo'shish">
+    <Modal isOpen onClose={onClose} title={t('auto.Yangi Klinika Qo\'shish')}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg px-4 py-2.5">{error}</div>}
 
-        <Input label="Klinika Nomi" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+        <Input label={t('auto.Klinika Nomi')} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
         <div className="grid grid-cols-2 gap-4">
-          <Input label="Admin ismi" value={form.adminName} onChange={e => setForm({ ...form, adminName: e.target.value })} required />
-          <Input label="Telefon" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
+          <Input label={t('auto.Admin ismi')} value={form.adminName} onChange={e => setForm({ ...form, adminName: e.target.value })} required />
+          <Input label={t('auto.Telefon')} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
         </div>
 
         <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4">
           <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
-            <Lock className="w-4 h-4" /> Kirish Ma'lumotlari
+            <Lock className="w-4 h-4" /> {t('auto.Kirish Ma\'lumotlari')}
           </h4>
-          <Input label="Login" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required />
+          <Input label={t('auto.Login')} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required />
           <div className="flex items-end gap-2">
-            <Input label="Parol" type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required className="flex-1" />
-            <Button type="button" variant="secondary" onClick={generatePassword} className="mb-[1px]">Generatsiya</Button>
+            <Input label={t('auto.Parol')} type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required className="flex-1" />
+            <Button type="button" variant="secondary" onClick={generatePassword} className="mb-[1px]">{t('auto.Generatsiya')}</Button>
           </div>
         </div>
 
         <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800 space-y-4">
           <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
-            <CreditCard className="w-4 h-4" /> Tarif va Obuna
+            <CreditCard className="w-4 h-4" /> {t('auto.Tarif va Obuna')}
           </h4>
 
           <div className="flex gap-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="subType" checked={form.subscriptionType === 'Paid'} onChange={() => setForm({ ...form, subscriptionType: 'Paid' })} className="text-primary-600" />
-              <span className="text-sm font-medium text-gray-900 dark:text-white">To'liq</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">{t('auto.To\'liq')}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="radio" name="subType" checked={form.subscriptionType === 'Trial'} onChange={() => setForm({ ...form, subscriptionType: 'Trial' })} className="text-primary-600" />
@@ -129,7 +134,7 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
           </div>
 
           <Select
-            label="Tarif Rejasi"
+            label={t('auto.Tarif Rejasi')}
             options={plans.map(p => ({ value: p.id, label: `${p.name} - ${p.price.toLocaleString()} UZS` }))}
             value={form.planId}
             onChange={e => setForm({ ...form, planId: e.target.value })}
@@ -138,17 +143,17 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
           <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
             <input type="checkbox" id="useCustomPrice" checked={form.useCustomPrice} onChange={e => setForm({ ...form, useCustomPrice: e.target.checked })}
               className="h-4 w-4 text-primary-600 border-gray-300 rounded cursor-pointer" />
-            <label htmlFor="useCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">Maxsus narx belgilash</label>
+            <label htmlFor="useCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">{t('auto.Maxsus narx belgilash')}</label>
           </div>
 
           {form.useCustomPrice && (
-            <Input label="Maxsus oylik to'lov summasi" type="number" value={form.customPrice}
+            <Input label={t('auto.Maxsus oylik to\'lov summasi')} type="number" value={form.customPrice}
               onChange={e => setForm({ ...form, customPrice: parseInt(e.target.value) || 0 })} required placeholder="Masalan: 800000" />
           )}
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose}>Bekor qilish</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>{t('auto.Bekor qilish')}</Button>
           <Button type="submit" disabled={loading}>
             {loading ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
             {loading ? 'Yaratilmoqda...' : 'Yaratish'}
@@ -161,6 +166,7 @@ function AddClinicModal({ plans, onClose, onSuccess }: { plans: Plan[]; onClose:
 
 /* ── Klinika detail modal (read-only) ─────────────────────────── */
 function ClinicDetailModal({ clinic, plans, onClose }: { clinic: SalesClinic; plans: Plan[]; onClose: () => void }) {
+  const { t } = useLanguage();
   const daysLeft = getDaysRemaining(clinic.expiryDate);
   const isExpired = daysLeft <= 0;
   const isExpiring = daysLeft <= 3 && daysLeft > 0;
@@ -171,7 +177,7 @@ function ClinicDetailModal({ clinic, plans, onClose }: { clinic: SalesClinic; pl
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md z-10 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">Klinika ma'lumotlari</h2>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">{t('auto.Klinika ma\'lumotlari')}</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 cursor-pointer"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-6 py-5 space-y-4">
@@ -185,18 +191,18 @@ function ClinicDetailModal({ clinic, plans, onClose }: { clinic: SalesClinic; pl
             <div className="flex flex-col items-end gap-1.5">
               <Badge status={clinic.status === 'Active' ? 'active' : 'blocked'} />
               {clinic.subscriptionType === 'Trial' && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-primary-100 text-primary-800">TRIAL</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-primary-100 text-primary-800">{t('auto.TRIAL')}</span>
               )}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-3">
-              <p className="text-xs text-gray-400 mb-1">Tarif</p>
+              <p className="text-xs text-gray-400 mb-1">{t('auto.Tarif')}</p>
               <p className="font-bold text-gray-900 dark:text-white">{plan?.name || '—'}</p>
             </div>
             <div className={`rounded-xl p-3 ${isExpired ? 'bg-red-50 dark:bg-red-900/20' : isExpiring ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
-              <p className="text-xs text-gray-400 mb-1">Muddat</p>
+              <p className="text-xs text-gray-400 mb-1">{t('auto.Muddat')}</p>
               <p className={`font-bold ${isExpired ? 'text-red-600' : isExpiring ? 'text-orange-600' : 'text-green-600'}`}>
                 {isExpired ? 'Tugagan' : `${daysLeft} kun qoldi`}
               </p>
@@ -210,7 +216,7 @@ function ClinicDetailModal({ clinic, plans, onClose }: { clinic: SalesClinic; pl
             </div>
           </div>
 
-          <Button variant="secondary" onClick={onClose} className="w-full">Yopish</Button>
+          <Button variant="secondary" onClick={onClose} className="w-full">{t('auto.Yopish')}</Button>
         </div>
       </div>
     </div>
@@ -219,6 +225,7 @@ function ClinicDetailModal({ clinic, plans, onClose }: { clinic: SalesClinic; pl
 
 /* ── Main SalesDashboard ─────────────────────────────────────── */
 export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLogout }) => {
+  const { t } = useLanguage();
   const [clinics, setClinics] = useState<SalesClinic[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -277,20 +284,20 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
           <LogoMark className="w-9 h-9" />
           <div>
             <span className="text-lg font-bold tracking-tight">
-              <span className="text-slate-900 dark:text-white">Denta</span><span className="text-primary-600 dark:text-primary-400">CRM</span>
+              <span className="text-slate-900 dark:text-white">{t('auto.Denta')}</span><span className="text-primary-600 dark:text-primary-400">{t('auto.CRM')}</span>
             </span>
-            <p className="text-[11px] text-gray-400 -mt-0.5">Sotuvchi paneli</p>
+            <p className="text-[11px] text-gray-400 -mt-0.5">{t('auto.Sotuvchi paneli')}</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
             <p className="text-sm font-semibold text-gray-800 dark:text-white">{agentName}</p>
-            <p className="text-[11px] text-gray-400">Sotuvchi</p>
+            <p className="text-[11px] text-gray-400">{t('auto.Sotuvchi')}</p>
           </div>
           <div className="w-9 h-9 rounded-full bg-primary-600 flex items-center justify-center text-white font-bold text-sm">{agentName.charAt(0).toUpperCase()}</div>
           <button onClick={onLogout} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
             <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Chiqish</span>
+            <span className="hidden sm:inline">{t('auto.Chiqish')}</span>
           </button>
         </div>
       </header>
@@ -323,12 +330,12 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
         {/* Clinics Table — same as SuperAdmin */}
         <Card className="p-6">
           <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Mening klinikalarim</h3>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('auto.Mening klinikalarim')}</h3>
             <div className="flex flex-1 w-full md:w-auto gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
-                  placeholder="Klinika yoki admin ismi..."
+                  placeholder={t('auto.Klinika yoki admin ismi...')}
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                   className="pl-9 w-full"
@@ -342,11 +349,11 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
                 <option value="All">Barchasi ({clinics.length})</option>
                 <option value="Active">Faol ({stats.active})</option>
                 <option value="Trial">Sinov ({stats.trial})</option>
-                <option value="Expiring">Tugayotgan</option>
-                <option value="Expired">Muddati tugagan</option>
+                <option value="Expiring">{t('auto.Tugayotgan')}</option>
+                <option value="Expired">{t('auto.Muddati tugagan')}</option>
               </select>
               <Button onClick={() => setShowAddModal(true)}>
-                <Plus className="w-4 h-4 mr-2" /> Yangi klinika
+                <Plus className="w-4 h-4 mr-2" /> {t('auto.Yangi klinika')}
               </Button>
               <button onClick={loadData} className="p-2 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors cursor-pointer border border-gray-200 dark:border-gray-600">
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -361,30 +368,31 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
-                    <th className="p-4 font-medium text-gray-500">Klinika</th>
-                    <th className="p-4 font-medium text-gray-500">Tarif</th>
-                    <th className="p-4 font-medium text-gray-500">Muddat</th>
-                    <th className="p-4 font-medium text-gray-500">Status</th>
-                    <th className="p-4 font-medium text-gray-500 text-right">Amal</th>
+                    <th className="p-4 font-medium text-gray-500">{t('auto.Klinika')}</th>
+                    <th className="p-4 font-medium text-gray-500">{t('auto.Tarif')}</th>
+                    <th className="p-4 font-medium text-gray-500">{t('auto.Muddat')}</th>
+                    <th className="p-4 font-medium text-gray-500">{t('auto.Status')}</th>
+                    <th className="p-4 font-medium text-gray-500 text-right">{t('auto.Amal')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {loading ? (
                     <tr><td colSpan={5} className="p-8 text-center text-gray-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary-400" />
-                      Yuklanmoqda...
+                      {t('auto.Yuklanmoqda...')}
                     </td></tr>
                   ) : paginated.length === 0 ? (
                     <tr><td colSpan={5} className="p-8 text-center">
                       <Building2 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                      <p className="text-gray-500 text-sm font-medium">Klinikalar topilmadi</p>
+                      <p className="text-gray-500 text-sm font-medium">{t('auto.Klinikalar topilmadi')}</p>
                       {clinics.length === 0 && (
                         <button onClick={() => setShowAddModal(true)} className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold cursor-pointer">
-                          <Plus className="w-4 h-4" /> Birinchi klinikani qo'shish
+                          <Plus className="w-4 h-4" /> {t('auto.Birinchi klinikani qo\'shish')}
                         </button>
                       )}
                     </td></tr>
                   ) : paginated.map(clinic => {
+  const { t } = useLanguage();
                     const daysLeft = getDaysRemaining(clinic.expiryDate);
                     const isExpiring = daysLeft <= 3 && daysLeft > 0;
                     const isExpired = daysLeft <= 0;
@@ -399,7 +407,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
                             {plans.find(p => p.id === clinic.planId)?.name || '—'}
                           </span>
                           {clinic.subscriptionType === 'Trial' && (
-                            <span className="ml-2 px-2 py-1 rounded-md text-xs font-bold uppercase bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">TRIAL</span>
+                            <span className="ml-2 px-2 py-1 rounded-md text-xs font-bold uppercase bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">{t('auto.TRIAL')}</span>
                           )}
                         </td>
                         <td className="p-4">
@@ -417,7 +425,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
                           <Badge status={clinic.status === 'Active' ? 'active' : 'blocked'} />
                         </td>
                         <td className="p-4 text-right" onClick={e => e.stopPropagation()}>
-                          <Button size="sm" variant="secondary" onClick={() => setSelectedClinic(clinic)}>Ko'rish</Button>
+                          <Button size="sm" variant="secondary" onClick={() => setSelectedClinic(clinic)}>{t('auto.Ko\'rish')}</Button>
                         </td>
                       </tr>
                     );
@@ -431,8 +439,8 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ agentName, onLog
             <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
               <div className="text-sm text-gray-500">Jami: {filtered.length} ta klinika (Sahifa {currentPage} / {totalPages})</div>
               <div className="flex gap-2">
-                <Button variant="secondary" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Ortga</Button>
-                <Button variant="secondary" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Oldinga</Button>
+                <Button variant="secondary" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>{t('auto.Ortga')}</Button>
+                <Button variant="secondary" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>{t('auto.Oldinga')}</Button>
               </div>
             </div>
           )}

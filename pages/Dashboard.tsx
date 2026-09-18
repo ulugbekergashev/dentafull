@@ -449,13 +449,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <td className="py-3.5 pr-4">
                         <div className="flex items-center gap-1.5">
                           {hasDebt && (
-                            <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-black rounded-full border border-red-100 dark:border-red-900/30" title="Qarz bor">
-                              <AlertCircle className="w-3 h-3" /> Qarz
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-black rounded-full border border-red-100 dark:border-red-900/30" title={t('auto.Qarz bor')}>
+                              <AlertCircle className="w-3 h-3" /> {t('auto.Qarz')}
                             </span>
                           )}
                           {hasLabWarning && (
-                            <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[10px] font-black rounded-full border border-amber-100 dark:border-amber-900/30" title="Lab buyurtma muddati o'tgan">
-                              <FlaskConical className="w-3 h-3" /> Lab
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[10px] font-black rounded-full border border-amber-100 dark:border-amber-900/30" title={t('auto.Lab buyurtma muddati o\'tgan')}>
+                              <FlaskConical className="w-3 h-3" /> {t('auto.Lab')}
                             </span>
                           )}
                           {!hasDebt && !hasLabWarning && (
@@ -472,7 +472,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                                 title="Keldi — tasdiqlash"
                                 className="flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold rounded-lg transition-colors"
                               >
-                                <UserCheck className="w-3 h-3" /> Keldi
+                                <UserCheck className="w-3 h-3" /> {t('auto.Keldi')}
                               </button>
                             )}
                             <button
@@ -480,14 +480,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                               title={t('dashboard.moveDay')}
                               className="flex items-center gap-1 px-2 py-1 bg-primary-50 hover:bg-primary-100 dark:bg-primary-900/20 dark:hover:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-[10px] font-bold rounded-lg transition-colors"
                             >
-                              <CalendarClock className="w-3 h-3" /> Ko'chir
+                              <CalendarClock className="w-3 h-3" /> {t('auto.Ko\'chir')}
                             </button>
                             <button
                               onClick={() => onUpdateAppointment(app.id, { status: 'Cancelled' })}
                               title={t('dashboard.cancel')}
                               className="flex items-center gap-1 px-2 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 text-[10px] font-bold rounded-lg transition-colors"
                             >
-                              <XCircle className="w-3 h-3" /> Bekor
+                              <XCircle className="w-3 h-3" /> {t('auto.Bekor')}
                             </button>
                           </div>
                         )}
@@ -629,7 +629,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                           onClick={() => openDebtPayment(tx)}
                           className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
                         >
-                          <CreditCard className="w-3.5 h-3.5" /> To'lov
+                          <CreditCard className="w-3.5 h-3.5" /> {t('auto.To\'lov')}
                         </button>
                       )}
                     </div>
@@ -693,7 +693,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                           onClick={() => openPaymentForAppointment(app)}
                           className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
                         >
-                          <CreditCard className="w-3.5 h-3.5" /> Yopish
+                          <CreditCard className="w-3.5 h-3.5" /> {t('auto.Yopish')}
                         </button>
                       )}
                     </div>
@@ -723,7 +723,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-6">
           <Card className="p-8 lg:col-span-2 rounded-[2rem]">
             <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">So'nggi <span className="text-primary">Qabullar</span></h3>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white">{t('auto.So\'nggi')} <span className="text-primary">{t('auto.Qabullar')}</span></h3>
             </div>
 
             <div className="overflow-x-auto">
@@ -735,7 +735,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDoctor')}</th>
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colService')}</th>
                     <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colStatus')}</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Baho</th>
+                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('auto.Baho')}</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm">
@@ -759,14 +759,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                             ))}
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400">Baholanmagan</span>
+                          <span className="text-xs text-gray-400">{t('auto.Baholanmagan')}</span>
                         )}
                       </td>
                     </tr>
                   ))}
                   {filteredAppointments.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center py-4 text-gray-500">Qabullar topilmadi</td>
+                      <td colSpan={6} className="text-center py-4 text-gray-500">{t('auto.Qabullar topilmadi')}</td>
                     </tr>
                   )}
                 </tbody>
@@ -845,7 +845,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 if (sortedActivities.length === 0) {
                   return (
                     <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                      Hozircha faoliyat yo'q
+                      {t('auto.Hozircha faoliyat yo\'q')}
                     </div>
                   );
                 }
@@ -916,13 +916,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 )}
                 {entered > 0 && remaining === 0 && (
                   <p className="text-xs text-success-600 dark:text-success font-medium mt-1.5">
-                    Qarz to'liq yopiladi
+                    {t('auto.Qarz to\'liq yopiladi')}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">To'lov usuli</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.To\'lov usuli')}</label>
                 <div className="flex gap-2 flex-wrap">
                   {INCOMING_PAYMENT_METHODS.map(m => (
                     <button
@@ -940,7 +940,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               </div>
 
               <div className="flex gap-2 pt-2">
-                <Button variant="secondary" className="flex-1" onClick={() => setPayingDebt(null)}>Bekor</Button>
+                <Button variant="secondary" className="flex-1" onClick={() => setPayingDebt(null)}>{t('auto.Bekor')}</Button>
                 <button
                   disabled={debtSaving || entered <= 0}
                   onClick={handleDebtPayment}

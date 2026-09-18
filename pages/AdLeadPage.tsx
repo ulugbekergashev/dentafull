@@ -1,3 +1,4 @@
+import { useLanguage } from '../context/LanguageContext';
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, Phone, User, AlertCircle, Loader2, ShieldCheck, Clock, Headphones } from 'lucide-react';
 import { API_URL } from '../services/api';
@@ -28,6 +29,7 @@ const COPY: Record<AdPlan, { badge: string; title: string; sub: string }> = {
 };
 
 const toDigits = (raw: string) => {
+
   let d = raw.replace(/\D/g, '');
   if (d.startsWith('998')) d = d.slice(3);
   return d.slice(0, 9);
@@ -50,6 +52,8 @@ const FIELD =
   'px-4 py-3.5 text-base text-slate-800 placeholder:text-slate-300 outline-none transition-all';
 
 export default function AdLeadPage({ plan }: AdLeadPageProps) {
+  const { t } = useLanguage();
+
   const copy = COPY[plan];
   const [name, setName] = useState('');
   const [digits, setDigits] = useState('');
@@ -99,7 +103,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900">Rahmat, {name.trim()}!</h1>
             <p className="text-base text-slate-500 leading-relaxed">
-              Arizangiz qabul qilindi. Tez orada <span className="font-bold text-slate-700 whitespace-nowrap">{formatPhone(digits)}</span> raqamiga qo'ng'iroq qilamiz.
+              {t('auto.Arizangiz qabul qilindi. Tez orada')} <span className="font-bold text-slate-700 whitespace-nowrap">{formatPhone(digits)}</span> raqamiga qo'ng'iroq qilamiz.
             </p>
           </div>
         ) : (
@@ -113,7 +117,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
             <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
               <div className="space-y-1.5">
                 <label htmlFor="ad-name" className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <User className="w-4 h-4 text-primary-500" /> Ismingiz
+                  <User className="w-4 h-4 text-primary-500" /> {t('auto.Ismingiz')}
                 </label>
                 <input
                   id="ad-name"
@@ -129,7 +133,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
 
               <div className="space-y-1.5">
                 <label htmlFor="ad-phone" className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <Phone className="w-4 h-4 text-primary-500" /> Telefon raqamingiz
+                  <Phone className="w-4 h-4 text-primary-500" /> {t('auto.Telefon raqamingiz')}
                 </label>
                 <input
                   id="ad-phone"
@@ -168,7 +172,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
               >
                 {status === 'loading' ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" /> Yuborilmoqda...
+                    <Loader2 className="w-5 h-5 animate-spin" /> {t('auto.Yuborilmoqda...')}
                   </>
                 ) : (
                   'Qo\'ng\'iroq qilishingizni kutaman'

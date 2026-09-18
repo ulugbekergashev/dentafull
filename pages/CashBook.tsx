@@ -113,16 +113,19 @@ const Tile: React.FC<{
     );
 };
 
-const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => (
+const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
+  const { t } = useLanguage();
+  return (
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <Tile label="Jami tushum" value={totals.gross} icon={Coins} hint={`${totals.paymentCount} ta to'lov`} />
-        <Tile label="Naqd" value={totals.cashIn} icon={Banknote} tone="cash" />
-        <Tile label="Naqdsiz" value={totals.nonCashIn} icon={CreditCard} tone="card" hint="Karta / Click / o'tkazma" />
-        <Tile label="Xarajat" value={totals.expenseTotal} icon={TrendingDown} tone="expense" hint={`naqd: ${num(totals.cashExpense)}`} />
-        <Tile label="Kassada qoldi" value={totals.drawer} icon={Wallet} tone="drawer" hint="naqd yashik" />
-        <Tile label="Qarzga yozildi" value={totals.unpaid} icon={AlertCircle} hint="to'lanmagan" />
+        <Tile label={t(`auto.Jami tushum`)} value={totals.gross} icon={Coins} hint={`${totals.paymentCount} ta to'lov`} />
+        <Tile label={t(`auto.Naqd`)} value={totals.cashIn} icon={Banknote} tone="cash" />
+        <Tile label={t(`auto.Naqdsiz`)} value={totals.nonCashIn} icon={CreditCard} tone="card" hint="Karta / Click / o'tkazma" />
+        <Tile label={t(`auto.Xarajat`)} value={totals.expenseTotal} icon={TrendingDown} tone="expense" hint={`naqd: ${num(totals.cashExpense)}`} />
+        <Tile label={t(`auto.Kassada qoldi`)} value={totals.drawer} icon={Wallet} tone="drawer" hint="naqd yashik" />
+        <Tile label={t(`auto.Qarzga yozildi`)} value={totals.unpaid} icon={AlertCircle} hint="to'lanmagan" />
     </div>
 );
+};
 
 // ── To'lov usullari qatori ───────────────────────────────────────────────────
 const MethodStrip: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
@@ -163,24 +166,25 @@ const ClosureChip: React.FC<{
     status?: ReturnType<typeof getClosureStatus>;
     hasActivity: boolean;
 }> = ({ status, hasActivity }) => {
+  const { t } = useLanguage();
     if (!status?.closed) {
         if (!hasActivity) return <span className="text-gray-200 dark:text-gray-700">·</span>;
-        return <span className="text-[10px] font-bold text-gray-400 uppercase">ochiq</span>;
+        return <span className="text-[10px] font-bold text-gray-400 uppercase">{t(`auto.ochiq`)}</span>;
     }
     if (status.changedAfterClose) {
         return (
-            <span title="Yopilgandan keyin o'zgargan" className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+            <span title={t(`auto.Yopilgandan keyin o'zgargan`)} className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
                 <AlertCircle className="w-3 h-3" /> o'zgardi
             </span>
         );
     }
     const exact = Math.abs(status.closure?.difference || 0) < 1;
     return exact ? (
-        <span title="Kassa to'g'ri keldi" className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+        <span title={t(`auto.Kassa to'g'ri keldi`)} className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
             <Check className="w-3 h-3" /> yopildi
         </span>
     ) : (
-        <span title="Farq bilan yopilgan" className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400">
+        <span title={t(`auto.Farq bilan yopilgan`)} className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400">
             <Lock className="w-3 h-3" /> {(status.closure!.difference > 0 ? '+' : '')}{num(status.closure!.difference)}
         </span>
     );
@@ -224,7 +228,8 @@ const CashFlowPanel: React.FC<{
     closure: ReturnType<typeof getClosureStatus>;
     onClose?: () => void;
 }> = ({ day, closure, onClose }) => {
-    const t = day.totals;
+  const { t } = useLanguage();
+    const totals = day.totals;
     // Nol qadamlar ko'rsatilmaydi — "−0" chirkin va ma'nosiz
     const steps: React.ReactNode[] = [];
     const push = (node: React.ReactNode, op: string) => {
@@ -235,18 +240,18 @@ const CashFlowPanel: React.FC<{
     push(
         <FlowStep
             key="opening"
-            label="Kun boshida"
-            value={t.openingCash}
+            label={t(`auto.Kun boshida`)}
+            value={totals.openingCash}
             hint={day.openingAnchorDate ? `${formatDateLabel(day.openingAnchorDate)} yopilishidan` : 'hali yopilmagan'}
         />, ''
     );
-    if (t.cashIn) push(<FlowStep key="in" label="Naqd tushum" value={t.cashIn} sign="+" tone="in" />, '+');
-    if (t.cashInManual) push(<FlowStep key="manual" label="Kassaga solindi" value={t.cashInManual} sign="+" tone="in" />, '+');
-    if (t.cashExpense) push(<FlowStep key="exp" label="Naqd xarajat" value={t.cashExpense} sign="−" tone="out" />, '−');
-    if (t.refundCash) push(<FlowStep key="ref" label="Qaytarildi" value={t.refundCash} sign="−" tone="out" />, '−');
-    if (t.encashment) push(<FlowStep key="enc" label="Inkassatsiya" value={t.encashment} sign="−" tone="move" />, '−');
+    if (totals.cashIn) push(<FlowStep key="in" label={t(`auto.Naqd tushum`)} value={totals.cashIn} sign="+" tone="in" />, '+');
+    if (totals.cashInManual) push(<FlowStep key="manual" label={t(`auto.Kassaga solindi`)} value={totals.cashInManual} sign="+" tone="in" />, '+');
+    if (totals.cashExpense) push(<FlowStep key="exp" label={t(`auto.Naqd xarajat`)} value={totals.cashExpense} sign="−" tone="out" />, '−');
+    if (totals.refundCash) push(<FlowStep key="ref" label={t(`auto.Qaytarildi`)} value={totals.refundCash} sign="−" tone="out" />, '−');
+    if (totals.encashment) push(<FlowStep key="enc" label={t(`auto.Inkassatsiya`)} value={totals.encashment} sign="−" tone="move" />, '−');
 
-    const quiet = !t.cashIn && !t.cashExpense && !t.encashment && !t.refundCash && !t.cashInManual;
+    const quiet = !totals.cashIn && !totals.cashExpense && !totals.encashment && !totals.refundCash && !totals.cashInManual;
     const diff = closure.currentDifference;
     const exact = Math.abs(diff) < 1;
 
@@ -261,7 +266,7 @@ const CashFlowPanel: React.FC<{
                     {quiet ? (
                         <div className="flex items-baseline gap-3">
                             <FlowStep
-                                label="Kun boshida"
+                                label={t(`auto.Kun boshida`)}
                                 value={t.openingCash}
                                 hint={day.openingAnchorDate ? `${formatDateLabel(day.openingAnchorDate)} yopilishidan` : undefined}
                             />
@@ -275,22 +280,22 @@ const CashFlowPanel: React.FC<{
                         </div>
                     )}
 
-                    {(t.nonCashIn > 0 || t.nonCashExpense > 0) && (
+                    {(totals.nonCashIn > 0 || totals.nonCashExpense > 0) && (
                         <div className="mt-5 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700">
                             <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                                 <CreditCard className="w-3.5 h-3.5" />
                                 Naqdsiz (hisob raqam) — yashikda emas
                             </p>
                             <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
-                                <FlowStep label="Tushdi" value={t.nonCashIn} sign="+" tone="in" />
+                                <FlowStep label={t(`auto.Tushdi`)} value={totals.nonCashIn} sign="+" tone="in" />
                                 {t.nonCashExpense > 0 && (
                                     <>
                                         <Operator>−</Operator>
-                                        <FlowStep label="Chiqdi" value={t.nonCashExpense} sign="−" tone="out" />
+                                        <FlowStep label={t(`auto.Chiqdi`)} value={t.nonCashExpense} sign="−" tone="out" />
                                     </>
                                 )}
                                 <Operator>=</Operator>
-                                <FlowStep label="Hisobga qo'shildi" value={t.nonCashIn - t.nonCashExpense} />
+                                <FlowStep label={t(`auto.Hisobga qo'shildi`)} value={t.nonCashIn - t.nonCashExpense} />
                             </div>
                         </div>
                     )}
@@ -704,18 +709,22 @@ export const CashBook: React.FC<CashBookProps> = ({
     // Kassirning kun oxiridagi asosiy savoli: kimdan pul olinmadi.
     // Ikki manba: qarzga yozilgan to'lovlar va to'lov yozilmagan yakunlangan qabullar.
     const unpaidItems = useMemo(() => {
+  const { t } = useLanguage();
         const pendingTx = transactions
-            .filter(t => t && (t.date || '').split('T')[0] === date && t.status !== 'Paid')
-            .map(t => ({
+            .filter(tx => {
+
+  return tx && (tx.date || '').split('T')[0] === date && tx.status !== 'Paid';
+})
+            .map(tx => ({
                 kind: 'debt' as const,
-                id: t.id,
-                patientName: t.patientName,
-                patientId: t.patientId,
-                doctorName: t.doctorName || '',
-                doctorId: t.doctorId,
-                service: t.service || '',
-                amount: t.amount || 0,
-                tx: t,
+                id: tx.id,
+                patientName: tx.patientName,
+                patientId: tx.patientId,
+                doctorName: tx.doctorName || '',
+                doctorId: tx.doctorId,
+                service: tx.service || '',
+                amount: tx.amount || 0,
+                tx: tx,
             }));
 
         const unpaidAppts = appointments
@@ -859,16 +868,22 @@ export const CashBook: React.FC<CashBookProps> = ({
                             {onAddCashMovement && (
                                 <>
                                     <button
-                                        onClick={() => openMovement('Encashment')}
-                                        title="Kassadan pul olindi"
+                                        onClick={() => {
+  const { t } = useLanguage();
+  return openMovement('Encashment');
+}}
+                                        title={t(`auto.Kassadan pul olindi`)}
                                         className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
                                     >
                                         <ArrowDownToLine className="w-3.5 h-3.5" />
                                         Inkassatsiya
                                     </button>
                                     <button
-                                        onClick={() => openMovement('Refund')}
-                                        title="Bemorga pul qaytarish"
+                                        onClick={() => {
+  const { t } = useLanguage();
+  return openMovement('Refund');
+}}
+                                        title={t(`auto.Bemorga pul qaytarish`)}
                                         className="flex items-center gap-1.5 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
                                     >
                                         <Undo2 className="w-3.5 h-3.5" />
@@ -901,7 +916,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             <button
                                 onClick={() => changeDate(shiftDate(date, -1))}
                                 className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                aria-label="Oldingi kun"
+                                aria-label={t(`auto.Oldingi kun`)}
                             >
                                 <ChevronLeft className="w-4 h-4 text-gray-500" />
                             </button>
@@ -914,7 +929,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             <button
                                 onClick={() => changeDate(shiftDate(date, 1))}
                                 className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                aria-label="Keyingi kun"
+                                aria-label={t(`auto.Keyingi kun`)}
                             >
                                 <ChevronRight className="w-4 h-4 text-gray-500" />
                             </button>
@@ -927,7 +942,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             <button
                                 onClick={() => setMonth(shiftMonth(month, -1))}
                                 className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                aria-label="Oldingi oy"
+                                aria-label={t(`auto.Oldingi oy`)}
                             >
                                 <ChevronLeft className="w-4 h-4 text-gray-500" />
                             </button>
@@ -940,7 +955,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             <button
                                 onClick={() => setMonth(shiftMonth(month, 1))}
                                 className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                aria-label="Keyingi oy"
+                                aria-label={t(`auto.Keyingi oy`)}
                             >
                                 <ChevronRight className="w-4 h-4 text-gray-500" />
                             </button>
@@ -969,6 +984,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                 {view === 'day' && multiShift && (
                     <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
                         {shiftWindows.map(w => {
+  const { t } = useLanguage();
                             const active = w.shift === activeShift;
                             return (
                                 <button
@@ -980,7 +996,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                 >
                                     {w.shift}-smena
                                     {w.isOpen
-                                        ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="ochiq" />
+                                        ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title={t(`auto.ochiq`)} />
                                         : <Check className="w-3 h-3 text-emerald-500" />}
                                 </button>
                             );
@@ -1120,7 +1136,9 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </p>
                         ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {day.rows.map(row => (
+                                {day.rows.map(row => {
+  const { t } = useLanguage();
+  return (
                                     <li key={row.id} className="px-5 py-3 flex items-center justify-between gap-3">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -1145,7 +1163,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         <div className="flex items-center gap-1 shrink-0">
                                             <button
                                                 onClick={() => setReceiptTx(transactions.find(t => t.id === row.id) || null)}
-                                                title="Chek"
+                                                title={t(`auto.Chek`)}
                                                 className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                             >
                                                 <Printer className="w-4 h-4" />
@@ -1156,7 +1174,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                         const tx = transactions.find(t => t.id === row.id);
                                                         if (tx) openEdit(tx);
                                                     }}
-                                                    title="Tuzatish"
+                                                    title={t(`auto.Tuzatish`)}
                                                     className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                                 >
                                                     <Pencil className="w-4 h-4" />
@@ -1165,7 +1183,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             {onDeleteTransaction && (
                                                 <button
                                                     onClick={() => setDeletingRow(row)}
-                                                    title="O'chirish"
+                                                    title={t(`auto.O'chirish`)}
                                                     className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
@@ -1173,7 +1191,8 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             )}
                                         </div>
                                     </li>
-                                ))}
+                                );
+})}
                             </ul>
                         )}
                     </Card>
@@ -1200,7 +1219,9 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </div>
                         ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {unpaidItems.map(item => (
+                                {unpaidItems.map(item => {
+  const { t } = useLanguage();
+  return (
                                     <li key={`${item.kind}-${item.id}`} className="px-5 py-3 flex items-center justify-between gap-3">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -1235,7 +1256,8 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             To'lash
                                         </button>
                                     </li>
-                                ))}
+                                );
+})}
                             </ul>
                         )}
                     </Card>
@@ -1300,13 +1322,19 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     {onAddCashMovement && (
                                         <div className="flex items-center justify-center gap-3 mt-3">
                                             <button
-                                                onClick={() => openMovement('Encashment')}
+                                                onClick={() => {
+  const { t } = useLanguage();
+  return openMovement('Encashment');
+}}
                                                 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
                                             >
                                                 Inkassatsiya →
                                             </button>
                                             <button
-                                                onClick={() => openMovement('Refund')}
+                                                onClick={() => {
+  const { t } = useLanguage();
+  return openMovement('Refund');
+}}
                                                 className="text-xs font-bold text-gray-500 dark:text-gray-400 hover:underline"
                                             >
                                                 Qaytarish →
@@ -1317,6 +1345,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {day.movements.map(m => {
+  const { t } = useLanguage();
                                     const isOut = m.type === 'Encashment' || m.type === 'Refund';
                                     return (
                                         <li key={m.id} className="px-5 py-3 flex items-center justify-between gap-3">
@@ -1338,7 +1367,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             {onDeleteCashMovement && (
                                                 <button
                                                     onClick={() => onDeleteCashMovement(m.id).catch(() => { })}
-                                                    title="O'chirish"
+                                                    title={t(`auto.O'chirish`)}
                                                     className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shrink-0"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
@@ -1361,7 +1390,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                         >
                             <History className="w-4 h-4 text-gray-400" />
                             <h3 className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.auditTrail')}</h3>
-                            <span className="text-xs text-gray-400">kim nimani o'chirgan yoki tuzatgan</span>
+                            <span className="text-xs text-gray-400">{t(`auto.kim nimani o'chirgan yoki tuzatgan`)}</span>
                             <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto transition-transform ${auditOpen ? 'rotate-180' : ''}`} />
                         </button>
                         {auditOpen && (
@@ -1410,7 +1439,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
                         <CalendarDays className="w-4 h-4 text-gray-400" />
                         <h3 className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.dailyBook')}</h3>
-                        <span className="text-xs text-gray-400">kunni bosing — o'sha kun varag'i ochiladi</span>
+                        <span className="text-xs text-gray-400">{t(`auto.kunni bosing — o'sha kun varag'i ochiladi`)}</span>
                     </div>
                     <div className="overflow-auto max-h-[70vh]">
                         <table className="w-full text-sm">
@@ -1431,7 +1460,9 @@ export const CashBook: React.FC<CashBookProps> = ({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {monthData.days.map(d => (
+                                {monthData.days.map(d => {
+  const { t } = useLanguage();
+  return (
                                     <tr
                                         key={d.date}
                                         onClick={() => openDay(d.date)}
@@ -1440,7 +1471,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     >
                                         <td className="px-4 py-2.5 font-semibold text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10 whitespace-nowrap">
                                             {String(d.day).padStart(2, '0')}
-                                            {d.date === today && <span className="ml-2 text-[10px] text-primary-600 font-bold">bugun</span>}
+                                            {d.date === today && <span className="ml-2 text-[10px] text-primary-600 font-bold">{t(`auto.bugun`)}</span>}
                                         </td>
                                         <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
                                             {d.totals.cashIn ? num(d.totals.cashIn) : '—'}
@@ -1466,7 +1497,8 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             </td>
                                         ))}
                                     </tr>
-                                ))}
+                                );
+})}
                             </tbody>
                             <tfoot className="bg-gray-50 dark:bg-gray-700 border-t-2 border-gray-200 dark:border-gray-600">
                                 <tr>
@@ -1524,22 +1556,22 @@ export const CashBook: React.FC<CashBookProps> = ({
             >
                 <div className="space-y-4">
                     <Select
-                        label="Kategoriya"
+                        label={t(`auto.Kategoriya`)}
                         value={expenseForm.category}
                         onChange={e => setExpenseForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))}
                         options={KASSA_EXPENSE_CATEGORIES.map(c => ({ value: c, label: EXPENSE_CATEGORY_LABELS[c] }))}
                     />
 
                     <Input
-                        label="Nomi *"
+                        label={t(`auto.Nomi *`)}
                         value={expenseForm.title}
                         onChange={e => setExpenseForm(f => ({ ...f, title: e.target.value }))}
-                        placeholder="Masalan: non, pamidor / taksi / suv"
+                        placeholder={t(`auto.Masalan: non, pamidor / taksi / suv`)}
                         autoFocus
                     />
 
                     <Input
-                        label="Summa (UZS) *"
+                        label={t(`auto.Summa (UZS) *`)}
                         type="number"
                         value={expenseForm.amount}
                         onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value }))}
@@ -1616,7 +1648,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
 
                     <Input
-                        label="Summa (UZS) *"
+                        label={t(`auto.Summa (UZS) *`)}
                         type="number"
                         value={movementForm.amount}
                         onChange={e => setMovementForm(f => ({ ...f, amount: e.target.value }))}
@@ -1637,7 +1669,7 @@ export const CashBook: React.FC<CashBookProps> = ({
 
                     {movementType === 'Refund' && patients.length > 0 && (
                         <Select
-                            label="Bemor (ixtiyoriy)"
+                            label={t(`auto.Bemor (ixtiyoriy)`)}
                             value={movementForm.patientId}
                             onChange={e => setMovementForm(f => ({ ...f, patientId: e.target.value }))}
                             options={[
@@ -1682,7 +1714,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             <Modal
                 isOpen={deletingRow !== null}
                 onClose={() => setDeletingRow(null)}
-                title="To'lovni o'chirish"
+                title={t(`auto.To'lovni o'chirish`)}
                 className="max-w-md"
             >
                 <div className="space-y-4">
@@ -1718,7 +1750,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             <Modal
                 isOpen={payingDebt !== null}
                 onClose={() => setPayingDebt(null)}
-                title="Qarzni yopish"
+                title={t(`auto.Qarzni yopish`)}
                 className="max-w-md"
             >
                 <div className="space-y-4">
@@ -1731,7 +1763,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
 
                     <Input
-                        label="To'lanayotgan summa (UZS)"
+                        label={t(`auto.To'lanayotgan summa (UZS)`)}
                         type="number"
                         value={debtAmount}
                         onChange={e => setDebtAmount(e.target.value)}
@@ -1786,7 +1818,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             <Modal
                 isOpen={editingTx !== null}
                 onClose={() => setEditingTx(null)}
-                title="To'lovni tuzatish"
+                title={t(`auto.To'lovni tuzatish`)}
                 className="max-w-md"
             >
                 <div className="space-y-4">
@@ -1800,7 +1832,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
 
                     <Input
-                        label="Summa (UZS) *"
+                        label={t(`auto.Summa (UZS) *`)}
                         type="number"
                         value={editForm.amount}
                         onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))}
@@ -1881,7 +1913,7 @@ export const CashBook: React.FC<CashBookProps> = ({
 
                     <div>
                         <Input
-                            label="Kassada haqiqatda sanalgan naqd (UZS)"
+                            label={t(`auto.Kassada haqiqatda sanalgan naqd (UZS)`)}
                             type="number"
                             value={countedInput}
                             onChange={e => setCountedInput(e.target.value)}
@@ -1928,7 +1960,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </p>
                             {expectedCard > 0 && (
                                 <ReconRow
-                                    label="Terminal (Z-hisobot)"
+                                    label={t(`auto.Terminal (Z-hisobot)`)}
                                     expected={expectedCard}
                                     value={countedCardInput}
                                     onChange={setCountedCardInput}
@@ -1937,7 +1969,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             )}
                             {expectedClick > 0 && (
                                 <ReconRow
-                                    label="Click / Payme"
+                                    label={t(`auto.Click / Payme`)}
                                     expected={expectedClick}
                                     value={countedClickInput}
                                     onChange={setCountedClickInput}
@@ -1956,7 +1988,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             value={closeNote}
                             onChange={e => setCloseNote(e.target.value)}
                             rows={2}
-                            placeholder="Masalan: 50 000 ertaga topshiriladi"
+                            placeholder={t(`auto.Masalan: 50 000 ertaga topshiriladi`)}
                             className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
                         />
                     </div>

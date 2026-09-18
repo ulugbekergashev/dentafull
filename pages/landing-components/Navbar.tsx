@@ -1,3 +1,4 @@
+import { useLanguage } from '../../context/LanguageContext';
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
@@ -13,6 +14,8 @@ interface NavbarProps {
 }
 
 export default function Navbar({ onOpenDemoModal, scrollToSection }: NavbarProps) {
+    const { t } = useLanguage();
+
   const navigate = useNavigate();
   const { c, lang, setLang } = useLandingCopy();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -60,7 +63,7 @@ export default function Navbar({ onOpenDemoModal, scrollToSection }: NavbarProps
           >
             <LogoMark className="w-9 h-9 group-hover:scale-105 transition-transform" />
             <span className="text-lg font-extrabold tracking-tight text-slate-900">
-              Denta<span className="text-primary-600">CRM</span>
+              {t('auto.Denta')}<span className="text-primary-600">{t('auto.CRM')}</span>
             </span>
           </a>
 

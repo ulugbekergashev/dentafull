@@ -1,3 +1,4 @@
+import { useLanguage } from '../../context/LanguageContext';
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Phone, Send, Instagram, Mail, Clock, MapPin } from "lucide-react";
@@ -11,6 +12,8 @@ interface FooterProps {
 }
 
 export default function Footer({ scrollToSection }: FooterProps) {
+    const { t } = useLanguage();
+
   const navigate = useNavigate();
   const { c, lang, setLang } = useLandingCopy();
 
@@ -50,7 +53,7 @@ export default function Footer({ scrollToSection }: FooterProps) {
             <div className="flex items-center gap-2">
               <LogoMark className="w-9 h-9" />
               <span className="text-lg font-extrabold text-slate-900">
-                Denta<span className="text-primary-600">CRM</span>
+                {t('auto.Denta')}<span className="text-primary-600">{t('auto.CRM')}</span>
               </span>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed max-w-sm">{c.footer.desc}</p>

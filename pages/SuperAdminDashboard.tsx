@@ -979,7 +979,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <Card className="p-6">
                   <div className="flex justify-between items-start">
                      <div>
-                        <p className="text-gray-500 dark:text-gray-400 font-medium">Muddati Tugayotgan</p>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">{t('auto.Muddati Tugayotgan')}</p>
                         <h3 className="text-3xl font-bold mt-2 text-orange-600">{expiringSoonCount}</h3>
                         <p className="text-xs text-gray-500 mt-2">3 kun ichida tugaydiganlar</p>
                      </div>
@@ -1066,7 +1066,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thPlan')}</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thExpiry')}</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thStatus')}</th>
-                           {!salesAgentMode && <th className="p-4 font-medium text-gray-500">Sotuvchi</th>}
+                           {!salesAgentMode && <th className="p-4 font-medium text-gray-500">{t('auto.Sotuvchi')}</th>}
                            <th className="p-4 font-medium text-gray-500 text-right">{t('superAdmin.clinics.thAction')}</th>
                         </tr>
                      </thead>
@@ -1104,7 +1104,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                              <button
                                                 type="button"
                                                 onClick={() => handleCopy(clinic.username, `login-${clinic.id}`)}
-                                                title="Login'dan nusxa olish"
+                                                title={t('auto.Login\'dan nusxa olish')}
                                                 className="p-1 rounded text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                              >
                                                 {copiedKey === `login-${clinic.id}`
@@ -1119,7 +1119,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                                 href={telegramLinkFor(clinic.phone)!}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                title="Telegramda ochish"
+                                                title={t('auto.Telegramda ochish')}
                                                 className="mt-0.5 inline-flex items-center gap-1 text-xs text-sky-600 dark:text-sky-400 hover:underline"
                                              >
                                                 <Send className="w-3 h-3" />
@@ -1141,7 +1141,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                        </span>
                                        {clinic.subscriptionType === 'Trial' && (
                                           <span className="ml-2 px-2 py-1 rounded-md text-xs font-bold uppercase bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">
-                                             TRIAL
+                                             {t('auto.TRIAL')}
                                           </span>
                                        )}
                                     </td>
@@ -1200,7 +1200,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                            disabled={currentPage === 1}
                         >
-                           Ortga
+                           {t('auto.Ortga')}
                         </Button>
                         <Button
                            variant="secondary"
@@ -1208,7 +1208,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                            disabled={currentPage === totalPages}
                         >
-                           Oldinga
+                           {t('auto.Oldinga')}
                         </Button>
                      </div>
                   </div>
@@ -1222,7 +1222,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                   <div>
                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bloklangan {t('superAdmin.tabs.clinics')} (Savat)</h3>
-                     <p className="text-sm text-gray-500">Ushbu klinikalar bloklangan va tushum hisobiga kirmaydi.</p>
+                     <p className="text-sm text-gray-500">{t('auto.Ushbu klinikalar bloklangan va tushum hisobiga kirmaydi.')}</p>
                   </div>
 
                   <div className="flex flex-1 w-full md:w-auto gap-3">
@@ -1243,7 +1243,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <tr>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thName')}</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thPlan')}</th>
-                           <th className="p-4 font-medium text-gray-500">Sana</th>
+                           <th className="p-4 font-medium text-gray-500">{t('auto.Sana')}</th>
                            <th className="p-4 font-medium text-gray-500">{t('superAdmin.clinics.thStatus')}</th>
                            <th className="p-4 font-medium text-gray-500 text-right">{t('superAdmin.clinics.thAction')}</th>
                         </tr>
@@ -1252,7 +1252,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         {paginatedClinics.length === 0 ? (
                            <tr>
                               <td colSpan={5} className="p-8 text-center text-gray-500">
-                                 Bloklangan klinikalar yo'q
+                                 {t('auto.Bloklangan klinikalar yo\'q')}
                               </td>
                            </tr>
                         ) : (
@@ -1304,7 +1304,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                            disabled={currentPage === 1}
                         >
-                           Ortga
+                           {t('auto.Ortga')}
                         </Button>
                         <Button
                            variant="secondary"
@@ -1312,7 +1312,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                            disabled={currentPage === totalPages}
                         >
-                           Oldinga
+                           {t('auto.Oldinga')}
                         </Button>
                      </div>
                   </div>
@@ -1394,13 +1394,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                   <div>
                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">Sotuvchilar (Resellers)</h3>
-                     <p className="text-sm text-gray-500">Tizimni klinikalar uchun targ'ib qiluvchi sotuvchilarni boshqarish bo'limi</p>
+                     <p className="text-sm text-gray-500">{t('auto.Tizimni klinikalar uchun targ\'ib qiluvchi sotuvchilarni boshqarish bo\'limi')}</p>
                   </div>
                   <Button onClick={() => {
                      setSalesError(null);
                      setIsAddSalesModalOpen(true);
                   }}>
-                     <Plus className="w-4 h-4 mr-2" /> Yangi Sotuvchi Qo'shish
+                     <Plus className="w-4 h-4 mr-2" /> {t('auto.Yangi Sotuvchi Qo\'shish')}
                   </Button>
                </div>
 
@@ -1408,19 +1408,19 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <table className="w-full text-left text-sm">
                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                           <th className="p-4 font-medium text-gray-500">Sotuvchi</th>
+                           <th className="p-4 font-medium text-gray-500">{t('auto.Sotuvchi')}</th>
                            <th className="p-4 font-medium text-gray-500">Login (Username)</th>
-                           <th className="p-4 font-medium text-gray-500">Telefon</th>
-                           <th className="p-4 font-medium text-gray-500 text-center">Biriktirilgan Klinikalar</th>
-                           <th className="p-4 font-medium text-gray-500">Yaratilgan Sana</th>
-                           <th className="p-4 font-medium text-gray-500">Holat</th>
+                           <th className="p-4 font-medium text-gray-500">{t('auto.Telefon')}</th>
+                           <th className="p-4 font-medium text-gray-500 text-center">{t('auto.Biriktirilgan Klinikalar')}</th>
+                           <th className="p-4 font-medium text-gray-500">{t('auto.Yaratilgan Sana')}</th>
+                           <th className="p-4 font-medium text-gray-500">{t('auto.Holat')}</th>
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {salesAgents.length === 0 ? (
                            <tr>
                               <td colSpan={6} className="p-8 text-center text-gray-500">
-                                 Sotuvchilar mavjud emas
+                                 {t('auto.Sotuvchilar mavjud emas')}
                               </td>
                            </tr>
                         ) : (
@@ -1488,12 +1488,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         onClick={() => { setDemoLoading(true); api.demoRequests.getAll().then(setDemoRequests).finally(() => setDemoLoading(false)); }}
                         className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                      >
-                        Yangilash
+                        {t('auto.Yangilash')}
                      </button>
                   </div>
                </div>
                {demoLoading ? (
-                  <Card className="p-10 text-center text-gray-400">Yuklanmoqda...</Card>
+                  <Card className="p-10 text-center text-gray-400">{t('auto.Yuklanmoqda...')}</Card>
                ) : visibleDemoRequests.length === 0 ? (
                   <Card className="p-10 text-center">
                      <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -1612,7 +1612,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     </span>
                                  ) : (
                                     <span className="flex items-center gap-1.5 text-xs text-gray-400 group-hover/note:text-primary-600 dark:group-hover/note:text-primary-400">
-                                       <StickyNote className="w-3.5 h-3.5" /> Izoh qo'shish
+                                       <StickyNote className="w-3.5 h-3.5" /> {t('auto.Izoh qo\'shish')}
                                     </span>
                                  )}
                               </button>
@@ -1628,7 +1628,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  {leadHint === req.id && (
                                     <span className="absolute -mt-9 text-[11px] px-2 py-1 rounded-lg
                                                      bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-                                       Avval sotuvchi tanlang
+                                       {t('auto.Avval sotuvchi tanlang')}
                                     </span>
                                  )}
                                  <Users className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -1642,7 +1642,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                           : 'border-dashed border-gray-300 bg-transparent text-gray-500 dark:border-gray-600'
                                     }`}
                                  >
-                                    <option value="">Taqsimlanmagan</option>
+                                    <option value="">{t('auto.Taqsimlanmagan')}</option>
                                     {salesAgents.map((a: any) => (
                                        <option key={a.id} value={a.id}>{a.name}</option>
                                     ))}
@@ -1666,7 +1666,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  href={`tel:${req.phone}`}
                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-lg transition-colors"
                               >
-                                 <Phone className="w-3 h-3" /> Qo'ng'iroq
+                                 <Phone className="w-3 h-3" /> {t('auto.Qo\'ng\'iroq')}
                               </a>
                            </div>
                         </Card>
@@ -1689,9 +1689,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             <div className="space-y-4">
                <div>
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                     <BarChart3 className="w-5 h-5 text-primary-500" /> Lidlar statistikasi
+                     <BarChart3 className="w-5 h-5 text-primary-500" /> {t('auto.Lidlar statistikasi')}
                   </h3>
-                  <p className="text-sm text-gray-500">Lidlar oqimi, sotuvchilar bo'yicha taqsimot va tashqi manba sozlamasi</p>
+                  <p className="text-sm text-gray-500">{t('auto.Lidlar oqimi, sotuvchilar bo\'yicha taqsimot va tashqi manba sozlamasi')}</p>
                </div>
 
                {/* Sana oralig'i: kartalar, bosqichlar va sotuvchilar jadvali shunga qaraydi */}
@@ -1750,7 +1750,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
                {/* Bosqichlar bo'yicha */}
                <Card className="p-5">
-                  <h4 className="font-bold text-gray-900 dark:text-white mb-3">Bosqichlar bo'yicha</h4>
+                  <h4 className="font-bold text-gray-900 dark:text-white mb-3">{t('auto.Bosqichlar bo\'yicha')}</h4>
                   <div className="space-y-2">
                      {DEMO_STAGES.map(stage => {
                         const count = stage === 'Inbox' ? leadStats.unassigned : (leadStats.byStage[stage] || 0);
@@ -1772,15 +1772,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                {/* Sotuvchilar bo'yicha */}
                <Card className="overflow-hidden">
                   <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                     <h4 className="font-bold text-gray-900 dark:text-white">Sotuvchilar bo'yicha</h4>
-                     <p className="text-xs text-gray-500">Kimga nechta lid berilgan va ular qaysi bosqichda</p>
+                     <h4 className="font-bold text-gray-900 dark:text-white">{t('auto.Sotuvchilar bo\'yicha')}</h4>
+                     <p className="text-xs text-gray-500">{t('auto.Kimga nechta lid berilgan va ular qaysi bosqichda')}</p>
                   </div>
                   <div className="overflow-x-auto">
                      <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 dark:bg-gray-800">
                            <tr>
-                              <th className="p-3 font-medium text-gray-500">Sotuvchi</th>
-                              <th className="p-3 font-medium text-gray-500 text-right">Jami</th>
+                              <th className="p-3 font-medium text-gray-500">{t('auto.Sotuvchi')}</th>
+                              <th className="p-3 font-medium text-gray-500 text-right">{t('auto.Jami')}</th>
                               {['Contacted', 'NoAnswer', 'Thinking', 'Booked', 'Cancelled'].map(st => (
                                  <th key={st} className="p-3 font-medium text-gray-500 text-right whitespace-nowrap">{DEMO_STAGE_LABELS[st]}</th>
                               ))}
@@ -1797,7 +1797,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               </tr>
                            ))}
                            {leadStats.byAgent.length === 0 && (
-                              <tr><td colSpan={7} className="p-6 text-center text-gray-400">Sotuvchi qo'shilmagan</td></tr>
+                              <tr><td colSpan={7} className="p-6 text-center text-gray-400">{t('auto.Sotuvchi qo\'shilmagan')}</td></tr>
                            )}
                         </tbody>
                      </table>
@@ -1806,7 +1806,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
                {/* Lid manbalari sozlamasi — taxtadan shu yerga ko'chirildi */}
                <Card className="p-5">
-                  <h4 className="font-bold text-gray-900 dark:text-white mb-1">Lid manbalari</h4>
+                  <h4 className="font-bold text-gray-900 dark:text-white mb-1">{t('auto.Lid manbalari')}</h4>
                   <p className="text-xs text-gray-500 mb-3">Facebook sahifasi va tashqi manba (yuboraman.uz) kaliti</p>
                   <div className="flex flex-wrap items-center gap-2">
                      {!salesAgentMode && (
@@ -1819,7 +1819,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  onClick={handleDisconnectFB}
                                  className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                               >
-                                 Uzish
+                                 {t('auto.Uzish')}
                               </button>
                            </div>
                         ) : (
@@ -1828,7 +1828,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               disabled={isFBLoading}
                               className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
                            >
-                              <Facebook className="w-4 h-4" /> Facebook ulash
+                              <Facebook className="w-4 h-4" /> {t('auto.Facebook ulash')}
                            </button>
                         )
                      )}
@@ -1849,7 +1849,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   >
                      <Link2 className="w-4 h-4 text-primary-500 shrink-0" />
                      <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                        Tashqi lid manbasi
+                        {t('auto.Tashqi lid manbasi')}
                      </span>
                      {leadApiInfo?.apiKey && (
                         <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700
@@ -1870,22 +1870,22 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            <Link2 className="w-5 h-5 text-primary-500" />
                            <div>
                               <h4 className="font-bold text-gray-900 dark:text-white">Tashqi lid manbasi (yuboraman.uz)</h4>
-                              <p className="text-xs text-gray-500">Bu kalit orqali kelgan lidlar shu ro'yxatga tushadi</p>
+                              <p className="text-xs text-gray-500">{t('auto.Bu kalit orqali kelgan lidlar shu ro\'yxatga tushadi')}</p>
                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                            {leadApiInfo?.apiKey ? (
                               <>
                                  <Button variant="secondary" onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
-                                    <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} /> Yangilash
+                                    <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} /> {t('auto.Yangilash')}
                                  </Button>
                                  <Button variant="danger" onClick={handleRevokePlatformKey} disabled={leadApiLoading}>
-                                    <Trash2 className="w-4 h-4 mr-2" /> O'chirish
+                                    <Trash2 className="w-4 h-4 mr-2" /> {t('auto.O\'chirish')}
                                  </Button>
                               </>
                            ) : (
                               <Button onClick={handleGeneratePlatformKey} disabled={leadApiLoading}>
-                                 <KeyRound className="w-4 h-4 mr-2" /> Kalit yaratish
+                                 <KeyRound className="w-4 h-4 mr-2" /> {t('auto.Kalit yaratish')}
                               </Button>
                            )}
 
@@ -1895,7 +1895,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                qidirishni talab qilardi. */}
                            <button
                               onClick={() => setLeadApiOpen(false)}
-                              aria-label="Yopish"
+                              aria-label={t('auto.Yopish')}
                               className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm
                                          text-gray-500 dark:text-gray-400
                                          hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -1906,7 +1906,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         </div>
                      </div>
 
-                     <label className="block text-xs font-medium text-gray-500 mb-1">So'rov manzili</label>
+                     <label className="block text-xs font-medium text-gray-500 mb-1">{t('auto.So\'rov manzili')}</label>
                      <div className="flex gap-2 mb-3">
                         <code className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-900 dark:text-gray-100 break-all">
                            POST {leadApiInfo?.endpoint || '—'}
@@ -1949,7 +1949,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          )}
 
          {/* Lid izohi */}
-         <Modal isOpen={!!noteLead} onClose={() => setNoteLead(null)} title="Lid izohi">
+         <Modal isOpen={!!noteLead} onClose={() => setNoteLead(null)} title={t('auto.Lid izohi')}>
             <div className="space-y-3">
                <p className="text-sm text-gray-500 dark:text-gray-400">
                   <span className="font-semibold text-gray-900 dark:text-white">{noteLead?.name}</span>
@@ -1968,7 +1968,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 outline-none resize-y"
                />
                <div className="flex justify-end gap-2">
-                  <Button variant="secondary" onClick={() => setNoteLead(null)} disabled={noteSaving}>Bekor qilish</Button>
+                  <Button variant="secondary" onClick={() => setNoteLead(null)} disabled={noteSaving}>{t('auto.Bekor qilish')}</Button>
                   <Button onClick={saveLeadNote} disabled={noteSaving}>{noteSaving ? 'Saqlanmoqda...' : 'Saqlash'}</Button>
                </div>
             </div>
@@ -1984,17 +1984,17 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                </div>
 
                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4">
-                  <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2"><Lock className="w-4 h-4" /> Kirish Ma'lumotlari</h4>
+                  <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2"><Lock className="w-4 h-4" /> {t('auto.Kirish Ma\'lumotlari')}</h4>
                   <Input label={t('superAdmin.forms.login')} value={newClinicForm.username} onChange={e => setNewClinicForm({ ...newClinicForm, username: e.target.value })} required />
                   <div className="flex items-end gap-2">
-                     <Input label="Parol" type="text" value={newClinicForm.password} onChange={e => setNewClinicForm({ ...newClinicForm, password: e.target.value })} required className="flex-1" />
+                     <Input label={t('auto.Parol')} type="text" value={newClinicForm.password} onChange={e => setNewClinicForm({ ...newClinicForm, password: e.target.value })} required className="flex-1" />
                      <Button type="button" variant="secondary" onClick={generatePassword} className="mb-[1px]">{t('superAdmin.forms.generate')}</Button>
                   </div>
                </div>
 
                <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800 space-y-4">
                   <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
-                     <CreditCard className="w-4 h-4" /> Tarif va Narx
+                     <CreditCard className="w-4 h-4" /> {t('auto.Tarif va Narx')}
                   </h4>
 
                   <div className="flex gap-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -2108,11 +2108,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <p className="text-gray-500 text-sm">{selectedClinic.phone}</p>
                      </div>
                      <div className="text-right">
-                        <div className="text-xs text-gray-500">Joriy Holat</div>
+                        <div className="text-xs text-gray-500">{t('auto.Joriy Holat')}</div>
                         <div className="flex gap-2 justify-end">
                            <Badge status={editClinicData.status === 'Active' ? 'active' : 'blocked'} />
                            {editClinicData.subscriptionType === 'Trial' && (
-                              <span className="px-2 py-1 rounded-full text-xs font-bold bg-primary-100 text-primary-800">TRIAL</span>
+                              <span className="px-2 py-1 rounded-full text-xs font-bold bg-primary-100 text-primary-800">{t('auto.TRIAL')}</span>
                            )}
                         </div>
                      </div>
@@ -2121,7 +2121,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   {/* Subscription Management Section */}
                   <div className="space-y-4">
                      <h4 className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                        <Clock className="w-4 h-4" /> Muddatni Uzaytirish
+                        <Clock className="w-4 h-4" /> {t('auto.Muddatni Uzaytirish')}
                      </h4>
 
                      <div className="grid grid-cols-3 gap-3">
@@ -2130,27 +2130,27 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-200 transition-all"
                         >
                            <span className="font-bold text-lg text-primary-600">+1 Oy</span>
-                           <span className="text-xs text-gray-500">Uzaytirish</span>
+                           <span className="text-xs text-gray-500">{t('auto.Uzaytirish')}</span>
                         </button>
                         <button
                            onClick={() => handleExtendSubscription(3)}
                            className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-200 transition-all"
                         >
                            <span className="font-bold text-lg text-primary-600">+3 Oy</span>
-                           <span className="text-xs text-gray-500">Uzaytirish</span>
+                           <span className="text-xs text-gray-500">{t('auto.Uzaytirish')}</span>
                         </button>
                         <button
                            onClick={() => handleExtendSubscription(12)}
                            className="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:border-primary-200 transition-all"
                         >
                            <span className="font-bold text-lg text-primary-600">+1 Yil</span>
-                           <span className="text-xs text-gray-500">Uzaytirish</span>
+                           <span className="text-xs text-gray-500">{t('auto.Uzaytirish')}</span>
                         </button>
                      </div>
 
                      <div className="grid grid-cols-2 gap-4 pt-2">
                         <Input
-                           label="Tugash Sanasi"
+                           label={t('auto.Tugash Sanasi')}
                            type="date"
                            value={editClinicData.expiryDate}
                            onChange={(e) => setEditClinicData({ ...editClinicData, expiryDate: e.target.value })}
@@ -2164,7 +2164,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      </div>
 
                      <div className="pt-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Obuna Turi</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Obuna Turi')}</label>
                         <div className="flex gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                            <label className="flex items-center gap-2 cursor-pointer">
                               <input
@@ -2192,7 +2192,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
                   <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800 space-y-4">
                      <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
-                        <CreditCard className="w-4 h-4" /> Tarif va Narx
+                        <CreditCard className="w-4 h-4" /> {t('auto.Tarif va Narx')}
                      </h4>
 
                      <div className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -2204,14 +2204,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"
                         />
                         <label htmlFor="editUseCustomPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer flex-1">
-                           Maxsus narx belgilash
+                           {t('auto.Maxsus narx belgilash')}
                         </label>
                      </div>
 
                      {editClinicData.useCustomPrice && (
                         <div className="animate-fade-in">
                            <Input
-                              label="Maxsus oylik to'lov summasi"
+                              label={t('auto.Maxsus oylik to\'lov summasi')}
                               type="number"
                               value={editClinicData.customPrice}
                               onChange={e => setEditClinicData({ ...editClinicData, customPrice: parseInt(e.target.value) || 0 })}
@@ -2219,7 +2219,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               placeholder="Masalan: 800000"
                            />
                            <p className="text-xs text-gray-500 mt-1">
-                              Ushbu klinika uchun tarif narxi o'rniga shu summa hisoblanadi.
+                              {t('auto.Ushbu klinika uchun tarif narxi o\'rniga shu summa hisoblanadi.')}
                            </p>
                         </div>
                      )}
@@ -2228,10 +2228,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   {/* Access Control Section */}
                   <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
                      <h4 className="font-medium text-sm text-gray-900 dark:text-white flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4" /> Kirish Huquqi
+                        <ShieldCheck className="w-4 h-4" /> {t('auto.Kirish Huquqi')}
                      </h4>
                      <Select
-                        label="Klinika Statusi"
+                        label={t('auto.Klinika Statusi')}
                         value={editClinicData.status}
                         onChange={(e) => setEditClinicData({ ...editClinicData, status: e.target.value })}
                         options={[
@@ -2242,7 +2242,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      {!salesAgentMode && (
                         <>
                            <Select
-                              label="Sotuvchiga biriktirish"
+                              label={t('auto.Sotuvchiga biriktirish')}
                               value={editClinicData.salesAgentId}
                               onChange={(e) => setEditClinicData({ ...editClinicData, salesAgentId: e.target.value })}
                               options={[
@@ -2251,7 +2251,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               ]}
                            />
                            <p className="text-xs text-gray-500">
-                              Biriktirilgan sotuvchi ushbu klinikani o'z panelida ko'radi va obunasini boshqara oladi.
+                              {t('auto.Biriktirilgan sotuvchi ushbu klinikani o\'z panelida ko\'radi va obunasini boshqara oladi.')}
                            </p>
                         </>
                      )}
@@ -2399,7 +2399,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      }}
                      disabled={!newPassword}
                   >
-                     Parolni Saqlash
+                     {t('auto.Parolni Saqlash')}
                   </Button>
                </div>
             </div>
@@ -2414,14 +2414,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </div>
                )}
                <Input
-                  label="F.I.SH."
+                  label={t('auto.F.I.SH.')}
                   value={newSalesForm.name}
                   onChange={e => setNewSalesForm({ ...newSalesForm, name: e.target.value })}
                   required
                />
                <div className="grid grid-cols-2 gap-4">
                   <Input
-                     label="Telefon raqami"
+                     label={t('auto.Telefon raqami')}
                      value={newSalesForm.phone}
                      onChange={e => setNewSalesForm({ ...newSalesForm, phone: e.target.value })}
                      required
@@ -2436,7 +2436,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                
                <div className="flex items-end gap-2">
                   <Input
-                     label="Parol"
+                     label={t('auto.Parol')}
                      type="text"
                      value={newSalesForm.password}
                      onChange={e => setNewSalesForm({ ...newSalesForm, password: e.target.value })}
@@ -2444,29 +2444,29 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      className="flex-1"
                   />
                   <Button type="button" variant="secondary" onClick={generateSalesPassword} className="mb-[1px]">
-                     Generatsiya qilish
+                     {t('auto.Generatsiya qilish')}
                   </Button>
                </div>
 
                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
                   <Button type="button" variant="secondary" onClick={() => setIsAddSalesModalOpen(false)}>
-                     Bekor qilish
+                     {t('auto.Bekor qilish')}
                   </Button>
                   <Button type="submit">
-                     Saqlash
+                     {t('auto.Saqlash')}
                   </Button>
                </div>
             </form>
          </Modal>
 
          {/* Sales Agent Created Credentials Modal */}
-         <Modal isOpen={!!createdSalesCreds} onClose={() => setCreatedSalesCreds(null)} title="Sotuvchi Muvaffaqiyatli Yaratildi">
+         <Modal isOpen={!!createdSalesCreds} onClose={() => setCreatedSalesCreds(null)} title={t('auto.Sotuvchi Muvaffaqiyatli Yaratildi')}>
             <div className="space-y-4 text-center">
                <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
                   <ShieldCheck className="w-6 h-6 text-green-600" />
                </div>
                <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center justify-center gap-1">Kirish Ma'lumotlari</h3>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center justify-center gap-1">{t('auto.Kirish Ma\'lumotlari')}</h3>
                   <p className="text-sm text-gray-500">Sotuvchi {createdSalesCreds?.name} uchun tizimga kirish ma'lumotlari:</p>
                </div>
                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg text-left space-y-2 border border-gray-200 dark:border-gray-700">
@@ -2480,13 +2480,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </div>
                </div>
                <div className="pt-2">
-                  <Button onClick={() => setCreatedSalesCreds(null)} className="w-full">Yopish</Button>
+                  <Button onClick={() => setCreatedSalesCreds(null)} className="w-full">{t('auto.Yopish')}</Button>
                </div>
             </div>
          </Modal>
 
          {/* Platform Facebook Page Selection Modal */}
-         <Modal isOpen={isFBPageModalOpen} onClose={() => setIsFBPageModalOpen(false)} title="Facebook Sahifasini Tanlang">
+         <Modal isOpen={isFBPageModalOpen} onClose={() => setIsFBPageModalOpen(false)} title={t('auto.Facebook Sahifasini Tanlang')}>
             <div className="space-y-3">
                <p className="text-sm text-gray-500">Lidlar qabul qilinadigan sahifani tanlang — undan kelgan Lead Ads murojaatlari shu paneldagi Lidlar bo'limiga tushadi.</p>
                <div className="space-y-2 max-h-80 overflow-y-auto">
@@ -2508,12 +2508,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   {fbPages.length === 0 && (
                      <div className="text-center py-8">
                         <Facebook className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">Sahifalar topilmadi. Facebook akkauntingizda sahifa administratori ekanligingizni tekshiring.</p>
+                        <p className="text-sm text-gray-500">{t('auto.Sahifalar topilmadi. Facebook akkauntingizda sahifa administratori ekanligingizni tekshiring.')}</p>
                      </div>
                   )}
                </div>
                <div className="flex justify-end pt-2">
-                  <Button variant="secondary" onClick={() => setIsFBPageModalOpen(false)}>Yopish</Button>
+                  <Button variant="secondary" onClick={() => setIsFBPageModalOpen(false)}>{t('auto.Yopish')}</Button>
                </div>
             </div>
          </Modal>

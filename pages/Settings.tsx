@@ -794,7 +794,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            />
                            <div className="grid grid-cols-2 gap-4 mt-4">
                               <div>
-                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ishni boshlash vaqti</label>
+                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Ishni boshlash vaqti')}</label>
                                  <Select
                                     value={generalForm.startHour.toString()}
                                     onChange={e => setGeneralForm({ ...generalForm, startHour: parseInt(e.target.value) })}
@@ -802,7 +802,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  />
                               </div>
                               <div>
-                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ishni tugash vaqti</label>
+                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Ishni tugash vaqti')}</label>
                                  <Select
                                     value={generalForm.endHour.toString()}
                                     onChange={e => setGeneralForm({ ...generalForm, endHour: parseInt(e.target.value) })}
@@ -914,7 +914,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   <div className="space-y-6">
                      {/* Chek chiqarish — umumiy ma'lumotlar bilan bitta so'rovda saqlanadi */}
                      <Card className="p-6">
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Chek chiqarish</h3>
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t('auto.Chek chiqarish')}</h3>
                         <form onSubmit={handleGeneralSave} className="space-y-4">
                            <div className="pt-2">
                               <label className="flex items-center space-x-3 cursor-pointer">
@@ -925,8 +925,8 @@ export const Settings: React.FC<SettingsProps> = ({
                                     className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
                                  />
                                  <div>
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white">Chek chiqarish funksiyasi</p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">Yoqilsa, to'lov qabul qilinganda avtomatik ravishda chek oynasi ochiladi.</p>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white">{t('auto.Chek chiqarish funksiyasi')}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{t('auto.Yoqilsa, to\'lov qabul qilinganda avtomatik ravishda chek oynasi ochiladi.')}</p>
                                  </div>
                               </label>
                            </div>
@@ -945,7 +945,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            </div>
                            <div>
                               <h3 className="text-xl font-bold text-gray-900 dark:text-white">Oldindan To'lov (Bron uchun)</h3>
-                              <p className="text-sm text-gray-500">Bemor bot orqali qabulga yozilganda oldindan to'lov talab qilish.</p>
+                              <p className="text-sm text-gray-500">{t('auto.Bemor bot orqali qabulga yozilganda oldindan to\'lov talab qilish.')}</p>
                            </div>
                         </div>
 
@@ -953,8 +953,8 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="bg-gray-50 dark:bg-gray-800/50 p-5 rounded-2xl border border-gray-100 dark:border-gray-700">
                               <label className="flex items-center justify-between cursor-pointer">
                                  <div>
-                                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Oldindan to'lovni yoqish</p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Yoqilsa, bemor qabulga yozilgandan keyin to'lov cheki yuborishi shart bo'ladi</p>
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{t('auto.Oldindan to\'lovni yoqish')}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('auto.Yoqilsa, bemor qabulga yozilgandan keyin to\'lov cheki yuborishi shart bo\'ladi')}</p>
                                  </div>
                                  <div className="relative w-12 h-6 flex-shrink-0">
                                     <input
@@ -973,7 +973,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            {prepaymentForm.prepaymentEnabled && (
                               <div className="space-y-4">
                                  <Input
-                                    label="Karta raqami"
+                                    label={t('auto.Karta raqami')}
                                     value={prepaymentForm.prepaymentCardNumber}
                                     onChange={(e) => setPrepaymentForm({ ...prepaymentForm, prepaymentCardNumber: e.target.value })}
                                     placeholder="8600 1234 5678 9012"
@@ -992,10 +992,10 @@ export const Settings: React.FC<SettingsProps> = ({
                            )}
 
                            <div className="flex items-center gap-4">
-                              <Button type="submit" variant="primary">Saqlash</Button>
+                              <Button type="submit" variant="primary">{t('auto.Saqlash')}</Button>
                               {prepaymentSaved && (
                                  <span className="text-green-600 text-sm flex items-center gap-1">
-                                    <CheckCircle className="w-4 h-4" /> Saqlandi
+                                    <CheckCircle className="w-4 h-4" /> {t('auto.Saqlandi')}
                                  </span>
                               )}
                            </div>
@@ -1006,7 +1006,7 @@ export const Settings: React.FC<SettingsProps> = ({
                      {isAdmin && (
                         <Card className="p-6">
                            <div className="mb-4">
-                              <h4 className="text-base font-bold text-gray-900 dark:text-white">Kassa smenalari</h4>
+                              <h4 className="text-base font-bold text-gray-900 dark:text-white">{t('auto.Kassa smenalari')}</h4>
                               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                  Smena kassir "Kunni yopish" bosgan daqiqada tugaydi — soat bo'yicha emas.
                                  Undan keyingi to'lovlar keyingi smenaga o'tadi.
@@ -1026,7 +1026,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                     {n === 1 ? 'Kuniga 1 smena' : 'Kuniga 2 smena'}
                                  </button>
                               ))}
-                              {cashShiftsSaving && <span className="text-xs text-gray-400">Saqlanmoqda...</span>}
+                              {cashShiftsSaving && <span className="text-xs text-gray-400">{t('auto.Saqlanmoqda...')}</span>}
                            </div>
                            <p className="text-[11px] text-gray-400 mt-3">
                               {cashShifts === 1
@@ -1078,7 +1078,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('settings.services.title')}</h3>
                                  <p className="text-sm text-gray-500">{t('settings.services.subtitle')}</p>
                               </div>
-                              <Button size="sm" onClick={() => handleOpenServiceModal()}>Xizmat Qo'shish</Button>
+                              <Button size="sm" onClick={() => handleOpenServiceModal()}>{t('auto.Xizmat Qo\'shish')}</Button>
                            </div>
 
                            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
@@ -1172,14 +1172,14 @@ export const Settings: React.FC<SettingsProps> = ({
 
                      <div className="space-y-6">
                         <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
-                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">Shaxsiy Telegram Botni Ulash</h4>
+                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">{t('auto.Shaxsiy Telegram Botni Ulash')}</h4>
                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
                               Telegram-da @BotFather orqali o'zingizning shaxsiy botingizni yarating va bot tokenini quyidagi maydonga kiritib, uni tizimga ulang.
                            </p>
 
                            <form onSubmit={handleBotSave} className="space-y-4">
                               <Input
-                                 label="Telegram Bot Token"
+                                 label={t('auto.Telegram Bot Token')}
                                  value={botToken}
                                  onChange={e => setBotToken(e.target.value)}
                                  placeholder="7451241151:AAEi-y2F4_abcdefghijklmnopqrst..."
@@ -1214,28 +1214,28 @@ export const Settings: React.FC<SettingsProps> = ({
                         <form onSubmit={handleSmsSave} className="space-y-3">
                               <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
                                  <div className="flex items-center justify-between mb-6">
-                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white">Eskiz.uz SMS</h4>
+                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white">{t('auto.Eskiz.uz SMS')}</h4>
                                     {smsConnected ? (
                                        <span className="flex items-center text-green-600 text-sm font-medium bg-green-50 dark:bg-green-900/30 px-3 py-1.5 rounded-full">
-                                          <CheckCircle className="w-4 h-4 mr-1.5" /> Ulangan
+                                          <CheckCircle className="w-4 h-4 mr-1.5" /> {t('auto.Ulangan')}
                                        </span>
                                     ) : (
                                        <span className="flex items-center text-amber-600 text-sm font-medium bg-amber-50 dark:bg-amber-900/30 px-3 py-1.5 rounded-full">
-                                          <Activity className="w-4 h-4 mr-1.5" /> Ulanmagan
+                                          <Activity className="w-4 h-4 mr-1.5" /> {t('auto.Ulanmagan')}
                                        </span>
                                     )}
                                  </div>
                                  <p className="text-sm text-gray-600 dark:text-gray-400 -mt-3 mb-5">Telegram botga ulanmagan bemorlarga xabarlar SMS orqali yuboriladi (pullik).</p>
                                  <div className="space-y-4">
                                     <Input 
-                                       label="Eskiz.uz Kabinet Email" 
+                                       label={t('auto.Eskiz.uz Kabinet Email')} 
                                        placeholder="kabinet@eskiz.uz"
                                        value={smsForm.eskizEmail} 
                                        onChange={(e) => setSmsForm({...smsForm, eskizEmail: e.target.value})}
                                        required
                                     />
                                     <div className="space-y-1">
-                                        <p className="sms-settings-label text-sm font-medium text-gray-700 dark:text-gray-300">Eskiz.uz Kabinet Paroli</p>
+                                        <p className="sms-settings-label text-sm font-medium text-gray-700 dark:text-gray-300">{t('auto.Eskiz.uz Kabinet Paroli')}</p>
                                         <input
                                             type="password"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -1255,18 +1255,18 @@ export const Settings: React.FC<SettingsProps> = ({
                                             onChange={(e) => setSmsForm({...smsForm, eskizNick: e.target.value})}
                                         />
                                         <p className="text-xs text-gray-500 mt-1">
-                                            Eskizda tasdiqlangan maxsus nomingiz bo'lsa kiriting. Aks holda 4546 qoladi.
+                                            {t('auto.Eskizda tasdiqlangan maxsus nomingiz bo\'lsa kiriting. Aks holda 4546 qoladi.')}
                                         </p>
                                     </div>
                                 </div>
                      
                                     <div className="pt-2">
-                                       <Button type="submit" className="w-full sm:w-auto">Saqlash va Ulanishni Tekshirish</Button>
+                                       <Button type="submit" className="w-full sm:w-auto">{t('auto.Saqlash va Ulanishni Tekshirish')}</Button>
                                     </div>
                                  </div>
 
                            
-                           {smsSaved && <span className="text-green-600 text-sm flex items-center mt-2"><CheckCircle className="w-4 h-4 mr-1" /> Saqlandi</span>}
+                           {smsSaved && <span className="text-green-600 text-sm flex items-center mt-2"><CheckCircle className="w-4 h-4 mr-1" /> {t('auto.Saqlandi')}</span>}
                         </form>
                      </div>
                   </Card>
@@ -1285,7 +1285,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               </div>
 
                               <div className="w-full md:w-auto p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-                                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Test SMS yuborish</p>
+                                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{t('auto.Test SMS yuborish')}</p>
                                  <div className="flex gap-2">
                                     <Input 
                                        placeholder="998901234567" 
@@ -1320,15 +1320,15 @@ export const Settings: React.FC<SettingsProps> = ({
                         </div>
 
                         <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-100 dark:border-primary-800/40 mb-6 text-sm text-primary-800 dark:text-primary-200 space-y-1">
-                           <p><strong>Kalitlar</strong> (client_id / client_secret) platforma operatori UZINFOCOM'dan olinadi. Avval sinov muhiti (playground), keyin ishchi.</p>
-                           <p>Klinika STIR'i <strong>Klinika</strong> bo'limida kiritiladi — tekshiruv shu bo'yicha tashkilotni topadi. Shifokorlarga tug'ilgan sana, jins va mutaxassislik kodi <strong>Xodimlar</strong> bo'limida.</p>
+                           <p><strong>{t('auto.Kalitlar')}</strong> (client_id / client_secret) platforma operatori UZINFOCOM'dan olinadi. Avval sinov muhiti (playground), keyin ishchi.</p>
+                           <p>{t('auto.Klinika STIR\'i')} <strong>{t('auto.Klinika')}</strong> bo'limida kiritiladi — tekshiruv shu bo'yicha tashkilotni topadi. Shifokorlarga tug'ilgan sana, jins va mutaxassislik kodi <strong>{t('auto.Xodimlar')}</strong> bo'limida.</p>
                         </div>
 
                         <form onSubmit={handleDmedSave} className="space-y-5">
                            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
                               <div>
-                                 <h4 className="font-medium text-gray-900 dark:text-white">DHP'ga yuborishni yoqish</h4>
-                                 <p className="text-sm text-gray-500">Yoqilganda yangi va o'zgargan yozuvlar navbatga tushadi va har daqiqa yuboriladi.</p>
+                                 <h4 className="font-medium text-gray-900 dark:text-white">{t('auto.DHP\'ga yuborishni yoqish')}</h4>
+                                 <p className="text-sm text-gray-500">{t('auto.Yoqilganda yangi va o\'zgargan yozuvlar navbatga tushadi va har daqiqa yuboriladi.')}</p>
                               </div>
                               <label className="relative inline-flex items-center cursor-pointer">
                                  <input
@@ -1343,7 +1343,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                               <Select
-                                 label="Muhit"
+                                 label={t('auto.Muhit')}
                                  value={dhpEnvironment}
                                  onChange={e => setDhpEnvironment(e.target.value === 'production' ? 'production' : 'playground')}
                                  disabled={!dmedEnabled}
@@ -1353,14 +1353,14 @@ export const Settings: React.FC<SettingsProps> = ({
                                  ]}
                               />
                               <Input
-                                 label="Client ID"
+                                 label={t('auto.Client ID')}
                                  value={dmedApiKey}
                                  onChange={e => setDmedApiKey(e.target.value)}
-                                 placeholder="UZINFOCOM bergan client_id"
+                                 placeholder={t('auto.UZINFOCOM bergan client_id')}
                                  disabled={!dmedEnabled}
                               />
                               <Input
-                                 label="Client Secret"
+                                 label={t('auto.Client Secret')}
                                  value={dmedApiSecret}
                                  onChange={e => setDmedApiSecret(e.target.value)}
                                  type="password"
@@ -1373,7 +1373,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               label="Organization ID (DHP'dagi klinika)"
                               value={dmedClinicId}
                               onChange={e => setDmedClinicId(e.target.value)}
-                              placeholder="Ulanishni tekshirish STIR bo'yicha o'zi topadi"
+                              placeholder={t('auto.Ulanishni tekshirish STIR bo\'yicha o\'zi topadi')}
                               disabled={!dmedEnabled}
                               helperText={currentClinic?.inn ? `STIR: ${currentClinic.inn}` : 'STIR kiritilmagan — Klinika bo\'limida kiriting'}
                            />
@@ -1401,9 +1401,9 @@ export const Settings: React.FC<SettingsProps> = ({
                         <Card className="p-6">
                            <div className="flex items-center justify-between mb-4">
                               <div className="flex items-center gap-2">
-                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Yuborish holati</h3>
+                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('auto.Yuborish holati')}</h3>
                                  {dhpStatus?.mock && (
-                                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" title="sandbox_key: tashqariga hech narsa ketmaydi">Mock</span>
+                                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" title="sandbox_key: tashqariga hech narsa ketmaydi">{t('auto.Mock')}</span>
                                  )}
                                  {dhpStatus?.environment && (
                                     <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
@@ -1412,7 +1412,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  )}
                               </div>
                               <div className="flex items-center gap-2">
-                                 <Button type="button" variant="secondary" size="sm" onClick={loadDhpStatus} disabled={dhpBusy !== ''} title="Yangilash">
+                                 <Button type="button" variant="secondary" size="sm" onClick={loadDhpStatus} disabled={dhpBusy !== ''} title={t('auto.Yangilash')}>
                                     <RefreshCw className={`w-4 h-4 ${dhpBusy === 'status' ? 'animate-spin' : ''}`} />
                                  </Button>
                                  <Button type="button" variant="secondary" size="sm" onClick={handleDhpSyncNow} disabled={dhpBusy !== ''}>
@@ -1421,7 +1421,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  </Button>
                                  {(dhpStatus?.counts.error ?? 0) > 0 && (
                                     <Button type="button" variant="secondary" size="sm" onClick={handleDhpRetry} disabled={dhpBusy !== ''}>
-                                       Xatolarni qayta urinish
+                                       {t('auto.Xatolarni qayta urinish')}
                                     </Button>
                                  )}
                               </div>
@@ -1448,7 +1448,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
                            {(dhpStatus?.recentErrors.length ?? 0) > 0 && (
                               <div className="mt-4">
-                                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Oxirgi xatolar</h4>
+                                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">{t('auto.Oxirgi xatolar')}</h4>
                                  <ul className="space-y-1.5 text-xs">
                                     {dhpStatus!.recentErrors.map(e => (
                                        <li key={`${e.resourceType}-${e.localId}`} className="flex gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 px-3 py-2 text-red-700 dark:text-red-300">
@@ -1472,7 +1472,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
                               <Sparkles className="w-5 h-5 text-primary-600 dark:text-primary-300" />
                            </div>
-                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">AI kaliti</h3>
+                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('auto.AI kaliti')}</h3>
                         </div>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
                            DentaAI hozir umumiy kalit bilan ishlaydi va u barcha klinikalarga taqsimlanadi —
@@ -1487,7 +1487,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
                                  <div className="min-w-0">
                                     <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                                       O'z kalitingiz ulangan
+                                       {t('auto.O\'z kalitingiz ulangan')}
                                     </p>
                                     <p className="text-sm text-emerald-700/80 dark:text-emerald-300/70 mt-0.5">
                                        {aiInfo.provider} · {aiInfo.keyHint}
@@ -1500,13 +1500,13 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="rounded-lg border border-gray-200 dark:border-gray-700
                                            bg-gray-50 dark:bg-gray-800/50 p-4 mb-5">
                               <p className="text-sm text-gray-600 dark:text-gray-400">
-                                 Hozir umumiy kalit ishlatilmoqda.
+                                 {t('auto.Hozir umumiy kalit ishlatilmoqda.')}
                               </p>
                            </div>
                         )}
 
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                           Provayder
+                           {t('auto.Provayder')}
                         </label>
                         <select
                            value={aiProvider}
@@ -1515,12 +1515,12 @@ export const Settings: React.FC<SettingsProps> = ({
                                       dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100"
                         >
                            <option value="gemini">Google Gemini (bepul, tavsiya etiladi)</option>
-                           <option value="groq">Groq</option>
-                           <option value="openrouter">OpenRouter</option>
+                           <option value="groq">{t('auto.Groq')}</option>
+                           <option value="openrouter">{t('auto.OpenRouter')}</option>
                         </select>
 
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                           Kalit
+                           {t('auto.Kalit')}
                         </label>
                         <div className="flex gap-2">
                            <input
@@ -1555,7 +1555,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="mt-4">
                               <Button variant="danger" onClick={handleRemoveAiKey} disabled={aiSaving}>
                                  <Trash2 className="w-4 h-4 mr-2" />
-                                 Kalitni o'chirish
+                                 {t('auto.Kalitni o\'chirish')}
                               </Button>
                            </div>
                         )}
@@ -1563,7 +1563,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
                      <Card className="p-6">
                         <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
-                           Bepul kalitni qanday olish
+                           {t('auto.Bepul kalitni qanday olish')}
                         </h4>
                         <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-2 list-decimal list-inside">
                            <li>
@@ -1573,7 +1573,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               </a> manzilini oching va Google hisobingiz bilan kiring.
                            </li>
                            <li>"Create API key" tugmasini bosing.</li>
-                           <li>Chiqqan kalitni nusxalab, yuqoridagi maydonga qo'ying.</li>
+                           <li>{t('auto.Chiqqan kalitni nusxalab, yuqoridagi maydonga qo\'ying.')}</li>
                            <li>"Tekshirish va saqlash" — kalit darhol sinab ko'riladi.</li>
                         </ol>
                         <p className="text-xs text-gray-400 mt-4">
@@ -1591,7 +1591,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
                               <Link2 className="w-5 h-5 text-primary-600 dark:text-primary-300" />
                            </div>
-                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">Lid integratsiyasi</h3>
+                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('auto.Lid integratsiyasi')}</h3>
                         </div>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
                            yuboraman.uz va shunga o'xshash manbalar lidlarni to'g'ridan-to'g'ri CRM'ga yuborishi uchun
@@ -1639,11 +1639,11 @@ export const Settings: React.FC<SettingsProps> = ({
                               <div className="flex flex-wrap gap-2 mt-4">
                                  <Button variant="secondary" onClick={handleGenerateLeadKey} disabled={leadApiLoading}>
                                     <RefreshCw className={`w-4 h-4 mr-2 ${leadApiLoading ? 'animate-spin' : ''}`} />
-                                    Yangi kalit yaratish
+                                    {t('auto.Yangi kalit yaratish')}
                                  </Button>
                                  <Button variant="danger" onClick={handleRevokeLeadKey} disabled={leadApiLoading}>
                                     <Trash2 className="w-4 h-4 mr-2" />
-                                    Kalitni o'chirish
+                                    {t('auto.Kalitni o\'chirish')}
                                  </Button>
                               </div>
                               <p className="text-xs text-amber-600 dark:text-amber-400 mt-3">
@@ -1654,11 +1654,11 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="p-5 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg text-center">
                               <KeyRound className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
                               <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                                 Kalit hali yaratilmagan.
+                                 {t('auto.Kalit hali yaratilmagan.')}
                               </p>
                               <Button onClick={handleGenerateLeadKey} disabled={leadApiLoading}>
                                  <Plus className="w-4 h-4 mr-2" />
-                                 Kalit yaratish
+                                 {t('auto.Kalit yaratish')}
                               </Button>
                            </div>
                         )}
@@ -1673,7 +1673,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            className="w-full flex items-center justify-between gap-3 text-left"
                         >
                            <div>
-                              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Texnik ma'lumot</h4>
+                              <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{t('auto.Texnik ma\'lumot')}</h4>
                               <p className="text-sm text-gray-500 dark:text-gray-400">
                                  Odatda kerak emas — kalitni kiritish yetarli. Boshqa xizmat ulanmoqchi bo'lsa kerak bo'ladi.
                               </p>
@@ -1703,7 +1703,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                               service/xizmat, source/manba, address/manzil, dob/tug'ilgan sana, notes/izoh.
                            </p>
                            <p>
-                              <b className="text-gray-900 dark:text-white">Boshqa har qanday maydon</b> ham qabul qilinadi —
+                              <b className="text-gray-900 dark:text-white">{t('auto.Boshqa har qanday maydon')}</b> ham qabul qilinadi —
                               u lid kartasida alohida qator bo'lib ko'rinadi. Ya'ni target formasidagi savollar
                               o'zgarsa ham, bizga qayta sozlash kerak emas.
                            </p>
@@ -1817,7 +1817,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                <Input label={t('settings.services.thName')} value={serviceForm.name} onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} required />
 
                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kategoriya</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Kategoriya')}</label>
                   <Select
                      value={serviceForm.categoryId}
                      onChange={e => setServiceForm({ ...serviceForm, categoryId: e.target.value })}
@@ -1829,7 +1829,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                </div>
                <div className="grid grid-cols-2 gap-4">
                   <Input label={t('settings.services.thPrice')} type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
-                  <Input label="Texniklar xarajati" type="number" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} placeholder="0" />
+                  <Input label={t('auto.Texniklar xarajati')} type="number" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} placeholder="0" />
                </div>
                {/* Nazorat: shu xizmatdan keyin bemor necha oydan so'ng qayta kelishi kerak.
                    Shifokor qabulni yakunlaganda shu muddat o'zi taklif qilinadi. */}
@@ -1936,7 +1936,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                         }
                      }}
                   >
-                     Ha, O'chirish
+                     {t('auto.Ha, O\'chirish')}
                   </Button>
                </div>
             </div>

@@ -51,7 +51,7 @@ const parseQAPairs = (notes: string | null | undefined): { q: string; a: string 
 };
 
 const renderNotes = (notes: string | null | undefined, t: any) => {
-    if (!notes) return <span className="text-gray-400 dark:text-gray-500">Izohlar yo'q</span>;
+    if (!notes) return <span className="text-gray-400 dark:text-gray-500">{t('auto.Izohlar yo\'q')}</span>;
 
     // Check if it's formatted Q&A
     if (notes.includes('Savollar va Javoblar:') || notes.includes('Savol-Javoblar:')) {
@@ -878,19 +878,19 @@ export const Leads: React.FC<LeadsProps> = ({
                                 </div>
                                 {parseNotesField(selectedLeadForDetail.notes, 'Klinika nomi') && (
                                     <div className="space-y-1">
-                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Klinika nomi</p>
+                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('auto.Klinika nomi')}</p>
                                         <p className="text-sm font-bold text-gray-900 dark:text-white">{parseNotesField(selectedLeadForDetail.notes, 'Klinika nomi')}</p>
                                     </div>
                                 )}
                                 {parseNotesField(selectedLeadForDetail.notes, 'Shahar') && (
                                     <div className="space-y-1">
-                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Shahar</p>
+                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('auto.Shahar')}</p>
                                         <p className="text-sm font-bold text-gray-900 dark:text-white">{parseNotesField(selectedLeadForDetail.notes, 'Shahar')}</p>
                                     </div>
                                 )}
                                 {parseNotesField(selectedLeadForDetail.notes, 'Shifokorlar soni') && (
                                     <div className="space-y-1">
-                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Shifokorlar soni</p>
+                                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('auto.Shifokorlar soni')}</p>
                                         <p className="text-sm font-bold text-gray-900 dark:text-white">{parseNotesField(selectedLeadForDetail.notes, 'Shifokorlar soni')}</p>
                                     </div>
                                 )}
@@ -907,7 +907,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     </p>
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Status</p>
+                                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">{t('auto.Status')}</p>
                                     <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-bold ${
                                         STAGES.find(s => s.id === selectedLeadForDetail.status)?.color || 'bg-gray-100 text-gray-700'
                                     }`}>
@@ -927,7 +927,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                 if (qaPairs.length > 0) {
                                     return (
                                         <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
-                                            <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">Savol-Javoblar</p>
+                                            <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-3">{t('auto.Savol-Javoblar')}</p>
                                             <div className="space-y-2">
                                                 {qaPairs.map((pair, i) => (
                                                     <div key={i} className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-700/50">

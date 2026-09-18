@@ -63,8 +63,8 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
    if (!person) {
       return (
          <Card className="p-10 text-center space-y-3">
-            <p className="text-gray-600 dark:text-gray-300">Xodim topilmadi</p>
-            <button onClick={() => navigate('/doctors')} className="text-primary-600 font-medium hover:underline">Xodimlar ro'yxatiga qaytish</button>
+            <p className="text-gray-600 dark:text-gray-300">{t('auto.Xodim topilmadi')}</p>
+            <button onClick={() => navigate('/doctors')} className="text-primary-600 font-medium hover:underline">{t('auto.Xodimlar ro\'yxatiga qaytish')}</button>
          </Card>
       );
    }
@@ -108,7 +108,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
    return (
       <div className="space-y-6 animate-fade-in">
          <button onClick={() => navigate('/doctors')} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-            <ArrowLeft className="w-4 h-4" /> Xodimlar ro'yxati
+            <ArrowLeft className="w-4 h-4" /> {t('auto.Xodimlar ro\'yxati')}
          </button>
 
          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -119,7 +119,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
                <div className="min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                      <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{name}</h1>
-                     <button onClick={edit} title="Tahrirlash" className="p-1.5 rounded-md text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700">
+                     <button onClick={edit} title={t('auto.Tahrirlash')} className="p-1.5 rounded-md text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700">
                         <Pencil className="w-4 h-4" />
                      </button>
                   </div>
@@ -139,11 +139,11 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
             </div>
             <div className="flex items-center gap-2">
                {person.phone && (
-                  <a href={`tel:${person.phone}`} title="Qo'ng'iroq qilish" className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-primary-600">
+                  <a href={`tel:${person.phone}`} title={t('auto.Qo\'ng\'iroq qilish')} className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-primary-600">
                      <Phone className="w-4 h-4" />
                   </a>
                )}
-               <button onClick={remove} title="O'chirish" className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-red-600">
+               <button onClick={remove} title={t('auto.O\'chirish')} className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-red-600">
                   <Trash2 className="w-4 h-4" />
                </button>
             </div>
@@ -156,7 +156,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
                      <>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Maosh turi · {SALARY_TYPE_LABEL[payroll.type]}</p>
                         {payroll.type === 'none' ? (
-                           <p className="text-sm font-medium text-amber-600 dark:text-amber-400 mt-2">Maosh turi kiritilmagan</p>
+                           <p className="text-sm font-medium text-amber-600 dark:text-amber-400 mt-2">{t('auto.Maosh turi kiritilmagan')}</p>
                         ) : (
                            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1 tabular-nums">
                               {payroll.type === 'kpi' ? `${doctor.percentage || 0}%` : fmt(doctor.fixedSalary || 0)}
@@ -172,7 +172,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
                   )}
                   {recMonth && (
                      <>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Bu oy to'langan maosh</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('auto.Bu oy to\'langan maosh')}</p>
                         <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1 tabular-nums">{fmt(recMonth.paid)} <span className="text-sm font-normal text-gray-400">so'm</span></p>
                         <div className="border-t border-primary-100 dark:border-gray-700 mt-3 pt-3">
                            {sumRow("Qabul qilgan to'lovlari", `${recMonth.received.length} ta`)}
@@ -181,7 +181,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
                   )}
                   {techStats && (
                      <>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Faol buyurtmalar</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t('auto.Faol buyurtmalar')}</p>
                         <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1 tabular-nums">{techStats.active.length}</p>
                         <div className="border-t border-primary-100 dark:border-gray-700 mt-3 pt-3 space-y-1.5">
                            {sumRow("Muddati o'tgan", `${techStats.overdue.length} ta`, techStats.overdue.length ? 'text-red-600 dark:text-red-400' : undefined)}
@@ -191,7 +191,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
                   )}
                </div>
 
-               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mt-5 mb-1">Aloqa ma'lumotlari</p>
+               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mt-5 mb-1">{t('auto.Aloqa ma\'lumotlari')}</p>
                <div className="divide-y divide-gray-100 dark:divide-gray-700/60">
                   {infoRow(Phone, 'Telefon', person.phone)}
                   {doctor?.secondaryPhone && infoRow(Phone, "Qo'shimcha", doctor.secondaryPhone)}

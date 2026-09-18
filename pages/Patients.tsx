@@ -419,7 +419,7 @@ export const Patients: React.FC<PatientsProps> = ({
         {showFilters && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Status</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('auto.Status')}</label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
@@ -432,7 +432,7 @@ export const Patients: React.FC<PatientsProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Jins</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('auto.Jins')}</label>
               <select
                 value={filterGender}
                 onChange={(e) => setFilterGender(e.target.value)}
@@ -444,7 +444,7 @@ export const Patients: React.FC<PatientsProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Shifokor</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('auto.Shifokor')}</label>
               <select
                 value={filterDoctor}
                 onChange={(e) => setFilterDoctor(e.target.value)}
@@ -474,7 +474,7 @@ export const Patients: React.FC<PatientsProps> = ({
               </div>
             )}
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Tug'ilganidan boshlab</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('auto.Tug\'ilganidan boshlab')}</label>
               <input
                 type="date"
                 value={filterDateFrom}
@@ -483,7 +483,7 @@ export const Patients: React.FC<PatientsProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Tugash sanasi</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('auto.Tugash sanasi')}</label>
               <input
                 type="date"
                 value={filterDateTo}
@@ -501,7 +501,7 @@ export const Patients: React.FC<PatientsProps> = ({
                   }}
                   className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 underline"
                 >
-                  Barcha filtrlarni tozalash
+                  {t('auto.Barcha filtrlarni tozalash')}
                 </button>
               </div>
             )}
@@ -523,7 +523,7 @@ export const Patients: React.FC<PatientsProps> = ({
                   <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('branches.doctorBranch')}</th>
                 )}
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.lastVisit')}</th>
-                <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">DMED</th>
+                <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('auto.DMED')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('patients.table.status')}</th>
                 <th className="px-6 py-4 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">{t('patients.table.actions')}</th>
               </tr>
@@ -568,7 +568,7 @@ export const Patients: React.FC<PatientsProps> = ({
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-full">
-                          <AlertCircle className="w-3 h-3" /> Biriktirilmagan
+                          <AlertCircle className="w-3 h-3" /> {t('auto.Biriktirilmagan')}
                         </span>
                       );
                     })()}
@@ -632,7 +632,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 <tr>
                   <td colSpan={7 + (hasBranches ? 1 : 0)} className="px-6 py-12 text-center text-gray-500">
                     <Search className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                    So'rovingiz bo'yicha bemorlar topilmadi.
+                    {t('auto.So\'rovingiz bo\'yicha bemorlar topilmadi.')}
                   </td>
                 </tr>
               )}
@@ -656,7 +656,7 @@ export const Patients: React.FC<PatientsProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Shifokorni tanlang</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('auto.Shifokorni tanlang')}</label>
               <select
                 value={assignDoctorId}
                 onChange={(e) => setAssignDoctorId(e.target.value)}
@@ -687,10 +687,10 @@ export const Patients: React.FC<PatientsProps> = ({
 
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="secondary" onClick={() => setIsAssignModalOpen(false)} disabled={isAssigning}>
-                Bekor qilish
+                {t('auto.Bekor qilish')}
               </Button>
               <Button onClick={handleAssignDoctor} disabled={isAssigning}>
-                {isAssigning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saqlanmoqda...</> : <><UserCheck className="w-4 h-4 mr-2" />Biriktirish</>}
+                {isAssigning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('auto.Saqlanmoqda...')}</> : <><UserCheck className="w-4 h-4 mr-2" />{t('auto.Biriktirish')}</>}
               </Button>
             </div>
           </div>
@@ -698,11 +698,11 @@ export const Patients: React.FC<PatientsProps> = ({
       </Modal>
 
       {/* Add Patient Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Yangi Bemor Qo'shish">
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title={t('auto.Yangi Bemor Qo\'shish')}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Familiya" name="lastName" value={formData.lastName} onChange={handleInputChange} required />
-            <Input label="Ism" name="firstName" value={formData.firstName} onChange={handleInputChange} required />
+            <Input label={t('auto.Familiya')} name="lastName" value={formData.lastName} onChange={handleInputChange} required />
+            <Input label={t('auto.Ism')} name="firstName" value={formData.firstName} onChange={handleInputChange} required />
           </div>
           
           <div className="space-y-1">
@@ -729,18 +729,18 @@ export const Patients: React.FC<PatientsProps> = ({
                 </Button>
               )}
             </div>
-            <p className="text-[10px] text-gray-500">Bemorning pasportidagi 14 raqamli shaxsiy identifikatsiya raqami.</p>
+            <p className="text-[10px] text-gray-500">{t('auto.Bemorning pasportidagi 14 raqamli shaxsiy identifikatsiya raqami.')}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Asosiy Telefon" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
-            <Input label="Qo'shimcha Telefon" name="secondaryPhone" value={formData.secondaryPhone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" />
+            <Input label={t('auto.Asosiy Telefon')} name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
+            <Input label={t('auto.Qo\'shimcha Telefon')} name="secondaryPhone" value={formData.secondaryPhone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Tug'ilgan sana" type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText="Sanani qo'lda kiritish uchun maydonga bosing" />
-            <Input label={t('patients.modal.passport')} name="passport" value={formData.passport} onChange={handleInputChange} placeholder="AA1234567" />
+            <Input label={t('auto.Tug\'ilgan sana')} type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText="Sanani qo'lda kiritish uchun maydonga bosing" />
+            <Input label={t('patients.modal.passport')} name="passport" value={formData.passport} onChange={handleInputChange} placeholder={t('auto.AA1234567')} />
           </div>
-          <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder="Toshkent sh., Chilonzor t..." />
+          <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder={t('auto.Toshkent sh., Chilonzor t...')} />
           <RegionDistrictSelect regionCode={formData.regionCode} districtCode={formData.districtCode} onChange={v => setFormData(prev => ({ ...prev, ...v }))} />
 
           <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-primary-200 dark:border-primary-800 rounded-xl bg-primary-50/50 dark:bg-primary-900/20 hover:bg-primary-100/50 dark:hover:bg-primary-900/30 transition-colors group cursor-pointer relative overflow-hidden">
@@ -773,7 +773,7 @@ export const Patients: React.FC<PatientsProps> = ({
                   <Plus className="w-6 h-6" />
                 </div>
                 <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{t('patients.modal.uploadPhoto')}</span>
-                <span className="text-[10px] text-gray-500 dark:text-gray-400">JPG, PNG or WEBP</span>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">{t('auto.JPG, PNG or WEBP')}</span>
               </div>
             )}
           </div>
@@ -813,31 +813,31 @@ export const Patients: React.FC<PatientsProps> = ({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jins</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Jins')}</label>
             <div className="flex gap-4">
               <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                <input type="radio" name="gender" value="Male" checked={formData.gender === 'Male'} onChange={handleInputChange} className="text-primary-600 focus:ring-primary-500" /> <span>Erkak</span>
+                <input type="radio" name="gender" value="Male" checked={formData.gender === 'Male'} onChange={handleInputChange} className="text-primary-600 focus:ring-primary-500" /> <span>{t('auto.Erkak')}</span>
               </label>
               <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                <input type="radio" name="gender" value="Female" checked={formData.gender === 'Female'} onChange={handleInputChange} className="text-primary-600 focus:ring-primary-500" /> <span>Ayol</span>
+                <input type="radio" name="gender" value="Female" checked={formData.gender === 'Female'} onChange={handleInputChange} className="text-primary-600 focus:ring-primary-500" /> <span>{t('auto.Ayol')}</span>
               </label>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tibbiy Tarix</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Tibbiy Tarix')}</label>
             <textarea
               name="medicalHistory"
               value={formData.medicalHistory}
               onChange={handleInputChange}
               className="w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:text-white h-24 focus:ring-2 focus:ring-primary-500 focus:outline-none"
-              placeholder="Allergiya, surunkali kasalliklar..."
+              placeholder={t('auto.Allergiya, surunkali kasalliklar...')}
             />
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)} disabled={isSubmitting}>Bekor qilish</Button>
+            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)} disabled={isSubmitting}>{t('auto.Bekor qilish')}</Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saqlanmoqda...</> : 'Saqlash'}
+              {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('auto.Saqlanmoqda...')}</> : 'Saqlash'}
             </Button>
           </div>
         </form>

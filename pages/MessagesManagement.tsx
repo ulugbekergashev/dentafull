@@ -1,3 +1,4 @@
+import { useLanguage } from '../context/LanguageContext';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '../components/Common';
 import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, RuleSchedule } from '../types';
@@ -138,6 +139,8 @@ const FunnelRow: React.FC<{ label: string; value: number; diff?: number; isDeduc
 export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     clinicId, currentClinic, doctors, addToast
 }) => {
+    const { t } = useLanguage();
+
     const [activeTab, setActiveTab] = useState<'templates' | 'auto' | 'manual' | 'history'>('templates');
 
     // ── Ma'lumotlar ──
@@ -649,7 +652,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     <MessageSquare className="w-6 h-6 text-primary-600 dark:text-primary-400" />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Xabarlar</h1>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('auto.Xabarlar')}</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Avtomatik va qo'lda SMS/Telegram xabar yuborish boshqaruvi</p>
                 </div>
             </div>
@@ -682,7 +685,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             ))}
                         </div>
                         <Button onClick={() => openTemplateForm()}>
-                            <Plus className="w-4 h-4 mr-1" /> Yangi shablon
+                            <Plus className="w-4 h-4 mr-1" /> {t('auto.Yangi shablon')}
                         </Button>
                     </div>
 
@@ -703,7 +706,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             </div>
                             <input
                                 type="text"
-                                placeholder="Shablon nomi"
+                                placeholder={t('auto.Shablon nomi')}
                                 value={templateForm.name}
                                 onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))}
                                 className={inputCls}
@@ -717,7 +720,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             />
                             <VarButtons onInsert={token => setTemplateForm(f => ({ ...f, text: f.text + token }))} />
                             <div className="flex justify-end gap-2 pt-2">
-                                <Button variant="secondary" onClick={() => { setIsTemplateFormOpen(false); setEditingTemplate(null); }}>Bekor</Button>
+                                <Button variant="secondary" onClick={() => { setIsTemplateFormOpen(false); setEditingTemplate(null); }}>{t('auto.Bekor')}</Button>
                                 <Button onClick={handleSaveTemplate} disabled={templateSaving || !templateForm.name.trim() || !templateForm.text.trim()}>
                                     {templateSaving ? 'Saqlanmoqda...' : 'Saqlash'}
                                 </Button>
@@ -752,10 +755,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                 <RefreshCw className={`w-4 h-4 ${syncingTemplateId === tpl.id ? 'animate-spin' : ''}`} />
                                             </button>
                                         )}
-                                        <button onClick={() => openTemplateForm(tpl)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors" title="Tahrirlash">
+                                        <button onClick={() => openTemplateForm(tpl)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors" title={t('auto.Tahrirlash')}>
                                             <Pencil className="w-4 h-4" />
                                         </button>
-                                        <button onClick={() => handleDeleteTemplate(tpl)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="O'chirish">
+                                        <button onClick={() => handleDeleteTemplate(tpl)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title={t('auto.O\'chirish')}>
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
@@ -778,7 +781,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     <Card className="p-5">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                                <h4 className="font-bold text-gray-900 dark:text-white text-sm">Chastota chegarasi</h4>
+                                <h4 className="font-bold text-gray-900 dark:text-white text-sm">{t('auto.Chastota chegarasi')}</h4>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                     Bitta bemorga shu muddat ichida bittadan ko'p xabar yuborilmaydi.
                                     Qabul eslatmalari bundan mustasno — ular baribir yetib boradi.
@@ -803,7 +806,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
 
                     <div className="flex justify-end">
                         <Button onClick={() => openRuleForm()}>
-                            <Plus className="w-4 h-4 mr-1" /> Yangi qoida
+                            <Plus className="w-4 h-4 mr-1" /> {t('auto.Yangi qoida')}
                         </Button>
                     </div>
 
@@ -827,13 +830,13 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         onClick={() => { closeRuleForm(); setActiveTab('templates'); openTemplateForm(); }}
                                         className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-all"
                                     >
-                                        Shablon yaratish
+                                        {t('auto.Shablon yaratish')}
                                     </button>
                                 </div>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className={labelCls}>Qoida nomi</label>
+                                    <label className={labelCls}>{t('auto.Qoida nomi')}</label>
                                     <input
                                         type="text"
                                         placeholder="Masalan: Qabuldan 2 soat oldin eslatma"
@@ -843,7 +846,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     />
                                 </div>
                                 <div>
-                                    <label className={labelCls}>Shablon</label>
+                                    <label className={labelCls}>{t('auto.Shablon')}</label>
                                     <select
                                         value={ruleForm.templateId}
                                         onChange={e => setRuleForm(f => ({ ...f, templateId: e.target.value }))}
@@ -856,7 +859,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className={labelCls}>Qachon yuborilsin</label>
+                                    <label className={labelCls}>{t('auto.Qachon yuborilsin')}</label>
                                     <select
                                         value={ruleForm.trigger}
                                         onChange={e => {
@@ -894,7 +897,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 )}
                             </div>
                             <div>
-                                <label className={labelCls}>Yuborish kanali</label>
+                                <label className={labelCls}>{t('auto.Yuborish kanali')}</label>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                     {CHANNEL_OPTIONS.map(({ value, label, hint }) => (
                                         <button
@@ -916,16 +919,16 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             </div>
                             {activeTriggerDef?.supportsSchedule && (
                                 <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-3">
-                                    <label className={labelCls}>Qachon yuborilsin</label>
+                                    <label className={labelCls}>{t('auto.Qachon yuborilsin')}</label>
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <select
                                             value={ruleForm.schedule.kind}
                                             onChange={e => setRuleForm(f => ({ ...f, schedule: { ...f.schedule, kind: e.target.value as RuleSchedule['kind'] } }))}
                                             className={inputCls}
                                         >
-                                            <option value="daily">Har kuni</option>
-                                            <option value="weekly">Har hafta</option>
-                                            <option value="monthly">Har oy</option>
+                                            <option value="daily">{t('auto.Har kuni')}</option>
+                                            <option value="weekly">{t('auto.Har hafta')}</option>
+                                            <option value="monthly">{t('auto.Har oy')}</option>
                                         </select>
                                         {ruleForm.schedule.kind === 'weekly' && (
                                             <select
@@ -964,7 +967,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
 
                             {activeTriggerDef?.supportsSegment && (
                                 <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-3">
-                                    <label className={labelCls}>Kimga yuborilsin</label>
+                                    <label className={labelCls}>{t('auto.Kimga yuborilsin')}</label>
                                     <SegmentBuilder
                                         value={ruleForm.segment}
                                         onChange={next => setRuleForm(f => ({ ...f, segment: next }))}
@@ -981,7 +984,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         onChange={e => setRuleForm(f => ({ ...f, doctorId: e.target.value }))}
                                         className={inputCls}
                                     >
-                                        <option value="">Barcha shifokorlar</option>
+                                        <option value="">{t('auto.Barcha shifokorlar')}</option>
                                         {doctors.map(d => (
                                             <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>
                                         ))}
@@ -1002,7 +1005,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 </div>
                             )}
                             <div className="flex justify-end gap-2 pt-2">
-                                <Button variant="secondary" onClick={closeRuleForm}>Bekor</Button>
+                                <Button variant="secondary" onClick={closeRuleForm}>{t('auto.Bekor')}</Button>
                                 <Button onClick={handleSaveRule} disabled={ruleSaving || !ruleForm.name.trim() || !ruleForm.templateId}>
                                     {ruleSaving ? 'Saqlanmoqda...' : 'Saqlash'}
                                 </Button>
@@ -1040,10 +1043,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         >
                                             <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${rule.active ? 'left-[22px]' : 'left-0.5'}`} />
                                         </button>
-                                        <button onClick={() => openRuleForm(rule)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors" title="Tahrirlash">
+                                        <button onClick={() => openRuleForm(rule)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors" title={t('auto.Tahrirlash')}>
                                             <Pencil className="w-4 h-4" />
                                         </button>
-                                        <button onClick={() => handleDeleteRule(rule)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="O'chirish">
+                                        <button onClick={() => handleDeleteRule(rule)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title={t('auto.O\'chirish')}>
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
@@ -1098,20 +1101,20 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     {(manualChannel === 'sms' || manualChannel === 'telegram_first') && !smsConnected && (
                         <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-400">
                             <AlertTriangle className="w-4 h-4 shrink-0" />
-                            <span>Eskiz SMS ulanmagan. <strong>Sozlamalar → Integratsiyalar → Telegram va SMS</strong> bo'limida login va parolni kiriting.</span>
+                            <span>{t('auto.Eskiz SMS ulanmagan.')} <strong>Sozlamalar → Integratsiyalar → Telegram va SMS</strong> bo'limida login va parolni kiriting.</span>
                         </div>
                     )}
                     {manualChannel === 'telegram' && !telegramConnected && (
                         <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-400">
                             <AlertTriangle className="w-4 h-4 shrink-0" />
-                            <span>Telegram bot ulanmagan. <strong>Sozlamalar → Integratsiyalar → Telegram va SMS</strong> bo'limida bot tokenini kiriting.</span>
+                            <span>{t('auto.Telegram bot ulanmagan.')} <strong>Sozlamalar → Integratsiyalar → Telegram va SMS</strong> bo'limida bot tokenini kiriting.</span>
                         </div>
                     )}
 
                     {/* Auditoriya */}
                     <Card className="p-6 space-y-4">
                         <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <Users className="w-5 h-5 text-gray-400" /> Kimga yuborish?
+                            <Users className="w-5 h-5 text-gray-400" /> {t('auto.Kimga yuborish?')}
                         </h3>
                         {/* Saqlangan segmentlar — bir marta yig'ilib qayta ishlatiladi */}
                         {savedSegments.length > 0 && (
@@ -1127,7 +1130,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         </button>
                                         <button
                                             onClick={() => handleDeleteSegment(s)}
-                                            title="O'chirish"
+                                            title={t('auto.O\'chirish')}
                                             className="px-1.5 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                                         >
                                             <X className="w-3 h-3" />
@@ -1156,12 +1159,12 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         {/* Hisob-kitob: son qayerdan kelgani bosqichma-bosqich ko'rinadi */}
                         {audienceLoading ? (
                             <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl text-sm text-gray-500">
-                                Hisoblanmoqda...
+                                {t('auto.Hisoblanmoqda...')}
                             </div>
                         ) : audience ? (
                             <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
                                 <div className="divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-                                    <FunnelRow label="Klinikada bemorlar" value={audience.clinicTotal} />
+                                    <FunnelRow label={t('auto.Klinikada bemorlar')} value={audience.clinicTotal} />
                                     {audience.matched !== audience.clinicTotal && (
                                         <FunnelRow
                                             label={
@@ -1175,21 +1178,21 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     )}
                                     {unreachableCount > 0 && (
                                         <FunnelRow
-                                            label="Tanlangan kanal bilan yetib bo'lmaydi"
+                                            label={t('auto.Tanlangan kanal bilan yetib bo\'lmaydi')}
                                             value={-unreachableCount}
                                             isDeduction
                                         />
                                     )}
                                     {excludedIds.size > 0 && (
                                         <FunnelRow
-                                            label="Ro'yxatdan qo'lda chiqarildi"
+                                            label={t('auto.Ro\'yxatdan qo\'lda chiqarildi')}
                                             value={-excludedIds.size}
                                             isDeduction
                                         />
                                     )}
                                     <div className="flex items-center justify-between px-4 py-3 bg-primary-50 dark:bg-primary-900/20">
                                         <span className="flex items-center gap-2 font-bold text-primary-700 dark:text-primary-400">
-                                            <Eye className="w-4 h-4" /> Xabar yetib boradi
+                                            <Eye className="w-4 h-4" /> {t('auto.Xabar yetib boradi')}
                                         </span>
                                         <span className="font-black text-lg text-primary-700 dark:text-primary-400">
                                             {recipientCount} ta
@@ -1244,7 +1247,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                         type="text"
                                                         value={recipientSearch}
                                                         onChange={e => setRecipientSearch(e.target.value)}
-                                                        placeholder="Ism yoki raqam bo'yicha qidirish"
+                                                        placeholder={t('auto.Ism yoki raqam bo\'yicha qidirish')}
                                                         className="flex-1 min-w-[180px] px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs outline-none dark:text-white"
                                                     />
                                                     {excludedIds.size > 0 && (
@@ -1283,7 +1286,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                         );
                                                     })}
                                                     {visibleRecipients.length === 0 && (
-                                                        <div className="px-4 py-6 text-center text-xs text-gray-400">Topilmadi</div>
+                                                        <div className="px-4 py-6 text-center text-xs text-gray-400">{t('auto.Topilmadi')}</div>
                                                     )}
                                                 </div>
                                                 {audience.recipientsTruncated && (
@@ -1333,7 +1336,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     {/* Xabar matni */}
                     <Card className="p-6 space-y-4">
                         <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <MessageSquare className="w-5 h-5 text-gray-400" /> Xabar matni
+                            <MessageSquare className="w-5 h-5 text-gray-400" /> {t('auto.Xabar matni')}
                         </h3>
                         {templates.length > 0 && (
                             <div>
@@ -1352,7 +1355,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             </div>
                         )}
                         <textarea
-                            placeholder="Xabar matni..."
+                            placeholder={t('auto.Xabar matni...')}
                             value={manualMessage}
                             onChange={e => setManualMessage(e.target.value)}
                             rows={5}
@@ -1381,7 +1384,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                 onClick={() => setManualMessage(m => fixApostrophes(m))}
                                                 className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-md shrink-0"
                                             >
-                                                Apostrofni to'g'rilash
+                                                {t('auto.Apostrofni to\'g\'rilash')}
                                             </button>
                                         )}
                                     </div>
@@ -1398,7 +1401,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
                                 <div className="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                                     <span className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                                        <Eye className="w-3.5 h-3.5" /> Bemor ko'radigan matn
+                                        <Eye className="w-3.5 h-3.5" /> {t('auto.Bemor ko\'radigan matn')}
                                     </span>
                                     <div className="flex items-center gap-2 text-xs">
                                         <span className="text-gray-400">{previewPatient.firstName} {previewPatient.lastName}</span>
@@ -1426,7 +1429,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         onClick={() => setTestOpen(true)}
                                         className="flex items-center gap-2 text-sm font-bold text-primary-600 hover:text-primary-700"
                                     >
-                                        <Send className="w-4 h-4" /> Avval o'zimga test yuborish
+                                        <Send className="w-4 h-4" /> {t('auto.Avval o\'zimga test yuborish')}
                                     </button>
                                 ) : (
                                     <div className="space-y-2">
@@ -1448,7 +1451,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                             <Button onClick={handleTestSend} disabled={testSending}>
                                                 {testSending ? 'Yuborilmoqda...' : 'Test yuborish'}
                                             </Button>
-                                            <Button variant="secondary" onClick={() => setTestOpen(false)}>Yopish</Button>
+                                            <Button variant="secondary" onClick={() => setTestOpen(false)}>{t('auto.Yopish')}</Button>
                                         </div>
                                     </div>
                                 )}
@@ -1492,15 +1495,15 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     <div className="grid grid-cols-3 gap-4">
                         <Card className="p-5 text-center">
                             <h3 className="text-3xl font-black text-gray-900 dark:text-white">{logStats.total}</h3>
-                            <p className="text-sm text-gray-500 mt-1">Jami yuborilgan</p>
+                            <p className="text-sm text-gray-500 mt-1">{t('auto.Jami yuborilgan')}</p>
                         </Card>
                         <Card className="p-5 text-center border border-emerald-100 dark:border-emerald-900/40">
                             <h3 className="text-3xl font-black text-emerald-600">{logStats.sent}</h3>
-                            <p className="text-sm text-gray-500 mt-1">Muvaffaqiyatli</p>
+                            <p className="text-sm text-gray-500 mt-1">{t('auto.Muvaffaqiyatli')}</p>
                         </Card>
                         <Card className="p-5 text-center border border-red-100 dark:border-red-900/40">
                             <h3 className="text-3xl font-black text-red-600">{logStats.failed}</h3>
-                            <p className="text-sm text-gray-500 mt-1">Xato</p>
+                            <p className="text-sm text-gray-500 mt-1">{t('auto.Xato')}</p>
                         </Card>
                     </div>
 
@@ -1516,7 +1519,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     {(bulkJob.sent || 0) + (bulkJob.failed || 0)} / {bulkJob.total || 0}
                                     {(bulkJob.failed || 0) > 0 ? ` · ${bulkJob.failed} ta xato` : ''}
                                     {bulkJob.done && (
-                                        <button onClick={() => setBulkJob(null)} className="text-primary-400 hover:text-primary-700" title="Yopish">
+                                        <button onClick={() => setBulkJob(null)} className="text-primary-400 hover:text-primary-700" title={t('auto.Yopish')}>
                                             <X className="w-4 h-4" />
                                         </button>
                                     )}
@@ -1539,7 +1542,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 <XCircle className="w-5 h-5 text-red-500 shrink-0" />
                                 <div>
                                     <p className="font-bold text-red-700 dark:text-red-400">{logStats.failed} ta xato xabar</p>
-                                    <p className="text-red-600/80 dark:text-red-400/80 text-xs">Qayta yuborish uchun tanlang yoki hammasini qayta yuboring</p>
+                                    <p className="text-red-600/80 dark:text-red-400/80 text-xs">{t('auto.Qayta yuborish uchun tanlang yoki hammasini qayta yuboring')}</p>
                                 </div>
                             </div>
                             <button
@@ -1547,7 +1550,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 disabled={logsLoading}
                                 className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white text-xs font-bold rounded-xl transition-all"
                             >
-                                <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? 'animate-spin' : ''}`} /> Hammasini tanlash
+                                <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? 'animate-spin' : ''}`} /> {t('auto.Hammasini tanlash')}
                             </button>
                         </div>
                     )}
@@ -1589,7 +1592,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 ))}
                             </div>
                             <button onClick={() => loadLogs()} disabled={logsLoading} className="flex items-center gap-1.5 text-xs font-bold text-primary-600 hover:text-primary-700 disabled:opacity-50">
-                                <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? 'animate-spin' : ''}`} /> Yangilash
+                                <RefreshCw className={`w-3.5 h-3.5 ${logsLoading ? 'animate-spin' : ''}`} /> {t('auto.Yangilash')}
                             </button>
                         </div>
                         <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[60vh] overflow-y-auto">
@@ -1620,19 +1623,19 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                 </span>
                                                 {isFailed ? (
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-red-50 dark:bg-red-900/20 text-red-600 rounded-md">
-                                                        <XCircle className="w-3 h-3" /> Xato
+                                                        <XCircle className="w-3 h-3" /> {t('auto.Xato')}
                                                     </span>
                                                 ) : isRetried ? (
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-md">
-                                                        <RefreshCw className="w-3 h-3" /> Qayta yuborilgan
+                                                        <RefreshCw className="w-3 h-3" /> {t('auto.Qayta yuborilgan')}
                                                     </span>
                                                 ) : isSkipped ? (
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-md">
-                                                        <Clock className="w-3 h-3" /> O'tkazib yuborildi
+                                                        <Clock className="w-3 h-3" /> {t('auto.O\'tkazib yuborildi')}
                                                     </span>
                                                 ) : (
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-md">
-                                                        <CheckCircle2 className="w-3 h-3" /> Yuborildi
+                                                        <CheckCircle2 className="w-3 h-3" /> {t('auto.Yuborildi')}
                                                     </span>
                                                 )}
                                             </div>

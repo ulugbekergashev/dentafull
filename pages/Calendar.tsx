@@ -881,7 +881,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                 <button
                   onClick={() => openEditModal(selectedAppointment)}
                   className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:text-gray-400 dark:hover:bg-gray-800 rounded-md transition-colors"
-                  title="Qabulni tahrirlash"
+                  title={t('auto.Qabulni tahrirlash')}
                 >
                   <Edit2 className="w-5 h-5" />
                 </button>
@@ -1048,7 +1048,7 @@ export const Calendar: React.FC<CalendarProps> = ({
             label={t('patients.modal.address')}
             value={patientFormData.address}
             onChange={e => setPatientFormData({ ...patientFormData, address: e.target.value })}
-            placeholder="Toshkent sh., Chilonzor t..."
+            placeholder={t('auto.Toshkent sh., Chilonzor t...')}
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.gender')}</label>

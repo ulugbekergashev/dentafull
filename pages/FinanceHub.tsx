@@ -1,3 +1,4 @@
+import { useLanguage } from '../context/LanguageContext';
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Wallet, BarChart3 } from 'lucide-react';
@@ -61,6 +62,8 @@ interface FinanceHubProps {
 }
 
 export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
+    const { t } = useLanguage();
+
     const { userRole, transactions, expenses, doctors, currentClinic, onPatientClick } = props;
 
     // Hisobot — tahlil va foyda; buni faqat klinika rahbariyati ko'radi.
@@ -84,7 +87,7 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
         <div className="space-y-5 animate-fade-in">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Moliya</h1>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('auto.Moliya')}</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{current.subtitle}</p>
                 </div>
 

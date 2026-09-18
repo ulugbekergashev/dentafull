@@ -1,3 +1,4 @@
+import { useLanguage } from '../context/LanguageContext';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Bot, Send, Sparkles, RefreshCw, MessageSquare,
@@ -95,6 +96,8 @@ async function apiPost<T>(path: string, body: object): Promise<T> {
 // ─── Asosiy komponent ────────────────────────────────────────────────────────
 
 export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats }) => {
+    const { t } = useLanguage();
+
   const isAdmin =
     userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.SUPER_ADMIN;
 
@@ -315,7 +318,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
           </div>
           <div>
             <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300">
-              DentaAI Yordamchi
+              {t('auto.DentaAI Yordamchi')}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
               {isAdmin ? 'Ma\'lumotlar bazasi bilan bog\'langan' : 'Umumiy stomatologiya maslahatlari'}
@@ -380,13 +383,13 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
                     <div className="flex items-center gap-1 mt-2 -mb-1">
                       {msg.rating ? (
                         <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                          Rahmat, hisobga olindi
+                          {t('auto.Rahmat, hisobga olindi')}
                         </span>
                       ) : (
                         <>
                           <button
                             onClick={() => rateMessage(msg.id, 1)}
-                            aria-label="Foydali"
+                            aria-label={t('auto.Foydali')}
                             className="p-1 rounded-md text-gray-300 dark:text-gray-600
                                        hover:text-emerald-500 transition-colors"
                           >
@@ -394,7 +397,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
                           </button>
                           <button
                             onClick={() => rateMessage(msg.id, -1)}
-                            aria-label="Foydasiz"
+                            aria-label={t('auto.Foydasiz')}
                             className="p-1 rounded-md text-gray-300 dark:text-gray-600
                                        hover:text-rose-500 transition-colors"
                           >
@@ -434,7 +437,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="AIni ishga soling..."
+              placeholder={t('auto.AIni ishga soling...')}
               rows={1}
               style={{ resize: 'none' }}
               className="flex-1 bg-transparent text-[15px] text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none leading-relaxed py-3 px-4 max-h-32 custom-scrollbar"
@@ -458,7 +461,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
               {isDemoMode() ? 'Demo rejim faol' : 'Ma\'lumotlar to\'liq shifrlangan'}
             </p>
             <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
-              AI xato qilishi mumkin.
+              {t('auto.AI xato qilishi mumkin.')}
             </p>
           </div>
         </div>
@@ -481,10 +484,10 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
           </div>
           <div>
             <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300">
-              Aqlli Tavsiyalar
+              {t('auto.Aqlli Tavsiyalar')}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Biznesingizni o'stirish uchun
+              {t('auto.Biznesingizni o\'stirish uchun')}
             </p>
           </div>
           <motion.button
@@ -506,7 +509,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
                 <Zap className="w-8 h-8 text-gray-400 dark:text-gray-500" />
               </div>
               <p className="text-base font-medium text-gray-500 dark:text-gray-400 max-w-[200px]">
-                Tavsiyalar faqat klinika ma'muriyatiga ko'rsatiladi
+                {t('auto.Tavsiyalar faqat klinika ma\'muriyatiga ko\'rsatiladi')}
               </p>
             </div>
           ) : insightsLoading ? (
@@ -534,7 +537,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
               <div className="w-14 h-14 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500">
                 <AlertCircle className="w-7 h-7" />
               </div>
-              <h4 className="text-lg font-bold text-red-600 dark:text-red-400">Xatolik yuz berdi</h4>
+              <h4 className="text-lg font-bold text-red-600 dark:text-red-400">{t('auto.Xatolik yuz berdi')}</h4>
               <p className="text-sm text-red-500 dark:text-red-300 mb-2">{insightsError}</p>
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -542,14 +545,14 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
                 onClick={loadInsights}
                 className="px-6 py-2.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 font-bold rounded-xl transition-colors text-sm flex items-center gap-2"
               >
-                <RefreshCw className="w-4 h-4" /> Boshqatdan urinish
+                <RefreshCw className="w-4 h-4" /> {t('auto.Boshqatdan urinish')}
               </motion.button>
             </motion.div>
           ) : insights.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center gap-4">
               <Sparkles className="w-12 h-12 text-gray-300 dark:text-gray-700" />
               <p className="text-base text-gray-400 dark:text-gray-500 font-medium">
-                Siz uchun tavsiyalar tayyor
+                {t('auto.Siz uchun tavsiyalar tayyor')}
               </p>
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -557,7 +560,7 @@ export const DashboardAiTab: React.FC<DashboardAiTabProps> = ({ userRole, stats 
                 onClick={loadInsights}
                 className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 mt-2"
               >
-                Tahlilni boshlash
+                {t('auto.Tahlilni boshlash')}
               </motion.button>
             </div>
           ) : (

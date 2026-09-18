@@ -1,3 +1,4 @@
+import { useLanguage } from '../../../context/LanguageContext';
 import React, { useEffect, useState } from "react";
 import { ImageOff, Signal, Wifi, BatteryFull } from "lucide-react";
 import { useLandingCopy } from "../useLandingCopy";
@@ -12,15 +13,20 @@ const SHOT_VERSION = "1";
 export const shotUrl = (name: string, lang?: string) =>
   `/landing/${name}${lang === "ru" ? ".ru" : ""}.webp?v=${SHOT_VERSION}`;
 
-const Placeholder: React.FC<{ ratio: string }> = ({ ratio }) => (
+const Placeholder: React.FC<{ ratio: string }> = ({ ratio }) => {
+  const { t } = useLanguage();
+  return (
   <div className={`w-full ${ratio} bg-slate-100 flex flex-col items-center justify-center gap-2 text-slate-400`}>
     <ImageOff className="w-6 h-6" />
-    <span className="text-[11px] font-medium">Ekran rasmi topilmadi</span>
+    <span className="text-[11px] font-medium">{t('auto.Ekran rasmi topilmadi')}</span>
   </div>
 );
+};
 
 /** Rasm manzilini boshqaradi: ruscha nusxa → o'zbekcha nusxa → placeholder */
 function useShotSrc(image: string) {
+    const { t } = useLanguage();
+
   const { lang } = useLandingCopy();
   const [src, setSrc] = useState(() => shotUrl(image, lang));
   const [failed, setFailed] = useState(false);

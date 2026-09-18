@@ -1,3 +1,4 @@
+import { useLanguage } from '../context/LanguageContext';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { FlaskConical, Plus, Search, Clock, CheckCircle, Package, Truck, X, Edit2, Trash2, AlertCircle, ChevronDown, User, Stethoscope, Calendar } from 'lucide-react';
 import { LabTechnician, LabOrder, Patient } from '../types';
@@ -32,6 +33,8 @@ const emptyForm = {
 };
 
 export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [], onExpensesChanged, defaultDoctorName }) => {
+    const { t } = useLanguage();
+
   const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterTech, setFilterTech]   = useState<string>('all');
@@ -137,12 +140,12 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center shadow-lg">
               <FlaskConical className="w-5 h-5 text-white" />
             </div>
-            Laboratoriya Buyurtmalari
+            {t('auto.Laboratoriya Buyurtmalari')}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Dental texnik buyurtmalarini boshqaring</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('auto.Dental texnik buyurtmalarini boshqaring')}</p>
         </div>
         <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium shadow-md hover:shadow-lg active:scale-95 transition-all">
-          <Plus className="w-4 h-4" /> Buyurtma qo'shish
+          <Plus className="w-4 h-4" /> {t('auto.Buyurtma qo\'shish')}
         </button>
       </div>
 
@@ -168,14 +171,14 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Bemor yoki texnik..." className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('auto.Bemor yoki texnik...')} className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
         </div>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-          <option value="all">Barcha holat</option>
+          <option value="all">{t('auto.Barcha holat')}</option>
           {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
         <select value={filterTech} onChange={e => setFilterTech(e.target.value)} className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-          <option value="all">Barcha texnik</option>
+          <option value="all">{t('auto.Barcha texnik')}</option>
           {activeTechs.map(t => <option key={t.id} value={t.id}>{t.lastName} {t.firstName}</option>)}
         </select>
       </div>
@@ -184,8 +187,8 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
       {activeTechs.length === 0 && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-6 text-center">
           <FlaskConical className="w-10 h-10 text-amber-500 mx-auto mb-3" />
-          <p className="font-semibold text-amber-800 dark:text-amber-400">Texniklar qo'shilmagan</p>
-          <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">Buyurtma yaratish uchun avval Xodimlar bo'limida texnik qo'shing.</p>
+          <p className="font-semibold text-amber-800 dark:text-amber-400">{t('auto.Texniklar qo\'shilmagan')}</p>
+          <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">{t('auto.Buyurtma yaratish uchun avval Xodimlar bo\'limida texnik qo\'shing.')}</p>
         </div>
       )}
 
@@ -194,7 +197,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
         {filtered.length === 0 && activeTechs.length > 0 && (
           <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
             <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">Buyurtmalar topilmadi</p>
+            <p className="text-gray-500">{t('auto.Buyurtmalar topilmadi')}</p>
           </div>
         )}
         {filtered.map(order => {
@@ -209,7 +212,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-lg font-bold text-gray-900 dark:text-white">{order.orderType}</span>
                       {order.priority === 'Urgent' && <span className="px-2 py-0.5 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs font-bold rounded-full border border-red-200">🔴 Shoshilinch</span>}
-                      {overdue && <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">Muddati o'tgan!</span>}
+                      {overdue && <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">{t('auto.Muddati o\'tgan!')}</span>}
                       <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full border flex items-center gap-1 ${sc.color}`}>
                         <StatusIcon className="w-3 h-3" />{sc.label}
                       </span>
@@ -226,13 +229,13 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   <div className="flex items-center gap-1.5 shrink-0">
                     {/* Quick status change */}
                     {order.status === 'Pending' && (
-                      <button onClick={() => handleStatusChange(order, 'In-Progress')} className="px-2.5 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">Boshlash</button>
+                      <button onClick={() => handleStatusChange(order, 'In-Progress')} className="px-2.5 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">{t('auto.Boshlash')}</button>
                     )}
                     {order.status === 'In-Progress' && (
-                      <button onClick={() => handleStatusChange(order, 'Ready')} className="px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">Tayyor</button>
+                      <button onClick={() => handleStatusChange(order, 'Ready')} className="px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">{t('auto.Tayyor')}</button>
                     )}
                     {order.status === 'Ready' && (
-                      <button onClick={() => handleStatusChange(order, 'Delivered')} className="px-2.5 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">Topshirish</button>
+                      <button onClick={() => handleStatusChange(order, 'Delivered')} className="px-2.5 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">{t('auto.Topshirish')}</button>
                     )}
                     <button onClick={() => openEdit(order)} className="p-1.5 text-gray-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
                     <button onClick={() => handleDelete(order.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
@@ -280,7 +283,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                           setShowPatientDropdown(true);
                         }}
                         onFocus={() => { if (patientSearch) setShowPatientDropdown(true); }}
-                        placeholder="Bemor ismi yoki telefoni bilan qidiring..."
+                        placeholder={t('auto.Bemor ismi yoki telefoni bilan qidiring...')}
                         className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                         autoFocus={!form.patientName}
                       />
@@ -313,7 +316,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Shifokor</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Shifokor')}</label>
                   <select value={form.doctorName} onChange={e => setForm(f => ({...f, doctorName: e.target.value}))} className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                     <option value="">— Tanlang —</option>
                     {doctors.map(d => <option key={d.id} value={`Dr. ${d.lastName} ${d.firstName}`}>{d.lastName} {d.firstName}</option>)}
@@ -334,14 +337,14 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Material</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Material')}</label>
                   <select value={form.material} onChange={e => setForm(f => ({...f, material: e.target.value}))} className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                     <option value="">— Tanlang —</option>
                     {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tish raqamlari</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Tish raqamlari')}</label>
                   <input value={form.toothNumbers} onChange={e => setForm(f => ({...f, toothNumbers: e.target.value}))} placeholder="14, 15, 16" className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
                 </div>
                 <div>
@@ -353,7 +356,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   <input type="number" value={form.price} onChange={e => setForm(f => ({...f, price: e.target.value}))} onWheel={e => e.currentTarget.blur()} placeholder="0" className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ustuvorlik</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Ustuvorlik')}</label>
                   <div className="flex gap-2">
                     {(['Normal', 'Urgent'] as const).map(p => (
                       <button key={p} type="button" onClick={() => setForm(f => ({...f, priority: p}))} className={`flex-1 py-2 rounded-xl text-xs font-medium border transition-all ${form.priority === p ? (p === 'Urgent' ? 'bg-red-600 text-white border-red-600' : 'bg-teal-600 text-white border-teal-600') : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>
@@ -363,7 +366,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Buyurtma holati</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Buyurtma holati')}</label>
                   <select value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value as any}))} className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                     {Object.entries(STATUS_CONFIG).map(([k, v]) => (
                       <option key={k} value={k}>{v.label}</option>
@@ -371,13 +374,13 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Shifokordan izoh</label>
-                  <textarea value={form.clinicianNotes} onChange={e => setForm(f => ({...f, clinicianNotes: e.target.value}))} rows={2} placeholder="Texnikka maxsus ko'rsatmalar..." className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none" />
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Shifokordan izoh')}</label>
+                  <textarea value={form.clinicianNotes} onChange={e => setForm(f => ({...f, clinicianNotes: e.target.value}))} rows={2} placeholder={t('auto.Texnikka maxsus ko\'rsatmalar...')} className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none" />
                 </div>
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100 dark:border-gray-800">
-              <button onClick={() => setShowModal(false)} className="flex-1 py-3 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Bekor</button>
+              <button onClick={() => setShowModal(false)} className="flex-1 py-3 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">{t('auto.Bekor')}</button>
               <button onClick={handleSave} disabled={saving} className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors">
                 {saving ? 'Saqlanmoqda...' : editingOrder ? 'Saqlash' : 'Yaratish'}
               </button>

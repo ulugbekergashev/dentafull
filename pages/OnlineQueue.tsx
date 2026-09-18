@@ -1,3 +1,4 @@
+import { useLanguage } from '../context/LanguageContext';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Clock, Users, UserCheck, UserX, ChevronRight, Plus,
@@ -8,6 +9,8 @@ import { Doctor, Patient, Appointment, Clinic } from '../types';
 import { api, API_URL } from '../services/api';
 
 const playChime = () => {
+    const { t } = useLanguage();
+
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     
@@ -183,6 +186,7 @@ function waitMinutes(iso: string) {
 }
 
 export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, userRole, currentClinic }) => {
+  const { t } = useLanguage();
   const [queue, setQueue] = useState<QueueEntry[]>(loadQueue);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isTVMode, setIsTVMode] = useState(false);
@@ -304,6 +308,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
   }, []);
 
   const printTicket = useCallback((entry: QueueEntry, position: number) => {
+  const { t } = useLanguage();
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     
@@ -320,7 +325,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
     printWindow.document.write(`
       <html>
         <head>
-          <title>Navbat chiptasi</title>
+          <title>{t('auto.Navbat chiptasi')}</title>
           <style>
             @page { size: 80mm auto; margin: 0; }
             @media print {
@@ -350,7 +355,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
           <div class="clinic-name">${clinicName}</div>
           ${clinicPhone ? `<div class="clinic-phone">${clinicPhone}</div>` : ''}
           <div class="divider"></div>
-          <div class="ticket-title">NAVBAT CHIPTASI</div>
+          <div class="ticket-title">{t('auto.NAVBAT CHIPTASI')}</div>
           <div class="queue-number">#${position}</div>
           <div class="divider"></div>
           <table class="info-table">
@@ -362,8 +367,8 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
           </table>
           <div class="divider"></div>
           <div class="footer">
-            Navbatingizni kutishingizni so'raymiz.<br/>
-            Salomat bo'ling!
+            {t('auto.Navbatingizni kutishingizni so\'raymiz.')}<br/>
+            {t('auto.Salomat bo\'ling!')}
           </div>
           <script>
             window.onload = function() {
@@ -514,9 +519,9 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg">
               <Users className="w-5 h-5 text-white" />
             </div>
-            Online Navbat
+            {t('auto.Online Navbat')}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Kunlik qabul navbatini boshqaring</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('auto.Kunlik qabul navbatini boshqaring')}</p>
         </div>
         <div className="flex items-center gap-3 font-sans">
           <button
@@ -536,17 +541,17 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
           <button
             onClick={() => setIsTVMode(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-gray-150 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-all active:scale-95 border border-gray-200 dark:border-gray-700 shadow-sm"
-            title="Televizorda navbatni ko'rsatish"
+            title={t('auto.Televizorda navbatni ko\'rsatish')}
           >
             <Tv className="w-4 h-4" />
-            Monitor rejimi
+            {t('auto.Monitor rejimi')}
           </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-medium transition-all shadow-md hover:shadow-lg active:scale-95"
           >
             <Plus className="w-4 h-4" />
-            Navbat qo'shish
+            {t('auto.Navbat qo\'shish')}
           </button>
         </div>
       </div>
@@ -597,7 +602,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
               <div className="w-16 h-16 bg-violet-100 dark:bg-violet-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Users className="w-8 h-8 text-violet-400" />
               </div>
-              <p className="font-medium text-gray-700 dark:text-gray-300">Navbatda hech kim yo'q</p>
+              <p className="font-medium text-gray-700 dark:text-gray-300">{t('auto.Navbatda hech kim yo\'q')}</p>
               <p className="text-sm text-gray-400 mt-1">Yangi navbat qo'shish uchun "Navbat qo'shish" tugmasini bosing</p>
             </div>
           )}
@@ -624,13 +629,13 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
                 className="text-sm text-red-500 hover:text-red-600 flex items-center gap-1 font-medium"
               >
                 <Trash2 className="w-4 h-4" />
-                Tarixni tozalash
+                {t('auto.Tarixni tozalash')}
               </button>
             </div>
           )}
           {history.length === 0 && (
             <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
-              <p className="text-gray-400">Bugun tarix yo'q</p>
+              <p className="text-gray-400">{t('auto.Bugun tarix yo\'q')}</p>
             </div>
           )}
           {history.map((entry, idx) => (
@@ -653,7 +658,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-700">
-              <h2 className="font-bold text-lg text-gray-900 dark:text-white">Navbat qo'shish</h2>
+              <h2 className="font-bold text-lg text-gray-900 dark:text-white">{t('auto.Navbat qo\'shish')}</h2>
               <button
                 onClick={() => { setShowAddModal(false); setPatientSuggestions([]); }}
                 className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -666,13 +671,13 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
               {/* Patient search */}
               <div className="relative">
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
-                  Bemor <span className="text-red-500">*</span>
+                  {t('auto.Bemor')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={form.patientSearch}
                   onChange={e => handlePatientSearch(e.target.value)}
-                  placeholder="Ism, familiya yoki telefon..."
+                  placeholder={t('auto.Ism, familiya yoki telefon...')}
                   className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
                 />
                 {patientSuggestions.length > 0 && (
@@ -699,7 +704,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
               {/* Phone */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
-                  Telefon <span className="text-red-500">*</span>
+                  {t('auto.Telefon')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
@@ -712,7 +717,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
 
               {/* Doctor */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Shifokor</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">{t('auto.Shifokor')}</label>
                 <select
                   value={form.doctorId}
                   onChange={e => setForm(f => ({ ...f, doctorId: e.target.value }))}
@@ -739,12 +744,12 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Izoh</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">{t('auto.Izoh')}</label>
                 <textarea
                   value={form.notes}
                   onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                   rows={2}
-                  placeholder="Qo'shimcha ma'lumot..."
+                  placeholder={t('auto.Qo\'shimcha ma\'lumot...')}
                   className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none"
                 />
               </div>
@@ -759,7 +764,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
                   className="w-4 h-4 rounded text-violet-600 focus:ring-violet-500 border-gray-300 cursor-pointer"
                 />
                 <label htmlFor="printOnAdd" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-                  Chiptani avtomat chop etish
+                  {t('auto.Chiptani avtomat chop etish')}
                 </label>
               </div>
             </div>
@@ -769,14 +774,14 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
                 onClick={() => { setShowAddModal(false); setPatientSuggestions([]); }}
                 className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                Bekor qilish
+                {t('auto.Bekor qilish')}
               </button>
               <button
                 onClick={addToQueue}
                 disabled={!form.phone.trim() && !form.patientSearch.trim()}
                 className="flex-1 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-xl font-medium transition-all shadow-md"
               >
-                Navbatga qo'shish
+                {t('auto.Navbatga qo\'shish')}
               </button>
             </div>
           </div>
@@ -797,6 +802,7 @@ interface CardProps {
 }
 
 const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUpdateStatus, onRemove, onPrint }) => {
+  const { t } = useLanguage();
   const waited = waitMinutes(entry.arrivedAt);
 
   return (
@@ -861,7 +867,7 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
           {/* Print Button (Always available for active or history) */}
           <button
             onClick={() => onPrint(entry)}
-            title="Chipta chop etish"
+            title={t('auto.Chipta chop etish')}
             className="p-2 text-gray-500 hover:text-violet-600 hover:bg-violet-50 dark:text-gray-400 dark:hover:bg-violet-900/20 rounded-lg transition-colors"
           >
             <Printer className="w-4 h-4" />
@@ -873,14 +879,14 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
                 <>
                   <button
                     onClick={() => onUpdateStatus(entry.id, 'Called')}
-                    title="Chaqirish"
+                    title={t('auto.Chaqirish')}
                     className="p-2 bg-primary-100 hover:bg-primary-200 dark:bg-primary-900/30 dark:hover:bg-primary-900/50 text-primary-700 dark:text-primary-400 rounded-lg transition-colors"
                   >
                     <Bell className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => onUpdateStatus(entry.id, 'Missed')}
-                    title="Kelmadi"
+                    title={t('auto.Kelmadi')}
                     className="p-2 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-lg transition-colors"
                   >
                     <UserX className="w-4 h-4" />
@@ -891,21 +897,21 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
                 <>
                   <button
                     onClick={() => onUpdateStatus(entry.id, 'Called')}
-                    title="Qayta chaqirish"
+                    title={t('auto.Qayta chaqirish')}
                     className="p-2 bg-primary-100 hover:bg-primary-200 dark:bg-primary-900/30 dark:hover:bg-primary-900/50 text-primary-700 dark:text-primary-400 rounded-lg transition-colors"
                   >
                     <Bell className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => onUpdateStatus(entry.id, 'In-Progress')}
-                    title="Qabul boshlash"
+                    title={t('auto.Qabul boshlash')}
                     className="p-2 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-400 rounded-lg transition-colors"
                   >
                     <Play className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => onUpdateStatus(entry.id, 'Missed')}
-                    title="Kelmadi"
+                    title={t('auto.Kelmadi')}
                     className="p-2 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-lg transition-colors"
                   >
                     <UserX className="w-4 h-4" />
@@ -915,7 +921,7 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
               {entry.status === 'In-Progress' && (
                 <button
                   onClick={() => onUpdateStatus(entry.id, 'Done')}
-                  title="Tugallash"
+                  title={t('auto.Tugallash')}
                   className="p-2 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400 rounded-lg transition-colors"
                 >
                   <CheckCircle className="w-4 h-4" />
@@ -926,7 +932,7 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
 
           <button
             onClick={() => onRemove(entry.id)}
-            title="O'chirish"
+            title={t('auto.O\'chirish')}
             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
@@ -944,6 +950,7 @@ const QueueTVBoard: React.FC<{
   voiceEnabled: boolean;
   onToggleVoice: () => void;
 }> = ({ queue, clinicName, onClose, voiceEnabled, onToggleVoice }) => {
+  const { t } = useLanguage();
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -995,7 +1002,7 @@ const QueueTVBoard: React.FC<{
           </div>
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight uppercase">{clinicName}</h1>
-            <p className="text-sm text-slate-400 mt-0.5">Kutish zali elektron monitori</p>
+            <p className="text-sm text-slate-400 mt-0.5">{t('auto.Kutish zali elektron monitori')}</p>
           </div>
         </div>
         <div className="text-right">
@@ -1021,11 +1028,12 @@ const QueueTVBoard: React.FC<{
             {currentDisplays.length === 0 ? (
               <div className="text-center py-20 text-slate-500">
                 <Clock className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                <p className="text-2xl font-medium">Hozircha chaqiruvlar yo'q</p>
-                <p className="text-sm mt-2">Kutish zalida navbatingizni kuting</p>
+                <p className="text-2xl font-medium">{t('auto.Hozircha chaqiruvlar yo\'q')}</p>
+                <p className="text-sm mt-2">{t('auto.Kutish zalida navbatingizni kuting')}</p>
               </div>
             ) : (
               currentDisplays.map((entry) => {
+  const { t } = useLanguage();
                 const isCalledStatus = entry.status === 'Called';
                 return (
                   <div
@@ -1057,11 +1065,11 @@ const QueueTVBoard: React.FC<{
                     <div className="text-right">
                       {isCalledStatus ? (
                         <div className="px-5 py-2.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-300 text-lg font-bold uppercase tracking-wider animate-bounce">
-                          Chaqirilmoqda
+                          {t('auto.Chaqirilmoqda')}
                         </div>
                       ) : (
                         <div className="px-5 py-2.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-lg font-bold uppercase tracking-wider">
-                          Qabulda
+                          {t('auto.Qabulda')}
                         </div>
                       )}
                     </div>
@@ -1081,10 +1089,12 @@ const QueueTVBoard: React.FC<{
           <div className="flex-1 overflow-y-auto space-y-4 pr-1">
             {waiting.length === 0 ? (
               <div className="h-full flex items-center justify-center text-slate-500">
-                <p className="text-lg">Navbatlar tugadi</p>
+                <p className="text-lg">{t('auto.Navbatlar tugadi')}</p>
               </div>
             ) : (
-              waiting.slice(0, 6).map((entry) => (
+              waiting.slice(0, 6).map((entry) => {
+  const { t } = useLanguage();
+  return (
                 <div
                   key={entry.id}
                   className="bg-slate-900 border border-slate-800/60 rounded-xl p-4 flex items-center gap-4 transition-all"
@@ -1099,10 +1109,11 @@ const QueueTVBoard: React.FC<{
                     )}
                   </div>
                   <div className="text-xs text-slate-500 bg-slate-800/50 px-2.5 py-1 rounded-md shrink-0">
-                    Kutmoqda
+                    {t('auto.Kutmoqda')}
                   </div>
                 </div>
-              ))
+              );
+})
             )}
           </div>
         </div>
