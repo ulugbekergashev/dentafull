@@ -1158,7 +1158,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                 <button
                                                     onClick={() => {
                                                         const tx = transactions.find(t => t.id === row.id);
-                                                        if (tx) openEdit(tx)}
+                                                        if (tx) openEdit(tx); }}
                                                     title={t(`auto.Tuzatish`)}
                                                     className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                                 >
@@ -1230,7 +1230,8 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                         service: item.service,
                                                         amount: item.amount || undefined,
                                                     });
-                                                    setIsPaymentOpen(true)
+                                                    setIsPaymentOpen(true);
+                                                }
                                             }}
                                             className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors"
                                         >
