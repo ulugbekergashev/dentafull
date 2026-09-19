@@ -113,16 +113,19 @@ const Tile: React.FC<{
     );
 };
 
-const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <Tile label={t(`auto.Jami tushum`)} value={totals.gross} icon={Coins} hint={`${totals.paymentCount} ta to'lov`} />
-        <Tile label={t(`auto.Naqd`)} value={totals.cashIn} icon={Banknote} tone="cash" />
-        <Tile label={t(`auto.Naqdsiz`)} value={totals.nonCashIn} icon={CreditCard} tone="card" hint="Karta / Click / o'tkazma" />
-        <Tile label={t(`auto.Xarajat`)} value={totals.expenseTotal} icon={TrendingDown} tone="expense" hint={`naqd: ${num(totals.cashExpense)}`} />
-        <Tile label={t(`auto.Kassada qoldi`)} value={totals.drawer} icon={Wallet} tone="drawer" hint="naqd yashik" />
-        <Tile label={t(`auto.Qarzga yozildi`)} value={totals.unpaid} icon={AlertCircle} hint="to'lanmagan" />
-    </div>
-);
+const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
+    const { t } = useLanguage();
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+            <Tile label={t(`auto.Jami tushum`)} value={totals.gross} icon={Coins} hint={`${totals.paymentCount} ta to'lov`} />
+            <Tile label={t(`auto.Naqd`)} value={totals.cashIn} icon={Banknote} tone="cash" />
+            <Tile label={t(`auto.Naqdsiz`)} value={totals.nonCashIn} icon={CreditCard} tone="card" hint="Karta / Click / o'tkazma" />
+            <Tile label={t(`auto.Xarajat`)} value={totals.expenseTotal} icon={TrendingDown} tone="expense" hint={`naqd: ${num(totals.cashExpense)}`} />
+            <Tile label={t(`auto.Kassada qoldi`)} value={totals.drawer} icon={Wallet} tone="drawer" hint="naqd yashik" />
+            <Tile label={t(`auto.Qarzga yozildi`)} value={totals.unpaid} icon={AlertCircle} hint="to'lanmagan" />
+        </div>
+    );
+};
 
 // ── To'lov usullari qatori ───────────────────────────────────────────────────
 const MethodStrip: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
