@@ -113,9 +113,7 @@ const Tile: React.FC<{
     );
 };
 
-const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
-  const { t } = useLanguage();
-  return (
+const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => (
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <Tile label={t(`auto.Jami tushum`)} value={totals.gross} icon={Coins} hint={`${totals.paymentCount} ta to'lov`} />
         <Tile label={t(`auto.Naqd`)} value={totals.cashIn} icon={Banknote} tone="cash" />
@@ -125,7 +123,6 @@ const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
         <Tile label={t(`auto.Qarzga yozildi`)} value={totals.unpaid} icon={AlertCircle} hint="to'lanmagan" />
     </div>
 );
-};
 
 // ── To'lov usullari qatori ───────────────────────────────────────────────────
 const MethodStrip: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
@@ -866,10 +863,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             {onAddCashMovement && (
                                 <>
                                     <button
-                                        onClick={() => {
-  const { t } = useLanguage();
-  return openMovement('Encashment');
-}}
+                                        onClick={() => openMovement('Encashment')}
                                         title={t(`auto.Kassadan pul olindi`)}
                                         className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
                                     >
@@ -877,10 +871,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         {t('auto.Inkassatsiya')}
                                     </button>
                                     <button
-                                        onClick={() => {
-  const { t } = useLanguage();
-  return openMovement('Refund');
-}}
+                                        onClick={() => openMovement('Refund')}
                                         title={t(`auto.Bemorga pul qaytarish`)}
                                         className="flex items-center gap-1.5 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
                                     >
@@ -894,9 +885,7 @@ export const CashBook: React.FC<CashBookProps> = ({
 
                     {/* Kun / Oy */}
                     <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
-                        {(['day', 'month'] as const).map(v => {
-  const { t } = useLanguage();
-  return (
+                        {(['day', 'month'] as const).map(v => (
                             <button
                                 key={v}
                                 onClick={() => setView(v)}
@@ -907,8 +896,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             >
                                 {v === 'day' ? t('auto.Kun') : t('auto.Oy')}
                             </button>
-                        );
-})}
+                        ))}
                     </div>
 
                     {/* Sana boshqaruvi */}
@@ -985,7 +973,6 @@ export const CashBook: React.FC<CashBookProps> = ({
                 {view === 'day' && multiShift && (
                     <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
                         {shiftWindows.map(w => {
-  const { t } = useLanguage();
                             const active = w.shift === activeShift;
                             return (
                                 <button
@@ -1137,9 +1124,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </p>
                         ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {day.rows.map(row => {
-  const { t } = useLanguage();
-  return (
+                                {day.rows.map(row => (
                                     <li key={row.id} className="px-5 py-3 flex items-center justify-between gap-3">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -1173,8 +1158,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                 <button
                                                     onClick={() => {
                                                         const tx = transactions.find(t => t.id === row.id);
-                                                        if (tx) openEdit(tx);
-                                                    }}
+                                                        if (tx) openEdit(tx)}
                                                     title={t(`auto.Tuzatish`)}
                                                     className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                                 >
@@ -1192,8 +1176,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             )}
                                         </div>
                                     </li>
-                                );
-})}
+                                ))}
                             </ul>
                         )}
                     </Card>
@@ -1220,9 +1203,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </div>
                         ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {unpaidItems.map(item => {
-  const { t } = useLanguage();
-  return (
+                                {unpaidItems.map(item => (
                                     <li key={`${item.kind}-${item.id}`} className="px-5 py-3 flex items-center justify-between gap-3">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -1249,16 +1230,14 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                         service: item.service,
                                                         amount: item.amount || undefined,
                                                     });
-                                                    setIsPaymentOpen(true);
-                                                }
+                                                    setIsPaymentOpen(true)
                                             }}
                                             className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors"
                                         >
                                             To'lash
                                         </button>
                                     </li>
-                                );
-})}
+                                ))}
                             </ul>
                         )}
                     </Card>
@@ -1323,19 +1302,13 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     {onAddCashMovement && (
                                         <div className="flex items-center justify-center gap-3 mt-3">
                                             <button
-                                                onClick={() => {
-  const { t } = useLanguage();
-  return openMovement('Encashment');
-}}
+                                                onClick={() => openMovement('Encashment')}
                                                 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
                                             >
                                                 Inkassatsiya →
                                             </button>
                                             <button
-                                                onClick={() => {
-  const { t } = useLanguage();
-  return openMovement('Refund');
-}}
+                                                onClick={() => openMovement('Refund')}
                                                 className="text-xs font-bold text-gray-500 dark:text-gray-400 hover:underline"
                                             >
                                                 Qaytarish →
@@ -1346,7 +1319,6 @@ export const CashBook: React.FC<CashBookProps> = ({
                             ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {day.movements.map(m => {
-  const { t } = useLanguage();
                                     const isOut = m.type === 'Encashment' || m.type === 'Refund';
                                     return (
                                         <li key={m.id} className="px-5 py-3 flex items-center justify-between gap-3">
@@ -1461,9 +1433,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {monthData.days.map(d => {
-  const { t } = useLanguage();
-  return (
+                                {monthData.days.map(d => (
                                     <tr
                                         key={d.date}
                                         onClick={() => openDay(d.date)}
@@ -1498,8 +1468,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             </td>
                                         ))}
                                     </tr>
-                                );
-})}
+                                ))}
                             </tbody>
                             <tfoot className="bg-gray-50 dark:bg-gray-700 border-t-2 border-gray-200 dark:border-gray-600">
                                 <tr>
