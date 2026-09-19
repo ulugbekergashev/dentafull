@@ -951,17 +951,17 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                   </tr>
                 </thead>
                 <tbody className="text-sm text-gray-700 dark:text-gray-300">
-                  {filteredTransactions.map(t => (
-                    <tr key={t.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="px-6 py-4">{t.date}</td>
-                      <td className="px-6 py-4 font-medium">{t.patientName}</td>
-                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{t.doctorName || '-'}</td>
-                      <td className="px-6 py-4">{t.service}</td>
-                      <td className="px-6 py-4">{getPaymentMethodLabel(t.type)}</td>
-                      <td className="px-6 py-4 font-medium">{t.amount.toLocaleString()} UZS</td>
-                      <td className="px-6 py-4"><Badge status={t.status} /></td>
+                  {filteredTransactions.map(tx => (
+                    <tr key={tx.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="px-6 py-4">{tx.date}</td>
+                      <td className="px-6 py-4 font-medium">{tx.patientName}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{tx.doctorName || '-'}</td>
+                      <td className="px-6 py-4">{tx.service}</td>
+                      <td className="px-6 py-4">{getPaymentMethodLabel(tx.type)}</td>
+                      <td className="px-6 py-4 font-medium">{tx.amount.toLocaleString()} UZS</td>
+                      <td className="px-6 py-4"><Badge status={tx.status} /></td>
                       <td className="px-6 py-4 text-right">
-                        <Button size="sm" variant="secondary" onClick={() => { setReceiptTransaction(t); setIsReceiptModalOpen(true); }} title={t('auto.Chek chiqarish')}>
+                        <Button size="sm" variant="secondary" onClick={() => { setReceiptTransaction(tx); setIsReceiptModalOpen(true); }} title={t('auto.Chek chiqarish')}>
                           <Printer className="w-4 h-4" />
                         </Button>
                       </td>
