@@ -419,5 +419,11 @@
   "F.I.SH.": "Ф.И.О.",
   "Telefon raqami": "Номер телефона",
   "Sotuvchi Muvaffaqiyatli Yaratildi": "Продавец успешно создан",
-  "Facebook Sahifasini Tanlang": "Выберите страницу Facebook"
+  "Facebook Sahifasini Tanlang": "Выберите страницу Facebook",
+  "Kun": "День",
+  "Oy": "Месяц",
+  "Kassaga qancha pul kirdi va qancha qoldi": "Сколько денег поступило и сколько осталось",
+  "Qancha ishlab topdik — foyda, qarz, shifokor ulushi": "Сколько мы заработали — прибыль, долги, доля врача",
+  "Kassa": "Касса",
+  "Hisobot": "Отчет"
 }

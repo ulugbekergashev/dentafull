@@ -709,10 +709,8 @@ export const CashBook: React.FC<CashBookProps> = ({
     // Kassirning kun oxiridagi asosiy savoli: kimdan pul olinmadi.
     // Ikki manba: qarzga yozilgan to'lovlar va to'lov yozilmagan yakunlangan qabullar.
     const unpaidItems = useMemo(() => {
-  const { t } = useLanguage();
-        const pendingTx = transactions
+  const pendingTx = transactions
             .filter(tx => {
-
   return tx && (tx.date || '').split('T')[0] === date && tx.status !== 'Paid';
 })
             .map(tx => ({
@@ -853,7 +851,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
                                 >
                                     <Plus className="w-3.5 h-3.5" />
-                                    To'lov
+                                    {t("auto.To'lov")}
                                 </button>
                             )}
                             {onAddExpense && (
@@ -862,7 +860,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
                                 >
                                     <Banknote className="w-3.5 h-3.5" />
-                                    Xarajat
+                                    {t('auto.Xarajat')}
                                 </button>
                             )}
                             {onAddCashMovement && (
@@ -876,7 +874,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
                                     >
                                         <ArrowDownToLine className="w-3.5 h-3.5" />
-                                        Inkassatsiya
+                                        {t('auto.Inkassatsiya')}
                                     </button>
                                     <button
                                         onClick={() => {
@@ -887,7 +885,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         className="flex items-center gap-1.5 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
                                     >
                                         <Undo2 className="w-3.5 h-3.5" />
-                                        Qaytarish
+                                        {t('auto.Qaytarish')}
                                     </button>
                                 </>
                             )}
@@ -896,18 +894,21 @@ export const CashBook: React.FC<CashBookProps> = ({
 
                     {/* Kun / Oy */}
                     <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
-                        {(['day', 'month'] as const).map(v => (
+                        {(['day', 'month'] as const).map(v => {
+  const { t } = useLanguage();
+  return (
                             <button
                                 key={v}
                                 onClick={() => setView(v)}
-                                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${view === v
-                                    ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-white shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${view === v
+                                    ? 'bg-gray-700 text-white shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700'
                                     }`}
                             >
-                                {v === 'day' ? 'Kun' : 'Oy'}
+                                {v === 'day' ? t('auto.Kun') : t('auto.Oy')}
                             </button>
-                        ))}
+                        );
+})}
                     </div>
 
                     {/* Sana boshqaruvi */}
@@ -963,12 +964,12 @@ export const CashBook: React.FC<CashBookProps> = ({
                     )}
 
                     <Button variant="secondary" onClick={handleExport} className="h-9">
-                        <Download className="w-4 h-4 mr-2" /> Excel
+                        <Download className="w-4 h-4 mr-2" /> {t('auto.Excel')}
                     </Button>
 
                     {view === 'day' && onCloseDay && !closureStatus.closed && (
                         <Button onClick={openCloseModal} className="h-9">
-                            <Lock className="w-4 h-4 mr-2" /> Kunni yopish
+                            <Lock className="w-4 h-4 mr-2" /> {t('auto.Kunni yopish')}
                         </Button>
                     )}
                 </div>
