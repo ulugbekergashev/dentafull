@@ -212,6 +212,34 @@ class BotManager {
                 }
             });
 
+            // 4.1 Listen for "📋 Bugungi qabullar" button (receptionist)
+            bot.hears('📋 Bugungi qabullar', async (ctx) => {
+                const chatId = String(ctx.chat.id);
+                const rec = await prisma.receptionist.findFirst({
+                    where: { telegramChatId: chatId, clinic: { botToken: token } }
+                });
+                if (rec) {
+                    const schedule = await this.generateClinicSchedule(rec.clinicId);
+                    ctx.reply(schedule, { parse_mode: 'Markdown' });
+                } else {
+                    ctx.reply("❌ Kechirasiz, huquqingiz yo'q.");
+                }
+            });
+
+            // 4.2 Listen for "💰 Bugungi kassa holati" button (receptionist)
+            bot.hears('💰 Bugungi kassa holati', async (ctx) => {
+                const chatId = String(ctx.chat.id);
+                const rec = await prisma.receptionist.findFirst({
+                    where: { telegramChatId: chatId, clinic: { botToken: token } }
+                });
+                if (rec) {
+                    const cashReport = await this.generateClinicCashReport(rec.clinicId);
+                    ctx.reply(cashReport, { parse_mode: 'Markdown' });
+                } else {
+                    ctx.reply("❌ Kechirasiz, huquqingiz yo'q.");
+                }
+            });
+
             // 5. Contact Listener
             bot.on('contact', async (ctx) => {
                 const contact = ctx.message.contact;
@@ -292,6 +320,47 @@ class BotManager {
                                 ctx.reply(schedule, { parse_mode: 'Markdown' });
                             }
 
+                            foundAny = true;
+                            break;
+                        }
+                    }
+
+                    if (foundAny) return;
+
+                    // --- CHECK: Receptionist ---
+                    const receptionists = await prisma.receptionist.findMany({
+                        where: {
+                            clinic: { botToken: token }
+                        },
+                        include: { clinic: true }
+                    });
+
+                    for (const rec of receptionists) {
+                        const recPhone = rec.phone.replace(/\s/g, '').replace('+', '');
+                        if (recPhone.slice(-9) === cleanPhone) {
+                            await prisma.receptionist.updateMany({
+                                where: {
+                                    telegramChatId: chatId,
+                                    clinicId: rec.clinicId,
+                                    NOT: { id: rec.id }
+                                },
+                                data: { telegramChatId: null }
+                            });
+
+                            await prisma.receptionist.update({
+                                where: { id: rec.id },
+                                data: { telegramChatId: chatId }
+                            });
+
+                            ctx.reply(`✅ Xush kelibsiz, ${rec.firstName}!\n\nSiz ${rec.clinic.name} qabulxona xodimi sifatida muvaffaqiyatli ulandingiz.`, {
+                                reply_markup: {
+                                    keyboard: [
+                                        [{ text: "📋 Bugungi qabullar" }],
+                                        [{ text: "💰 Bugungi kassa holati" }]
+                                    ],
+                                    resize_keyboard: true
+                                }
+                            });
                             foundAny = true;
                             break;
                         }
@@ -958,6 +1027,81 @@ class BotManager {
     }
 
     /**
+     * Generate today's appointment schedule for a clinic
+     */
+    public async generateClinicSchedule(clinicId: string): Promise<string> {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Tashkent',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const todayDateString = formatter.format(new Date());
+
+        const appointments = await prisma.appointment.findMany({
+            where: {
+                clinicId: clinicId,
+                date: todayDateString,
+                status: { notIn: ['Cancelled'] }
+            },
+            include: {
+                patient: true,
+                doctor: true
+            },
+            orderBy: { time: 'asc' }
+        });
+
+        if (appointments.length === 0) {
+            return `📅 *Bugun uchun qabullar yo'q.*`;
+        }
+
+        let message = `📅 *Bugungi Qabullar (Klinika bo'yicha)*\nSana: ${todayDateString}\n\n`;
+        appointments.forEach((app: any, index: number) => {
+            const docName = app.doctor ? `Dr. ${app.doctor.lastName}` : "Noma'lum";
+            message += `${index + 1}. ⏰ *${app.time}* - 👤 ${app.patient.firstName} ${app.patient.lastName}\n`;
+            message += `   🩺 Shifokor: ${docName}\n`;
+            if (app.type) {
+                message += `   🛠 Xizmat turkum: ${app.type}\n`;
+            }
+            message += `\n`;
+        });
+
+        return message;
+    }
+
+    /**
+     * Generate today's cash report for a clinic
+     */
+    public async generateClinicCashReport(clinicId: string): Promise<string> {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Tashkent',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const todayDateString = formatter.format(new Date());
+
+        const transactions = await prisma.transaction.findMany({
+            where: { clinicId: clinicId, date: todayDateString }
+        });
+
+        const expenses = await prisma.expense.findMany({
+            where: { clinicId: clinicId, date: todayDateString }
+        });
+
+        const totalIncome = transactions.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
+        const totalExpense = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+
+        let message = `💰 *Bugungi Kassa Holati*\nSana: ${todayDateString}\n\n`;
+        message += `🟢 *Tushumlar:* ${totalIncome.toLocaleString()} so'm\n`;
+        message += `🔴 *Xarajatlar:* ${totalExpense.toLocaleString()} so'm\n`;
+        message += `━━━━━━━━━━━━━━━\n`;
+        message += `⚖️ *Qoldiq:* ${(totalIncome - totalExpense).toLocaleString()} so'm\n`;
+
+        return message;
+    }
+
+    /**
      * Generate today's appointment schedule for a specific doctor
      */
     public async generateDoctorSchedule(doctorId: string, clinicId: string): Promise<string> {
@@ -1102,6 +1246,20 @@ class BotManager {
             `💰 *Jami tushum:* ${totalRevenue.toLocaleString()} so'm\n` +
             recallLine + `\n` +
             `Xizmatingiz barakali bo'lsin! 😊`;
+    }
+    public async notifyReceptionists(clinicId: string, text: string) {
+        try {
+            const receptionists = await prisma.receptionist.findMany({
+                where: { clinicId, telegramChatId: { not: null } }
+            });
+            for (const rec of receptionists) {
+                if (rec.telegramChatId) {
+                    await this.notifyClinicUser(clinicId, rec.telegramChatId, text);
+                }
+            }
+        } catch(e) {
+            console.error("Failed to notify receptionists:", e);
+        }
     }
 }
 

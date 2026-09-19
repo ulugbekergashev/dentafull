@@ -105,6 +105,25 @@ if (bot) {
                 return;
             }
 
+            // Try finding receptionist
+            let receptionist = await prisma.receptionist.findFirst({
+                where: {
+                    OR: [
+                        { phone: phone },
+                        { phone: `+${phone}` }
+                    ]
+                }
+            });
+
+            if (receptionist) {
+                await prisma.receptionist.update({
+                    where: { id: receptionist.id },
+                    data: { telegramChatId: chatId }
+                });
+                ctx.reply(`✅ Xush kelibsiz, ${receptionist.firstName}! Qabulxona xodimi sifatida ulandingiz.`);
+                return;
+            }
+
             ctx.reply("❌ Kechirasiz, bu raqam tizimda topilmadi.");
 
         } catch (error) {

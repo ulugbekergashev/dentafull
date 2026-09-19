@@ -4225,6 +4225,7 @@ const notifyNewLead = async (clinic: any, lead: any) => {
         if (lead.source) lines.push(`🔗 Manba: ${lead.source}`);
 
         await botManager.notifyClinicUser(clinic.id, clinic.telegramChatId, lines.join('\n'), undefined, 'NewLead', undefined, { source: 'lead_webhook' });
+        await botManager.notifyReceptionists(clinic.id, lines.join('\n'));
     } catch (err: any) {
         console.error('❌ Yangi lid bildirishnomasi yuborilmadi:', err?.message || err);
     }
