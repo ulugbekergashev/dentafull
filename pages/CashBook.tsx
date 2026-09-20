@@ -30,6 +30,7 @@ import { PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, get
 import { formatDateToISO } from '../utils/dateUtils';
 import { calculateAppointmentTotal, isAppointmentPaid } from '../utils/financialCalculations';
 import { api } from '../services/api';
+import { tLabel } from '../i18n/labels';
 
 // Kassada kundalik chiqimlar yoziladi. Oylik va shifokor ulushi ataylab yo'q —
 // ular oyda bir marta, murakkab hisob-kitob bilan Hisobot tabida rasmiylashtiriladi.
@@ -75,6 +76,14 @@ interface CashBookProps {
     onDeleteTransaction?: (id: string) => Promise<void>;
 }
 
+/** Oy nomlari: formatMonthLabel() o'zbekcha qaytaradi, ekranda esa tanlangan til kerak */
+const MONTH_KEYS = ['auto.Yanvar', 'auto.Fevral', 'auto.Mart', 'auto.Aprel', 'auto.May', 'auto.Iyun',
+    'auto.Iyul', 'auto.Avgust', 'auto.Sentabr', 'auto.Oktabr', 'auto.Noyabr', 'auto.Dekabr'] as const;
+const monthLabelT = (month: string, t: (k: any) => string) => {
+    const [y, m] = month.split('-').map(Number);
+    return (!y || !m) ? month : `${t(MONTH_KEYS[m - 1])} ${y}`;
+};
+
 const num = (v: number) => Math.round(v).toLocaleString('uz-UZ').replace(/,/g, ' ');
 
 // ── Yakun plitkasi ───────────────────────────────────────────────────────────
@@ -117,12 +126,12 @@ const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
     const { t } = useLanguage();
     return (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-            <Tile label={t(`auto.Jami tushum`)} value={totals.gross} icon={Coins} hint={`${totals.paymentCount} ta to'lov`} />
+            <Tile label={t(`auto.Jami tushum`)} value={totals.gross} icon={Coins} hint={t("auto.{n} ta to'lov").replace('{n}', String(totals.paymentCount))} />
             <Tile label={t(`auto.Naqd`)} value={totals.cashIn} icon={Banknote} tone="cash" />
-            <Tile label={t(`auto.Naqdsiz`)} value={totals.nonCashIn} icon={CreditCard} tone="card" hint="Karta / Click / o'tkazma" />
-            <Tile label={t(`auto.Xarajat`)} value={totals.expenseTotal} icon={TrendingDown} tone="expense" hint={`naqd: ${num(totals.cashExpense)}`} />
-            <Tile label={t(`auto.Kassada qoldi`)} value={totals.drawer} icon={Wallet} tone="drawer" hint="naqd yashik" />
-            <Tile label={t(`auto.Qarzga yozildi`)} value={totals.unpaid} icon={AlertCircle} hint="to'lanmagan" />
+            <Tile label={t(`auto.Naqdsiz`)} value={totals.nonCashIn} icon={CreditCard} tone="card" hint={t("auto.Karta / Click / o'tkazma")} />
+            <Tile label={t(`auto.Xarajat`)} value={totals.expenseTotal} icon={TrendingDown} tone="expense" hint={t('auto.naqd: {n}').replace('{n}', num(totals.cashExpense))} />
+            <Tile label={t(`auto.Kassada qoldi`)} value={totals.drawer} icon={Wallet} tone="drawer" hint={t('auto.naqd yashik')} />
+            <Tile label={t(`auto.Qarzga yozildi`)} value={totals.unpaid} icon={AlertCircle} hint={t("auto.to'lanmagan")} />
         </div>
     );
 };
@@ -151,7 +160,7 @@ const MethodStrip: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
                         <div>
                             <p className="text-[11px] text-gray-400 leading-tight">{t('cashbook.advanceDeducted')}</p>
                             <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">
-                                {num(totals.fromBalance)} <span className="text-[10px] font-normal">· kassaga kirmagan</span>
+                                {num(totals.fromBalance)} <span className="text-[10px] font-normal">{t('auto.· kassaga kirmagan')}</span>
                             </p>
                         </div>
                     </div>
@@ -242,7 +251,7 @@ const CashFlowPanel: React.FC<{
             key="opening"
             label={t(`auto.Kun boshida`)}
             value={totals.openingCash}
-            hint={day.openingAnchorDate ? `${formatDateLabel(day.openingAnchorDate)} yopilishidan` : 'hali yopilmagan'}
+            hint={day.openingAnchorDate ? t('auto.{d} yopilishidan').replace('{d}', formatDateLabel(day.openingAnchorDate)) : t('auto.hali yopilmagan')}
         />, ''
     );
     if (totals.cashIn) push(<FlowStep key="in" label={t(`auto.Naqd tushum`)} value={totals.cashIn} sign="+" tone="in" />, '+');
@@ -261,17 +270,17 @@ const CashFlowPanel: React.FC<{
                 {/* Chap: oqim */}
                 <div className="flex-1 min-w-0">
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-                        Naqd yashik hisobi
+                        {t('auto.Naqd yashik hisobi')}
                     </h3>
                     {quiet ? (
                         <div className="flex items-baseline gap-3">
                             <FlowStep
                                 label={t(`auto.Kun boshida`)}
-                                value={t.openingCash}
-                                hint={day.openingAnchorDate ? `${formatDateLabel(day.openingAnchorDate)} yopilishidan` : undefined}
+                                value={totals.openingCash}
+                                hint={day.openingAnchorDate ? t('auto.{d} yopilishidan').replace('{d}', formatDateLabel(day.openingAnchorDate)) : undefined}
                             />
                             <p className="text-sm text-gray-400">
-                                Bu kunda naqd harakat bo'lmagan.
+                                {t("auto.Bu kunda naqd harakat bo'lmagan.")}
                             </p>
                         </div>
                     ) : (
@@ -284,25 +293,24 @@ const CashFlowPanel: React.FC<{
                         <div className="mt-5 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700">
                             <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                                 <CreditCard className="w-3.5 h-3.5" />
-                                Naqdsiz (hisob raqam) — yashikda emas
+                                {t('auto.Naqdsiz (hisob raqam) — yashikda emas')}
                             </p>
                             <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
                                 <FlowStep label={t(`auto.Tushdi`)} value={totals.nonCashIn} sign="+" tone="in" />
-                                {t.nonCashExpense > 0 && (
+                                {totals.nonCashExpense > 0 && (
                                     <>
                                         <Operator>−</Operator>
-                                        <FlowStep label={t(`auto.Chiqdi`)} value={t.nonCashExpense} sign="−" tone="out" />
+                                        <FlowStep label={t(`auto.Chiqdi`)} value={totals.nonCashExpense} sign="−" tone="out" />
                                     </>
                                 )}
                                 <Operator>=</Operator>
-                                <FlowStep label={t(`auto.Hisobga qo'shildi`)} value={t.nonCashIn - t.nonCashExpense} />
+                                <FlowStep label={t(`auto.Hisobga qo'shildi`)} value={totals.nonCashIn - totals.nonCashExpense} />
                             </div>
                         </div>
                     )}
                     {!day.openingAnchorDate && (
                         <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">
-                            Hali birorta kun yopilmagan — kun boshi 0 deb olindi. Birinchi marta
-                            yopganingizdan keyin qoldiq har kuni o'zi ko'chib boradi.
+                            {t("auto.Hali birorta kun yopilmagan — kun boshi 0 deb olindi. Birinchi marta yopganingizdan keyin qoldiq har kuni o'zi ko'chib boradi.")}
                         </p>
                     )}
                 </div>
@@ -311,7 +319,7 @@ const CashFlowPanel: React.FC<{
                 <div className="xl:w-72 shrink-0 xl:border-l xl:pl-5 border-gray-200 dark:border-gray-700 flex flex-col justify-between gap-3">
                     <div>
                         <p className="text-[11px] text-gray-400 uppercase tracking-wide">
-                            Yashikda bo'lishi kerak
+                            {t("auto.Yashikda bo'lishi kerak")}
                         </p>
                         <p className="text-3xl font-black tabular-nums text-amber-600 dark:text-amber-400 leading-tight mt-1">
                             {num(t.drawer)}
@@ -338,13 +346,13 @@ const CashFlowPanel: React.FC<{
 
                     {!closure.closed && onClose && (
                         <Button onClick={onClose} className="w-full">
-                            <Lock className="w-4 h-4 mr-2" /> Kunni yopish
+                            <Lock className="w-4 h-4 mr-2" /> {t('auto.Kunni yopish')}
                         </Button>
                     )}
                     {closure.closed && (
                         <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
                             <Check className="w-3.5 h-3.5 text-emerald-500" />
-                            Kun yopilgan
+                            {t('auto.Kun yopilgan')}
                         </p>
                     )}
                 </div>
@@ -361,12 +369,13 @@ const ReconRow: React.FC<{
     onChange: (v: string) => void;
     counted: number | null;
 }> = ({ label, expected, value, onChange, counted }) => {
+    const { t } = useLanguage();
     const diff = counted === null ? null : counted - expected;
     return (
         <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
                 <p className="text-sm text-gray-700 dark:text-gray-200 truncate">{label}</p>
-                <p className="text-[11px] text-gray-400">tizimda: {num(expected)}</p>
+                <p className="text-[11px] text-gray-400">{t('auto.tizimda: {n}').replace('{n}', num(expected))}</p>
             </div>
             <input
                 type="number"
@@ -393,6 +402,7 @@ const ClosureBanner: React.FC<{
     onReopen: () => void;
     onRecount: () => void;
 }> = ({ status, currentDrawer, canReopen, onReopen, onRecount }) => {
+    const { t, language } = useLanguage();
     const c = status.closure!;
     const diff = status.changedAfterClose ? status.currentDifference : c.difference;
     const exact = Math.abs(diff) < 1;
@@ -415,37 +425,36 @@ const ClosureBanner: React.FC<{
                     <div>
                         <p className="text-sm font-bold text-gray-900 dark:text-white">
                             {status.changedAfterClose
-                                ? 'Kun yopilgan, lekin keyin o\'zgardi'
-                                : exact ? 'Kun yopilgan — kassa to\'g\'ri keldi' : 'Kun yopilgan — farq bor'}
+                                ? t("auto.Kun yopilgan, lekin keyin o'zgardi")
+                                : exact ? t("auto.Kun yopilgan — kassa to'g'ri keldi") : t('auto.Kun yopilgan — farq bor')}
                         </p>
                         <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-                            Sanalgan <b>{num(c.countedCash)}</b>
+                            {t('auto.Sanalgan')} <b>{num(c.countedCash)}</b>
                             <span className="mx-1.5">·</span>
-                            Hisob bo'yicha <b>{num(status.changedAfterClose ? currentDrawer : c.expectedCash)}</b>
+                            {t("auto.Hisob bo'yicha")} <b>{num(status.changedAfterClose ? currentDrawer : c.expectedCash)}</b>
                             <span className="mx-1.5">·</span>
-                            Farq <b className={exact ? '' : diff > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}>
+                            {t('auto.Farq')} <b className={exact ? '' : diff > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}>
                                 {diff > 0 ? '+' : ''}{num(diff)}
                             </b>
                         </p>
                         {status.changedAfterClose && (
                             <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                                Yopilgandan keyin bu kunga to'lov yoki xarajat qo'shilgan.
-                                Naqdni qayta sanab, kunni yangilang.
+                                {t("auto.Yopilgandan keyin bu kunga to'lov yoki xarajat qo'shilgan. Naqdni qayta sanab, kunni yangilang.")}
                             </p>
                         )}
                         <p className="text-[11px] text-gray-400 mt-1.5">
-                            {c.closedByName || 'Xodim'} · {new Date(c.closedAt).toLocaleString('uz-UZ')}
+                            {c.closedByName || t('auto.Xodim')} · {new Date(c.closedAt).toLocaleString(language === 'ru' ? 'ru-RU' : 'uz-UZ')}
                             {c.note ? ` · ${c.note}` : ''}
                         </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="secondary" size="sm" onClick={onRecount}>
-                        <Lock className="w-3.5 h-3.5 mr-1.5" /> Qayta sanash
+                        <Lock className="w-3.5 h-3.5 mr-1.5" /> {t('auto.Qayta sanash')}
                     </Button>
                     {canReopen && (
                         <Button variant="ghost" size="sm" onClick={onReopen}>
-                            <LockOpen className="w-3.5 h-3.5 mr-1.5" /> Qayta ochish
+                            <LockOpen className="w-3.5 h-3.5 mr-1.5" /> {t('auto.Qayta ochish')}
                         </Button>
                     )}
                 </div>
@@ -836,7 +845,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('cashbook.title')}</h1>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Kassaga tushgan va kassadan chiqqan haqiqiy pul
+                            {t('auto.Kassaga tushgan va kassadan chiqqan haqiqiy pul')}
                         </p>
                     </div>
                 )}
@@ -970,7 +979,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
                     <CalendarDays className="w-4 h-4 text-gray-400" />
-                    {view === 'day' ? formatDateLabel(date) : formatMonthLabel(month)}
+                    {view === 'day' ? formatDateLabel(date) : monthLabelT(month, t)}
                 </div>
 
                 {view === 'day' && multiShift && (
@@ -1016,9 +1025,9 @@ export const CashBook: React.FC<CashBookProps> = ({
                         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
                             <Users className="w-4 h-4 text-gray-400" />
                             <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                                To'lovlar — shifokorlar bo'yicha
+                                {t("auto.To'lovlar — shifokorlar bo'yicha")}
                             </h3>
-                            <span className="text-xs text-gray-400">({day.rows.length} ta)</span>
+                            <span className="text-xs text-gray-400">{t('auto.({n} ta)').replace('{n}', String(day.rows.length))}</span>
                         </div>
 
                         {day.rows.length === 0 ? (
@@ -1032,7 +1041,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     <thead className="bg-gray-50 dark:bg-gray-700">
                                         <tr>
                                             <th className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 uppercase sticky left-0 top-0 bg-gray-50 dark:bg-gray-700 z-30 min-w-[180px]">
-                                                Bemor
+                                                {t('auto.Bemor')}
                                             </th>
                                             <th className="px-3 py-3 text-left text-[11px] font-bold text-gray-500 uppercase w-20 sticky top-0 bg-gray-50 dark:bg-gray-700 z-20">{t('cashbook.thTime')}</th>
                                             {doctorCols.map(col => (
@@ -1093,7 +1102,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     <tfoot className="bg-gray-50 dark:bg-gray-700 border-t-2 border-gray-200 dark:border-gray-600">
                                         <tr>
                                             <td className="px-4 py-3 font-bold text-gray-900 dark:text-white sticky left-0 bottom-0 bg-gray-50 dark:bg-gray-700 z-30">
-                                                JAMI
+                                                {t('auto.JAMI')}
                                             </td>
                                             <td className="sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20" />
                                             {doctorCols.map(col => (
@@ -1119,11 +1128,11 @@ export const CashBook: React.FC<CashBookProps> = ({
                         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
                             <ListOrdered className="w-4 h-4 text-gray-400" />
                             <h3 className="text-sm font-bold text-gray-900 dark:text-white">{t('cashbook.dayPayments')}</h3>
-                            <span className="text-xs text-gray-400">({day.rows.length} ta)</span>
+                            <span className="text-xs text-gray-400">{t('auto.({n} ta)').replace('{n}', String(day.rows.length))}</span>
                         </div>
                         {day.rows.length === 0 ? (
                             <p className="px-5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                                Bu kunda to'lov yo'q
+                                {t("auto.Bu kunda to'lov yo'q")}
                             </p>
                         ) : (
                             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -1140,7 +1149,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                 <span className="mx-1.5">·</span>
                                                 {getPaymentMethodLabel(row.method)}
                                                 {row.receivedByName && (
-                                                    <><span className="mx-1.5">·</span>qabul qildi: {row.receivedByName}</>
+                                                    <><span className="mx-1.5">·</span>{t('auto.qabul qildi: {n}').replace('{n}', row.receivedByName)}</>
                                                 )}
                                             </p>
                                         </div>
@@ -1191,7 +1200,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             <div className="flex items-center gap-2 min-w-0">
                                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
                                 <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate">{t('cashbook.unpaid')}</h3>
-                                <span className="text-xs text-gray-400">({unpaidItems.length} ta)</span>
+                                <span className="text-xs text-gray-400">{t('auto.({n} ta)').replace('{n}', String(unpaidItems.length))}</span>
                             </div>
                             <span className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums shrink-0">
                                 {num(unpaidTotal)} UZS
@@ -1201,7 +1210,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             <div className="px-5 py-10 text-center">
                                 <Check className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    Hammadan pul olingan
+                                    {t('auto.Hammadan pul olingan')}
                                 </p>
                             </div>
                         ) : (
@@ -1266,7 +1275,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         onClick={openExpenseModal}
                                         className="mt-2 text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline"
                                     >
-                                        Xarajat qo'shish →
+                                        {t("auto.Xarajat qo'shish →")}
                                     </button>
                                 )}
                             </div>
@@ -1301,7 +1310,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             {day.movements.length === 0 ? (
                                 <div className="px-5 py-8 text-center">
                                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                                        Kassadan pul olinmagan, qaytarilmagan
+                                        {t('auto.Kassadan pul olinmagan, qaytarilmagan')}
                                     </p>
                                     {onAddCashMovement && (
                                         <div className="flex items-center justify-center gap-3 mt-3">
@@ -1309,13 +1318,13 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                 onClick={() => openMovement('Encashment')}
                                                 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
                                             >
-                                                Inkassatsiya →
+                                                {t('auto.Inkassatsiya →')}
                                             </button>
                                             <button
                                                 onClick={() => openMovement('Refund')}
                                                 className="text-xs font-bold text-gray-500 dark:text-gray-400 hover:underline"
                                             >
-                                                Qaytarish →
+                                                {t('auto.Qaytarish →')}
                                             </button>
                                         </div>
                                     )}
@@ -1376,7 +1385,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     <p className="px-5 py-6 text-center text-sm text-gray-400">{t('cashbook.loading')}</p>
                                 ) : auditLogs.length === 0 ? (
                                     <p className="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                                        Bu kunda o'zgarish qilinmagan
+                                        {t("auto.Bu kunda o'zgarish qilinmagan")}
                                     </p>
                                 ) : (
                                     <ul className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -1385,14 +1394,14 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                 <div className="min-w-0">
                                                     <p className="text-sm text-gray-900 dark:text-white">{log.summary}</p>
                                                     <p className="text-[11px] text-gray-400">
-                                                        {log.byName || 'Xodim'}
+                                                        {log.byName || t('auto.Xodim')}
                                                         <span className="mx-1.5">.</span>
-                                                        {new Date(log.createdAt).toLocaleString('uz-UZ')}
+                                                        {new Date(log.createdAt).toLocaleString(language === 'ru' ? 'ru-RU' : 'uz-UZ')}
                                                     </p>
                                                 </div>
                                                 {log.afterClose && (
                                                     <span className="shrink-0 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
-                                                        yopilgandan keyin
+                                                        {t('auto.yopilgandan keyin')}
                                                     </span>
                                                 )}
                                             </li>
@@ -1525,7 +1534,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             <Modal
                 isOpen={isExpenseOpen}
                 onClose={() => setIsExpenseOpen(false)}
-                title={`Xarajat — ${formatDateLabel(date)}`}
+                title={t('auto.Xarajat — {d}').replace('{d}', formatDateLabel(date))}
                 className="max-w-md"
             >
                 <div className="space-y-4">
@@ -1555,7 +1564,7 @@ export const CashBook: React.FC<CashBookProps> = ({
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                            Qayerdan to'landi
+                            {t("auto.Qayerdan to'landi")}
                         </label>
                         <div className="flex gap-2 flex-wrap">
                             {EXPENSE_PAYMENT_METHODS.map(m => (
@@ -1572,13 +1581,13 @@ export const CashBook: React.FC<CashBookProps> = ({
                             ))}
                         </div>
                         <p className="text-[11px] text-gray-400 mt-1.5">
-                            Naqd tanlansa kassadagi pul kamayadi. Boshqasi hisob raqamdan chiqadi.
+                            {t('auto.Naqd tanlansa kassadagi pul kamayadi. Boshqasi hisob raqamdan chiqadi.')}
                         </p>
                     </div>
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                            Izoh (ixtiyoriy)
+                            {t('auto.Izoh (ixtiyoriy)')}
                         </label>
                         <textarea
                             value={expenseForm.note}
@@ -1589,7 +1598,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
 
                     <p className="text-[11px] text-gray-400">
-                        Oylik va shifokor ulushi bu yerda yo'q — ular Hisobot tabida rasmiylashtiriladi.
+                        {t("auto.Oylik va shifokor ulushi bu yerda yo'q — ular Hisobot tabida rasmiylashtiriladi.")}
                     </p>
 
                     <div className="flex gap-2">
@@ -1610,7 +1619,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             <Modal
                 isOpen={movementType !== null}
                 onClose={() => setMovementType(null)}
-                title={movementType ? `${CASH_MOVEMENT_LABELS[movementType]} — ${formatDateLabel(date)}` : ''}
+                title={movementType ? `${tLabel(t, CASH_MOVEMENT_LABELS[movementType])} — ${formatDateLabel(date)}` : ''}
                 className="max-w-md"
             >
                 <div className="space-y-4">
@@ -1655,7 +1664,7 @@ export const CashBook: React.FC<CashBookProps> = ({
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                            Izoh (ixtiyoriy)
+                            {t('auto.Izoh (ixtiyoriy)')}
                         </label>
                         <textarea
                             value={movementForm.note}
@@ -1667,7 +1676,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
 
                     <p className="text-[11px] text-gray-400">
-                        Bu xarajat emas — kassadagi naqdni kamaytiradi, lekin klinikaning sof foydasiga ta'sir qilmaydi.
+                        {t("auto.Bu xarajat emas — kassadagi naqdni kamaytiradi, lekin klinikaning sof foydasiga ta'sir qilmaydi.")}
                     </p>
 
                     <div className="flex gap-2">
@@ -1693,18 +1702,17 @@ export const CashBook: React.FC<CashBookProps> = ({
             >
                 <div className="space-y-4">
                     <p className="text-sm text-gray-700 dark:text-gray-200">
-                        <b>{deletingRow?.patientName}</b> — <b>{num(deletingRow?.amount || 0)} UZS</b> to'lovi o'chiriladi.
+                        {t("auto.{name} — {sum} UZS to'lovi o'chiriladi.").replace('{name}', deletingRow?.patientName || '').replace('{sum}', num(deletingRow?.amount || 0))}
                     </p>
                     {closureStatus.closed && (
                         <div className="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 p-3">
                             <p className="text-xs text-amber-700 dark:text-amber-400">
-                                Bu kun allaqachon yopilgan. O'chirsangiz kassa summasi o'zgaradi va
-                                "yopilgandan keyin o'zgardi" belgisi chiqadi.
+                                {t("auto.Bu kun allaqachon yopilgan. O'chirsangiz kassa summasi o'zgaradi va «yopilgandan keyin o'zgardi» belgisi chiqadi.")}
                             </p>
                         </div>
                     )}
                     <p className="text-[11px] text-gray-400">
-                        O'chirish izda qoladi: kim, qachon va qaysi to'lovni o'chirgani yozib qo'yiladi.
+                        {t("auto.O'chirish izda qoladi: kim, qachon va qaysi to'lovni o'chirgani yozib qo'yiladi.")}
                     </p>
                     <div className="flex gap-2">
                         <Button variant="secondary" className="flex-1" onClick={() => setDeletingRow(null)}>{t('cashbook.cancel')}</Button>
@@ -1714,7 +1722,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 transition-all"
                         >
                             {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {deleting ? "O'chirilmoqda..." : "O'chirish"}
+                            {deleting ? t("auto.O'chirilmoqda...") : t("auto.O'chirish")}
                         </button>
                     </div>
                 </div>
@@ -1746,13 +1754,13 @@ export const CashBook: React.FC<CashBookProps> = ({
                     />
                     {Number(debtAmount) > 0 && Number(debtAmount) < (payingDebt?.amount || 0) && (
                         <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                            Qisman to'lov: {num((payingDebt?.amount || 0) - Number(debtAmount))} UZS qarz bo'lib qoladi.
+                            {t("auto.Qisman to'lov: {n} UZS qarz bo'lib qoladi.").replace('{n}', num((payingDebt?.amount || 0) - Number(debtAmount)))}
                         </p>
                     )}
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                            To'lov usuli
+                            {t("auto.To'lov usuli")}
                         </label>
                         <div className="flex gap-2 flex-wrap">
                             {INCOMING_PAYMENT_METHODS.map(m => (
@@ -1771,7 +1779,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
 
                     <p className="text-[11px] text-gray-400">
-                        To'lov ko'rilayotgan kunga ({formatDateLabel(date)}) yoziladi.
+                        {t("auto.To'lov ko'rilayotgan kunga ({d}) yoziladi.").replace('{d}', formatDateLabel(date))}
                     </p>
 
                     <div className="flex gap-2">
@@ -1782,7 +1790,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/50 transition-all"
                         >
                             {debtSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                            {debtSaving ? t('cashbook.saving') : 'To\'lovni qabul qilish'}
+                            {debtSaving ? t('cashbook.saving') : t("auto.To'lovni qabul qilish")}
                         </button>
                     </div>
                 </div>
@@ -1816,7 +1824,7 @@ export const CashBook: React.FC<CashBookProps> = ({
 
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                            To'lov usuli
+                            {t("auto.To'lov usuli")}
                         </label>
                         <div className="flex gap-2 flex-wrap">
                             {PAYMENT_METHODS.filter(m => m.key !== 'Balance').map(m => (
@@ -1837,7 +1845,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     {closureStatus.closed && (
                         <div className="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 p-3">
                             <p className="text-xs text-amber-700 dark:text-amber-400">
-                                Bu kun yopilgan. O'zgartirsangiz kassa summasi o'zgaradi va izda qoladi.
+                                {t("auto.Bu kun yopilgan. O'zgartirsangiz kassa summasi o'zgaradi va izda qoladi.")}
                             </p>
                         </div>
                     )}
@@ -1863,7 +1871,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             <Modal
                 isOpen={isCloseOpen}
                 onClose={() => setIsCloseOpen(false)}
-                title={`Kunni yopish — ${formatDateLabel(date)}`}
+                title={t('auto.Kunni yopish — {d}').replace('{d}', formatDateLabel(date))}
             >
                 <div className="space-y-5">
                     <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4 space-y-2 text-sm">
@@ -1900,7 +1908,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             onClick={() => setCountedInput(String(Math.round(day.totals.drawer)))}
                             className="mt-2 text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline"
                         >
-                            Hisob bo'yicha summani qo'yish ({num(day.totals.drawer)})
+                            {t("auto.Hisob bo'yicha summani qo'yish ({n})").replace('{n}', num(day.totals.drawer))}
                         </button>
                     </div>
 
@@ -1918,10 +1926,10 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </div>
                             <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
                                 {Math.abs(previewDifference) < 1
-                                    ? "Kassa to'g'ri keldi."
+                                    ? t("auto.Kassa to'g'ri keldi.")
                                     : previewDifference > 0
-                                        ? "Kassada hisobdan ko'p pul bor — kiritilmagan to'lov bo'lishi mumkin."
-                                        : "Kassada hisobdan kam pul bor — yozilmagan xarajat bo'lishi mumkin."}
+                                        ? t("auto.Kassada hisobdan ko'p pul bor — kiritilmagan to'lov bo'lishi mumkin.")
+                                        : t("auto.Kassada hisobdan kam pul bor — yozilmagan xarajat bo'lishi mumkin.")}
                             </p>
                         </div>
                     )}
@@ -1930,7 +1938,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     {(expectedCard > 0 || expectedClick > 0) && (
                         <div className="space-y-3 pt-1">
                             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                Naqdsiz to'lovlarni solishtirish
+                                {t("auto.Naqdsiz to'lovlarni solishtirish")}
                             </p>
                             {expectedCard > 0 && (
                                 <ReconRow
@@ -1951,13 +1959,13 @@ export const CashBook: React.FC<CashBookProps> = ({
                                 />
                             )}
                             <p className="text-[11px] text-gray-400">
-                                Bo'sh qoldirsangiz solishtirilmaydi — faqat naqd yopiladi.
+                                {t("auto.Bo'sh qoldirsangiz solishtirilmaydi — faqat naqd yopiladi.")}
                             </p>
                         </div>
                     )}
 
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Izoh (ixtiyoriy)</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Izoh (ixtiyoriy)')}</label>
                         <textarea
                             value={closeNote}
                             onChange={e => setCloseNote(e.target.value)}
@@ -1968,8 +1976,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </div>
 
                     <p className="text-[11px] text-gray-400">
-                        Yopish kunni qulflamaydi — kechroq kelgan to'lov baribir yoziladi.
-                        Shunda bu sahifada "yopilgandan keyin o'zgardi" belgisi chiqadi.
+                        {t("auto.Yopish kunni qulflamaydi — kechroq kelgan to'lov baribir yoziladi. Shunda bu sahifada «yopilgandan keyin o'zgardi» belgisi chiqadi.")}
                     </p>
 
                     <div className="flex gap-2">
@@ -1979,7 +1986,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                             onClick={handleCloseDay}
                             disabled={closeSaving || countedInput.trim() === '' || !isFinite(countedValue)}
                         >
-                            {closeSaving ? t('cashbook.saving') : closureStatus.closed ? 'Yangilash' : 'Kunni yopish'}
+                            {closeSaving ? t('cashbook.saving') : closureStatus.closed ? t('auto.Yangilash') : t('auto.Kunni yopish')}
                         </Button>
                     </div>
                 </div>

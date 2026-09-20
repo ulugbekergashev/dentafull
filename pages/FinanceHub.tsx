@@ -21,15 +21,15 @@ type TabKey = 'kassa' | 'hisobot';
 const TABS: { key: TabKey; label: string; icon: React.ElementType; subtitle: string }[] = [
     {
         key: 'kassa',
-        label: 'Kassa',
+        label: 'auto.Kassa',
         icon: Wallet,
-        subtitle: 'Kassaga qancha pul kirdi va qancha qoldi',
+        subtitle: 'auto.Kassaga qancha pul kirdi va qancha qoldi',
     },
     {
         key: 'hisobot',
-        label: 'Hisobot',
+        label: 'auto.Hisobot',
         icon: BarChart3,
-        subtitle: "Qancha ishlab topdik — foyda, qarz, shifokor ulushi",
+        subtitle: 'auto.Qancha ishlab topdik — foyda, qarz, shifokor ulushi',
     },
 ];
 
@@ -88,7 +88,7 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('auto.Moliya')}</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{t(`auto.${current.subtitle}`)}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{t(current.subtitle)}</p>
                 </div>
 
                 {visibleTabs.length > 1 && (
@@ -106,7 +106,7 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
                                         }`}
                                 >
                                     <Icon className="w-4 h-4" />
-                                    {t(`auto.${tab.label}`)}
+                                    {t(tab.label)}
                                 </button>
                             );
                         })}
