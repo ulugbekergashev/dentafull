@@ -11,11 +11,12 @@ import { useLanguage } from '../context/LanguageContext';
 import { calculateTotalFinancials, calculateDoctorShares, transactionBelongsToDoctor } from '../utils/financialCalculations';
 import { exportFinanceToExcel } from '../utils/excelExport';
 import {
-  PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, getPaymentMethodLabel,
+  PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, getPaymentMethodLabel,
 } from '../utils/paymentMethods';
 import type { PaymentMethod } from '../types';
 
 import { ReceiptModal } from '../components/ReceiptModal';
+import { QuickPaymentModal } from '../components/QuickPaymentModal';
 import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
 
 interface FinanceProps {
@@ -85,17 +86,9 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     return { total: recalls.length, active: active.length, returned, cancelled, overdue, rate: resolved ? Math.round((returned / resolved) * 100) : 0 };
   }, [recalls]);
 
-  // Add Payment Modal State
+  // Add Payment Modal State — bemor profilidagi bilan bir xil QuickPaymentModal ishlatiladi
+  // (chegirma, bir nechta xizmat, qisman to'lov shu yerda ham mavjud)
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({
-    patientId: '',
-    doctorId: defaultDoctorId,
-    service: '',
-    amount: '',
-    type: 'Cash' as PaymentMethod,
-    notes: '',
-  });
-  const [paymentLoading, setPaymentLoading] = useState(false);
 
   // Expense Modal State
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -229,32 +222,6 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const handleDeleteExpense = async (expense: Expense) => {
     if (!confirm(t("auto.«{name}» xarajatini o'chirishni tasdiqlaysizmi?").replace('{name}', expense.title))) return;
     await onDeleteExpense?.(expense.id);
-  };
-
-  const handleAddPayment = async () => {
-    if (!paymentForm.amount || !paymentForm.patientId) return;
-    setPaymentLoading(true);
-    try {
-      const patient = patients.find(p => p.id === paymentForm.patientId);
-      const doctor = doctors.find(d => d.id === paymentForm.doctorId);
-      const clinicId = patients[0]?.clinicId || '';
-      await onAddTransaction?.({
-        patientName: patient ? `${patient.lastName} ${patient.firstName}` : '',
-        date: today,
-        amount: parseFloat(paymentForm.amount),
-        type: paymentForm.type,
-        service: paymentForm.service || 'To\'lov',
-        status: 'Paid',
-        clinicId,
-        patientId: paymentForm.patientId || undefined,
-        doctorId: paymentForm.doctorId || undefined,
-        doctorName: doctor ? `${doctor.lastName} ${doctor.firstName}` : undefined,
-      });
-      setIsAddPaymentOpen(false);
-      setPaymentForm({ patientId: '', doctorId: defaultDoctorId, service: '', amount: '', type: 'Cash', notes: '' });
-    } finally {
-      setPaymentLoading(false);
-    }
   };
 
   // Date Range State
@@ -1165,115 +1132,19 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
         clinic={currentClinic}
       />
 
-      {/* Add Payment Quick Modal */}
-      <Modal
-        isOpen={isAddPaymentOpen}
-        onClose={() => setIsAddPaymentOpen(false)}
-        title={'💰 To\'lov Qo\'shish'}
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Bemor *')}</label>
-            <select
-              value={paymentForm.patientId}
-              onChange={e => setPaymentForm(f => ({ ...f, patientId: e.target.value }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
-            >
-              <option value="">{t('auto.Bemorni tanlang...')}</option>
-              {patients.map(p => (
-                <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Shifokor')}</label>
-            <select
-              value={paymentForm.doctorId}
-              onChange={e => setPaymentForm(f => ({ ...f, doctorId: e.target.value }))}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
-            >
-              <option value="">{t('auto.Shifokorni tanlang (ixtiyoriy)')}</option>
-              {doctors.map(d => (
-                <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Xizmat nomi')}</label>
-            <select
-              value={paymentForm.service}
-              onChange={e => {
-                const svc = services.find(s => s.name === e.target.value);
-                setPaymentForm(f => ({
-                  ...f,
-                  service: e.target.value,
-                  amount: svc ? String(svc.price) : f.amount,
-                }));
-              }}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
-            >
-              <option value="">{t('auto.Xizmatni tanlang...')}</option>
-              {services.map((s, i) => (
-                <option key={i} value={s.name}>{s.name} — {s.price.toLocaleString()} UZS</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Summa (UZS) *')}</label>
-            <input
-              type="number"
-              placeholder="0"
-              value={paymentForm.amount}
-              onChange={e => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
-              onWheel={e => e.currentTarget.blur()}
-              className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white placeholder-gray-400"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.To\'lov usuli')}</label>
-            <div className="flex gap-2 flex-wrap">
-              {[...INCOMING_PAYMENT_METHODS, 'Balance' as PaymentMethod].map(type => (
-                <button
-                  key={type}
-                  onClick={() => setPaymentForm(f => ({ ...f, type }))}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${paymentForm.type === type
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'
-                    }`}
-                >
-                  {tLabel(t, getPaymentMethodLabel(type))}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => setIsAddPaymentOpen(false)}
-            >
-              {t('auto.Bekor')}
-            </Button>
-            <button
-              disabled={paymentLoading || !paymentForm.amount || !paymentForm.patientId}
-              onClick={handleAddPayment}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-white transition-all bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed"
-            >
-              {paymentLoading ? (
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Plus className="w-4 h-4" />
-              )}
-              {t("auto.To'lovni Saqlash")}
-            </button>
-          </div>
-        </div>
-      </Modal>
+      {/* Add Payment Quick Modal — bemor profilidagi bilan bir xil to'liq forma */}
+      {onAddTransaction && (
+        <QuickPaymentModal
+          isOpen={isAddPaymentOpen}
+          onClose={() => setIsAddPaymentOpen(false)}
+          patients={patients}
+          doctors={doctors}
+          services={services}
+          clinicId={patients[0]?.clinicId || ''}
+          onAddTransaction={onAddTransaction}
+          presetDoctorId={defaultDoctorId}
+        />
+      )}
 
       {/* Add / Edit Expense Modal */}
       <Modal

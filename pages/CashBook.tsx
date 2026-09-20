@@ -470,7 +470,7 @@ export const CashBook: React.FC<CashBookProps> = ({
     movements = [], onAddCashMovement, onDeleteCashMovement,
     onUpdateTransaction, onDeleteTransaction,
 }) => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const today = formatDateToISO(new Date());
     const [view, setView] = useState<'day' | 'month'>('day');
     const [date, setDate] = useState(today);

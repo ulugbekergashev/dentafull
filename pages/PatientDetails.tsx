@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Calendar, CalendarClock, CalendarPlus, ChevronRight, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, CalendarClock, CalendarPlus, ChevronDown, ChevronRight, X, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
@@ -14,6 +14,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { formatDobDDMMYYYY, calcAge } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
+import { tLabel } from '../i18n/labels';
 import { maskPhone } from '../utils/accessControl';
 import { printPatientCard } from '../utils/printPatientCard';
 
@@ -74,7 +75,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
    // Payment Form State
    const [paymentData, setPaymentData] = useState({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: defaultDoctorId, appointmentDate: '', discountPercent: '' });
-   const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent'); // Chegirma turi: foiz yoki summa
+   const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
+   /** To'lov oynasida xizmatlar ro'yxati ochiqmi */
+   const [paymentServicesOpen, setPaymentServicesOpen] = useState(false);
 
    // Chegirmadan keyingi jami summa (asl narx ma'lum bo'lganda)
    const getDiscountedTotal = (): number => {
@@ -1844,7 +1847,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         value={paymentData.doctorId}
                         onChange={e => setPaymentData({ ...paymentData, doctorId: e.target.value })}
                         options={[
-                           { value: '', label: 'Shifokorni tanlang' },
+                           { value: '', label: t('auto.Shifokorni tanlang') },
                            ...doctors.map(d => ({ value: d.id, label: `Dr. ${d.firstName} ${d.lastName}` }))
                         ]}
                         required
@@ -1863,7 +1866,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     return (
                                        <div key={idx} className="pt-3 mt-3 border-t-2 border-primary-300 dark:border-primary-700">
                                           <div className="flex justify-between items-center bg-primary-600 dark:bg-primary-700 text-white px-4 py-2.5 rounded-md font-bold text-base">
-                                             <span className="flex items-center gap-2">💰 JAMI:</span>
+                                             <span className="flex items-center gap-2">💰 {t('auto.JAMI')}:</span>
                                              <span className="text-lg">{parts[1]} UZS</span>
                                           </div>
                                        </div>
@@ -1893,9 +1896,44 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                                  <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                       Xizmat{manualPaymentServiceIds.length > 0 && <span className="ml-1 text-primary-600">({manualPaymentServiceIds.length})</span>}
+                                       {t('auto.Xizmat')}{manualPaymentServiceIds.length > 0 && <span className="ml-1 text-primary-600">({manualPaymentServiceIds.length})</span>}
                                     </label>
-                                    <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800">
+                                    <button
+                                       type="button"
+                                       onClick={() => setPaymentServicesOpen(v => !v)}
+                                       className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-200 hover:border-primary-400 transition-colors"
+                                    >
+                                       <span className="truncate text-left">
+                                          {manualPaymentServiceIds.length === 0
+                                             ? t('auto.Xizmatni tanlang...')
+                                             : t('auto.{n} ta tanlandi').replace('{n}', String(manualPaymentServiceIds.length))}
+                                       </span>
+                                       <ChevronDown className={`w-4 h-4 shrink-0 text-gray-400 transition-transform ${paymentServicesOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {/* Yopiq holatda ham tanlangan xizmatlar va narxlari ko'rinadi */}
+                                    {!paymentServicesOpen && manualPaymentServiceIds.length > 0 && (
+                                       <div className="mt-2 space-y-1.5">
+                                          {(services || []).filter(sv => manualPaymentServiceIds.includes(sv.id)).map(service => (
+                                             <div key={service.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-primary-100 dark:border-primary-800/50">
+                                                <span className="flex-1 min-w-0 truncate text-sm text-gray-900 dark:text-white">{service.name}</span>
+                                                <input
+                                                   type="number"
+                                                   value={manualPaymentPrices[service.id] ?? ''}
+                                                   onChange={(e) => changeManualServicePrice(service.id, e.target.value)}
+                                                   aria-label={`${t('auto.Narx')}: ${service.name}`}
+                                                   className="w-28 h-8 px-2 text-sm text-right rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-primary/20 outline-none"
+                                                />
+                                                <button type="button" onClick={() => toggleManualService(service.id)} className="p-1 text-gray-400 hover:text-red-500 rounded">
+                                                   <X className="w-4 h-4" />
+                                                </button>
+                                             </div>
+                                          ))}
+                                       </div>
+                                    )}
+
+                                    {paymentServicesOpen && (
+                                       <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800">
                                        {(services || [])
                                           .filter(s => {
                                              if (!manualPaymentCategoryId) return true;
@@ -1920,7 +1958,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                          type="number"
                                                          value={manualPaymentPrices[service.id] ?? ''}
                                                          onChange={(e) => changeManualServicePrice(service.id, e.target.value)}
-                                                         aria-label={`Narx: ${service.name}`}
+                                                         aria-label={`${t('auto.Narx')}: ${service.name}`}
                                                          className="w-28 h-8 px-2 text-sm text-right rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
                                                       />
                                                    ) : (
@@ -1930,9 +1968,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                              );
                                           })}
                                     </div>
+                                    )}
                                     {manualPaymentServiceIds.length > 1 && (
                                        <p className="mt-2 text-sm text-right text-gray-600 dark:text-gray-300">
-                                          Jami: <strong className="text-primary-600 dark:text-primary-400">{(Number(paymentData.amount) || 0).toLocaleString()} UZS</strong>
+                                          {t('auto.Jami')}: <strong className="text-primary-600 dark:text-primary-400">{(Number(paymentData.amount) || 0).toLocaleString()} UZS</strong>
                                        </p>
                                     )}
                                  </div>
@@ -1958,7 +1997,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     setDiscountType('percent');
                                     setPaymentData({ ...paymentData, discountPercent: '' });
                                  }}
-                              >Foiz (%)</button>
+                              >{t('auto.Foiz (%)')}</button>
                               <button
                                  type="button"
                                  className={`px-3 py-2 text-sm font-medium transition-colors ${
@@ -2094,7 +2133,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   {/* Total Calculator Display - Only for non-Avans */}
                   {paymentData.service !== 'Avans' && (
                      <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg flex justify-between items-center">
-                        <span className="text-gray-700 dark:text-gray-300 font-medium">Jami Summa:</span>
+                        <span className="text-gray-700 dark:text-gray-300 font-medium">{t('auto.Jami Summa')}:</span>
                         <span className="text-gray-900 dark:text-white font-bold text-lg">
                            {((Number(paymentData.paidAmount) || 0) + (Number(paymentData.debtAmount) || 0)).toLocaleString()} UZS
                         </span>
@@ -2110,10 +2149,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            // Avans — bu kassaga pul kiritish; sug'urta ham, hisobdan yechish ham bu yerda ma'nosiz
                            ? INCOMING_PAYMENT_METHODS
                               .filter(m => m !== 'Insurance')
-                              .map(m => ({ value: m, label: getPaymentMethodLabel(m) }))
+                              .map(m => ({ value: m, label: tLabel(t, getPaymentMethodLabel(m)) }))
                            : [
-                              ...INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: getPaymentMethodLabel(m) })),
-                              { value: 'Balance', label: getPaymentMethodLabel('Balance'), disabled: (patient?.balance || 0) <= 0 }
+                              ...INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: tLabel(t, getPaymentMethodLabel(m)) })),
+                              { value: 'Balance', label: tLabel(t, getPaymentMethodLabel('Balance')), disabled: (patient?.balance || 0) <= 0 }
                            ]
                         }
                      />
@@ -2121,7 +2160,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <div className="flex justify-end gap-2 pt-4">
                      <Button type="button" variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isPaymentSubmitting}>{t('auto.Bekor qilish')}</Button>
                      <Button type="submit" disabled={isPaymentSubmitting}>
-                        {isPaymentSubmitting ? 'Saqlanmoqda...' : 'Saqlash'}
+                        {isPaymentSubmitting ? t('auto.Saqlanmoqda...') : t('auto.Saqlash')}
                      </Button>
                   </div>
                </form>
@@ -2159,7 +2198,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      label={t('auto.To\'lov Usuli')}
                      value={editPaymentMethod}
                      onChange={e => setEditPaymentMethod(e.target.value)}
-                     options={INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: getPaymentMethodLabel(m) }))}
+                     options={INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: tLabel(t, getPaymentMethodLabel(m)) }))}
                   />
                   <div className="flex justify-end gap-2 pt-4">
                      <Button type="button" variant="secondary" onClick={() => setIsPaymentEditModalOpen(false)}>{t('auto.Bekor qilish')}</Button>

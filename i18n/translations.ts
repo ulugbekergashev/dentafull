@@ -2103,6 +2103,12 @@ export const translations = {
     "auto.«Tekshirish va saqlash» — kalit darhol sinab ko'riladi.": "«Tekshirish va saqlash» — kalit darhol sinab ko'riladi.",
     "auto.Kalit faqat serverda saqlanadi va hech qachon qaytarib berilmaydi. Uni o'chirsangiz, klinika yana umumiy kalitga qaytadi.": "Kalit faqat serverda saqlanadi va hech qachon qaytarib berilmaydi. Uni o'chirsangiz, klinika yana umumiy kalitga qaytadi.",
     "auto.bo'limida.": "bo'limida.",
+    'auto.{n} ta tanlandi': '{n} ta tanlandi',
+    'auto.Narx': 'Narx',
+    'auto.Foiz (%)': 'Foiz (%)',
+    'auto.Jami Summa': 'Jami Summa',
+    'auto.Chegirma summasi': 'Chegirma summasi',
+    "auto.Avansdagi mablag'": "Avansdagi mablag'",
   },
   ru: {
     // DentaAI
@@ -3903,6 +3909,12 @@ export const translations = {
     "auto.«Tekshirish va saqlash» — kalit darhol sinab ko'riladi.": '«Проверить и сохранить» — ключ сразу проверяется.',
     "auto.Kalit faqat serverda saqlanadi va hech qachon qaytarib berilmaydi. Uni o'chirsangiz, klinika yana umumiy kalitga qaytadi.": 'Ключ хранится только на сервере и никогда не возвращается обратно. Если удалить его, клиника снова перейдёт на общий ключ.',
     "auto.bo'limida.": '.',
+    'auto.{n} ta tanlandi': 'Выбрано: {n}',
+    'auto.Narx': 'Цена',
+    'auto.Foiz (%)': 'Процент (%)',
+    'auto.Jami Summa': 'Итоговая сумма',
+    'auto.Chegirma summasi': 'Сумма скидки',
+    "auto.Avansdagi mablag'": 'Средства на авансе',
   }
 };
 

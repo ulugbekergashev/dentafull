@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ArrowRight } from 'lucide-react';
+import { Plus, Trash2, ArrowRight, ChevronDown, X } from 'lucide-react';
 import { Modal, Button, Select, Input } from './Common';
 import { TeethChart } from './TeethChart';
 import { Service, ServiceCategory } from '../types';
@@ -46,6 +46,8 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     // Har bir tanlangan xizmatning narxi alohida tahrirlanadi
     const [prices, setPrices] = useState<Record<number, string>>({});
     const [notes, setNotes] = useState<string>('');
+    /** Xizmatlar ro'yxati ochiqmi. Yopiq holatda faqat tanlanganlar ko'rinadi. */
+    const [servicesOpen, setServicesOpen] = useState(false);
 
     const toggleTooth = (tooth: number) => {
         setSelectedTeeth(prev => (prev.includes(tooth) ? prev.filter(n => n !== tooth) : [...prev, tooth].sort((a, b) => a - b)));
@@ -176,10 +178,10 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                 </div>
 
                 {/* Right Side: Actions & Queue */}
-                <div className="lg:w-1/2 flex flex-col h-auto lg:h-full">
+                <div className="lg:w-1/2 flex flex-col h-auto lg:h-full min-h-0">
 
                     {/* Input Area */}
-                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm mb-4 shrink-0">
+                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm mb-4 shrink-0 max-h-[46vh] overflow-y-auto">
                         <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 flex items-center justify-between gap-3">
                             <span className="min-w-0 truncate">2. {t('patients.details.modals.stepAddService')} ({teethLabel})</span>
                             {selectedTeeth.length > 0 && <button onClick={() => setSelectedTeeth([])} className="text-xs text-primary-500 hover:underline shrink-0">{t('patients.details.modals.switchToCommon')}</button>}
@@ -204,7 +206,42 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                     {t('patients.details.modals.service')}
                                     {selectedServiceIds.length > 0 && <span className="ml-1 text-primary-600">({selectedServiceIds.length})</span>}
                                 </label>
-                                <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
+                                <button
+                                    type="button"
+                                    onClick={() => setServicesOpen(v => !v)}
+                                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 hover:border-primary-400 transition-colors"
+                                >
+                                    <span className="truncate text-left">
+                                        {selectedServiceIds.length === 0
+                                            ? t('patients.details.modals.selectService')
+                                            : t('auto.{n} ta tanlandi').replace('{n}', String(selectedServiceIds.length))}
+                                    </span>
+                                    <ChevronDown className={`w-4 h-4 shrink-0 text-gray-400 transition-transform ${servicesOpen ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {/* Yopiq holatda ham tanlanganlar va narxlari ko'rinib turadi */}
+                                {!servicesOpen && selectedServiceIds.length > 0 && (
+                                    <div className="mt-2 space-y-1.5">
+                                        {visibleServices.filter(sv => selectedServiceIds.includes(sv.id)).map(service => (
+                                            <div key={service.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-50/60 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800/50">
+                                                <span className="flex-1 min-w-0 truncate text-sm text-gray-900 dark:text-white">{service.name}</span>
+                                                <input
+                                                    type="number"
+                                                    value={prices[service.id] ?? ''}
+                                                    onChange={(e) => setPrices(prev => ({ ...prev, [service.id]: e.target.value }))}
+                                                    aria-label={`${t('patients.details.modals.price')}: ${service.name}`}
+                                                    className="w-28 h-8 px-2 text-sm text-right rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-primary/20 outline-none"
+                                                />
+                                                <button type="button" onClick={() => toggleService(service)} className="p-1 text-gray-400 hover:text-red-500 rounded">
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {servicesOpen && (
+                                <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
                                     {visibleServices.length === 0 ? (
                                         <p className="p-3 text-sm text-gray-400">{t('patients.details.modals.selectService')}</p>
                                     ) : visibleServices.map(service => {
@@ -235,6 +272,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                         );
                                     })}
                                 </div>
+                                )}
                             </div>
 
                             <div>
@@ -253,7 +291,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                     </div>
 
                     {/* Queue List */}
-                    <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-xl p-4 overflow-hidden flex flex-col">
+                    <div className="flex-1 min-h-[180px] bg-gray-50 dark:bg-gray-800 rounded-xl p-4 overflow-hidden flex flex-col">
                         <h4 className="text-sm font-bold text-gray-500 uppercase mb-3 flex items-center justify-between">
                             <span>{t('patients.details.modals.totalList')} ({queue.length})</span>
                             <span className="text-primary-600 font-bold">
