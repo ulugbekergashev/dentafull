@@ -32,6 +32,15 @@ export function canSeePatientPhone(ac: AccessControl, role: UserRole): boolean {
     return getRoleAccess(ac, role)?.showPatientPhone !== false;
 }
 
+// Xodim klinikadagi barcha bemorlar/qabullarni ko'radimi, yoki faqat o'zinikini.
+// Faqat shifokor cheklangan — resepshn va admin allaqachon hammasini ko'radi.
+// Boshqa ruxsatlardan farqli, default `false` (cheklangan): bu tarixiy xatti-harakat
+// va uni ochish klinika egasining ongli qarori bo'lishi kerak.
+export function canSeeAllPatients(ac: AccessControl, role: UserRole): boolean {
+    if (role !== UserRole.DOCTOR) return true;
+    return ac.doctor?.seeAllPatients === true;
+}
+
 // Oxirgi 2 raqamdan tashqari hammasini yashiradi: "+998 90 123 45 67" → "+*** ** *** ** 67"
 export function maskPhone(phone?: string): string {
     if (!phone) return '';

@@ -145,6 +145,37 @@ export const AccessControlSettings: React.FC<AccessControlSettingsProps> = ({ cu
                      })}
                   </div>
 
+                  {roleKey === 'doctor' && (
+                     <>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Ko'rish doirasi</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-6">
+                           {([
+                              { value: false, title: 'Faqat o\'z bemorlari', desc: 'Shifokor o\'ziga biriktirilgan bemorlar, qabullar va kalendarni ko\'radi (standart)' },
+                              { value: true, title: 'Klinikadagi barcha bemorlar', desc: 'Shifokor boshqa shifokorlarning bemorlari, qabullari va kalendarini ham ko\'radi — huddi admin kabi' },
+                           ]).map(opt => {
+                              const active = (roleAccess.seeAllPatients === true) === opt.value;
+                              return (
+                                 <label key={String(opt.value)} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${active
+                                    ? 'border-primary-300 bg-primary-50/60 dark:border-primary-800 dark:bg-primary-900/20'
+                                    : 'border-gray-200 dark:border-gray-700 hover:border-primary-300'}`}>
+                                    <input
+                                       type="radio"
+                                       name="doctor-scope"
+                                       checked={active}
+                                       onChange={() => updateRoleAccess('doctor', { seeAllPatients: opt.value })}
+                                       className="w-4 h-4 mt-0.5 text-primary-600 focus:ring-primary-500"
+                                    />
+                                    <div>
+                                       <p className="text-sm font-semibold text-gray-900 dark:text-white">{opt.title}</p>
+                                       <p className="text-xs text-gray-500 dark:text-gray-400">{opt.desc}</p>
+                                    </div>
+                                 </label>
+                              );
+                           })}
+                        </div>
+                     </>
+                  )}
+
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Maxfiy ma'lumotlar</p>
                   <div className="space-y-2">
                      <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-primary-300 transition-colors">

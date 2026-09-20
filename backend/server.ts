@@ -382,6 +382,25 @@ const canAccessClinic = (req: any, clinicId: string): boolean => {
     return u?.clinicId === clinicId;
 };
 
+// Shifokor klinikadagi BARCHA bemorlarni ko'radimi (Xodimlar → Ruxsatlar →
+// "Ko'rish doirasi"). Sozlama clinic.accessControl JSON ichida saqlanadi:
+// { doctor: { seeAllPatients: true } }. Sozlama yo'q yoki buzuq bo'lsa — false,
+// ya'ni hozirgi xatti-harakat (faqat o'z bemorlari) saqlanadi.
+const doctorSeesAllPatients = async (clinicId: string): Promise<boolean> => {
+    try {
+        const clinic = await prisma.clinic.findUnique({
+            where: { id: clinicId },
+            select: { accessControl: true },
+        });
+        const raw = clinic?.accessControl;
+        if (!raw) return false;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return parsed?.doctor?.seeAllPatients === true;
+    } catch {
+        return false; // xato bo'lsa — cheklangan holat, ochiq emas
+    }
+};
+
 // ─── Markaziy (yagona) xabar yuborish funksiyasi ─────────────────────────────
 // Barcha kanallar (Telegram/SMS) shu yerdan o'tadi va yagona TelegramLog tarixiga yoziladi.
 // ─── Chastota chegarasi (bir bemorga N kun ichida bittadan ko'p xabar yubormaslik) ──
@@ -1651,7 +1670,10 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
         const user = (req as any).user;
         const whereClause: any = { clinicId: clinicId as string };
         if (user?.role === 'DOCTOR' && user?.doctorId) {
-            whereClause.doctorId = user.doctorId;
+            // Klinika "shifokor hammani ko'rsin" deb sozlagan bo'lsa, cheklov qo'yilmaydi.
+            if (!(await doctorSeesAllPatients(clinicId as string))) {
+                whereClause.doctorId = user.doctorId;
+            }
         }
 
         const patients = await prisma.patient.findMany({

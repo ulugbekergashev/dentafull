@@ -32,6 +32,7 @@ interface DashboardProps {
   currentClinic?: Clinic;
   clinicId?: string;
   showFinance?: boolean; // Ruxsatlar: pul ko'rsatkichlari (KPI, tushum grafigi, qarzdorlar)
+  seeAllPatients?: boolean; // Ruxsatlar → Ko'rish doirasi: shifokor butun klinika ma'lumotini ko'rsinmi
   onPatientClick?: (id: string) => void;
   onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
   onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
@@ -53,7 +54,7 @@ const STAT_GRID_COLS: Record<number, string> = {
   6: 'lg:grid-cols-3 xl:grid-cols-6',
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, seeAllPatients = false, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -67,6 +68,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // Grafiklar va "jami" kartalar faqat shifokorga. Klinika egasi ularni Moliya →
   // Hisobot da ko'radi (bu yerda takror edi), shifokorda esa Hisobot yo'q.
   const isDoctor = userRole === UserRole.DOCTOR;
+  // Shifokor o'z ma'lumotlari bilan cheklanadimi. Ruxsatlar → Ko'rish doirasi
+  // ochilgan bo'lsa cheklov yo'q — bosh sahifa butun klinikani ko'rsatadi.
+  const scopeToMyPatients = isDoctor && !!doctorId && !seeAllPatients;
   const today = new Date().toISOString().split('T')[0];
   const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
   const [startDate, setStartDate] = useState(isReceptionist ? today : defaultStart);
@@ -74,14 +78,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
   // Filter data for doctors - only show their appointments and transactions
   const filteredAppointmentsByDoctor = useMemo(() => {
-    if (userRole === UserRole.DOCTOR && doctorId) {
+    if (scopeToMyPatients) {
       return appointments.filter(a => a.doctorId === doctorId);
     }
     return appointments;
-  }, [appointments, userRole, doctorId]);
+  }, [appointments, scopeToMyPatients, doctorId]);
 
   const filteredTransactionsByDoctor = useMemo(() => {
-    if (userRole === UserRole.DOCTOR && doctorId) {
+    if (scopeToMyPatients) {
       // Qat'iy atributsiya: doctorId yoki aniq ism tengligi (taxminiy moslashtirish yo'q)
       const doctor = doctors.find(d => d.id === doctorId);
       return transactions.filter(t => {
@@ -90,7 +94,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       });
     }
     return transactions;
-  }, [transactions, doctors, userRole, doctorId]);
+  }, [transactions, doctors, scopeToMyPatients, doctorId]);
 
   // --- Filter Logic ---
   const isDateInRange = (dateStr: string) => {
@@ -134,13 +138,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
   // Today's Appointments
   const todayAppointments = useMemo(() => {
-    const base = userRole === UserRole.DOCTOR && doctorId
+    const base = scopeToMyPatients
       ? appointments.filter(a => a.doctorId === doctorId)
       : appointments;
     return base
       .filter(a => a.date === today)
       .sort((a, b) => a.time.localeCompare(b.time));
-  }, [appointments, today, userRole, doctorId]);
+  }, [appointments, today, scopeToMyPatients, doctorId]);
 
   // Overdue lab orders (by patient name)
   const overdueLabPatients = useMemo(() => {
@@ -180,8 +184,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     api.recalls.getDue(clinicId, 14).then(setDueRecalls).catch(() => setDueRecalls([]));
   }, [clinicId]);
   const visibleRecalls = useMemo(
-    () => (doctorId ? dueRecalls.filter(r => r.doctorId === doctorId) : dueRecalls),
-    [dueRecalls, doctorId]);
+    () => (scopeToMyPatients ? dueRecalls.filter(r => r.doctorId === doctorId) : dueRecalls),
+    [dueRecalls, scopeToMyPatients, doctorId]);
   const recallToday = (() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

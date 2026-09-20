@@ -21,6 +21,8 @@ interface CalendarProps {
   onAddPatient: (patient: Omit<Patient, 'id'>) => Promise<Patient | undefined>;
   userRole: UserRole;
   doctorId: string;
+  /** Xodimlar → Ruxsatlar: shifokor klinikadagi barcha qabullarni ko'rsinmi (default yo'q) */
+  seeAllPatients?: boolean;
   currentClinic?: Clinic;
   plans: SubscriptionPlan[];
   onPatientClick?: (id: string) => void;
@@ -29,7 +31,7 @@ interface CalendarProps {
 
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, currentClinic, plans, onPatientClick
+  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick
 }) => {
   const { t, language } = useLanguage();
   // Sana sarlavhasi tanlangan tilda ko'rsatiladi
@@ -37,8 +39,9 @@ export const Calendar: React.FC<CalendarProps> = ({
   const startHour = currentClinic?.startHour ?? 8;
   const endHour = currentClinic?.endHour ?? 20;
   const HOURS = Array.from({ length: Math.max(1, endHour - startHour + 1) }, (_, i) => i + startHour);
-  // Filter appointments for doctors
-  const filteredAppointments = userRole === UserRole.DOCTOR && doctorId
+  // Filter appointments for doctors — ruxsat berilgan bo'lsa (Ruxsatlar → Ko'rish
+  // doirasi) shifokor ham butun klinika jadvalini ko'radi
+  const filteredAppointments = userRole === UserRole.DOCTOR && doctorId && !seeAllPatients
     ? appointments.filter(a => a.doctorId === doctorId)
     : appointments;
   // State

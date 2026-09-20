@@ -37,7 +37,7 @@ import { Logo } from './components/Logo';
 import { BranchSwitcher } from './components/BranchSwitcher';
 import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } from './services/api';
 import type { CashCloseInput } from './services/api';
-import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone } from './utils/accessControl';
+import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone, canSeeAllPatients } from './utils/accessControl';
 import { formatHeaderDate } from './utils/dateUtils';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
@@ -1123,6 +1123,10 @@ const AppContent: React.FC = () => {
     && (nav.id !== 'finance' || showFinanceForRole)
   );
   const showPatientPhoneForRole = canSeePatientPhone(accessControl, userRole);
+  // Ko'rish doirasi: shifokor faqat o'z qabullarini ko'radimi yoki klinikadagi hammasini.
+  // Bemorlar ro'yxatini backend o'zi filtrlaydi, kalendar va bosh sahifa esa
+  // to'liq ro'yxatni oladi — shuning uchun ularga bu bayroq uzatiladi.
+  const seeAllPatientsForRole = canSeeAllPatients(accessControl, userRole);
 
   // --- Main Render ---
   // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
@@ -1681,6 +1685,7 @@ const AppContent: React.FC = () => {
                     currentClinic={currentClinic}
                     clinicId={clinicId}
                     showFinance={showFinanceForRole}
+                    seeAllPatients={seeAllPatientsForRole}
                     onPatientClick={handlePatientClick}
                     onUpdateAppointment={updateAppointment}
                     onUpdateTransaction={updateTransaction}
@@ -1761,6 +1766,7 @@ const AppContent: React.FC = () => {
                   onAddPatient={addPatient}
                   userRole={userRole}
                   doctorId={doctorId}
+                  seeAllPatients={seeAllPatientsForRole}
                   currentClinic={currentClinic}
                   plans={plans}
                   onPatientClick={handlePatientClick}

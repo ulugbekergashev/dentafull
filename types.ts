@@ -556,6 +556,12 @@ export interface RoleAccess {
   hiddenModules?: string[];   // yashirilgan modul id lari (nav id: 'finance', 'leads', ...)
   showFinance?: boolean;      // pul ko'rsatkichlari (dashboard KPI, tushum grafigi); default true
   showPatientPhone?: boolean; // bemor telefon raqamlari; default true
+  // Ko'rish doirasi (hozircha faqat shifokor uchun): yoqilsa shifokor klinikadagi
+  // BARCHA bemorlar va qabullarni ko'radi, nafaqat o'zinikini. Default false —
+  // eski klinikalarda hech narsa o'zgarmaydi.
+  // Ataylab moliyadan ajratilgan: "hamma qabulni ko'rsin, lekin kassani ko'rmasin"
+  // eng ko'p so'raladigan kombinatsiya — buning uchun showFinance alohida qoladi.
+  seeAllPatients?: boolean;
 }
 
 export interface AccessControl {
