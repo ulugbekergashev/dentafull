@@ -148,7 +148,7 @@ const MethodStrip: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
                     <div key={m.key} className="flex items-center gap-2.5">
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
                         <div>
-                            <p className="text-[11px] text-gray-400 leading-tight">{m.label}</p>
+                            <p className="text-[11px] text-gray-400 leading-tight">{tLabel(t, m.label)}</p>
                             <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
                                 {num(totals.byMethod[m.key])}
                             </p>
@@ -1576,7 +1576,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         ? 'bg-red-500 text-white border-red-500'
                                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-red-400'}`}
                                 >
-                                    {getPaymentMethodLabel(m)}
+                                    {tLabel(t, getPaymentMethodLabel(m))}
                                 </button>
                             ))}
                         </div>
@@ -1772,7 +1772,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         ? 'bg-emerald-600 text-white border-emerald-600'
                                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400'}`}
                                 >
-                                    {getPaymentMethodLabel(m)}
+                                    {tLabel(t, getPaymentMethodLabel(m))}
                                 </button>
                             ))}
                         </div>
@@ -1836,7 +1836,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         ? 'bg-primary-600 text-white border-primary-600'
                                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                                 >
-                                    {m.label}
+                                    {tLabel(t, m.label)}
                                 </button>
                             ))}
                         </div>

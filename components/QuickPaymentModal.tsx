@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Modal, Button } from './Common';
 import { Patient, Doctor, Transaction, PaymentMethod } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
+import { useLanguage } from '../context/LanguageContext';
+import { tLabel } from '../i18n/labels';
 import { Plus, Loader2 } from 'lucide-react';
 
 interface QuickPaymentModalProps {
@@ -32,6 +34,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
     isOpen, onClose, patients, doctors, services, clinicId, onAddTransaction,
     presetPatientId, presetDoctorId, presetService, presetAmount, presetDate,
 }) => {
+    const { t } = useLanguage();
     const buildPresetForm = () => ({
         ...emptyForm,
         patientId: presetPatientId || '',
@@ -72,26 +75,26 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="💰 To'lov qo'shish" className="max-w-md">
+        <Modal isOpen={isOpen} onClose={onClose} title={t("auto.💰 To'lov qo'shish")} className="max-w-md">
             <div className="space-y-4">
                 <div>
-                    <label className={labelCls}>Bemor *</label>
+                    <label className={labelCls}>{t('auto.Bemor *')}</label>
                     <select value={form.patientId} onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))} className={inputCls}>
-                        <option value="">Bemorni tanlang...</option>
+                        <option value="">{t('auto.Bemorni tanlang...')}</option>
                         {patients.map(p => <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>)}
                     </select>
                 </div>
 
                 <div>
-                    <label className={labelCls}>Shifokor</label>
+                    <label className={labelCls}>{t('auto.Shifokor')}</label>
                     <select value={form.doctorId} onChange={e => setForm(f => ({ ...f, doctorId: e.target.value }))} className={inputCls}>
-                        <option value="">Tanlanmagan (ixtiyoriy)</option>
+                        <option value="">{t('auto.Tanlanmagan (ixtiyoriy)')}</option>
                         {doctors.map(d => <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>)}
                     </select>
                 </div>
 
                 <div>
-                    <label className={labelCls}>Xizmat</label>
+                    <label className={labelCls}>{t('auto.Xizmat')}</label>
                     <select
                         value={form.service}
                         onChange={e => {
@@ -100,18 +103,18 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                         }}
                         className={inputCls}
                     >
-                        <option value="">Xizmatni tanlang...</option>
+                        <option value="">{t('auto.Xizmatni tanlang...')}</option>
                         {services.map((s, i) => <option key={i} value={s.name}>{s.name} — {s.price.toLocaleString()} UZS</option>)}
                     </select>
                 </div>
 
                 <div>
-                    <label className={labelCls}>Summa (UZS) *</label>
+                    <label className={labelCls}>{t('auto.Summa (UZS) *')}</label>
                     <input type="number" placeholder="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} onWheel={e => e.currentTarget.blur()} className={inputCls} />
                 </div>
 
                 <div>
-                    <label className={labelCls}>To'lov usuli</label>
+                    <label className={labelCls}>{t("auto.To'lov usuli")}</label>
                     <div className="flex gap-2 flex-wrap">
                         {[...INCOMING_PAYMENT_METHODS, 'Balance' as PaymentMethod].map(type => (
                             <button
@@ -121,21 +124,21 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                                     ? 'bg-primary text-white border-primary'
                                     : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                             >
-                                {getPaymentMethodLabel(type)}
+                                {tLabel(t, getPaymentMethodLabel(type))}
                             </button>
                         ))}
                     </div>
                 </div>
 
                 <div className="flex gap-2 pt-2">
-                    <Button variant="secondary" className="flex-1" onClick={onClose}>Bekor</Button>
+                    <Button variant="secondary" className="flex-1" onClick={onClose}>{t('auto.Bekor')}</Button>
                     <button
                         disabled={saving || !form.amount || !form.patientId}
                         onClick={handleSave}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-success hover:bg-success-700 disabled:bg-success/50 disabled:cursor-not-allowed transition-all"
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                        Saqlash
+                        {t('auto.Saqlash')}
                     </button>
                 </div>
             </div>

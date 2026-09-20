@@ -198,7 +198,7 @@ export const Patients: React.FC<PatientsProps> = ({
       p.dob,
       p.gender === 'Male' ? 'Erkak' : 'Ayol',
       p.status === 'Active' ? 'Faol' : 'Arxiv',
-      getPatientDoctorName(p) || 'Biriktirilmagan',
+      getPatientDoctorName(p) || t('auto.Biriktirilmagan'),
       p.lastVisit,
     ]);
     const csvContent = [headers, ...rows].map((r) => r.join(',')).join('\n');
@@ -242,7 +242,7 @@ export const Patients: React.FC<PatientsProps> = ({
 
   const handleLookupPinfl = async () => {
     if (!formData.pinfl || formData.pinfl.length !== 14) {
-      alert('JSHSHIR 14 ta raqamdan iborat bo\'lishi kerak');
+      alert(t("auto.JSHSHIR 14 raqamdan iborat bo'lishi kerak"));
       return;
     }
     setIsLookingUp(true);
@@ -261,7 +261,7 @@ export const Patients: React.FC<PatientsProps> = ({
         }));
       }
     } catch (error: any) {
-      alert('DHP orqali topilmadi: ' + (error.message || 'Xatolik'));
+      alert(t('auto.DHP orqali topilmadi: {e}').replace('{e}', error.message || t('auto.Xatolik')));
     } finally {
       setIsLookingUp(false);
     }
@@ -662,7 +662,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 onChange={(e) => setAssignDoctorId(e.target.value)}
                 className="w-full h-10 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-3 focus:ring-2 focus:ring-primary-500"
               >
-                <option value="">— Biriktirilmagan —</option>
+                <option value="">{t('auto.— Biriktirilmagan —')}</option>
                 {doctors.filter((d) => d.status === 'Active').map((d) => (
                   <option key={d.id} value={d.id}>{d.lastName} {d.firstName} ({d.specialty})</option>
                 ))}
@@ -713,7 +713,7 @@ export const Patients: React.FC<PatientsProps> = ({
                   name="pinfl" 
                   value={formData.pinfl} 
                   onChange={handleInputChange} 
-                  placeholder="14 ta raqam" 
+                  placeholder={t('auto.14 ta raqam')} 
                   maxLength={14}
                 />
               </div>
@@ -737,7 +737,7 @@ export const Patients: React.FC<PatientsProps> = ({
             <Input label={t('auto.Qo\'shimcha Telefon')} name="secondaryPhone" value={formData.secondaryPhone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input label={t('auto.Tug\'ilgan sana')} type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText="Sanani qo'lda kiritish uchun maydonga bosing" />
+            <Input label={t('auto.Tug\'ilgan sana')} type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText={t("auto.Sanani qo'lda kiritish uchun maydonga bosing")} />
             <Input label={t('patients.modal.passport')} name="passport" value={formData.passport} onChange={handleInputChange} placeholder={t('auto.AA1234567')} />
           </div>
           <Input label="Manzil (Ixtiyoriy)" name="address" value={formData.address} onChange={handleInputChange} placeholder={t('auto.Toshkent sh., Chilonzor t...')} />
@@ -837,7 +837,7 @@ export const Patients: React.FC<PatientsProps> = ({
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)} disabled={isSubmitting}>{t('auto.Bekor qilish')}</Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('auto.Saqlanmoqda...')}</> : 'Saqlash'}
+              {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('auto.Saqlanmoqda...')}</> : t('auto.Saqlash')}
             </Button>
           </div>
         </form>

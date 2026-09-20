@@ -653,7 +653,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                 </div>
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('auto.Xabarlar')}</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Avtomatik va qo'lda SMS/Telegram xabar yuborish boshqaruvi</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{t("auto.Avtomatik va qo'lda SMS/Telegram xabar yuborish boshqaruvi")}</p>
                 </div>
             </div>
 
@@ -691,7 +691,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
 
                     <div className="flex items-center gap-2 px-4 py-2.5 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-xs text-primary-700 dark:text-primary-400">
                         <Smartphone className="w-3.5 h-3.5 shrink-0" />
-                        <span>Eskiz SMS ulangan bo'lsa, shablon saqlangach fonda Eskiz moderatsiyasiga yuboriladi (o'zgaruvchilar Eskiz talab qilgan <code className="font-mono">%w</code> ko'rinishiga aylantiriladi). Holatini "🔄" tugmasi bilan yangilab turing.</span>
+                        <span>{t("auto.Eskiz SMS ulangan bolsa hint")}</span>
                     </div>
 
                     {isTemplateFormOpen && (

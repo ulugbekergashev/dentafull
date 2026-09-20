@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Doctor, Patient, Appointment, Clinic } from '../types';
 import { api, API_URL } from '../services/api';
+import { tLabel } from '../i18n/labels';
 
 const playChime = () => {
     const { t } = useLanguage();
@@ -531,7 +532,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
                 ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-400'
                 : 'bg-gray-150 hover:bg-gray-200 border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-700 text-gray-700 dark:text-gray-300'
             }`}
-            title={voiceEnabled ? "Ovozli e'lonni o'chirish" : "Ovozli e'lonni yoqish"}
+            title={voiceEnabled ? t("auto.Ovozli e'lonni o'chirish") : t("auto.Ovozli e'lonni yoqish")}
           >
             {voiceEnabled ? <Volume2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <VolumeX className="w-4 h-4" />}
             <span className="hidden sm:inline">
@@ -569,7 +570,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
               <s.icon className="w-5 h-5 text-white" />
             </div>
             <div className="text-2xl font-bold text-gray-900 dark:text-white">{s.value}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.label}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{tLabel(t, s.label)}</div>
           </div>
         ))}
       </div>
@@ -603,7 +604,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
                 <Users className="w-8 h-8 text-violet-400" />
               </div>
               <p className="font-medium text-gray-700 dark:text-gray-300">{t('auto.Navbatda hech kim yo\'q')}</p>
-              <p className="text-sm text-gray-400 mt-1">Yangi navbat qo'shish uchun "Navbat qo'shish" tugmasini bosing</p>
+              <p className="text-sm text-gray-400 mt-1">{t("auto.Yangi navbat qo'shish uchun «Navbat qo'shish» tugmasini bosing")}</p>
             </div>
           )}
           {active.map((entry, idx) => (
@@ -829,7 +830,7 @@ const QueueCard: React.FC<CardProps> = ({ entry, position, tick, isHistory, onUp
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-gray-900 dark:text-white text-sm">{entry.patientName}</span>
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${STATUS_COLORS[entry.status]}`}>
-              {STATUS_LABELS[entry.status]}
+              {tLabel(t, STATUS_LABELS[entry.status])}
             </span>
           </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -981,7 +982,7 @@ const QueueTVBoard: React.FC<{
         <button
           onClick={onToggleVoice}
           className="opacity-5 hover:opacity-100 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs transition-opacity flex items-center gap-1.5"
-          title={voiceEnabled ? "Ovozli e'lonni o'chirish" : "Ovozli e'lonni yoqish"}
+          title={voiceEnabled ? t("auto.Ovozli e'lonni o'chirish") : t("auto.Ovozli e'lonni yoqish")}
         >
           {voiceEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-400" /> : <VolumeX className="w-3.5 h-3.5 text-gray-400" />}
           <span>Ovoz: {voiceEnabled ? "Yoqilgan" : "O'chirilgan"}</span>

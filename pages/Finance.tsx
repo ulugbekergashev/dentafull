@@ -6,6 +6,7 @@ import { UserRole, Transaction, Expense, ExpenseCategory, EXPENSE_CATEGORY_LABEL
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, UserCheck, AlertOctagon, Calendar, Bot, Users, Clock, Printer, Plus, Banknote, Pencil, Trash2, HandCoins } from 'lucide-react';
 import { api } from '../services/api';
+import { tLabel } from '../i18n/labels';
 import { useLanguage } from '../context/LanguageContext';
 import { calculateTotalFinancials, calculateDoctorShares, transactionBelongsToDoctor } from '../utils/financialCalculations';
 import { exportFinanceToExcel } from '../utils/excelExport';
@@ -226,7 +227,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   };
 
   const handleDeleteExpense = async (expense: Expense) => {
-    if (!confirm(`"${expense.title}" xarajatini o'chirishni tasdiqlaysizmi?`)) return;
+    if (!confirm(t("auto.«{name}» xarajatini o'chirishni tasdiqlaysizmi?").replace('{name}', expense.title))) return;
     await onDeleteExpense?.(expense.id);
   };
 
@@ -410,7 +411,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     const txs = dateFilteredTransactions.filter(t => t.type === m.key && t.status === 'Paid');
     return {
       key: m.key,
-      name: m.short,
+      name: tLabel(t, m.short),
       color: m.color,
       value: txs.length,
       amount: txs.reduce((sum, t) => sum + t.amount, 0),
@@ -511,7 +512,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 className="flex items-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
                 <Banknote className="w-3.5 h-3.5" />
-                {embedded ? "Xarajat / Oylik" : 'Xarajat'}
+                {embedded ? t('auto.Xarajat / Oylik') : t('auto.Xarajat')}
               </button>
             )}
           </div>
@@ -550,13 +551,13 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
           subtitle={<span className="flex items-center"><Calendar className="w-3.5 h-3.5 mr-1" />{isReceptionist ? today : (startDate || endDate ? t('finance.selectedPeriod') : t('finance.allTime'))}</span>}
         />
         {!isReceptionist && (
-          <StatCard label={t('finance.debt')} value={totalDebt.toLocaleString()} unit="UZS" icon={Wallet} color="warning" variant="gradient" subtitle={`${DEBTORS.length} ta qarzdor bemor`} />
+          <StatCard label={t('finance.debt')} value={totalDebt.toLocaleString()} unit="UZS" icon={Wallet} color="warning" variant="gradient" subtitle={t('auto.{n} ta qarzdor bemor').replace('{n}', String(DEBTORS.length))} />
         )}
         {!isReceptionist && (
           <StatCard label={t('auto.Bo\'lib to\'lash')} value={upcomingInstallmentAmount.toLocaleString()} unit="UZS" icon={Clock} color="info" variant="gradient" subtitle={t('auto.Shu oy kutilmoqda')} />
         )}
         {!isReceptionist && (
-          <StatCard label={t('finance.avgCheck')} value={paidTransactionCount ? Math.round(totalRevenue / paidTransactionCount).toLocaleString() : 0} unit="UZS" icon={CreditCard} color="primary" variant="gradient" subtitle={`${paidTransactionCount} ta to'lov`} />
+          <StatCard label={t('finance.avgCheck')} value={paidTransactionCount ? Math.round(totalRevenue / paidTransactionCount).toLocaleString() : 0} unit="UZS" icon={CreditCard} color="primary" variant="gradient" subtitle={t("auto.{n} ta to'lov").replace('{n}', String(paidTransactionCount))} />
         )}
       </div>
 
@@ -569,7 +570,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
           </h3>
           <div className="max-w-md space-y-2 text-sm">
             <div className="flex justify-between text-gray-600 dark:text-gray-300">
-              <span>Jami daromad (hisoblangan)</span>
+              <span>{t('auto.Jami daromad (hisoblangan)')}</span>
               <span className="font-semibold tabular-nums">{totalRevenue.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-gray-600 dark:text-gray-300">
@@ -622,7 +623,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               </div>
               <p className="text-xs font-medium text-gray-400 dark:text-gray-500">{t('auto.Umumiy Xarajatlar')}</p>
               <h3 className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{financials.otherExpenses.toLocaleString()}</h3>
-              <p className="text-[10px] text-gray-400 mt-0.5">UZS · shifokor ulushisiz</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{t('auto.UZS · shifokor ulushisiz')}</p>
             </Card>
 
             <Card className="p-5 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
@@ -643,7 +644,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                   <TrendingDown className={`w-5 h-5 rotate-180 ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`} />
                 </div>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${netProfit >= 0 ? 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30' : 'text-red-500 bg-red-100 dark:bg-red-900/30'}`}>
-                  {netProfit >= 0 ? 'Foyda' : 'Zarar'}
+                  {netProfit >= 0 ? t('auto.Foyda') : t('auto.Zarar')}
                 </span>
               </div>
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('finance.netProfit')}</p>
@@ -707,7 +708,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                 </table>
               </div>
               <p className="px-6 py-3 text-[11px] text-gray-400 border-t border-gray-100 dark:border-gray-700">
-                Hisoblangan = to'langan to'lovlar × shifokor foizi. "To'lash" bosilganda "Shifokor ulushi" kategoriyali xarajat yoziladi — u sof foydadan qayta ayirilmaydi.
+                {t("auto.Hisoblangan = to'langan to'lovlar × shifokor foizi. «To'lash» bosilganda «Shifokor ulushi» kategoriyali xarajat yoziladi — u sof foydadan qayta ayirilmaydi.")}
               </p>
             </Card>
           </div>
@@ -785,7 +786,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                       return (
                         <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg shadow-lg px-3.5 py-2.5">
                           <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">{d.name}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{d.value} ta to'lov</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t("auto.{n} ta to'lov").replace('{n}', String(d.value))}</p>
                           <p className="text-sm font-bold tabular-nums" style={{ color: d.color }}>
                             {d.amount.toLocaleString()} UZS
                           </p>
@@ -824,7 +825,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-semibold text-gray-900 dark:text-white">{t('auto.Bo\'lib to\'lash rejalari')}</h3>
-                <p className="text-sm text-gray-500">{installments.filter(p => p.status === 'Active').length} ta faol shartnoma</p>
+                <p className="text-sm text-gray-500">{t('auto.{n} ta faol shartnoma').replace('{n}', String(installments.filter(p => p.status === 'Active').length))}</p>
               </div>
               <div className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg text-primary-600">
                 <CreditCard className="w-5 h-5" />
@@ -910,7 +911,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
             {activeTab === 'payments' ? (
               <div className="relative">
                 <Button variant="secondary" size="sm" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-                  <Filter className="w-4 h-4 mr-2" /> {filterStatus}
+                  <Filter className="w-4 h-4 mr-2" /> {filterStatus === 'Paid' ? t("auto.To'langan") : filterStatus === 'Pending' ? t('auto.Kutilmoqda') : filterStatus === 'Overdue' ? t('auto.Qarzdor') : t('auto.Barchasi')}
                 </Button>
                 {isFilterOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10">
@@ -920,7 +921,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                         className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                         onClick={() => { setFilterStatus(status); setIsFilterOpen(false); }}
                       >
-                        {status === 'Paid' ? 'To\'langan' : status === 'Pending' ? 'Kutilmoqda' : status === 'Overdue' ? 'Qarzdor' : status}
+                        {status === 'Paid' ? t("auto.To'langan") : status === 'Pending' ? t('auto.Kutilmoqda') : status === 'Overdue' ? t('auto.Qarzdor') : t('auto.Barchasi')}
                       </button>
                     ))}
                   </div>
@@ -957,7 +958,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                       <td className="px-6 py-4 font-medium">{tx.patientName}</td>
                       <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{tx.doctorName || '-'}</td>
                       <td className="px-6 py-4">{tx.service}</td>
-                      <td className="px-6 py-4">{getPaymentMethodLabel(tx.type)}</td>
+                      <td className="px-6 py-4">{tLabel(t, getPaymentMethodLabel(tx.type))}</td>
                       <td className="px-6 py-4 font-medium">{tx.amount.toLocaleString()} UZS</td>
                       <td className="px-6 py-4"><Badge status={tx.status} /></td>
                       <td className="px-6 py-4 text-right">
@@ -997,14 +998,14 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                         <td className="px-6 py-4">{e.date?.split('T')[0]}</td>
                         <td className="px-6 py-4">
                           <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${CATEGORY_COLORS[e.category] || CATEGORY_COLORS.Other}`}>
-                            {EXPENSE_CATEGORY_LABELS[e.category] || e.category}
+                            {tLabel(t, EXPENSE_CATEGORY_LABELS[e.category] || e.category)}
                           </span>
                         </td>
                         <td className="px-6 py-4 font-medium">{e.title}</td>
                         <td className="px-6 py-4 text-gray-600 dark:text-gray-400">
                           {expenseDoctor ? `${expenseDoctor.lastName} ${expenseDoctor.firstName}` : expenseReceptionist ? `${expenseReceptionist.lastName} ${expenseReceptionist.firstName} (reception)` : '-'}
                         </td>
-                        <td className="px-6 py-4">{getPaymentMethodLabel(e.method)}</td>
+                        <td className="px-6 py-4">{tLabel(t, getPaymentMethodLabel(e.method))}</td>
                         <td className="px-6 py-4 font-bold text-red-600 dark:text-red-400">-{e.amount.toLocaleString()} UZS</td>
                         <td className="px-6 py-4 text-right">
                           {isAutoLab ? (
@@ -1120,7 +1121,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
 
           <div className="flex items-center gap-2 px-4 py-3 mb-4 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl text-sm text-primary-700 dark:text-primary-400">
             <Bot className="w-4 h-4 shrink-0" />
-            <span>{t('auto.Qarzdorlarga ommaviy eslatma yuborish uchun')} <strong>Xabarlar → Qo'lda</strong> bo'limidan "Qarzdorlar" filtridan foydalaning.</span>
+            <span>{t('auto.Qarzdorlarga ommaviy eslatma yuborish uchun')} <strong>{t("auto.Xabarlar → Qo'lda")}</strong> bo'limidan "Qarzdorlar" filtridan foydalaning.</span>
           </div>
           <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
             {filteredDebtors.map(d => (
@@ -1172,7 +1173,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Bemor *</label>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Bemor *')}</label>
             <select
               value={paymentForm.patientId}
               onChange={e => setPaymentForm(f => ({ ...f, patientId: e.target.value }))}
@@ -1192,7 +1193,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               onChange={e => setPaymentForm(f => ({ ...f, doctorId: e.target.value }))}
               className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
             >
-              <option value="">Shifokorni tanlang (ixtiyoriy)</option>
+              <option value="">{t('auto.Shifokorni tanlang (ixtiyoriy)')}</option>
               {doctors.map(d => (
                 <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>
               ))}
@@ -1221,7 +1222,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Summa (UZS) *</label>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Summa (UZS) *')}</label>
             <input
               type="number"
               placeholder="0"
@@ -1244,7 +1245,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'
                     }`}
                 >
-                  {getPaymentMethodLabel(type)}
+                  {tLabel(t, getPaymentMethodLabel(type))}
                 </button>
               ))}
             </div>
@@ -1268,7 +1269,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               ) : (
                 <Plus className="w-4 h-4" />
               )}
-              To'lovni Saqlash
+              {t("auto.To'lovni Saqlash")}
             </button>
           </div>
         </div>
@@ -1289,14 +1290,14 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-500/20 dark:text-white"
             >
               {(Object.keys(EXPENSE_CATEGORY_LABELS) as ExpenseCategory[]).map(cat => (
-                <option key={cat} value={cat}>{EXPENSE_CATEGORY_LABELS[cat]}</option>
+                <option key={cat} value={cat}>{tLabel(t, EXPENSE_CATEGORY_LABELS[cat])}</option>
               ))}
             </select>
           </div>
 
           {expenseForm.category === 'DoctorShare' && (
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Shifokor *</label>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Shifokor *')}</label>
               <select
                 value={expenseForm.doctorId}
                 onChange={e => setExpenseForm(f => ({ ...f, doctorId: e.target.value }))}
@@ -1434,7 +1435,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Summa (UZS) *</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">{t('auto.Summa (UZS) *')}</label>
                 <input
                   type="number"
                   placeholder="0"
@@ -1468,7 +1469,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-red-400'
                     }`}
                 >
-                  {getPaymentMethodLabel(method)}
+                  {tLabel(t, getPaymentMethodLabel(method))}
                 </button>
               ))}
             </div>

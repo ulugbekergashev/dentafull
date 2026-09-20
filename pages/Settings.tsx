@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UpgradePlanModal } from '../components/UpgradePlanModal';
+import { tLabel } from '../i18n/labels';
+
+/**
+ * Tarif xususiyatlari bazada o'zbekcha saqlanadi (SubscriptionPlan.features).
+ * Bazaga tegmasdan, ekranda tarjima qilamiz: '3 tagacha shifokor' kabi
+ * qatorlarda son o'rnini {n} bilan almashtiramiz.
+ */
+const planFeatureLabel = (t: (k: any) => string, feature: string): string => {
+    const m = feature.match(/^(\d+)\s+tagacha shifokor$/);
+    if (m) return t('auto.{n} tagacha shifokor').replace('{n}', m[1]);
+    return tLabel(t, feature);
+};
 
 import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal } from 'lucide-react';
@@ -944,7 +956,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               <DollarSign className="w-8 h-8" />
                            </div>
                            <div>
-                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Oldindan To'lov (Bron uchun)</h3>
+                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t("auto.Oldindan To'lov (Bron uchun)")}</h3>
                               <p className="text-sm text-gray-500">{t('auto.Bemor bot orqali qabulga yozilganda oldindan to\'lov talab qilish.')}</p>
                            </div>
                         </div>
@@ -1008,8 +1020,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div className="mb-4">
                               <h4 className="text-base font-bold text-gray-900 dark:text-white">{t('auto.Kassa smenalari')}</h4>
                               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                 Smena kassir "Kunni yopish" bosgan daqiqada tugaydi — soat bo'yicha emas.
-                                 Undan keyingi to'lovlar keyingi smenaga o'tadi.
+                                 {t("auto.Smena kassir «Kunni yopish» bosgan daqiqada tugaydi — soat bo'yicha emas. Undan keyingi to'lovlar keyingi smenaga o'tadi.")}
                               </p>
                            </div>
                            <div className="flex flex-wrap items-center gap-2">
@@ -1023,15 +1034,15 @@ export const Settings: React.FC<SettingsProps> = ({
                                        ? 'bg-primary-600 text-white border-primary-600'
                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                                  >
-                                    {n === 1 ? 'Kuniga 1 smena' : 'Kuniga 2 smena'}
+                                    {n === 1 ? t('auto.Kuniga 1 smena') : t('auto.Kuniga 2 smena')}
                                  </button>
                               ))}
                               {cashShiftsSaving && <span className="text-xs text-gray-400">{t('auto.Saqlanmoqda...')}</span>}
                            </div>
                            <p className="text-[11px] text-gray-400 mt-3">
                               {cashShifts === 1
-                                 ? 'Kassa sahifasida kun butunligicha ko\'rinadi.'
-                                 : 'Kassa sahifasida "1-smena / 2-smena" tanlagichi chiqadi. 2-smena 1-smena topshirgan naqddan boshlanadi.'}
+                                 ? t("auto.Kassa sahifasida kun butunligicha ko'rinadi.")
+                                 : t("auto.Kassa sahifasida «1-smena / 2-smena» tanlagichi chiqadi. 2-smena 1-smena topshirgan naqddan boshlanadi.")}
                            </p>
                         </Card>
                      )}
@@ -1174,7 +1185,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
                            <h4 className="font-bold text-gray-900 dark:text-white mb-2">{t('auto.Shaxsiy Telegram Botni Ulash')}</h4>
                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                              Telegram-da @BotFather orqali o'zingizning shaxsiy botingizni yarating va bot tokenini quyidagi maydonga kiritib, uni tizimga ulang.
+                              {t("auto.Telegram-da @BotFather orqali o'zingizning shaxsiy botingizni yarating va bot tokenini quyidagi maydonga kiritib, uni tizimga ulang.")}
                            </p>
 
                            <form onSubmit={handleBotSave} className="space-y-4">
@@ -1225,7 +1236,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                        </span>
                                     )}
                                  </div>
-                                 <p className="text-sm text-gray-600 dark:text-gray-400 -mt-3 mb-5">Telegram botga ulanmagan bemorlarga xabarlar SMS orqali yuboriladi (pullik).</p>
+                                 <p className="text-sm text-gray-600 dark:text-gray-400 -mt-3 mb-5">{t('auto.Telegram botga ulanmagan bemorlarga xabarlar SMS orqali yuboriladi (pullik).')}</p>
                                  <div className="space-y-4">
                                     <Input 
                                        label={t('auto.Eskiz.uz Kabinet Email')} 
@@ -1239,7 +1250,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                         <input
                                             type="password"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                            placeholder={smsHasPassword ? "(Parol kiritilgan. O'zgartirish uchun yangisini kiriting)" : "Yashirin kalitni kiriting"}
+                                            placeholder={smsHasPassword ? t("auto.(Parol kiritilgan. O'zgartirish uchun yangisini kiriting)") : t('auto.Yashirin kalitni kiriting')}
                                             value={smsForm.eskizPassword}
                                             onChange={(e) => setSmsForm({...smsForm, eskizPassword: e.target.value})}
                                         />
@@ -1798,7 +1809,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                                  {features.map(feature => (
                                     <li key={feature} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                                        <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
-                                       {feature}
+                                       {planFeatureLabel(t, feature)}
                                     </li>
                                  ))}
                               </ul>

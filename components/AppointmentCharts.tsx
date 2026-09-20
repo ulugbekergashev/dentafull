@@ -149,7 +149,7 @@ export const TrendCharts: React.FC<TrendChartsProps> = ({ appointments: filtered
           </ResponsiveContainer>
           {trendData.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm font-medium">
-              Ma'lumotlar mavjud emas
+              {t("auto.Ma'lumotlar mavjud emas")}
             </div>
           )}
         </div>
@@ -251,7 +251,7 @@ export const IntensityChart: React.FC<{ appointments: Appointment[] }> = ({ appo
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
         <div>
           <h3 className="text-xl font-black text-gray-900 dark:text-white">
-            Qabullar <span className="text-danger">Intensivligi</span>
+            {t('auto.Qabullar')} <span className="text-danger">{t('auto.Intensivligi')}</span>
           </h3>
           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
             {intensityView === 'month' ? t('dashboard.byMonthDays') : t('dashboard.byLast12')}
@@ -267,7 +267,7 @@ export const IntensityChart: React.FC<{ appointments: Appointment[] }> = ({ appo
               : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
           >
-            OYLIK
+            {t('auto.OYLIK')}
           </button>
           <button
             onClick={() => setIntensityView('year')}
@@ -276,7 +276,7 @@ export const IntensityChart: React.FC<{ appointments: Appointment[] }> = ({ appo
               : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
           >
-            YILLIK
+            {t('auto.YILLIK')}
           </button>
         </div>
       </div>
@@ -323,8 +323,8 @@ export const IntensityChart: React.FC<{ appointments: Appointment[] }> = ({ appo
         </div>
         <p className="leading-relaxed">
           {intensityView === 'year'
-            ? "Yillik tahlil klinika faolligini oylar kesimida ko'rsatadi. Kunlik tahlilga o'tish uchun tepadan 'OYLIK' tugmasini bosing."
-            : "Joriy oy uchun kunlik qabullar soni. Bu qaysi kunlarda klinika yuklamasi yuqori ekanini ko'rsatadi."}
+            ? t("auto.Yillik tahlil klinika faolligini oylar kesimida ko'rsatadi. Kunlik tahlilga o'tish uchun tepadan «OYLIK» tugmasini bosing.")
+            : t("auto.Joriy oy uchun kunlik qabullar soni. Bu qaysi kunlarda klinika yuklamasi yuqori ekanini ko'rsatadi.")}
         </p>
       </div>
     </Card>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Input, Button } from './Common';
 import { Patient, Doctor, UserRole } from '../types';
 import { api } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 import { ChevronDown, Search, Loader2 } from 'lucide-react';
 import { RegionDistrictSelect } from './RegionDistrictSelect';
 
@@ -26,6 +27,7 @@ const emptyForm = {
 export const AddPatientModal: React.FC<AddPatientModalProps> = ({
     isOpen, onClose, onAddPatient, doctors = [], userRole, doctorId, compact = false, onCreated,
 }) => {
+    const { t } = useLanguage();
     const [form, setForm] = useState({ ...emptyForm });
     const [showMore, setShowMore] = useState(!compact);
     const [saving, setSaving] = useState(false);
@@ -36,7 +38,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
 
     const handleLookupPinfl = async () => {
         if (!form.pinfl || form.pinfl.length < 14) {
-            alert('JSHSHIR 14 raqamdan iborat bo\'lishi kerak');
+            alert(t("auto.JSHSHIR 14 raqamdan iborat bo'lishi kerak"));
             return;
         }
         setLookupLoading(true);
@@ -56,7 +58,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                 setShowMore(true);
             }
         } catch (e: any) {
-            alert(e.message || 'JSHSHIR bo\'yicha ma\'lumot topilmadi');
+            alert(e.message || t("auto.JSHSHIR bo'yicha ma'lumot topilmadi"));
         } finally {
             setLookupLoading(false);
         }
@@ -65,7 +67,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form.firstName.trim() || !form.lastName.trim()) {
-            alert('Ism va familiyani kiriting');
+            alert(t('auto.Ism va familiyani kiriting'));
             return;
         }
         setSaving(true);
@@ -96,14 +98,14 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Yangi bemor qo'shish" className="max-w-xl">
+        <Modal isOpen={isOpen} onClose={onClose} title={t("auto.Yangi bemor qo'shish")} className="max-w-xl">
             <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Asosiy maydonlar */}
                 <div className="grid grid-cols-2 gap-3">
-                    <Input label="Familiya *" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required />
-                    <Input label="Ism *" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required />
+                    <Input label={t('auto.Familiya *')} value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} required />
+                    <Input label={t('auto.Ism *')} value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required />
                 </div>
-                <Input label="Telefon" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+998 90 123 45 67" />
+                <Input label={t('auto.Telefon')} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+998 90 123 45 67" />
 
                 {/* Qo'shimcha ma'lumot toggle */}
                 {compact && (
@@ -113,7 +115,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                         className="flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
                     >
                         <ChevronDown className={`w-4 h-4 transition-transform ${showMore ? 'rotate-180' : ''}`} />
-                        Qo'shimcha ma'lumot
+                        {t("auto.Qo'shimcha ma'lumot")}
                     </button>
                 )}
 
@@ -121,36 +123,36 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                     <div className="space-y-4 pt-1">
                         <div className="grid grid-cols-2 gap-3">
                             <div className="flex gap-2 items-end">
-                                <Input label="JSHSHIR (PINFL)" containerClassName="flex-1" value={form.pinfl} onChange={e => setForm(f => ({ ...f, pinfl: e.target.value }))} placeholder="14 raqam" maxLength={14} />
+                                <Input label={t('auto.JSHSHIR (PINFL)')} containerClassName="flex-1" value={form.pinfl} onChange={e => setForm(f => ({ ...f, pinfl: e.target.value }))} placeholder="14 raqam" maxLength={14} />
                                 <Button type="button" variant="secondary" onClick={handleLookupPinfl} disabled={lookupLoading} className="h-10">
                                     {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                                 </Button>
                             </div>
-                            <Input label="Pasport (seriya, raqam)" value={form.passport} onChange={e => setForm(f => ({ ...f, passport: e.target.value }))} placeholder="AA1234567" />
+                            <Input label={t('auto.Pasport (seriya, raqam)')} value={form.passport} onChange={e => setForm(f => ({ ...f, passport: e.target.value }))} placeholder="AA1234567" />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <Input label="Qo'shimcha telefon" value={form.secondaryPhone} onChange={e => setForm(f => ({ ...f, secondaryPhone: e.target.value }))} />
-                            <Input label="Tug'ilgan sana" type="date" value={form.dob} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))} />
+                            <Input label={t("auto.Qo'shimcha telefon")} value={form.secondaryPhone} onChange={e => setForm(f => ({ ...f, secondaryPhone: e.target.value }))} />
+                            <Input label={t("auto.Tug'ilgan sana")} type="date" value={form.dob} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))} />
                         </div>
-                        <Input label="Manzil" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+                        <Input label={t('auto.Manzil')} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
                         <RegionDistrictSelect regionCode={form.regionCode} districtCode={form.districtCode} onChange={v => setForm(f => ({ ...f, ...v }))} />
 
                         {!isDoctor && doctors.length > 0 && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Biriktirilgan shifokor</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Biriktirilgan shifokor')}</label>
                                 <select
                                     value={form.doctorId}
                                     onChange={e => setForm(f => ({ ...f, doctorId: e.target.value }))}
                                     className="w-full h-10 rounded-lg border border-gray-300 bg-transparent px-3 text-sm dark:border-gray-700 dark:text-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
                                 >
-                                    <option value="">Tanlanmagan</option>
+                                    <option value="">{t('auto.Tanlanmagan')}</option>
                                     {doctors.map(d => <option key={d.id} value={d.id}>{d.lastName} {d.firstName}</option>)}
                                 </select>
                             </div>
                         )}
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Jins</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Jins')}</label>
                             <div className="flex gap-2">
                                 {(['Male', 'Female'] as const).map(g => (
                                     <button
@@ -161,19 +163,19 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                                             ? 'bg-primary text-white border-primary'
                                             : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                                     >
-                                        {g === 'Male' ? 'Erkak' : 'Ayol'}
+                                        {g === 'Male' ? t('auto.Erkak') : t('auto.Ayol')}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tibbiy tarix</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Tibbiy tarix')}</label>
                             <textarea
                                 value={form.medicalHistory}
                                 onChange={e => setForm(f => ({ ...f, medicalHistory: e.target.value }))}
                                 rows={2}
-                                placeholder="Allergiya, surunkali kasalliklar..."
+                                placeholder={t('auto.Allergiya, surunkali kasalliklar...')}
                                 className="w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
                             />
                         </div>
@@ -181,9 +183,9 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                 )}
 
                 <div className="flex justify-end gap-2 pt-2">
-                    <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>Bekor</Button>
+                    <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>{t('auto.Bekor')}</Button>
                     <Button type="submit" disabled={saving}>
-                        {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saqlanmoqda...</> : 'Saqlash'}
+                        {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('auto.Saqlanmoqda...')}</> : t('auto.Saqlash')}
                     </Button>
                 </div>
             </form>

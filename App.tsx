@@ -1496,7 +1496,7 @@ const AppContent: React.FC = () => {
                   lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
               <button
                 onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
-                title="DentaAI — Ctrl+Shift+Space yoki F2 (ovoz bilan)"
+                title={t('auto.DentaAI — Ctrl+Shift+Space yoki F2 (ovoz bilan)')}
                 aria-label="DentaAI"
                 className="group relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl
                            text-white font-bold text-[13px] tracking-wide
