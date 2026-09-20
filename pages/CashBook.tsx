@@ -322,7 +322,7 @@ const CashFlowPanel: React.FC<{
                             {t("auto.Yashikda bo'lishi kerak")}
                         </p>
                         <p className="text-3xl font-black tabular-nums text-amber-600 dark:text-amber-400 leading-tight mt-1">
-                            {num(t.drawer)}
+                            {num(totals.drawer)}
                         </p>
                         <p className="text-[10px] text-gray-400">{t('cashbook.uzs')}</p>
 

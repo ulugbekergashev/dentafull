@@ -16,6 +16,7 @@ const getAdLeadPlan = (source?: string | null) => {
 };
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
+import { tLabel, tPlanFeature } from '../i18n/labels';
 
 // Kunlik yangi klinikalar diagrammasi (oxirgi 12 oy)
 const UZ_MONTHS_SHORT = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
@@ -29,6 +30,7 @@ const telegramLinkFor = (phone?: string | null): string | null => {
 };
 
 const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
+   const { t } = useLanguage();
    const [hover, setHover] = useState<{ i: number; xPct: number; count: number; label: string } | null>(null);
 
    // Kunlik hisoblash: klinika qo'shilgan sana bo'yicha
@@ -69,7 +71,7 @@ const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
       const key = `${d.date.getFullYear()}-${d.date.getMonth()}`;
       const last = monthSegments[monthSegments.length - 1] as any;
       if (!last || last.key !== key) {
-         monthSegments.push({ key, label: UZ_MONTHS_SHORT[d.date.getMonth()], total: d.count, startI: i, endI: i, center: 0 } as any);
+         monthSegments.push({ key, label: tLabel(t, UZ_MONTHS_SHORT[d.date.getMonth()]), total: d.count, startI: i, endI: i, center: 0 } as any);
       } else {
          last.total += d.count;
          last.endI = i;
@@ -85,8 +87,8 @@ const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
       <Card className="p-6 md:col-span-3">
          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div>
-               <p className="text-gray-500 dark:text-gray-400 font-medium">Yangi klinikalar (kunlik)</p>
-               <p className="text-xs text-gray-400 mt-0.5">Oxirgi 12 oy · jami {total} ta</p>
+               <p className="text-gray-500 dark:text-gray-400 font-medium">{t('auto.Yangi klinikalar (kunlik)')}</p>
+               <p className="text-xs text-gray-400 mt-0.5">{t('auto.Oxirgi 12 oy · jami {n} ta').replace('{n}', String(total))}</p>
             </div>
          </div>
          <div className="relative">
@@ -143,7 +145,7 @@ const DailySignupsChart: React.FC<{ clinics: Clinic[] }> = ({ clinics }) => {
                               i,
                               xPct: ((x + barW / 2) / W) * 100,
                               count: d.count,
-                              label: `${d.date.getDate()}-${UZ_MONTHS_SHORT[d.date.getMonth()].toLowerCase()} ${d.date.getFullYear()}`
+                              label: `${d.date.getDate()}-${tLabel(t, UZ_MONTHS_SHORT[d.date.getMonth()]).toLowerCase()} ${d.date.getFullYear()}`
                            })}
                         />
                      </g>
@@ -414,9 +416,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const DEMO_STAGES = ['Inbox', 'New', 'Contacted', 'NoAnswer', 'Thinking', 'Booked', 'Cancelled'];
    const ADMIN_ONLY_STAGES = ['Inbox'];
    const DEMO_STAGE_LABELS: Record<string, string> = {
-      Inbox: 'Taqsimlanmagan', New: 'Yangi lidlar', Contacted: "Bog'lashildi",
+      Inbox: t('auto.Taqsimlanmagan'), New: t('auto.Yangi lidlar'), Contacted: t("auto.Bog'lashildi"),
       NoAnswer: "Trubkani ko'tarmadi",
-      Thinking: "O'ylamoqda", Booked: 'Oldi', Cancelled: 'Bekor'
+      Thinking: t("auto.O'ylamoqda"), Booked: t('auto.Oldi'), Cancelled: t('auto.Bekor (lid)')
    };
    const DEMO_STAGE_COLORS: Record<string, string> = {
       Inbox: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
@@ -535,11 +537,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
    /** Tayyor oraliqlar: tugma bosilganda sanalar shunga qo'yiladi. */
    const LEAD_RANGE_PRESETS: { id: string; label: string; from: () => string; to: () => string }[] = [
-      { id: 'today', label: 'Bugun', from: () => shiftDay(0), to: () => shiftDay(0) },
-      { id: 'yesterday', label: 'Kecha', from: () => shiftDay(1), to: () => shiftDay(1) },
-      { id: '7d', label: '7 kun', from: () => shiftDay(6), to: () => shiftDay(0) },
-      { id: '30d', label: '30 kun', from: () => shiftDay(29), to: () => shiftDay(0) },
-      { id: 'all', label: 'Hammasi', from: () => '2000-01-01', to: () => shiftDay(0) },
+      { id: 'today', label: t('auto.Bugun'), from: () => shiftDay(0), to: () => shiftDay(0) },
+      { id: 'yesterday', label: t('auto.Kecha'), from: () => shiftDay(1), to: () => shiftDay(1) },
+      { id: '7d', label: t('auto.7 kun'), from: () => shiftDay(6), to: () => shiftDay(0) },
+      { id: '30d', label: t('auto.30 kun'), from: () => shiftDay(29), to: () => shiftDay(0) },
+      { id: 'all', label: t('auto.Hammasi'), from: () => '2000-01-01', to: () => shiftDay(0) },
    ];
 
    // Statistika oralig'i. Standart — oxirgi 7 kun.
@@ -922,7 +924,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <p className="text-indigo-100 font-medium">{t('superAdmin.stats.revenue')}</p>
                         <h3 className="text-3xl font-bold mt-2">{totalRevenue.toLocaleString()} UZS</h3>
                         <div className="text-xs text-indigo-200 mt-2 space-y-0.5">
-                           <p>{payingClinics.length} ta to'lovchi klinika</p>
+                           <p>{t("auto.{n} ta to'lovchi klinika").replace('{n}', String(payingClinics.length))}</p>
                            {expiredActiveClinics.length > 0 && (
                               <p>Muddati o'tgan: {expiredActiveClinics.length} ta (+{expiredActiveSum.toLocaleString()} UZS kutilmoqda)</p>
                            )}
@@ -940,7 +942,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <Card className="p-6">
                   <div className="flex justify-between items-start">
                      <div>
-                        <p className="text-gray-500 dark:text-gray-400 font-medium">Jami {t('superAdmin.tabs.clinics')}</p>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">{t('auto.Jami')} {t('superAdmin.tabs.clinics')}</p>
                         <h3 className="text-3xl font-bold mt-2 text-gray-900 dark:text-white">{totalClinics}</h3>
                         <div className="flex gap-3 mt-3 text-xs">
                            <span className="text-green-600 font-medium flex items-center"><CheckCircle className="w-3 h-3 mr-1" /> {activeClinics} Faol</span>
@@ -981,7 +983,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <div>
                         <p className="text-gray-500 dark:text-gray-400 font-medium">{t('auto.Muddati Tugayotgan')}</p>
                         <h3 className="text-3xl font-bold mt-2 text-orange-600">{expiringSoonCount}</h3>
-                        <p className="text-xs text-gray-500 mt-2">3 kun ichida tugaydiganlar</p>
+                        <p className="text-xs text-gray-500 mt-2">{t('auto.3 kun ichida tugaydiganlar')}</p>
                      </div>
                      <div className="p-3 bg-orange-50 dark:bg-orange-900/30 rounded-full">
                         <Clock className="w-6 h-6 text-orange-600" />
@@ -992,9 +994,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <Card className="p-6">
                   <div className="flex justify-between items-start">
                      <div>
-                        <p className="text-gray-500 dark:text-gray-400 font-medium">Yangi (Bu oy)</p>
+                        <p className="text-gray-500 dark:text-gray-400 font-medium">{t('auto.Yangi (Bu oy)')}</p>
                         <h3 className="text-3xl font-bold mt-2 text-primary-600">{newClinicsThisMonth}</h3>
-                        <p className="text-xs text-gray-500 mt-2">O'tgan oyga nisbatan +{newClinicsThisMonth > 0 ? '100%' : '0%'}</p>
+                        <p className="text-xs text-gray-500 mt-2">{t("auto.O'tgan oyga nisbatan")} +{newClinicsThisMonth > 0 ? '100%' : '0%'}</p>
                      </div>
                      <div className="p-3 bg-primary-50 dark:bg-primary-900/30 rounded-full">
                         <Users className="w-6 h-6 text-primary-600" />
@@ -1008,7 +1010,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         <p className="text-gray-500 dark:text-gray-400 font-medium">Muddati O'tgan (Faol)</p>
                         <h3 className="text-3xl font-bold mt-2 text-red-600">{expiredActiveClinics.length}</h3>
                         <p className="text-xs text-gray-500 mt-2">
-                           Yangilansa oyiga +{expiredActiveSum.toLocaleString()} UZS
+                           {t('auto.Yangilansa oyiga')} +{expiredActiveSum.toLocaleString()} UZS
                         </p>
                         {freePriceClinics.length > 0 && (
                            <p className="text-xs text-gray-400 mt-1">Bepul (maxsus narx 0): {freePriceClinics.length} ta</p>
@@ -1153,7 +1155,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                           </span>
                                        </div>
                                        <div className={`text-xs mt-1 font-medium ${isExpired ? 'text-red-500' : isExpiring ? 'text-orange-500' : 'text-green-500'}`}>
-                                          {isExpired ? 'Muddati tugagan' : `${daysLeft} kun qoldi`}
+                                          {isExpired ? t('auto.Muddati tugagan') : t('auto.{n} kun qoldi').replace('{n}', String(daysLeft))}
                                        </div>
                                     </td>
                                     <td className="p-4">
@@ -1191,7 +1193,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                {totalPages > 1 && (
                   <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
                      <div className="text-sm text-gray-500">
-                        Jami: {filteredClinics.length} ta klinika (Sahifa {currentPage} / {totalPages})
+                        {t('auto.Jami: {n} ta klinika (Sahifa {p} / {t})').replace('{n}', String(filteredClinics.length)).replace('{p}', String(currentPage)).replace('{t}', String(totalPages))}
                      </div>
                      <div className="flex gap-2">
                         <Button
@@ -1295,7 +1297,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                {totalPages > 1 && (
                   <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
                      <div className="text-sm text-gray-500">
-                        Jami: {filteredClinics.length} ta (Sahifa {currentPage} / {totalPages})
+                        {t('auto.Jami: {n} ta (Sahifa {p} / {t})').replace('{n}', String(filteredClinics.length)).replace('{p}', String(currentPage)).replace('{t}', String(totalPages))}
                      </div>
                      <div className="flex gap-2">
                         <Button
@@ -1335,7 +1337,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         </div>
                         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{plan.name}</h3>
                         <div className="text-3xl font-bold text-primary-600 dark:text-primary-400 mb-6">
-                           {plan.price.toLocaleString()} <span className="text-sm text-gray-500 font-normal">UZS/oy</span>
+                           {plan.price.toLocaleString()} <span className="text-sm text-gray-500 font-normal">{t('auto.UZS/oy')}</span>
                         </div>
 
                         <div className="space-y-3 flex-1">
@@ -1346,7 +1348,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            {plan.features.map((feat, i) => (
                               <div key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                                  <CheckCircle className="w-4 h-4 text-green-500" />
-                                 <span>{feat}</span>
+                                 <span>{tPlanFeature(t, feat)}</span>
                               </div>
                            ))}
 
@@ -1497,7 +1499,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                ) : visibleDemoRequests.length === 0 ? (
                   <Card className="p-10 text-center">
                      <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                     <p className="text-gray-500">{salesAgentMode ? 'Sizga hali lid biriktirilmagan' : "Hali so'rovlar yo'q"}</p>
+                     <p className="text-gray-500">{salesAgentMode ? t('auto.Sizga hali lid biriktirilmagan') : t("auto.Hali so'rovlar yo'q")}</p>
                      <p className="text-xs text-gray-400 mt-1">
                         {salesAgentMode
                            ? "Superadmin lid biriktirganda shu yerda paydo bo'ladi"
@@ -1735,10 +1737,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
-                     { label: 'Oraliqda tushgan', value: leadStats.scopedTotal, hint: `Bugun: ${leadStats.today} · Kecha: ${leadStats.yesterday}`, tone: 'text-primary-600 dark:text-primary-400' },
-                     { label: 'Taqsimlanmagan', value: leadStats.unassigned, hint: 'Sotuvchi kutmoqda', tone: 'text-amber-600 dark:text-amber-400' },
-                     { label: 'Oldi (sotuv)', value: leadStats.byStage['Booked'] || 0, hint: leadStats.conversion + '% konversiya', tone: 'text-emerald-600 dark:text-emerald-400' },
-                     { label: 'Jami (butun vaqt)', value: leadStats.total, hint: `Oxirgi 7 kun: ${leadStats.week}`, tone: 'text-indigo-600 dark:text-indigo-400' },
+                     { label: t('auto.Oraliqda tushgan'), value: leadStats.scopedTotal, hint: t('auto.Bugun: {a} · Kecha: {b}').replace('{a}', String(leadStats.today)).replace('{b}', String(leadStats.yesterday)), tone: 'text-primary-600 dark:text-primary-400' },
+                     { label: t('auto.Taqsimlanmagan'), value: leadStats.unassigned, hint: t('auto.Sotuvchi kutmoqda'), tone: 'text-amber-600 dark:text-amber-400' },
+                     { label: t('auto.Oldi (sotuv)'), value: leadStats.byStage['Booked'] || 0, hint: leadStats.conversion + t('auto.% konversiya'), tone: 'text-emerald-600 dark:text-emerald-400' },
+                     { label: t('auto.Jami (butun vaqt)'), value: leadStats.total, hint: t('auto.Oxirgi 7 kun: {n}').replace('{n}', String(leadStats.week)), tone: 'text-indigo-600 dark:text-indigo-400' },
                   ].map(card => (
                      <Card key={card.label} className="p-4">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{card.label}</p>
@@ -1807,7 +1809,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                {/* Lid manbalari sozlamasi — taxtadan shu yerga ko'chirildi */}
                <Card className="p-5">
                   <h4 className="font-bold text-gray-900 dark:text-white mb-1">{t('auto.Lid manbalari')}</h4>
-                  <p className="text-xs text-gray-500 mb-3">Facebook sahifasi va tashqi manba (yuboraman.uz) kaliti</p>
+                  <p className="text-xs text-gray-500 mb-3">{t('auto.Facebook sahifasi va tashqi manba (yuboraman.uz) kaliti')}</p>
                   <div className="flex flex-wrap items-center gap-2">
                      {!salesAgentMode && (
                         fbStatus?.connected ? (

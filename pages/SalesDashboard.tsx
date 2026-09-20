@@ -204,7 +204,7 @@ function ClinicDetailModal({ clinic, plans, onClose }: { clinic: SalesClinic; pl
             <div className={`rounded-xl p-3 ${isExpired ? 'bg-red-50 dark:bg-red-900/20' : isExpiring ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
               <p className="text-xs text-gray-400 mb-1">{t('auto.Muddat')}</p>
               <p className={`font-bold ${isExpired ? 'text-red-600' : isExpiring ? 'text-orange-600' : 'text-green-600'}`}>
-                {isExpired ? 'Tugagan' : `${daysLeft} kun qoldi`}
+                {isExpired ? t('auto.Tugagan') : t('auto.{n} kun qoldi').replace('{n}', String(daysLeft))}
               </p>
             </div>
           </div>

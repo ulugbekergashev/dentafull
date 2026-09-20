@@ -17,3 +17,14 @@ export const tLabel = (t: (key: TranslationKey) => string, label?: string | null
     const value = t(key);
     return value === key ? label : value;
 };
+
+/**
+ * Tarif xususiyatlari bazada o'zbekcha saqlanadi (SubscriptionPlan.features).
+ * Bazaga tegmasdan, ekranda tarjima qilamiz: "3 tagacha shifokor" kabi
+ * qatorlarda sonni {n} bilan almashtiramiz.
+ */
+export const tPlanFeature = (t: (key: TranslationKey) => string, feature: string): string => {
+    const m = feature.match(/^(\d+)\s+tagacha shifokor$/);
+    if (m) return t('auto.{n} tagacha shifokor' as TranslationKey).replace('{n}', m[1]);
+    return tLabel(t, feature);
+};

@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UpgradePlanModal } from '../components/UpgradePlanModal';
-import { tLabel } from '../i18n/labels';
+import { tPlanFeature } from '../i18n/labels';
 
 /**
  * Tarif xususiyatlari bazada o'zbekcha saqlanadi (SubscriptionPlan.features).
  * Bazaga tegmasdan, ekranda tarjima qilamiz: '3 tagacha shifokor' kabi
  * qatorlarda son o'rnini {n} bilan almashtiramiz.
  */
-const planFeatureLabel = (t: (k: any) => string, feature: string): string => {
-    const m = feature.match(/^(\d+)\s+tagacha shifokor$/);
-    if (m) return t('auto.{n} tagacha shifokor').replace('{n}', m[1]);
-    return tLabel(t, feature);
-};
+
 
 import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal } from 'lucide-react';
@@ -1809,7 +1805,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                                  {features.map(feature => (
                                     <li key={feature} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                                        <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
-                                       {planFeatureLabel(t, feature)}
+                                       {tPlanFeature(t, feature)}
                                     </li>
                                  ))}
                               </ul>
