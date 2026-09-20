@@ -536,7 +536,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
           >
             {voiceEnabled ? <Volume2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <VolumeX className="w-4 h-4" />}
             <span className="hidden sm:inline">
-              Ovoz: {voiceEnabled ? "Yoqilgan" : "O'chirilgan"}
+              {t('auto.Ovoz: {s}').replace('{s}', voiceEnabled ? t('auto.Yoqilgan') : t("auto.O'chirilgan"))}
             </span>
           </button>
           <button
@@ -578,8 +578,8 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
         {[
-          { id: 'active', label: `Faol navbat (${active.length})` },
-          { id: 'history', label: `Tarix (${history.length})` },
+          { id: 'active', label: t('auto.Faol navbat ({n})').replace('{n}', String(active.length)) },
+          { id: 'history', label: t('auto.Tarix ({n})').replace('{n}', String(history.length)) },
         ].map(tab => (
           <button
             key={tab.id}
@@ -724,7 +724,7 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
                   onChange={e => setForm(f => ({ ...f, doctorId: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
                 >
-                  <option value="">— Shifokor tanlash —</option>
+                  <option value="">{t('auto.— Shifokor tanlash —')}</option>
                   {doctors.filter(d => d.status === 'Active').map(d => (
                     <option key={d.id} value={d.id}>Dr. {d.lastName} {d.firstName} — {d.specialty}</option>
                   ))}
@@ -733,12 +733,12 @@ export const OnlineQueue: React.FC<Props> = ({ doctors, patients, clinicId, user
 
               {/* Service */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Xizmat / sabab</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">{t('auto.Xizmat / sabab')}</label>
                 <input
                   type="text"
                   value={form.service}
                   onChange={e => setForm(f => ({ ...f, service: e.target.value }))}
-                  placeholder="Masalan: tish og'riq, davolanish..."
+                  placeholder={t("auto.Masalan: tish og'riq, davolanish...")}
                   className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
                 />
               </div>
@@ -985,13 +985,13 @@ const QueueTVBoard: React.FC<{
           title={voiceEnabled ? t("auto.Ovozli e'lonni o'chirish") : t("auto.Ovozli e'lonni yoqish")}
         >
           {voiceEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-400" /> : <VolumeX className="w-3.5 h-3.5 text-gray-400" />}
-          <span>Ovoz: {voiceEnabled ? "Yoqilgan" : "O'chirilgan"}</span>
+          <span>{t('auto.Ovoz: {s}').replace('{s}', voiceEnabled ? t('auto.Yoqilgan') : t("auto.O'chirilgan"))}</span>
         </button>
         <button
           onClick={onClose}
           className="opacity-5 hover:opacity-100 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs transition-opacity"
         >
-          Chiqish [Esc]
+          {t('auto.Chiqish [Esc]')}
         </button>
       </div>
 

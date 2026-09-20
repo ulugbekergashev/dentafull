@@ -4,6 +4,7 @@ import { Card, Button } from '../components/Common';
 import { Patient, Doctor, Transaction, Clinic, MessageTemplate, AutomationRule, MessageLog, MessageChannel, AutomationTrigger, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, RuleSchedule } from '../types';
 import { SegmentBuilder } from '../components/SegmentBuilder';
 import { api } from '../services/api';
+import { tLabel } from '../i18n/labels';
 import { analyzeSms, hasTypographicApostrophe, fixApostrophes } from '../utils/sms';
 import { processTemplate } from '../utils/messageTemplate';
 import {
@@ -631,7 +632,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     onClick={() => onInsert(v.token)}
                     className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors"
                 >
-                    {v.label}
+                    {tLabel(t, v.label)}
                 </button>
             ))}
         </div>
@@ -668,7 +669,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
                     >
                         <tab.icon className="w-4 h-4" />
-                        <span className="hidden sm:inline">{tab.label}</span>
+                        <span className="hidden sm:inline">{tLabel(t, tab.label)}</span>
                     </button>
                 ))}
             </div>
@@ -738,7 +739,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                             <h4 className="font-bold text-gray-900 dark:text-white">{tpl.name}</h4>
                                             {badge && (
                                                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${badge.cls}`}>
-                                                    {badge.label}
+                                                    {tLabel(t, badge.label)}
                                                 </span>
                                             )}
                                         </div>
@@ -783,8 +784,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             <div>
                                 <h4 className="font-bold text-gray-900 dark:text-white text-sm">{t('auto.Chastota chegarasi')}</h4>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                    Bitta bemorga shu muddat ichida bittadan ko'p xabar yuborilmaydi.
-                                    Qabul eslatmalari bundan mustasno — ular baribir yetib boradi.
+                                    {t("auto.Bitta bemorga shu muddat ichida bittadan ko'p xabar yuborilmaydi. Qabul eslatmalari bundan mustasno — ular baribir yetib boradi.")}
                                 </p>
                             </div>
                             <div className="flex items-center gap-1">
@@ -797,7 +797,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                             ? 'bg-primary-600 text-white'
                                             : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                                     >
-                                        {d === 0 ? "O'chiq" : `${d} kun`}
+                                        {d === 0 ? t("auto.O'chiq") : t('auto.{n} kun').replace('{n}', String(d))}
                                     </button>
                                 ))}
                             </div>
@@ -874,14 +874,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         }}
                                         className={inputCls}
                                     >
-                                        {triggerDefs.map(t => (
-                                            <option key={t.id} value={t.id}>{triggerIcon(t.id)} {t.label}</option>
+                                        {triggerDefs.map(def => (
+                                            <option key={def.id} value={def.id}>{triggerIcon(def.id)} {tLabel(t, def.label)}</option>
                                         ))}
                                     </select>
                                 </div>
                                 {activeTriggerDef?.offset && (
                                     <div>
-                                        <label className={labelCls}>{activeTriggerDef.offset.label}</label>
+                                        <label className={labelCls}>{tLabel(t, activeTriggerDef.offset.label)}</label>
                                         <select
                                             value={ruleForm.hoursBefore}
                                             onChange={e => setRuleForm(f => ({ ...f, hoursBefore: parseInt(e.target.value) }))}
@@ -903,18 +903,18 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         <button
                                             key={value}
                                             type="button"
-                                            title={hint}
+                                            title={tLabel(t, hint)}
                                             onClick={() => setRuleForm(f => ({ ...f, channel: value }))}
                                             className={`px-3 py-2.5 rounded-xl text-sm font-bold border transition-all ${ruleForm.channel === value
                                                 ? 'bg-primary-600 text-white border-primary-600'
                                                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                                         >
-                                            {label}
+                                            {tLabel(t, label)}
                                         </button>
                                     ))}
                                 </div>
                                 <p className="text-xs text-gray-400 mt-2">
-                                    {CHANNEL_OPTIONS.find(c => c.value === ruleForm.channel)?.hint}
+                                    {tLabel(t, CHANNEL_OPTIONS.find(c => c.value === ruleForm.channel)?.hint)}
                                 </p>
                             </div>
                             {activeTriggerDef?.supportsSchedule && (
@@ -1023,15 +1023,15 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     <div className="min-w-0">
                                         <h4 className="font-bold text-gray-900 dark:text-white">{rule.name}</h4>
                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                            {triggerIcon(rule.trigger)} {def?.label || rule.trigger}
+                                            {triggerIcon(rule.trigger)} {def?.label ? tLabel(t, def.label) : rule.trigger}
                                             {def?.offset && rule.hoursBefore != null
-                                                ? ` · ${rule.hoursBefore === 0 ? 'darhol' : `${rule.hoursBefore} ${offsetUnitLabel(def.offset.unit)}`}`
+                                                ? ` · ${rule.hoursBefore === 0 ? t('auto.darhol') : `${rule.hoursBefore} ${tLabel(t, offsetUnitLabel(def.offset.unit))}`}`
                                                 : ''}
                                             {' · '}{rule.channel === 'sms' ? 'SMS'
                                                 : rule.channel === 'telegram' ? 'Telegram'
-                                                    : rule.channel === 'telegram_first' ? 'Avval Telegram, keyin SMS'
+                                                    : rule.channel === 'telegram_first' ? t('auto.Avval Telegram, keyin SMS')
                                                         : 'SMS + Telegram'}
-                                            {tpl ? ` · Shablon: ${tpl.name}` : ''}
+                                            {tpl ? ` · ${t('auto.Shablon')}: ${tpl.name}` : ''}
                                             {doctor ? ` · ${doctor.lastName} ${doctor.firstName}` : ''}
                                         </p>
                                     </div>
@@ -1039,7 +1039,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         <button
                                             onClick={() => handleToggleRule(rule)}
                                             className={`relative w-11 h-6 rounded-full transition-colors ${rule.active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-                                            title={rule.active ? "O'chirish" : 'Yoqish'}
+                                            title={rule.active ? t("auto.O'chirib qo'yish") : t('auto.Yoqish')}
                                         >
                                             <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${rule.active ? 'left-[22px]' : 'left-0.5'}`} />
                                         </button>
@@ -1073,7 +1073,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 ? 'bg-primary-600 text-white border-primary-600'
                                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                         >
-                            ✈️→📱 Avval Telegram
+                            {t('auto.✈️→📱 Avval Telegram')}
                         </button>
                         <button
                             onClick={() => setManualChannel('telegram')}
@@ -1081,7 +1081,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 ? 'bg-primary-600 text-white border-primary-600'
                                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                         >
-                            ✈️ Telegram {!telegramConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+                            {t('auto.✈️ Telegram')} {!telegramConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
                         </button>
                         <button
                             onClick={() => setManualChannel('sms')}
@@ -1089,19 +1089,19 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 ? 'bg-primary-600 text-white border-primary-600'
                                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
                         >
-                            <Smartphone className="w-4 h-4" /> Faqat SMS {!smsConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+                            <Smartphone className="w-4 h-4" /> {t('auto.Faqat SMS')} {!smsConnected && <AlertTriangle className="w-4 h-4 text-amber-400" />}
                         </button>
                     </div>
                     {manualChannel === 'telegram_first' && (
                         <p className="text-xs text-gray-400 px-1">
-                            Botga ulangan bemorga bepul Telegram, qolganiga SMS ketadi — eng tejamli variant.
+                            {t('auto.Botga ulangan bemorga bepul Telegram, qolganiga SMS ketadi — eng tejamli variant.')}
                         </p>
                     )}
 
                     {(manualChannel === 'sms' || manualChannel === 'telegram_first') && !smsConnected && (
                         <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-700 dark:text-amber-400">
                             <AlertTriangle className="w-4 h-4 shrink-0" />
-                            <span>{t('auto.Eskiz SMS ulanmagan.')} <strong>Sozlamalar → Integratsiyalar → Telegram va SMS</strong> bo'limida login va parolni kiriting.</span>
+                            <span>{t('auto.Eskiz SMS ulanmagan.')} <strong>{t('auto.Sozlamalar → Integratsiyalar → Telegram va SMS')}</strong> {t("auto.bo'limida login va parolni kiriting.")}</span>
                         </div>
                     )}
                     {manualChannel === 'telegram' && !telegramConnected && (
@@ -1152,7 +1152,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                 onClick={handleSaveSegment}
                                 className="self-start text-xs font-bold text-gray-500 hover:text-primary-600"
                             >
-                                💾 Shu segmentni saqlab qo'yish
+                                {t("auto.💾 Shu segmentni saqlab qo'yish")}
                             </button>
                         )}
 
@@ -1205,7 +1205,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 text-sm">
                                         {viaTelegram > 0 && (
                                             <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                                ✈️ {viaTelegram} ta — bepul
+                                                ✈️ {t('auto.{n} ta — bepul').replace('{n}', String(viaTelegram))}
                                             </span>
                                         )}
                                         {viaSms > 0 && (
@@ -1233,10 +1233,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         >
                                             <span>
                                                 {recipientSample.map(r => `${r.firstName} ${r.lastName}`).join(', ')}
-                                                {recipientCount > recipientSample.length ? ` va yana ${recipientCount - recipientSample.length} ta` : ''}
+                                                {recipientCount > recipientSample.length ? ' ' + t('auto.va yana {n} ta').replace('{n}', String(recipientCount - recipientSample.length)) : ''}
                                             </span>
                                             <span className="font-bold shrink-0">
-                                                {showRecipients ? 'Yashirish' : "To'liq ro'yxat"}
+                                                {showRecipients ? t('auto.Yashirish') : t("auto.To'liq ro'yxat")}
                                             </span>
                                         </button>
 
@@ -1340,7 +1340,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         </h3>
                         {templates.length > 0 && (
                             <div>
-                                <p className="text-xs text-gray-500 mb-2">Shablondan foydalanish:</p>
+                                <p className="text-xs text-gray-500 mb-2">{t('auto.Shablondan foydalanish:')}</p>
                                 <div className="flex flex-wrap gap-2">
                                     {templates.map(tpl => (
                                         <button
@@ -1393,8 +1393,8 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         )}
                         <VarButtons onInsert={token => setManualMessage(m => m + token)} />
                         <p className="text-xs text-gray-400">
-                            <strong>{'{sana}'}</strong>, <strong>{'{vaqt}'}</strong> va <strong>{"{shifokor_ismi}"}</strong> bemorning eng yaqin kelgusi qabuli bo'yicha to'ldiriladi.
-                            Qabuli bo'lmasa {'{sana}'} bugungi sana bo'ladi, qolganlari bo'sh qoladi.
+                            <strong>{'{sana}'}</strong>, <strong>{'{vaqt}'}</strong> {t("auto.va {shifokor} bemorning eng yaqin kelgusi qabuli bo'yicha to'ldiriladi.").replace('{shifokor}', '{shifokor_ismi}')}
+                            {t("auto.Qabuli bo'lmasa {sana} bugungi sana bo'ladi, qolganlari bo'sh qoladi.").replace('{sana}', '{sana}')}
                         </p>
                         {/* Bemor aynan nimani ko'radi */}
                         {manualMessage.trim() && previewPatient && (
@@ -1576,9 +1576,9 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
                             <div className="flex items-center gap-1">
                                 {([
-                                    ['all', 'Barchasi'],
-                                    ['sent', `Yuborildi (${logStats.sent})`],
-                                    ['failed', `Xato (${logStats.failed})`],
+                                    ['all', t('auto.Barchasi')],
+                                    ['sent', t('auto.Yuborildi ({n})').replace('{n}', String(logStats.sent))],
+                                    ['failed', t('auto.Xato ({n})').replace('{n}', String(logStats.failed))],
                                 ] as const).map(([key, lbl]) => (
                                     <button
                                         key={key}
@@ -1619,7 +1619,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                                 <span className="font-bold text-gray-900 dark:text-white text-sm">{name}</span>
                                                 {contact && <span className="text-xs text-gray-400">{contact}</span>}
                                                 <span className="px-2 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md">
-                                                    {log.channel === 'sms' ? 'SMS' : 'Telegram'} ({SOURCE_LABELS[log.source] || log.source})
+                                                    {log.channel === 'sms' ? 'SMS' : 'Telegram'} ({tLabel(t, SOURCE_LABELS[log.source] || log.source)})
                                                 </span>
                                                 {isFailed ? (
                                                     <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-red-50 dark:bg-red-900/20 text-red-600 rounded-md">

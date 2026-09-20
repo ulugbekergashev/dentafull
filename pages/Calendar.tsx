@@ -31,7 +31,9 @@ interface CalendarProps {
 export const Calendar: React.FC<CalendarProps> = ({
   appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, currentClinic, plans, onPatientClick
 }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  // Sana sarlavhasi tanlangan tilda ko'rsatiladi
+  const dateLocale = language === 'ru' ? 'ru-RU' : 'uz-UZ';
   const startHour = currentClinic?.startHour ?? 8;
   const endHour = currentClinic?.endHour ?? 20;
   const HOURS = Array.from({ length: Math.max(1, endHour - startHour + 1) }, (_, i) => i + startHour);
@@ -467,8 +469,8 @@ export const Calendar: React.FC<CalendarProps> = ({
             <button onClick={handlePrev} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronLeft className="w-4 h-4" /></button>
             <span className="px-4 text-sm font-medium min-w-[140px] text-center">
               {view === 'week'
-                ? `${displayDays[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${displayDays[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                : displayDays[0].toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+                ? `${displayDays[0].toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })} - ${displayDays[6].toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}`
+                : displayDays[0].toLocaleDateString(dateLocale, { weekday: 'long', month: 'long', day: 'numeric' })
               }
             </span>
             <button onClick={handleNext} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronRight className="w-4 h-4" /></button>

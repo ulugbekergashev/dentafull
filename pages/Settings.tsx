@@ -50,7 +50,7 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({
    userRole, services, categories, doctors, onAddService, onUpdateService, onDeleteService, onAddCategory, onDeleteCategory, branches = [], patientCountByBranch = {}, onAddBranch, onUpdateBranch, onDeleteBranch, currentClinic, plans
 }) => {
-   const { t } = useLanguage();
+   const { t, language } = useLanguage();
    const isAdmin = userRole === UserRole.CLINIC_ADMIN;
    type SettingsTab = 'clinic' | 'branches' | 'services' | 'features' | 'integrations' | 'plan';
    type IntegrationTab = 'messaging' | 'dmed' | 'ai' | 'leadApi';
@@ -1253,11 +1253,11 @@ export const Settings: React.FC<SettingsProps> = ({
                                     </div>
 
                                     <div className="space-y-1">
-                                        <p className="sms-settings-label text-sm font-medium text-gray-700 dark:text-gray-300">Nickname (Yuboruvchi nomi)</p>
+                                        <p className="sms-settings-label text-sm font-medium text-gray-700 dark:text-gray-300">{t('auto.Nickname (Yuboruvchi nomi)')}</p>
                                         <input
                                             type="text"
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                            placeholder="Masalan: 4546 yoki DentaCRM"
+                                            placeholder={t('auto.Masalan: 4546 yoki DentaCRM')}
                                             value={smsForm.eskizNick}
                                             onChange={(e) => setSmsForm({...smsForm, eskizNick: e.target.value})}
                                         />
@@ -1318,17 +1318,16 @@ export const Settings: React.FC<SettingsProps> = ({
                               <Activity className="w-8 h-8" />
                            </div>
                            <div>
-                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Davlat platformasi (DHP)</h3>
+                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('auto.Davlat platformasi (DHP)')}</h3>
                               <p className="text-sm text-gray-500">
-                                 Raqamli sog'liqni saqlash platformasi (dhp.uz). Bemor, shifokor, qabul, tashxis va muolajalar
-                                 avtomatik yuboriladi. 2027-yil 1-apreldan litsenziya sharti.
+                                 {t("auto.Raqamli sog'liqni saqlash platformasi (dhp.uz). Bemor, shifokor, qabul, tashxis va muolajalar avtomatik yuboriladi. 2027-yil 1-apreldan litsenziya sharti.")}
                               </p>
                            </div>
                         </div>
 
                         <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-100 dark:border-primary-800/40 mb-6 text-sm text-primary-800 dark:text-primary-200 space-y-1">
-                           <p><strong>{t('auto.Kalitlar')}</strong> (client_id / client_secret) platforma operatori UZINFOCOM'dan olinadi. Avval sinov muhiti (playground), keyin ishchi.</p>
-                           <p>{t('auto.Klinika STIR\'i')} <strong>{t('auto.Klinika')}</strong> bo'limida kiritiladi — tekshiruv shu bo'yicha tashkilotni topadi. Shifokorlarga tug'ilgan sana, jins va mutaxassislik kodi <strong>{t('auto.Xodimlar')}</strong> bo'limida.</p>
+                           <p><strong>{t('auto.Kalitlar')}</strong> {t("auto.(client_id / client_secret) platforma operatori UZINFOCOM'dan olinadi. Avval sinov muhiti (playground), keyin ishchi.")}</p>
+                           <p>{t('auto.Klinika STIR\'i')} <strong>{t('auto.Klinika')}</strong> {t("auto.bo'limida kiritiladi — tekshiruv shu bo'yicha tashkilotni topadi. Shifokorlarga tug'ilgan sana, jins va mutaxassislik kodi")} <strong>{t('auto.Xodimlar')}</strong> {t("auto.bo'limida.")}</p>
                         </div>
 
                         <form onSubmit={handleDmedSave} className="space-y-5">
@@ -1355,8 +1354,8 @@ export const Settings: React.FC<SettingsProps> = ({
                                  onChange={e => setDhpEnvironment(e.target.value === 'production' ? 'production' : 'playground')}
                                  disabled={!dmedEnabled}
                                  options={[
-                                    { value: 'playground', label: 'Sinov (playground.dhp.uz)' },
-                                    { value: 'production', label: 'Ishchi (fhir.dhp.uz)' },
+                                    { value: 'playground', label: t('auto.Sinov (playground.dhp.uz)') },
+                                    { value: 'production', label: t('auto.Ishchi (fhir.dhp.uz)') },
                                  ]}
                               />
                               <Input
@@ -1371,18 +1370,18 @@ export const Settings: React.FC<SettingsProps> = ({
                                  value={dmedApiSecret}
                                  onChange={e => setDmedApiSecret(e.target.value)}
                                  type="password"
-                                 placeholder={currentClinic?.dmedApiSecret ? 'Saqlangan — o\'zgartirish uchun kiriting' : '••••••••••••'}
+                                 placeholder={currentClinic?.dmedApiSecret ? t("auto.Saqlangan — o'zgartirish uchun kiriting") : '••••••••••••'}
                                  disabled={!dmedEnabled}
                               />
                            </div>
 
                            <Input
-                              label="Organization ID (DHP'dagi klinika)"
+                              label={t("auto.Organization ID (DHP'dagi klinika)")}
                               value={dmedClinicId}
                               onChange={e => setDmedClinicId(e.target.value)}
                               placeholder={t('auto.Ulanishni tekshirish STIR bo\'yicha o\'zi topadi')}
                               disabled={!dmedEnabled}
-                              helperText={currentClinic?.inn ? `STIR: ${currentClinic.inn}` : 'STIR kiritilmagan — Klinika bo\'limida kiriting'}
+                              helperText={currentClinic?.inn ? `${t('auto.STIR')}: ${currentClinic.inn}` : t("auto.STIR kiritilmagan — Klinika bo'limida kiriting")}
                            />
 
                            <div className="flex items-center gap-4 pt-2">
@@ -1396,7 +1395,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  disabled={!dmedEnabled || isCheckingDmed || !dmedApiKey}
                               >
                                  {isCheckingDmed ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
-                                 Ulanishni tekshirish
+                                 {t('auto.Ulanishni tekshirish')}
                               </Button>
                               {dmedSaved && <span className="text-green-600 text-sm flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> {t('settings.general.saved')}</span>}
                            </div>
@@ -1540,7 +1539,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            />
                            <Button onClick={handleSaveAiKey} disabled={aiSaving || aiKeyInput.trim().length < 10}>
                               {aiSaving ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                              Tekshirish va saqlash
+                              {t('auto.Tekshirish va saqlash')}
                            </Button>
                         </div>
 
@@ -1577,15 +1576,14 @@ export const Settings: React.FC<SettingsProps> = ({
                               <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
                                  className="text-primary-600 dark:text-primary-400 hover:underline">
                                  aistudio.google.com/apikey
-                              </a> manzilini oching va Google hisobingiz bilan kiring.
+                              </a> {t('auto.manzilini oching va Google hisobingiz bilan kiring.')}
                            </li>
-                           <li>"Create API key" tugmasini bosing.</li>
+                           <li>{t("auto.«Create API key» tugmasini bosing.")}</li>
                            <li>{t('auto.Chiqqan kalitni nusxalab, yuqoridagi maydonga qo\'ying.')}</li>
-                           <li>"Tekshirish va saqlash" — kalit darhol sinab ko'riladi.</li>
+                           <li>{t("auto.«Tekshirish va saqlash» — kalit darhol sinab ko'riladi.")}</li>
                         </ol>
                         <p className="text-xs text-gray-400 mt-4">
-                           Kalit faqat serverda saqlanadi va hech qachon qaytarib berilmaydi.
-                           Uni o'chirsangiz, klinika yana umumiy kalitga qaytadi.
+                           {t("auto.Kalit faqat serverda saqlanadi va hech qachon qaytarib berilmaydi. Uni o'chirsangiz, klinika yana umumiy kalitga qaytadi.")}
                         </p>
                      </Card>
                   </div>
@@ -1601,13 +1599,11 @@ export const Settings: React.FC<SettingsProps> = ({
                            <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('auto.Lid integratsiyasi')}</h3>
                         </div>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                           yuboraman.uz va shunga o'xshash manbalar lidlarni to'g'ridan-to'g'ri CRM'ga yuborishi uchun
-                           quyidagi manzil va kalitni ularga bering. Lid tushishi bilan «Lidlar» bo'limida paydo bo'ladi
-                           va Telegram bot orqali xabar keladi.
+                           {t("auto.yuboraman.uz va shunga o'xshash manbalar lidlarni to'g'ridan-to'g'ri CRM'ga yuborishi uchun quyidagi manzil va kalitni ularga bering. Lid tushishi bilan «Lidlar» bo'limida paydo bo'ladi va Telegram bot orqali xabar keladi.")}
                         </p>
 
                         {/* Endpoint */}
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">So'rov manzili (endpoint)</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t("auto.So'rov manzili (endpoint)")}</label>
                         <div className="flex gap-2 mb-5">
                            <code className="flex-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-gray-100 break-all">
                               POST {leadApiInfo?.endpoint || '—'}
@@ -1640,7 +1636,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               </div>
                               {leadApiInfo.createdAt && (
                                  <p className="text-xs text-gray-400 mt-2">
-                                    Yaratilgan: {new Date(leadApiInfo.createdAt).toLocaleString('uz-UZ')}
+                                    {t('auto.Yaratilgan:')} {new Date(leadApiInfo.createdAt).toLocaleString(language === 'ru' ? 'ru-RU' : 'uz-UZ')}
                                  </p>
                               )}
                               <div className="flex flex-wrap gap-2 mt-4">
@@ -1654,7 +1650,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  </Button>
                               </div>
                               <p className="text-xs text-amber-600 dark:text-amber-400 mt-3">
-                                 ⚠️ Kalitni faqat ishonchli hamkorga bering — u bilan klinikangizga lid yozish mumkin.
+                                 {t('auto.⚠️ Kalitni faqat ishonchli hamkorga bering — u bilan klinikangizga lid yozish mumkin.')}
                               </p>
                            </>
                         ) : (
@@ -1682,7 +1678,7 @@ export const Settings: React.FC<SettingsProps> = ({
                            <div>
                               <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{t('auto.Texnik ma\'lumot')}</h4>
                               <p className="text-sm text-gray-500 dark:text-gray-400">
-                                 Odatda kerak emas — kalitni kiritish yetarli. Boshqa xizmat ulanmoqchi bo'lsa kerak bo'ladi.
+                                 {t("auto.Odatda kerak emas — kalitni kiritish yetarli. Boshqa xizmat ulanmoqchi bo'lsa kerak bo'ladi.")}
                               </p>
                            </div>
                            <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${leadDocsOpen ? 'rotate-180' : ''}`} />

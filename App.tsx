@@ -1332,7 +1332,7 @@ const AppContent: React.FC = () => {
                   <p className="text-xs text-gray-500 capitalize">{userRole === UserRole.SUPER_ADMIN ? 'SaaS Owner' : userRole === UserRole.CLINIC_ADMIN ? 'Administrator' : userRole === UserRole.RECEPTIONIST ? 'Resepshn' : userRole === UserRole.SALES_AGENT ? 'Sotuvchi' : 'Shifokor'}</p>
                 </div>
               </div>
-              <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 flex-shrink-0" title="Chiqish">
+              <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 flex-shrink-0" title={t('auto.Chiqish')}>
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
@@ -1374,7 +1374,7 @@ const AppContent: React.FC = () => {
 
               {clinicId === 'demo-clinic-1' && (
                 <span className="px-2 py-1 text-xs font-bold bg-primary-100 dark:bg-primary-900/40 text-primary dark:text-primary-400 rounded-full border border-primary-200 dark:border-primary-800">
-                  DEMO REJIM
+                  {t('auto.DEMO REJIM')}
                 </span>
               )}
 

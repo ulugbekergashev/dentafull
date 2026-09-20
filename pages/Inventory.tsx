@@ -194,13 +194,13 @@ export const Inventory: React.FC<InventoryProps> = ({
                         helperText={t('inventory.minQtyHelp')}
                     />
                     <Input
-                        label="Umumiy narxi (ixtiyoriy)"
+                        label={t('auto.Umumiy narxi (ixtiyoriy)')}
                         type="number"
                         value={addForm.initialCost}
                         onChange={e => setAddForm({ ...addForm, initialCost: e.target.value })}
                         min="0"
-                        placeholder="Masalan: 500000"
-                        helperText="Kiritilsa, Moliya bo'limida 'Ombor' kategoriyali xarajat sifatida yoziladi"
+                        placeholder={t('auto.Masalan: 500000')}
+                        helperText={t("auto.Kiritilsa, Moliya bo'limida «Ombor» kategoriyali xarajat sifatida yoziladi")}
                     />
                     <div className="flex justify-end gap-2 pt-4">
                         <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>
@@ -233,12 +233,12 @@ export const Inventory: React.FC<InventoryProps> = ({
                     />
                     {stockForm.type === 'IN' && (
                         <Input
-                            label="Xarajat (agar mavjud bo'lsa)"
+                            label={t("auto.Xarajat (agar mavjud bo'lsa)")}
                             type="number"
                             value={stockForm.cost}
                             onChange={e => setStockForm({ ...stockForm, cost: e.target.value })}
                             min="0"
-                            placeholder="Masalan: 500000"
+                            placeholder={t('auto.Masalan: 500000')}
                             helperText="Omborga kiritish uchun ketgan mablag' (moliyaviy hisobotda ko'rinadi)"
                         />
                     )}

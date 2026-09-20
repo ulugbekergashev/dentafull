@@ -150,12 +150,12 @@ export const StaffManagement: React.FC<StaffManagementProps> = (props) => {
                <table className="w-full text-sm min-w-[760px]">
                   <thead>
                      <tr className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700/60">
-                        <th className="px-5 py-3 font-medium">Xodim</th>
-                        <th className="px-3 py-3 font-medium">Lavozim</th>
-                        <th className="px-3 py-3 font-medium">Rol</th>
-                        {branches.length > 0 && <th className="px-3 py-3 font-medium">Filial</th>}
-                        <th className="px-3 py-3 font-medium text-right">Maosh sharti</th>
-                        <th className="px-3 py-3 font-medium">Holat</th>
+                        <th className="px-5 py-3 font-medium">{t('auto.Xodim')}</th>
+                        <th className="px-3 py-3 font-medium">{t('auto.Lavozim')}</th>
+                        <th className="px-3 py-3 font-medium">{t('auto.Rol')}</th>
+                        {branches.length > 0 && <th className="px-3 py-3 font-medium">{t('auto.Filial')}</th>}
+                        <th className="px-3 py-3 font-medium text-right">{t('auto.Maosh sharti')}</th>
+                        <th className="px-3 py-3 font-medium">{t('auto.Holat')}</th>
                         <th className="px-5 py-3" />
                      </tr>
                   </thead>

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AudienceSegment, SegmentCondition, SegmentFieldDescriptor } from '../types';
+import { useLanguage } from '../context/LanguageContext';
+import { tLabel } from '../i18n/labels';
 import { X, Plus, SlidersHorizontal, ChevronDown } from 'lucide-react';
 
 /**
@@ -227,6 +229,7 @@ const SimpleFilters: React.FC<{
     counts?: number[];
     onChange: (next: AudienceSegment) => void;
 }> = ({ value, picked, counts, onChange }) => {
+    const { t } = useLanguage();
     const hasExtra = SIMPLE_FILTERS.some(f => f.extra && picked[f.id]);
     const [showExtra, setShowExtra] = useState(hasExtra);
 
@@ -270,9 +273,9 @@ const SimpleFilters: React.FC<{
                     return (
                         <div key={f.id} className="space-y-1">
                             <label className="flex items-center justify-between gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
-                                <span>{f.label}</span>
+                                <span>{tLabel(t, f.label)}</span>
                                 {cnt !== undefined && (
-                                    <span className="font-mono tabular-nums text-gray-400 font-medium">{cnt} ta</span>
+                                    <span className="font-mono tabular-nums text-gray-400 font-medium">{t('auto.{n} ta').replace('{n}', String(cnt))}</span>
                                 )}
                             </label>
                             <select
@@ -281,7 +284,7 @@ const SimpleFilters: React.FC<{
                                 className={`${selectCls} ${on ? 'border-primary-400 dark:border-primary-600 font-semibold text-primary-700 dark:text-primary-300' : ''}`}
                             >
                                 {f.options.map((o, i) => (
-                                    <option key={i} value={i}>{o.label}</option>
+                                    <option key={i} value={i}>{tLabel(t, o.label)}</option>
                                 ))}
                             </select>
                         </div>
@@ -296,7 +299,7 @@ const SimpleFilters: React.FC<{
                     className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
                 >
                     <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showExtra ? 'rotate-180' : ''}`} />
-                    {showExtra ? 'Qo\'shimcha filtrlarni yashirish' : 'Ko\'proq filtr'}
+                    {showExtra ? t("auto.Qo'shimcha filtrlarni yashirish") : t("auto.Ko'proq filtr")}
                 </button>
 
                 {activeCount > 0 && (
@@ -305,12 +308,12 @@ const SimpleFilters: React.FC<{
                         onClick={clearAll}
                         className="text-xs font-bold text-gray-400 hover:text-red-600 transition-colors"
                     >
-                        Filtrlarni tozalash
+                        {t('auto.Filtrlarni tozalash')}
                     </button>
                 )}
 
                 {activeCount === 0 && (
-                    <span className="text-xs text-gray-400">Filtrsiz — klinikaning barcha bemorlari</span>
+                    <span className="text-xs text-gray-400">{t('auto.Filtrsiz — klinikaning barcha bemorlari')}</span>
                 )}
             </div>
         </div>
@@ -336,6 +339,7 @@ const ConditionRow: React.FC<{
     count?: number;
     onChange: (patch: Partial<SegmentCondition>) => void;
 }> = ({ cond, fields, count, onChange }) => {
+    const { t } = useLanguage();
     const def = fields.find(f => f.id === cond.field);
     const op = def?.operators.find(o => o.id === cond.op);
     const arity = op?.arity ?? 1;
@@ -355,7 +359,7 @@ const ConditionRow: React.FC<{
                 {groups.map(([group, list]) => (
                     <optgroup key={group} label={group}>
                         {list.map(f => (
-                            <option key={f.id} value={f.id}>{f.label}</option>
+                            <option key={f.id} value={f.id}>{tLabel(t, f.label)}</option>
                         ))}
                     </optgroup>
                 ))}
@@ -376,7 +380,7 @@ const ConditionRow: React.FC<{
                     className={inputCls}
                 >
                     {def.operators.map(o => (
-                        <option key={o.id} value={o.id}>{o.label}</option>
+                        <option key={o.id} value={o.id}>{tLabel(t, o.label)}</option>
                     ))}
                 </select>
             )}
@@ -393,7 +397,7 @@ const ConditionRow: React.FC<{
                         >
                             <option value="">— muolaja —</option>
                             {(def.options || []).map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
+                                <option key={o.value} value={o.value}>{tLabel(t, o.label)}</option>
                             ))}
                         </select>
                         <input
@@ -412,7 +416,7 @@ const ConditionRow: React.FC<{
                     >
                         <option value="">— tanlang —</option>
                         {def.options.map(o => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
+                            <option key={o.value} value={o.value}>{tLabel(t, o.label)}</option>
                         ))}
                     </select>
                 ) : def.type === 'text' ? (
@@ -575,6 +579,7 @@ interface Props {
 }
 
 export const SegmentBuilder: React.FC<Props> = ({ value, onChange, fields, conditionCounts }) => {
+    const { t } = useLanguage();
     const conditions = value.conditions || [];
     const match = value.match === 'any' ? 'any' : 'all';
 
@@ -609,15 +614,15 @@ export const SegmentBuilder: React.FC<Props> = ({ value, onChange, fields, condi
                         type="button"
                         onClick={() => setWantAdvanced(false)}
                         disabled={picked === null}
-                        title={picked === null ? 'Joriy shartlar oddiy rejimga sig\'maydi' : undefined}
+                        title={picked === null ? t("auto.Joriy shartlar oddiy rejimga sig'maydi") : undefined}
                         className={`${tabCls(!advanced)} ${picked === null ? 'opacity-40 cursor-not-allowed' : ''}`}
                     >
-                        Oddiy
+                        {t('auto.Oddiy')}
                     </button>
                     <button type="button" onClick={() => setWantAdvanced(true)} className={tabCls(advanced)}>
                         <span className="flex items-center gap-1.5">
                             <SlidersHorizontal className="w-3.5 h-3.5" />
-                            Murakkab
+                            {t('auto.Murakkab')}
                         </span>
                     </button>
                 </div>
@@ -641,7 +646,7 @@ export const SegmentBuilder: React.FC<Props> = ({ value, onChange, fields, condi
                                 onClick={() => applyPreset(p.conditions)}
                                 className="px-2.5 py-1 text-xs font-medium border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-300 hover:border-primary-400 hover:text-primary-600 transition-colors bg-white dark:bg-gray-800"
                             >
-                                {p.label}
+                                {tLabel(t, p.label)}
                             </button>
                         ))}
                     </div>

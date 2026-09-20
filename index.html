@@ -122,6 +122,14 @@
     .animate-in {
       animation: fadeIn 0.2s ease-out;
     }
+
+    /* Ekranni to'liq qoplaydigan modal fon (fixed inset-0) hech qachon
+       chekinishga ega bo'lmasligi kerak. space-y-* konteyner ichida
+       ochilgan oyna aks holda 24px pastga surilib, tepada bo'sh joy
+       qoldirardi (Laboratoriya, Online navbat va boshqalar). */
+    .fixed.inset-0 {
+      margin: 0 !important;
+    }
   </style>
   <script type="importmap">
 {
