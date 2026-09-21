@@ -187,7 +187,19 @@ export const AccessControlSettings: React.FC<AccessControlSettingsProps> = ({ cu
                         />
                         <div>
                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Moliyaviy ko'rsatkichlarni ko'rsatish</p>
-                           <p className="text-xs text-gray-500 dark:text-gray-400">Dashboarddagi tushum, o'rtacha chek, kutilayotgan to'lovlar va qarzdorlar ro'yxati</p>
+                           <p className="text-xs text-gray-500 dark:text-gray-400">Dashboarddagi tushum, o'rtacha chek va "Olinmagan pul" ro'yxatidagi summalar. O'chirilsa ro'yxat ko'rinadi, lekin summalarsiz</p>
+                        </div>
+                     </label>
+                     <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-primary-300 transition-colors">
+                        <input
+                           type="checkbox"
+                           checked={roleAccess.canTakePayment !== false}
+                           onChange={e => updateRoleAccess(roleKey, { canTakePayment: e.target.checked })}
+                           className="w-4 h-4 mt-0.5 rounded text-primary-600 focus:ring-primary-500"
+                        />
+                        <div>
+                           <p className="text-sm font-semibold text-gray-900 dark:text-white">Bemordan to'lovni o'zi qabul qila olsin</p>
+                           <p className="text-xs text-gray-500 dark:text-gray-400">O'chirilsa, tugagan qabulni faqat "Kassaga yuborish" mumkin bo'ladi — pulni kassir oladi</p>
                         </div>
                      </label>
                      {roleKey === 'doctor' && (

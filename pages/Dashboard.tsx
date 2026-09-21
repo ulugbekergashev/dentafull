@@ -5,13 +5,14 @@ import { StatCard } from '../components/StatCard';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
-  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot, Phone
+  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot, Phone, Send
 } from 'lucide-react';
 import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
 import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { getCurrentMonthRange } from '../utils/dateUtils';
-import { transactionBelongsToDoctor, calculateAppointmentTotal, isAppointmentPaid } from '../utils/financialCalculations';
+import { transactionBelongsToDoctor, calculateAppointmentTotal } from '../utils/financialCalculations';
+import { buildUnpaidRows, unpaidTotal, UnpaidRow } from '../utils/unpaid';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { AddPatientModal } from '../components/AddPatientModal';
@@ -31,7 +32,8 @@ interface DashboardProps {
   services?: Service[];
   currentClinic?: Clinic;
   clinicId?: string;
-  showFinance?: boolean; // Ruxsatlar: pul ko'rsatkichlari (KPI, tushum grafigi, qarzdorlar)
+  showFinance?: boolean; // Ruxsatlar: pul ko'rsatkichlari (KPI, tushum grafigi, summalar)
+  canTakePayment?: boolean; // Ruxsatlar: pulni o'zi qabul qila oladimi yoki faqat kassaga uzatadimi
   seeAllPatients?: boolean; // Ruxsatlar → Ko'rish doirasi: shifokor butun klinika ma'lumotini ko'rsinmi
   onPatientClick?: (id: string) => void;
   onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
@@ -54,7 +56,7 @@ const STAT_GRID_COLS: Record<number, string> = {
   6: 'lg:grid-cols-3 xl:grid-cols-6',
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, seeAllPatients = false, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -155,21 +157,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     );
   }, [labOrders, today]);
 
-  // Tanlangan davrda yakunlangan, lekin hali to'lanmagan qabullar — ресепшн шу ердан бирдан ёпиши учун
-  const unpaidCompleted = useMemo(() => {
-    return filteredAppointments
-      .filter(app =>
-        (app.status === 'Completed' || app.status === 'Checked-In') && !isAppointmentPaid(app, transactions)
-      )
-      .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
-  }, [filteredAppointments, transactions]);
+  /**
+   * Olinmagan pul — yagona ro'yxat. Ilgari bu ikkita alohida karta edi
+   * ("qarzga yozilgan" va "kassaga yozilmagan"), lekin ikkalasi ham bitta narsani
+   * bildiradi va to'liq qarzga yozilgan qabul ikkalasiga ham tushib ketardi.
+   * Endi manba faqat qatorning belgisi — amal bitta joydan bajariladi.
+   */
+  const unpaidRows = useMemo(
+    () => buildUnpaidRows(filteredAppointments, filteredTransactionsByDoctor, services),
+    [filteredAppointments, filteredTransactionsByDoctor, services]);
 
-  // Kutilayotgan to'lovlar (qarzdorlar) — Pending/Overdue tranzaksiyalar, davr filtridan qat'i nazar
-  const pendingDebts = useMemo(() => {
-    return filteredTransactionsByDoctor
-      .filter(t => t.status === 'Pending' || t.status === 'Overdue')
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [filteredTransactionsByDoctor]);
+  /**
+   * Shifokor faqat hali hal qilmagan qabullarini ko'radi: "To'lovni olish" yoki
+   * "Kassaga yuborish" bosilgach qator uning ro'yxatidan chiqadi. Resepshn va admin
+   * esa hammasini ko'radi — aks holda shifokor unutgan pul hech kimga ko'rinmay qolardi.
+   */
+  const visibleUnpaid = useMemo(
+    () => (isDoctor ? unpaidRows.filter(r => r.source === 'appointment' && !r.sentToCashier) : unpaidRows),
+    [unpaidRows, isDoctor]);
+
+  const unpaidSum = useMemo(() => unpaidTotal(visibleUnpaid), [visibleUnpaid]);
+  // Qatorda "Kassaga yuborish" chiqadimi — faqat kassada yozuvi yo'q qabullarda
+  const canSendToCashier = !!onUpdateAppointment;
+  // Moliyani ko'rmaydigan xodim summani ham, "To'lovni olish" ni ham ko'rmaydi —
+  // unga faqat kassaga uzatish qoladi, ro'yxatning o'zi esa ochiq turaveradi.
+  const canCollect = canTakePayment && showFinance;
+
+  // Eski nomlar — pastdagi KPI va AI stats shular orqali o'qiydi
+  const pendingDebts = useMemo(
+    () => unpaidRows.filter(r => r.source === 'debt'), [unpaidRows]);
 
   /**
    * O'ng ustunda ko'rsatiladigan "hali olinmagan pul" ro'yxatlari bormi.
@@ -197,13 +213,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     } catch { /* ro'yxat keyingi yuklashda yangilanadi */ }
   };
 
-  const hasMoneyCards = (showFinance && pendingDebts.length > 0) || unpaidCompleted.length > 0;
+  const hasMoneyCards = visibleUnpaid.length > 0;
   // O'ng ustunda nazorat ro'yxati ham turadi
   const hasSideCards = hasMoneyCards || visibleRecalls.length > 0;
 
-  const pendingDebtsTotal = useMemo(() =>
-    pendingDebts.reduce((acc, t) => acc + t.amount, 0)
-    , [pendingDebts]);
 
   const openDebtPayment = (tx: Transaction) => {
     setPayingDebt(tx);
@@ -248,6 +261,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     setIsQuickPaymentOpen(true);
   };
 
+  /**
+   * "To'lovni olish" — qator manbasiga qarab to'g'ri oynani ochadi.
+   * Foydalanuvchi uchun farqi yo'q: qarz yopiladimi yoki yangi to'lov yoziladimi,
+   * buni dastur o'zi hal qiladi.
+   */
+  const openPaymentForRow = (row: UnpaidRow) => {
+    if (row.source === 'debt' && row.transaction) openDebtPayment(row.transaction);
+    else if (row.appointment) openPaymentForAppointment(row.appointment);
+  };
+
+  // "Kassaga yuborish" — shifokor pulga tegmaydi, qator resepshn ro'yxatida qoladi
+  const [sendingToCashier, setSendingToCashier] = useState<string | null>(null);
+  const sendRowToCashier = async (row: UnpaidRow) => {
+    if (!row.appointment || !onUpdateAppointment) return;
+    setSendingToCashier(row.key);
+    try {
+      await onUpdateAppointment(row.appointment.id, { sentToCashierAt: new Date().toISOString() });
+    } finally {
+      setSendingToCashier(null);
+    }
+  };
+
   // AI tab uchun stats obyekti
   const aiStats = useMemo(() => ({
     todayAppointments: todayAppointments.length,
@@ -258,8 +293,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     pendingRevenue,
     totalPatients,
     avgCheck,
-    unpaidCompleted: unpaidCompleted.length,
-  }), [todayAppointments, filteredAppointments, totalRevenue, newLeadsCount, pendingDebts, pendingRevenue, totalPatients, avgCheck, unpaidCompleted]);
+    unpaidCompleted: unpaidRows.filter(r => r.source === 'appointment').length,
+  }), [todayAppointments, filteredAppointments, totalRevenue, newLeadsCount, pendingDebts, pendingRevenue, totalPatients, avgCheck, unpaidRows]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -589,71 +624,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             </Card>
           )}
 
-          {/* Qarzdorlar — qarzga yozilgan, yopilmagan to'lovlar */}
-          {showFinance && pendingDebts.length > 0 && (
-            <Card className="p-6 rounded-[2rem] border border-red-200 dark:border-red-800/50">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className="min-w-0">
-                  <h3 className="text-lg font-black text-gray-900 dark:text-white">
-                    {t('dashboard.debtsTitleA')} <span className="text-red-500">{t('dashboard.debtsTitleB')}</span>
-                  </h3>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                    {t('dashboard.debtsDesc')}
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                  <span className="px-3 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-black rounded-full whitespace-nowrap">
-                    {pendingDebtsTotal.toLocaleString()} UZS
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-400">{pendingDebts.length} {t('dashboard.count')}</span>
-                </div>
-              </div>
-
-              <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
-                {pendingDebts.slice(0, DASH_ROW_LIMIT).map(tx => {
-                  const patient = patients.find(p => p.id === tx.patientId)
-                    || patients.find(p => `${p.lastName} ${p.firstName}` === tx.patientName);
-                  const serviceLabel = tx.service?.includes('|') ? tx.service.split('||')[0].split('|')[0] : (tx.service || '—');
-                  return (
-                    <div key={tx.id} className="flex items-center gap-3 py-3 group">
-                      <div className="min-w-0 flex-1">
-                        <button
-                          onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
-                          className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
-                        >
-                          {tx.patientName}
-                        </button>
-                        <p className="text-[11px] text-gray-400 truncate">{String(tx.date).slice(0, 10)} · {serviceLabel}</p>
-                      </div>
-                      <span className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">
-                        {tx.amount.toLocaleString()}
-                      </span>
-                      {onUpdateTransaction && (
-                        <button
-                          onClick={() => openDebtPayment(tx)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" /> {t('auto.To\'lov')}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {pendingDebts.length > DASH_ROW_LIMIT && (
-                <button
-                  onClick={() => navigate('/finance')}
-                  className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
-                >
-                  {t('dashboard.moreAll')} {pendingDebts.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </Card>
-          )}
-
-          {/* To'lovni kutayotgan qabullar — protsedura yakunlangan, to'lov olinmagan */}
-          {unpaidCompleted.length > 0 && (
+          {/*
+            Olinmagan pul — yagona ro'yxat. Qarzga yozilgan to'lovlar ham, kassaga
+            umuman yozilmagan qabullar ham shu yerda: klinika uchun ikkalasi bitta
+            narsa — pul kelmagan. Manba faqat qator yonidagi belgi bilan farqlanadi.
+          */}
+          {visibleUnpaid.length > 0 && (
             <Card className="p-6 rounded-[2rem] border border-amber-200 dark:border-amber-800/50">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="min-w-0">
@@ -661,56 +637,88 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     {t('dashboard.unpaidTitleA')} <span className="text-amber-500">{t('dashboard.unpaidTitleB')}</span>
                   </h3>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                    {t('dashboard.unpaidDesc')}
+                    {isDoctor ? t('dashboard.unpaidDescDoctor') : t('dashboard.unpaidDesc')}
                   </p>
                 </div>
-                <span className="px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-black rounded-full flex-shrink-0">
-                  {unpaidCompleted.length} {t('dashboard.count')}
-                </span>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  {showFinance && unpaidSum > 0 && (
+                    <span className="px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-black rounded-full whitespace-nowrap">
+                      {unpaidSum.toLocaleString()} UZS
+                    </span>
+                  )}
+                  <span className="text-[10px] font-bold text-gray-400">{visibleUnpaid.length} {t('dashboard.count')}</span>
+                </div>
               </div>
 
               <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
-                {unpaidCompleted.slice(0, DASH_ROW_LIMIT).map(app => {
-                  const patient = patients.find(p => p.id === app.patientId);
-                  const doctorColor = doctors.find(d => d.id === app.doctorId)?.color || '#3B82F6';
-                  const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
-                  const serviceLabel = breakdown ? breakdown.split('||')[0].split('|')[0] : app.type;
+                {visibleUnpaid.slice(0, DASH_ROW_LIMIT).map(row => {
+                  const patient = patients.find(p => p.id === row.patientId)
+                    || patients.find(p => `${p.lastName} ${p.firstName}` === row.patientName);
+                  const isDebt = row.source === 'debt';
+                  // Kassaga uzatish faqat hali hal qilinmagan qabulda ma'noga ega.
+                  // Resepshnning o'zi kassa — unga bu tugma ortiqcha.
+                  const showSend = row.source === 'appointment' && !row.sentToCashier
+                    && canSendToCashier && !isReceptionist;
+                  // Shifokor kassaga yuborgan-yubormagani kassa uchun ahamiyatsiz —
+                  // ikkalasida ham pul kelmagan. "Yuborish" faqat shifokorning
+                  // ro'yxatini bo'shatadi, bu yerda esa yagona holat ko'rinadi.
+                  const dotClass = isDebt ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600';
+                  const tag = isDebt ? t('dashboard.unpaidTagDebt') : t('dashboard.unpaidTagPending');
                   return (
-                    <div key={app.id} className="flex items-center gap-3 py-3">
-                      <div className="min-w-0 flex-1">
+                    <div key={row.key} className="py-3">
+                      {/* Ism va summa tepada — tor ustunda ham qisqarib ketmasin */}
+                      <div className="flex items-baseline gap-3">
                         <button
                           onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
-                          className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                          className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
                         >
-                          {app.patientName}
+                          {row.patientName}
                         </button>
-                        <p className="flex items-center gap-1.5 text-[11px] text-gray-400 truncate">
-                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: doctorColor }} />
-                          <span className="truncate">{app.date} · {serviceLabel}</span>
-                        </p>
+                        {showFinance && (
+                          <span className={`text-sm font-bold tabular-nums whitespace-nowrap ${isDebt ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+                            {row.amount > 0 ? row.amount.toLocaleString() : '—'}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">
-                        {total > 0 ? total.toLocaleString() : '—'}
-                      </span>
-                      {onAddTransaction && (
-                        <button
-                          onClick={() => openPaymentForAppointment(app)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" /> {t('auto.Yopish')}
-                        </button>
-                      )}
+                      {/* Tafsilot va amallar pastda — ikkita tugma bo'lsa ham joy yetadi */}
+                      <div className="flex items-center justify-between gap-2 mt-1.5">
+                        <p className="flex items-center gap-1.5 min-w-0 text-[11px] text-gray-400">
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotClass}`} />
+                          {/* Yorliq oldinda — tor ustunda ham kesilmasin; kerak bo'lsa xizmat nomi qisqaradi */}
+                          <span className="flex-shrink-0">{tag}</span>
+                          <span className="truncate">· {row.date} · {row.service}</span>
+                        </p>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {canCollect && (onUpdateTransaction || onAddTransaction) && (
+                            <button
+                              onClick={() => openPaymentForRow(row)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" /> {t('dashboard.unpaidTake')}
+                            </button>
+                          )}
+                          {showSend && (
+                            <button
+                              onClick={() => sendRowToCashier(row)}
+                              disabled={sendingToCashier === row.key}
+                              className="flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 hover:border-primary-400 text-gray-600 dark:text-gray-300 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              <Send className="w-3.5 h-3.5" /> {t('dashboard.unpaidSend')}
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
 
-              {unpaidCompleted.length > DASH_ROW_LIMIT && (
+              {visibleUnpaid.length > DASH_ROW_LIMIT && (
                 <button
                   onClick={() => navigate('/finance')}
                   className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
                 >
-                  {t('dashboard.moreAll')} {unpaidCompleted.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
+                  {t('dashboard.moreAll')} {visibleUnpaid.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </Card>

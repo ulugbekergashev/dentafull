@@ -32,6 +32,12 @@ export function canSeePatientPhone(ac: AccessControl, role: UserRole): boolean {
     return getRoleAccess(ac, role)?.showPatientPhone !== false;
 }
 
+// Xodim bemordan pulni o'zi qabul qila oladimi. O'chirilsa tugagan qabulni faqat
+// kassaga uzatishi mumkin. Default true — ilgari bu yerda umuman tekshiruv yo'q edi.
+export function canTakePayment(ac: AccessControl, role: UserRole): boolean {
+    return getRoleAccess(ac, role)?.canTakePayment !== false;
+}
+
 // Xodim klinikadagi barcha bemorlar/qabullarni ko'radimi, yoki faqat o'zinikini.
 // Faqat shifokor cheklangan — resepshn va admin allaqachon hammasini ko'radi.
 // Boshqa ruxsatlardan farqli, default `false` (cheklangan): bu tarixiy xatti-harakat

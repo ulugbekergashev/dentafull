@@ -28,7 +28,8 @@ import {
 import { exportCashBookDay, exportCashBookMonth } from '../utils/cashbookExport';
 import { PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { formatDateToISO } from '../utils/dateUtils';
-import { calculateAppointmentTotal, isAppointmentPaid } from '../utils/financialCalculations';
+import { calculateAppointmentTotal } from '../utils/financialCalculations';
+import { isAppointmentRecorded } from '../utils/unpaid';
 import { api } from '../services/api';
 import { tLabel } from '../i18n/labels';
 
@@ -735,7 +736,10 @@ export const CashBook: React.FC<CashBookProps> = ({
             }));
 
         const unpaidAppts = appointments
-            .filter(a => a && a.date === date && a.status === 'Completed' && !isAppointmentPaid(a, transactions))
+            // Kassada yozuv bor bo'lsa (qarz ham) — yuqoridagi pendingTx uni allaqachon
+            // ko'rsatadi; `isAppointmentPaid` faqat 'Paid' ni sanagani uchun qarzga
+            // yozilgan qabul shu ro'yxatga ikkinchi marta tushib ketardi.
+            .filter(a => a && a.date === date && a.status === 'Completed' && !isAppointmentRecorded(a, transactions))
             .map(a => {
                 const { total } = calculateAppointmentTotal(a.notes || '', services as any);
                 return {

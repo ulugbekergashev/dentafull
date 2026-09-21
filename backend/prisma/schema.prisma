@@ -142,6 +142,9 @@ model Appointment {
   notes        String?
   clinicId     String
   reminderSent Boolean @default(false)
+  /// Shifokor "Kassaga yuborish" bosgan payt. null bo'lsa — qabul tugagan, lekin
+  /// shifokor pulni o'zi olish/kassaga o'tkazish haqida hali qaror qilmagan.
+  sentToCashierAt DateTime?
   branchId     String?
   branch       Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
   clinic       Clinic  @relation(fields: [clinicId], references: [id])

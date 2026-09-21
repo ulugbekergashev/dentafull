@@ -37,7 +37,7 @@ import { Logo } from './components/Logo';
 import { BranchSwitcher } from './components/BranchSwitcher';
 import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } from './services/api';
 import type { CashCloseInput } from './services/api';
-import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone, canSeeAllPatients } from './utils/accessControl';
+import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone, canSeeAllPatients, canTakePayment } from './utils/accessControl';
 import { formatHeaderDate } from './utils/dateUtils';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
@@ -1111,6 +1111,8 @@ const AppContent: React.FC = () => {
   // Ruxsatlar (Xodimlar → Ruxsatlar): rol bo'yicha modul/moliya/telefon ko'rinishi
   const accessControl = parseAccessControl(currentClinic);
   const showFinanceForRole = canSeeFinance(accessControl, userRole);
+  // Tugagan qabulda "To'lovni olish" tugmasi chiqadimi, yoki faqat "Kassaga yuborish"
+  const canTakePaymentForRole = canTakePayment(accessControl, userRole);
   // Bo'lim ko'rsatilmagan bo'lsa qaysi biri ochiladi — SuperAdminDashboard
   // dagi standart bilan bir xil bo'lishi shart, aks holda birinchi kirishda
   // yuqorida bir bo'lim, sahifada boshqasi faol ko'rinardi.
@@ -1685,6 +1687,7 @@ const AppContent: React.FC = () => {
                     currentClinic={currentClinic}
                     clinicId={clinicId}
                     showFinance={showFinanceForRole}
+                    canTakePayment={canTakePaymentForRole}
                     seeAllPatients={seeAllPatientsForRole}
                     onPatientClick={handlePatientClick}
                     onUpdateAppointment={updateAppointment}

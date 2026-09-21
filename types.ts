@@ -122,6 +122,9 @@ export interface Appointment {
   clinicId: string;
   branchId?: string | null;
   review?: Review;
+  // Shifokor "Kassaga yuborish" bosgan payt. null — qabul tugagan, lekin shifokor
+  // hali pulni o'zi olish yoki kassaga o'tkazish haqida qaror qilmagan.
+  sentToCashierAt?: string | null;
 }
 
 export interface Transaction {
@@ -562,6 +565,10 @@ export interface RoleAccess {
   // Ataylab moliyadan ajratilgan: "hamma qabulni ko'rsin, lekin kassani ko'rmasin"
   // eng ko'p so'raladigan kombinatsiya — buning uchun showFinance alohida qoladi.
   seeAllPatients?: boolean;
+  // Xodim bemordan pulni o'zi qabul qila oladimi. O'chirilsa "To'lovni olish"
+  // tugmasi yo'qoladi va faqat "Kassaga yuborish" qoladi. Default true —
+  // ilgari hech qanday tekshiruv yo'q edi, eski klinikalarda hech nima o'zgarmaydi.
+  canTakePayment?: boolean;
 }
 
 export interface AccessControl {

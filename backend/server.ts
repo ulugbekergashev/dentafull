@@ -1983,7 +1983,7 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'appointment', req.params.id))) return;
         // Sanitize body to only include valid Appointment fields
-        const { patientId, patientName, doctorId, doctorName, type, date, time, duration, status, reminderSent, notes, clinicId } = req.body;
+        const { patientId, patientName, doctorId, doctorName, type, date, time, duration, status, reminderSent, notes, clinicId, sentToCashierAt } = req.body;
         const updateData: any = {};
         if (patientId !== undefined) updateData.patientId = patientId;
         if (patientName !== undefined) updateData.patientName = patientName;
@@ -1997,6 +1997,10 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
         if (reminderSent !== undefined) updateData.reminderSent = reminderSent;
         if (notes !== undefined) updateData.notes = notes;
         if (clinicId !== undefined) updateData.clinicId = clinicId;
+        // Kassaga uzatish belgisi: sana yoki null (bekor qilish) qabul qilinadi
+        if (sentToCashierAt !== undefined) {
+            updateData.sentToCashierAt = sentToCashierAt ? new Date(sentToCashierAt) : null;
+        }
 
         // Update appointment and fetch necessary data for notification
         const appointment = await prisma.appointment.update({
@@ -7952,22 +7956,38 @@ async function runStartupMigrations() {
         CREATE INDEX IF NOT EXISTS "DhpResourceLink_clinicId_status_idx" ON "DhpResourceLink" ("clinicId", "status")
     `);
 
+    // Shifokor tugagan qabulni kassaga uzatganini belgilash uchun.
+    await migrationStep('Appointment.sentToCashierAt', `ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "sentToCashierAt" TIMESTAMP(3)`);
+
     console.log('✅ Startup migrations applied');
 }
 
 /**
- * Prisma modeli Transaction.createdAt ni SELECT qiladi — ustun bo'lmasa BARCHA to'lov
- * so'rovlari xato beradi, ya'ni klinikalar uchun tizim ishlamay qoladi.
- * Shuning uchun serverni ishga tushirishdan oldin majburiy tekshiramiz.
+ * Prisma modeli bu ustunlarni SELECT qiladi — ustun bo'lmasa o'sha modelning
+ * BARCHA so'rovlari xato beradi, ya'ni klinikalar uchun tizim ishlamay qoladi.
+ * `migrationStep` xatoni yutib yuboradi, shuning uchun serverni ishga
+ * tushirishdan oldin bu yerda majburiy tekshiramiz.
  */
+const CRITICAL_COLUMNS: ReadonlyArray<{ table: string; column: string; type: string }> = [
+    { table: 'Transaction', column: 'createdAt', type: 'TIMESTAMP(3)' },
+    { table: 'Appointment', column: 'sentToCashierAt', type: 'TIMESTAMP(3)' },
+];
+
 async function verifyCriticalSchema(): Promise<boolean> {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        if (await columnExists('Transaction', 'createdAt')) return true;
-        console.error(`⚠️ "Transaction"."createdAt" topilmadi (urinish ${attempt}/3), qayta urinilmoqda...`);
-        await migrationStep('Transaction.createdAt (retry)', `ALTER TABLE "Transaction" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3)`);
-        await new Promise(r => setTimeout(r, 2000));
+    for (const { table, column, type } of CRITICAL_COLUMNS) {
+        let ok = false;
+        for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+            if (await columnExists(table, column)) { ok = true; break; }
+            console.error(`⚠️ "${table}"."${column}" topilmadi (urinish ${attempt}/3), qayta urinilmoqda...`);
+            await migrationStep(`${table}.${column} (retry)`, `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${column}" ${type}`);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+        if (!ok && !(await columnExists(table, column))) {
+            console.error(`❌ KRITIK: "${table}"."${column}" ustunini qo'shib bo'lmadi.`);
+            return false;
+        }
     }
-    return columnExists('Transaction', 'createdAt');
+    return true;
 }
 
 console.log('🚀 Server is initializing...');
@@ -7977,7 +7997,7 @@ runStartupMigrations()
         if (!ok) {
             // Ataylab ishga tushmaymiz: buzuq versiya trafik olgandan ko'ra,
             // deploy muvaffaqiyatsiz bo'lib eski versiya ishlab turgani xavfsizroq.
-            console.error('❌ KRITIK: "Transaction"."createdAt" ustunini qo\'shib bo\'lmadi. Server ishga tushirilmaydi.');
+            console.error('❌ Majburiy ustunlar yetishmayapti. Server ishga tushirilmaydi.');
             process.exit(1);
         }
         app.listen(PORT, () => {
