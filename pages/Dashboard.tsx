@@ -655,10 +655,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   const patient = patients.find(p => p.id === row.patientId)
                     || patients.find(p => `${p.lastName} ${p.firstName}` === row.patientName);
                   const isDebt = row.source === 'debt';
-                  // Kassaga uzatish faqat hali hal qilinmagan qabulda ma'noga ega.
-                  // Resepshnning o'zi kassa — unga bu tugma ortiqcha.
-                  const showSend = row.source === 'appointment' && !row.sentToCashier
-                    && canSendToCashier && !isReceptionist;
+                  // Kassaga uzatish faqat shifokorga ma'noli: u shifokorning o'z
+                  // ro'yxatini bo'shatadi. Admin va resepshn butun ro'yxatni ko'radi,
+                  // ularda bu tugma bosilsa ham qator joyida qolardi — ya'ni behuda edi.
+                  const showSend = isDoctor && row.source === 'appointment' && canSendToCashier;
                   // Shifokor kassaga yuborgan-yubormagani kassa uchun ahamiyatsiz —
                   // ikkalasida ham pul kelmagan. "Yuborish" faqat shifokorning
                   // ro'yxatini bo'shatadi, bu yerda esa yagona holat ko'rinadi.
