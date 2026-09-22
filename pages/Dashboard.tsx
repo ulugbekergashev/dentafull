@@ -666,49 +666,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   const dotClass = row.isDebt ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600';
                   const tag = row.isDebt ? t('dashboard.unpaidTagDebt') : t('dashboard.unpaidTagPending');
                   return (
-                    <div key={row.key} className="py-3">
-                      {/* Ism va summa tepada — tor ustunda ham qisqarib ketmasin */}
-                      <div className="flex items-baseline gap-3">
+                    // Bitta qator: ism va tafsilot chapda, summa bilan tugmalar o'ngda.
+                    <div key={row.key} className="flex items-center gap-3 py-3">
+                      <div className="min-w-0 flex-1">
                         <button
                           onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
-                          className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                          className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
                         >
                           {row.patientName}
                         </button>
-                        {showFinance && (
-                          <span className={`text-sm font-bold tabular-nums whitespace-nowrap ${row.isDebt ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
-                            {row.amount > 0 ? row.amount.toLocaleString() : '—'}
-                          </span>
-                        )}
-                      </div>
-                      {/* Tafsilot va amallar pastda — ikkita tugma bo'lsa ham joy yetadi */}
-                      <div className="flex items-center justify-between gap-2 mt-1.5">
-                        <p className="flex items-center gap-1.5 min-w-0 text-[11px] text-gray-400">
+                        <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
                           <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotClass}`} />
-                          {/* Yorliq oldinda — tor ustunda ham kesilmasin; kerak bo'lsa xizmat nomi qisqaradi */}
-                          <span className="flex-shrink-0">{tag}</span>
-                          <span className="truncate">· {row.date} · {row.service}</span>
+                          <span className="truncate">{tag} · {row.date} · {row.service}</span>
                         </p>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {canCollect && (onUpdateTransaction || onAddTransaction) && (
-                            <button
-                              onClick={() => openPaymentForRow(row)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors"
-                            >
-                              <CreditCard className="w-3.5 h-3.5" /> {t('dashboard.unpaidTake')}
-                            </button>
-                          )}
-                          {showSend && (
-                            <button
-                              onClick={() => sendRowToCashier(row)}
-                              disabled={sendingToCashier === row.key}
-                              className="flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 hover:border-primary-400 text-gray-600 dark:text-gray-300 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              <Send className="w-3.5 h-3.5" /> {t('dashboard.unpaidSend')}
-                            </button>
-                          )}
-                        </div>
                       </div>
+                      {showFinance && (
+                        <span className={`text-sm font-bold tabular-nums whitespace-nowrap ${row.isDebt ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+                          {row.amount > 0 ? row.amount.toLocaleString() : '—'}
+                        </span>
+                      )}
+                      {canCollect && (onUpdateTransaction || onAddTransaction) && (
+                        <button
+                          onClick={() => openPaymentForRow(row)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" /> {t('dashboard.unpaidTake')}
+                        </button>
+                      )}
+                      {showSend && (
+                        <button
+                          onClick={() => sendRowToCashier(row)}
+                          disabled={sendingToCashier === row.key}
+                          className="flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 hover:border-primary-400 text-gray-600 dark:text-gray-300 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+                        >
+                          <Send className="w-3.5 h-3.5" /> {t('dashboard.unpaidSend')}
+                        </button>
+                      )}
                     </div>
                   );
                 })}
