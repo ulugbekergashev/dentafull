@@ -48,12 +48,12 @@ model Doctor {
 }
 
 model Receptionist {
-  id        String    @id @default(uuid())
-  firstName String
-  lastName  String
-  phone     String
-  username  String    @unique
-  password  String
+  id             String    @id @default(uuid())
+  firstName      String
+  lastName       String
+  phone          String
+  username       String    @unique
+  password       String
   status         String
   clinicId       String
   /// Resepshnni Telegram botiga ulash uchun. botManager kontakt ulash oqimida
@@ -132,29 +132,29 @@ model PatientPhoto {
 }
 
 model Appointment {
-  id           String  @id @default(uuid())
-  patientId    String
-  patientName  String
-  doctorId     String
-  doctorName   String
-  type         String
-  date         String
-  time         String
-  duration     Int
-  status       String
-  notes        String?
-  clinicId     String
-  reminderSent Boolean @default(false)
+  id              String    @id @default(uuid())
+  patientId       String
+  patientName     String
+  doctorId        String
+  doctorName      String
+  type            String
+  date            String
+  time            String
+  duration        Int
+  status          String
+  notes           String?
+  clinicId        String
+  reminderSent    Boolean   @default(false)
   /// Shifokor "Kassaga yuborish" bosgan payt. null bo'lsa — qabul tugagan, lekin
   /// shifokor pulni o'zi olish/kassaga o'tkazish haqida hali qaror qilmagan.
   sentToCashierAt DateTime?
-  branchId     String?
-  branch       Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  clinic       Clinic  @relation(fields: [clinicId], references: [id])
-  doctor       Doctor  @relation(fields: [doctorId], references: [id])
-  patient      Patient @relation(fields: [patientId], references: [id])
-  review       Review?
-  visits       Visit[]
+  branchId        String?
+  branch          Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  clinic          Clinic    @relation(fields: [clinicId], references: [id])
+  doctor          Doctor    @relation(fields: [doctorId], references: [id])
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  review          Review?
+  visits          Visit[]
 
   @@unique([patientId, date], name: "unique_patient_date")
   @@index([date])
@@ -223,6 +223,11 @@ model Transaction {
   visitId         String?
   discountAmount  Float?    @default(0)
   discountPercent Float?    @default(0)
+  /// To'lov ataylab qarzga yozilganmi. To'lov oynasida "Qolgan qarzdorlik"
+  /// to'ldirilsa true bo'ladi. Boshqa yo'llar bilan tug'ilgan to'lanmagan
+  /// yozuvlar (masalan oldindan to'lov kutilayotgan qabul) false bo'lib qoladi —
+  /// ular qarz emas, shunchaki hali to'lov kelmagan.
+  isDebt          Boolean   @default(false)
   createdAt       DateTime? @default(now())
   /// Pulni kim qabul qildi. Rollar har xil jadvalda (Receptionist/Doctor/Clinic admin)
   /// bo'lgani uchun FK emas — id va ism nusxasi saqlanadi.
@@ -265,19 +270,19 @@ model Expense {
 }
 
 model Service {
-  id         Int              @id @default(autoincrement())
-  name       String
-  price      Float
-  duration   Int
-  clinicId   String
-  cost       Float            @default(0)
+  id           Int              @id @default(autoincrement())
+  name         String
+  price        Float
+  duration     Int
+  clinicId     String
+  cost         Float            @default(0)
   /// Necha oydan keyin nazoratga chaqirish (null — kerak emas)
   recallMonths Int?
   /// DHP Procedure.code uchun SNOMED CT kodi (null — moslashtirilmagan)
-  snomedCode String?
-  categoryId String?
-  category   ServiceCategory? @relation(fields: [categoryId], references: [id])
-  clinic     Clinic           @relation(fields: [clinicId], references: [id])
+  snomedCode   String?
+  categoryId   String?
+  category     ServiceCategory? @relation(fields: [categoryId], references: [id])
+  clinic       Clinic           @relation(fields: [clinicId], references: [id])
 }
 
 model SubscriptionPlan {
@@ -290,10 +295,10 @@ model SubscriptionPlan {
 }
 
 model Clinic {
-  id                      String             @id @default(uuid())
+  id                      String              @id @default(uuid())
   name                    String
   adminName               String
-  username                String             @unique
+  username                String              @unique
   password                String?
   phone                   String
   status                  String
@@ -303,18 +308,18 @@ model Clinic {
   monthlyRevenue          Float
   telegramChatId          String?
   botToken                String?
-  subscriptionType        String             @default("Paid")
-  smsBalance              Float              @default(0)
-  smsLimit                Int                @default(0)
-  smsUsedThisMonth        Int                @default(0)
+  subscriptionType        String              @default("Paid")
+  smsBalance              Float               @default(0)
+  smsLimit                Int                 @default(0)
+  smsUsedThisMonth        Int                 @default(0)
   ownerPhone              String?
   facebookPageAccessToken String?
   facebookPageId          String?
   facebookPageName        String?
   facebookUserAccessToken String?
   customPrice             Float?
-  endHour                 Int                @default(20)
-  startHour               Int                @default(8)
+  endHour                 Int                 @default(20)
+  startHour               Int                 @default(8)
   address                 String?
   email                   String?
   /// STIR — DHP Organization identifikatori (sid/org/uz/soliq)
@@ -323,8 +328,8 @@ model Clinic {
   /// dmedApiKey/dmedApiSecret/dmedClinicId/dmedEnabled ustunlari ham DHP uchun
   /// ishlatiladi (client_id, client_secret, Organization id, yoqilgan).
   dhpEnvironment          String?
-  enableReceipts          Boolean            @default(false)
-  notificationMode        String             @default("telegram_only")
+  enableReceipts          Boolean             @default(false)
+  notificationMode        String              @default("telegram_only")
   eskizEmail              String?
   eskizPassword           String?
   eskizToken              String?
@@ -338,22 +343,22 @@ model Clinic {
   aiApiKey                String?
   /// Kalit oxirgi marta muvaffaqiyatli tekshirilgan vaqt.
   aiKeyCheckedAt          DateTime?
-  dmedEnabled             Boolean            @default(false)
+  dmedEnabled             Boolean             @default(false)
   dmedApiKey              String?
   dmedApiSecret           String?
   dmedClinicId            String?
   dmedToken               String?
   dmedTokenExpiry         DateTime?
-  prepaymentEnabled       Boolean            @default(false)
+  prepaymentEnabled       Boolean             @default(false)
   prepaymentCardNumber    String?
   prepaymentAmount        Float?
   accessControl           String?
   /// Tashqi lid manbalari (yuboraman va h.k.) uchun kirish kaliti.
   /// POST /api/public/leads da X-API-Key sarlavhasi orqali klinika shu kalit bo'yicha topiladi.
-  leadApiKey              String?            @unique
+  leadApiKey              String?             @unique
   leadApiKeyCreatedAt     DateTime?
   appointments            Appointment[]
-  plan                    SubscriptionPlan   @relation(fields: [planId], references: [id])
+  plan                    SubscriptionPlan    @relation(fields: [planId], references: [id])
   doctors                 Doctor[]
   installmentPlans        InstallmentPlan[]
   inventoryItems          InventoryItem[]
@@ -367,7 +372,7 @@ model Clinic {
   transactions            Transaction[]
   visits                  Visit[]
   salesAgentId            String?
-  salesAgent              SalesAgent?        @relation(fields: [salesAgentId], references: [id])
+  salesAgent              SalesAgent?         @relation(fields: [salesAgentId], references: [id])
   labTechnicians          LabTechnician[]
   labOrders               LabOrder[]
   expenses                Expense[]
@@ -377,8 +382,9 @@ model Clinic {
   cashRegisterDays        CashRegisterDay[]
   cashMovements           CashMovement[]
   cashAuditLogs           CashAuditLog[]
+  staffNotifications      StaffNotification[]
   /// Kuniga nechta kassa smenasi (1 yoki 2). Klinikaga qarab sozlanadi.
-  cashShiftsPerDay        Int                @default(1)
+  cashShiftsPerDay        Int                 @default(1)
   branches                Branch[]
 
   @@index([botToken])
@@ -863,4 +869,35 @@ model AiConversation {
   updatedAt DateTime @updatedAt
 
   @@index([clinicId, userId, updatedAt])
+}
+
+/// Xodimga ko'rsatiladigan bildirishnoma (ilovadagi qo'ng'iroq belgisi).
+///
+/// Har bir qabul qiluvchiga ALOHIDA qator yoziladi. Bu ataylab: umumiy lenta
+/// qilinganda kim birinchi ochsa hammaning belgisi o'chib ketadi va bir xodimga
+/// tegishli xabar boshqasiga ko'rinadi.
+model StaffNotification {
+  id            String    @id @default(uuid())
+  clinicId      String
+  /// Qabul qiluvchi. Rollar har xil jadvalda (Doctor/Receptionist/Clinic) bo'lgani
+  /// uchun FK emas, matnli kalit: 'doctor:<id>' | 'receptionist:<id>' |
+  /// 'admin:<clinicId>' | 'lab:<id>'. Transaction.receivedById bilan bir xil yondashuv.
+  recipientKey  String
+  recipientRole String
+  /// notifications.ts dagi hodisa turi (masalan 'payment_to_cashier')
+  type          String
+  title         String
+  body          String?
+  /// Bosilganda ochiladigan sahifa ('/finance', '/patients/<id>')
+  link          String?
+  /// Manba yozuv id si. Bir hodisa ikki marta yozilmasligi uchun.
+  refId         String?
+  read          Boolean   @default(false)
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+  clinic        Clinic    @relation(fields: [clinicId], references: [id])
+
+  @@unique([recipientKey, type, refId])
+  @@index([clinicId, recipientKey, read])
+  @@index([createdAt])
 }

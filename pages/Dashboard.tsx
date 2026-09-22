@@ -654,7 +654,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 {visibleUnpaid.slice(0, DASH_ROW_LIMIT).map(row => {
                   const patient = patients.find(p => p.id === row.patientId)
                     || patients.find(p => `${p.lastName} ${p.firstName}` === row.patientName);
-                  const isDebt = row.source === 'debt';
                   // Kassaga uzatish faqat shifokorga ma'noli: u shifokorning o'z
                   // ro'yxatini bo'shatadi. Admin va resepshn butun ro'yxatni ko'radi,
                   // ularda bu tugma bosilsa ham qator joyida qolardi — ya'ni behuda edi.
@@ -662,8 +661,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   // Shifokor kassaga yuborgan-yubormagani kassa uchun ahamiyatsiz —
                   // ikkalasida ham pul kelmagan. "Yuborish" faqat shifokorning
                   // ro'yxatini bo'shatadi, bu yerda esa yagona holat ko'rinadi.
-                  const dotClass = isDebt ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600';
-                  const tag = isDebt ? t('dashboard.unpaidTagDebt') : t('dashboard.unpaidTagPending');
+                  // "Qarz" faqat pul ataylab qarzga yozilgan qatorda. Kassada shunchaki
+                  // to'lanmagan yozuv turgani qarz degani emas — u "kutilmoqda".
+                  const dotClass = row.isDebt ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600';
+                  const tag = row.isDebt ? t('dashboard.unpaidTagDebt') : t('dashboard.unpaidTagPending');
                   return (
                     <div key={row.key} className="py-3">
                       {/* Ism va summa tepada — tor ustunda ham qisqarib ketmasin */}
@@ -675,7 +676,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                           {row.patientName}
                         </button>
                         {showFinance && (
-                          <span className={`text-sm font-bold tabular-nums whitespace-nowrap ${isDebt ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+                          <span className={`text-sm font-bold tabular-nums whitespace-nowrap ${row.isDebt ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
                             {row.amount > 0 ? row.amount.toLocaleString() : '—'}
                           </span>
                         )}

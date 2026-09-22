@@ -7959,10 +7959,51 @@ async function runStartupMigrations() {
     // Shifokor tugagan qabulni kassaga uzatganini belgilash uchun.
     await migrationStep('Appointment.sentToCashierAt', `ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "sentToCashierAt" TIMESTAMP(3)`);
 
-    // Resepshnni Telegram botiga ulash. botManager bu ustunni 8977319 kommitidan
-    // beri o'qiydi, lekin na schema'ga, na migratsiyaga qo'shilgan edi — natijada
-    // `tsc` yiqilib, backend 3 kun deploy bo'lmadi va prodda ustun ham yo'q edi.
+    // Resepshnni Telegram botiga ulash. botManager bu ustunni allaqachon o'qiydi
+    // (kontakt ulash oqimi, notifyReceptionists), lekin migratsiyasi yo'q edi —
+    // shuning uchun prodda ustun bo'lmagan va o'sha kod jimgina xato berardi.
     await migrationStep('Receptionist.telegramChatId', `ALTER TABLE "Receptionist" ADD COLUMN IF NOT EXISTS "telegramChatId" TEXT`);
+
+    // To'lanmagan yozuv ikki xil bo'ladi: ataylab qarzga yozilgani va shunchaki
+    // hali puli kelmagani. Ilgari ikkalasi ham "qarz" deb ko'rsatilardi, chunki
+    // farqini saqlaydigan joy yo'q edi. Endi to'lov oynasida "Qolgan qarzdorlik"
+    // to'ldirilsa shu ustun true bo'ladi.
+    await migrationStep('Transaction.isDebt', `ALTER TABLE "Transaction" ADD COLUMN IF NOT EXISTS "isDebt" BOOLEAN NOT NULL DEFAULT false`);
+    // Eski yozuvlarda qarz ekanini faqat xizmat nomidagi "(Qarz)" belgisi bildiradi.
+    // Qolganlari uchun qarz ekani aniq emas — ular "kutilmoqda" bo'lib qoladi.
+    await migrationStep('Transaction.isDebt backfill', `
+        UPDATE "Transaction" SET "isDebt" = true
+        WHERE "isDebt" = false AND "status" IN ('Pending', 'Overdue') AND "service" LIKE '%(Qarz)%'
+    `);
+
+    // Xodim bildirishnomalari (ilovadagi qo'ng'iroq).
+    await migrationStep('StaffNotification table', `
+        CREATE TABLE IF NOT EXISTS "StaffNotification" (
+            "id"            TEXT NOT NULL PRIMARY KEY,
+            "clinicId"      TEXT NOT NULL,
+            "recipientKey"  TEXT NOT NULL,
+            "recipientRole" TEXT NOT NULL,
+            "type"          TEXT NOT NULL,
+            "title"         TEXT NOT NULL,
+            "body"          TEXT,
+            "link"          TEXT,
+            "refId"         TEXT,
+            "read"          BOOLEAN NOT NULL DEFAULT false,
+            "readAt"        TIMESTAMP(3),
+            "createdAt"     TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('StaffNotification unique', `
+        CREATE UNIQUE INDEX IF NOT EXISTS "StaffNotification_recipientKey_type_refId_key"
+        ON "StaffNotification" ("recipientKey", "type", "refId")
+    `);
+    await migrationStep('StaffNotification inbox index', `
+        CREATE INDEX IF NOT EXISTS "StaffNotification_clinicId_recipientKey_read_idx"
+        ON "StaffNotification" ("clinicId", "recipientKey", "read")
+    `);
+    await migrationStep('StaffNotification createdAt index', `
+        CREATE INDEX IF NOT EXISTS "StaffNotification_createdAt_idx" ON "StaffNotification" ("createdAt")
+    `);
 
     console.log('✅ Startup migrations applied');
 }
@@ -7975,6 +8016,7 @@ async function runStartupMigrations() {
  */
 const CRITICAL_COLUMNS: ReadonlyArray<{ table: string; column: string; type: string }> = [
     { table: 'Transaction', column: 'createdAt', type: 'TIMESTAMP(3)' },
+    { table: 'Transaction', column: 'isDebt', type: 'BOOLEAN NOT NULL DEFAULT false' },
     { table: 'Appointment', column: 'sentToCashierAt', type: 'TIMESTAMP(3)' },
 ];
 

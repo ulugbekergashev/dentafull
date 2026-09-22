@@ -145,6 +145,8 @@ export interface Transaction {
   branchId?: string | null;
   discountPercent?: number; // Chegirma foizi (0-100)
   discountAmount?: number;  // Chegirma summasi
+  /** Ataylab qarzga yozilganmi (to'lov oynasida "Qolgan qarzdorlik" to'ldirilgan) */
+  isDebt?: boolean;
 }
 
 export type ExpenseCategory = 'DoctorShare' | 'Salary' | 'Rent' | 'Utilities' | 'Inventory' | 'Lab' | 'Other';

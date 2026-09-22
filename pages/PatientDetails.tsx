@@ -742,6 +742,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                service: paymentData.service,
                type: paymentData.type as any,
                status: 'Pending',
+               // Ataylab qarzga yozildi — ro'yxatlarda "qarz" deb ko'rsatiladi
+               isDebt: true,
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,
@@ -774,6 +776,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                service: `${paymentData.service} (Qarz)`,
                type: paymentData.type as any,
                status: 'Pending',
+               isDebt: true,
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,

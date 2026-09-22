@@ -41,6 +41,12 @@ export interface UnpaidRow {
     key: string;
     /** 'debt' — kassada Pending yozuv bor; 'appointment' — kassada yozuv yo'q */
     source: 'debt' | 'appointment';
+    /**
+     * Pul ataylab qarzga yozilganmi. Kassada Pending yozuv bo'lishining o'zi
+     * qarz degani emas: to'lov oddiygina hali kelmagan bo'lishi ham mumkin.
+     * Shuning uchun bu yerda faqat qarz ekani ANIQ holatlar true bo'ladi.
+     */
+    isDebt: boolean;
     patientId?: string;
     patientName: string;
     date: string;
@@ -52,6 +58,15 @@ export interface UnpaidRow {
     sentToCashier: boolean;
     transaction?: Transaction;
     appointment?: Appointment;
+}
+
+/**
+ * Tranzaksiya qarzmi. `isDebt` — to'lov oynasida "Qolgan qarzdorlik" to'ldirilganda
+ * yoziladigan aniq belgi. Bu ustun paydo bo'lishidan oldingi yozuvlarda esa qarzni
+ * faqat xizmat nomidagi "(Qarz)" bildiradi; qolganlari uchun qarz ekani aniq emas.
+ */
+export function isDebtTransaction(tx: Transaction): boolean {
+    return tx.isDebt === true || /\(Qarz\)/i.test(tx.service || '');
 }
 
 /** Xizmat nomini qabul yozuvlaridan/tranzaksiyadan o'qiydi */
@@ -88,6 +103,7 @@ export function buildUnpaidRows(
             rows.push({
                 key: `tx:${tx.id}`,
                 source: 'debt',
+                isDebt: isDebtTransaction(tx),
                 patientId: tx.patientId,
                 patientName: tx.patientName,
                 date: String(tx.date).slice(0, 10),
@@ -109,6 +125,8 @@ export function buildUnpaidRows(
         rows.push({
             key: `app:${app.id}`,
             source: 'appointment',
+            // Kassada yozuv ham yo'q — qarz deyishga asos yo'q
+            isDebt: false,
             patientId: app.patientId,
             patientName: app.patientName,
             date: app.date,

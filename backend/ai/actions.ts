@@ -1459,6 +1459,8 @@ export const executeAction = async (
                     type: 'Cash',
                     service: args.service,
                     status: 'Pending',
+                    // Bu ataylab qarzga yozish — ro'yxatlarda "qarz" deb ko'rinadi
+                    isDebt: true,
                 },
                 select: { id: true },
             });

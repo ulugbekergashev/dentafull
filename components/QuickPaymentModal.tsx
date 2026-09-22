@@ -196,8 +196,9 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                 // To'liq to'landi
                 await onAddTransaction({ ...common, amount: grandTotal, service: serviceName, status: 'Paid', discountAmount } as any);
             } else if (paidAmount <= 0) {
-                // Umuman to'lanmadi — butunlay qarz
-                await onAddTransaction({ ...common, amount: grandTotal, service: serviceName, status: 'Pending', discountAmount } as any);
+                // Umuman to'lanmadi — butunlay qarz. `isDebt` shu yerda yoziladi:
+                // ro'yxatlarda "qarz" deb ko'rsatish uchun yagona ishonchli belgi.
+                await onAddTransaction({ ...common, amount: grandTotal, service: serviceName, status: 'Pending', discountAmount, isDebt: true } as any);
             } else {
                 // Qisman: to'langan qismi va qarz qismi alohida yoziladi
                 await onAddTransaction({
@@ -205,7 +206,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                     discountAmount: Math.round(paidAmount * (discountPercent / 100)) || 0,
                 } as any);
                 await onAddTransaction({
-                    ...common, amount: debtAmount, service: `${serviceName} (Qarz)`, status: 'Pending',
+                    ...common, amount: debtAmount, service: `${serviceName} (Qarz)`, status: 'Pending', isDebt: true,
                     discountAmount: Math.round(debtAmount * (discountPercent / 100)) || 0,
                 } as any);
             }

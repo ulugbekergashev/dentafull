@@ -29,7 +29,7 @@ import { exportCashBookDay, exportCashBookMonth } from '../utils/cashbookExport'
 import { PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { formatDateToISO } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
-import { isAppointmentRecorded } from '../utils/unpaid';
+import { isAppointmentRecorded, isDebtTransaction } from '../utils/unpaid';
 import { api } from '../services/api';
 import { tLabel } from '../i18n/labels';
 
@@ -725,6 +725,10 @@ export const CashBook: React.FC<CashBookProps> = ({
 })
             .map(tx => ({
                 kind: 'debt' as const,
+                // Kassada to'lanmagan yozuv turgani hali qarz degani emas —
+                // qarz faqat ataylab qarzga yozilganda (to'lov oynasidagi
+                // "Qolgan qarzdorlik") belgilanadi.
+                isDebt: isDebtTransaction(tx),
                 id: tx.id,
                 patientName: tx.patientName,
                 patientId: tx.patientId,
@@ -744,6 +748,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                 const { total } = calculateAppointmentTotal(a.notes || '', services as any);
                 return {
                     kind: 'appointment' as const,
+                    isDebt: false,
                     id: a.id,
                     patientName: a.patientName,
                     patientId: a.patientId,
@@ -1226,9 +1231,11 @@ export const CashBook: React.FC<CashBookProps> = ({
                                                 {item.patientName}
                                             </p>
                                             <p className="text-[11px] text-gray-400 truncate">
-                                                {item.kind === 'debt'
+                                                {item.isDebt
                                                     ? <span className="text-amber-600 dark:text-amber-400 font-bold">{t('cashbook.writtenToDebt')}</span>
-                                                    : <span className="text-gray-500">{t('cashbook.visitFinishedNoPay')}</span>}
+                                                    : item.kind === 'debt'
+                                                        ? <span className="text-gray-500">{t('cashbook.awaitingPayment')}</span>
+                                                        : <span className="text-gray-500">{t('cashbook.visitFinishedNoPay')}</span>}
                                                 {item.doctorName && <><span className="mx-1.5">.</span>{item.doctorName}</>}
                                                 {item.service && <><span className="mx-1.5">.</span>{item.service}</>}
                                             </p>
