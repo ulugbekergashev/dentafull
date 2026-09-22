@@ -7959,6 +7959,11 @@ async function runStartupMigrations() {
     // Shifokor tugagan qabulni kassaga uzatganini belgilash uchun.
     await migrationStep('Appointment.sentToCashierAt', `ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "sentToCashierAt" TIMESTAMP(3)`);
 
+    // Resepshnni Telegram botiga ulash. botManager bu ustunni 8977319 kommitidan
+    // beri o'qiydi, lekin na schema'ga, na migratsiyaga qo'shilgan edi — natijada
+    // `tsc` yiqilib, backend 3 kun deploy bo'lmadi va prodda ustun ham yo'q edi.
+    await migrationStep('Receptionist.telegramChatId', `ALTER TABLE "Receptionist" ADD COLUMN IF NOT EXISTS "telegramChatId" TEXT`);
+
     console.log('✅ Startup migrations applied');
 }
 

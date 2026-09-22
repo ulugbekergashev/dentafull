@@ -54,10 +54,13 @@ model Receptionist {
   phone     String
   username  String    @unique
   password  String
-  status    String
-  clinicId  String
-  clinic    Clinic    @relation(fields: [clinicId], references: [id])
-  expenses  Expense[]
+  status         String
+  clinicId       String
+  /// Resepshnni Telegram botiga ulash uchun. botManager kontakt ulash oqimida
+  /// yozadi, notifyReceptionists esa shu bo'yicha xabar yuboradi.
+  telegramChatId String?
+  clinic         Clinic    @relation(fields: [clinicId], references: [id])
+  expenses       Expense[]
 }
 
 model Patient {
