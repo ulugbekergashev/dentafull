@@ -84,6 +84,7 @@ const SALES_NAVIGATION = [
   { id: 'plans', labelKey: 'superAdmin.tabs.plans', icon: CreditCard, to: '/sales?tab=plans', roles: [UserRole.SALES_AGENT] },
   { id: 'blocked', labelKey: 'superAdmin.tabs.blocked', icon: Shield, to: '/sales?tab=blocked', roles: [UserRole.SALES_AGENT] },
   { id: 'leads', labelKey: 'nav.leads', icon: MessageSquare, to: '/sales?tab=leads', roles: [UserRole.SALES_AGENT] },
+  { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarIcon, to: '/sales?tab=calendar', roles: [UserRole.SALES_AGENT] },
 ];
 
 // Helper: get page label key from path

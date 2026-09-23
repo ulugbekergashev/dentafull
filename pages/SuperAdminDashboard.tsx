@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan, LeadApiKeyInfo } from '../types';
-import { BarChart3, StickyNote, Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, Infinity as InfinityIcon, Repeat } from 'lucide-react';
+import { BarChart3, StickyNote, Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, BellRing, PhoneCall, Infinity as InfinityIcon, Repeat } from 'lucide-react';
 
 // Reklama formalaridan (/lifetime, /monthly) kelgan lidlar kartada rang bilan ajralib turadi.
 // source: "ad-lifetime" yoki "ad-monthly", oxirida ixtiyoriy "-<utm_campaign>".
@@ -195,7 +195,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // brauzerning "orqaga" tugmasi ishlaydi va bo'limga havola yuborsa
    // bo'ladi.
    const [searchParams, setSearchParams] = useSearchParams();
-   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads', 'leadStats'] as const;
+   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads', 'leadStats', 'calendar'] as const;
    type TabId = typeof TABS[number];
 
    const fallbackTab: TabId = salesAgentMode ? 'clinics' : 'overview';
@@ -203,7 +203,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // Lidlar statistikasi — faqat superadmin bo'limi. Sotuvchi shu havolani
    // ochsa, bo'sh sahifa ko'rinmasin: o'zining odatdagi bo'limiga tushadi.
    const requestedTab: TabId | null = urlTab && TABS.includes(urlTab) ? urlTab : null;
-   const activeTab: TabId = !requestedTab || (salesAgentMode && requestedTab === 'leadStats')
+   const activeTab: TabId = !requestedTab
+      || (salesAgentMode && requestedTab === 'leadStats')
+      || (!salesAgentMode && requestedTab === 'calendar')
       ? fallbackTab
       : requestedTab;
 
@@ -222,6 +224,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // Demo Requests State
    const [demoRequests, setDemoRequests] = useState<any[]>([]);
    const [demoLoading, setDemoLoading] = useState(false);
+   const [demoLoaded, setDemoLoaded] = useState(false);
 
    // Platform Facebook State
    const [fbStatus, setFbStatus] = useState<{ connected: boolean; pageName: string | null } | null>(null);
@@ -269,11 +272,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       }
    };
 
+   // Sotuvchida lidlar har doim yuklanadi: qo'ng'iroq eslatmasi qaysi bo'limda
+   // turganidan qat'i nazar chiqishi kerak.
+   const needsDemoRequests = salesAgentMode || activeTab === 'leads' || activeTab === 'leadStats';
+
    useEffect(() => {
-      if (activeTab === 'leads' || activeTab === 'leadStats') {
+      if (needsDemoRequests) {
          setDemoLoading(true);
          api.demoRequests.getAll()
-            .then(setDemoRequests)
+            .then(rows => { setDemoRequests(rows); setDemoLoaded(true); })
             .catch(err => console.error('Demo so\'rovlarni yuklashda xatolik:', err))
             .finally(() => setDemoLoading(false));
          if (!salesAgentMode) {
@@ -286,7 +293,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // Lidlar ochiq turganda ro'yxat o'zi yangilanadi: superadmin lid o'tkazsa,
    // sotuvchida hech narsa bosmasdan paydo bo'ladi. Yashirin tabda so'rov ketmaydi.
    useEffect(() => {
-      if (activeTab !== 'leads' && activeTab !== 'leadStats') return;
+      if (!needsDemoRequests) return;
       const refresh = () => {
          if (document.hidden) return;
          api.demoRequests.getAll().then(setDemoRequests).catch(() => { /* keyingi urinishda */ });
@@ -534,6 +541,189 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       return `${dt.getFullYear()}-${m}-${day}`;
    };
    const shiftDay = (daysBack: number) => localDayKey(Date.now() - daysBack * 86400000);
+
+   // --- Qayta qo'ng'iroqlar: kalendar va eslatma ---
+   const [nowTs, setNowTs] = useState(() => Date.now());
+   useEffect(() => {
+      if (!salesAgentMode) return;
+      const timer = setInterval(() => setNowTs(Date.now()), 30000);
+      return () => clearInterval(timer);
+   }, [salesAgentMode]);
+
+   const scheduledLeads = demoRequests
+      .filter((r: any) => r.callbackAt)
+      .sort((a: any, b: any) => new Date(a.callbackAt).getTime() - new Date(b.callbackAt).getTime());
+   const isOverdue = (r: any) => !!r.callbackAt && new Date(r.callbackAt).getTime() <= nowTs;
+
+   const formatCallback = (at: string) => {
+      const d = new Date(at);
+      const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      const key = localDayKey(d);
+      if (key === shiftDay(0)) return `Bugun, ${time}`;
+      if (key === shiftDay(-1)) return `Ertaga, ${time}`;
+      if (key === shiftDay(1)) return `Kecha, ${time}`;
+      return `${d.getDate()}-${tLabel(t, UZ_MONTHS_SHORT[d.getMonth()]).toLowerCase()}, ${time}`;
+   };
+
+   const toLocalInputValue = (d: Date) =>
+      `${localDayKey(d)}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+   // Rejalashtirish oynasi. lead=null bo'lsa, oynada lid tanlanadi (kalendardan ochilganda).
+   const [scheduleOpen, setScheduleOpen] = useState(false);
+   const [scheduleLeadId, setScheduleLeadId] = useState('');
+   const [scheduleAt, setScheduleAt] = useState('');
+   const [scheduleNote, setScheduleNote] = useState('');
+   const [scheduleSaving, setScheduleSaving] = useState(false);
+
+   const openSchedule = (lead: any | null, day?: string) => {
+      setScheduleLeadId(lead?.id || '');
+      setScheduleNote(lead?.callbackNote || '');
+      if (lead?.callbackAt) {
+         setScheduleAt(toLocalInputValue(new Date(lead.callbackAt)));
+      } else {
+         // Standart: tanlangan kun soat 10:00, bugun bo'lsa — keyingi to'liq soat
+         const base = day ? new Date(`${day}T10:00`) : new Date();
+         if (!day || day === shiftDay(0)) {
+            const next = new Date();
+            next.setMinutes(0, 0, 0);
+            next.setHours(next.getHours() + 1);
+            if (!day || next > base) base.setTime(next.getTime());
+         }
+         setScheduleAt(toLocalInputValue(base));
+      }
+      setScheduleOpen(true);
+   };
+
+   const applyCallback = (leadId: string, callbackAt: string | null, callbackNote: string | null) => {
+      setDemoRequests(prev => prev.map((r: any) => r.id === leadId ? { ...r, callbackAt, callbackNote } : r));
+   };
+
+   const saveSchedule = async () => {
+      if (!scheduleLeadId || !scheduleAt) return;
+      const when = new Date(scheduleAt);
+      if (isNaN(when.getTime())) return;
+      setScheduleSaving(true);
+      try {
+         const res = await api.demoRequests.setCallback(scheduleLeadId, when.toISOString(), scheduleNote);
+         applyCallback(scheduleLeadId, res.callbackAt, res.callbackNote);
+         setScheduleOpen(false);
+      } catch (err: any) {
+         alert(err?.message || "Qo'ng'iroq vaqtini saqlashda xatolik");
+      } finally {
+         setScheduleSaving(false);
+      }
+   };
+
+   const clearCallback = async (leadId: string) => {
+      const lead = demoRequests.find((r: any) => r.id === leadId);
+      applyCallback(leadId, null, null);
+      try {
+         await api.demoRequests.setCallback(leadId, null);
+      } catch (err: any) {
+         applyCallback(leadId, lead?.callbackAt || null, lead?.callbackNote || null);
+         alert(err?.message || 'Xatolik yuz berdi');
+      }
+   };
+
+   // Eslatma: kirishda bugungi va o'tib ketgan qo'ng'iroqlar ro'yxati, keyin har
+   // bir qo'ng'iroq vaqti kelganda alohida. Bir marta ko'rsatilgani qayta chiqmaydi.
+   const [reminder, setReminder] = useState<{ title: string; ids: string[] } | null>(null);
+   const remindedKeys = React.useRef<Set<string> | null>(null);
+
+   useEffect(() => {
+      if (!salesAgentMode || !demoLoaded) return;
+      const keyOf = (r: any) => `${r.id}|${r.callbackAt}`;
+
+      if (remindedKeys.current === null) {
+         remindedKeys.current = new Set();
+         const todayKey = shiftDay(0);
+         const agenda = scheduledLeads.filter((r: any) => localDayKey(r.callbackAt) <= todayKey);
+         agenda.filter(isOverdue).forEach((r: any) => remindedKeys.current!.add(keyOf(r)));
+         if (agenda.length > 0) {
+            setReminder({ title: "Bugungi qo'ng'iroqlaringiz", ids: agenda.map((r: any) => r.id) });
+         }
+         return;
+      }
+
+      const due = scheduledLeads.filter((r: any) => isOverdue(r) && !remindedKeys.current!.has(keyOf(r)));
+      if (due.length === 0) return;
+      due.forEach((r: any) => remindedKeys.current!.add(keyOf(r)));
+      setReminder(prev => ({
+         title: "Qo'ng'iroq qilish vaqti keldi",
+         ids: Array.from(new Set([...(prev?.ids || []), ...due.map((r: any) => r.id)])),
+      }));
+   }, [salesAgentMode, demoRequests, demoLoaded, nowTs]);
+
+   const reminderLeads = (reminder?.ids || [])
+      .map(id => demoRequests.find((r: any) => r.id === id))
+      .filter((r: any) => r && r.callbackAt);
+
+   // Kalendar: ko'rinayotgan oy va tanlangan kun
+   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+   const [calDay, setCalDay] = useState(() => shiftDay(0));
+
+   const UZ_MONTHS_FULL = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+   const UZ_WEEKDAYS = ['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'];
+
+   const callsByDay: Record<string, any[]> = {};
+   scheduledLeads.forEach((r: any) => {
+      const k = localDayKey(r.callbackAt);
+      (callsByDay[k] ||= []).push(r);
+   });
+
+   // Oy to'ri dushanbadan boshlanadi; oldingi/keyingi oy kunlari bo'sh katak
+   const calCells: (string | null)[] = (() => {
+      const first = calMonth;
+      const lead = (first.getDay() + 6) % 7;
+      const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+      const cells: (string | null)[] = Array(lead).fill(null);
+      for (let d = 1; d <= daysInMonth; d++) cells.push(localDayKey(new Date(first.getFullYear(), first.getMonth(), d)));
+      while (cells.length % 7) cells.push(null);
+      return cells;
+   })();
+
+   const renderCallRow = (r: any, onAfterAction?: () => void) => {
+      const d = new Date(r.callbackAt);
+      const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      const overdue = isOverdue(r);
+      return (
+         <div key={r.id} className={`flex flex-wrap items-start gap-3 p-3 rounded-xl border ${overdue
+            ? 'border-red-200 bg-red-50 dark:border-red-900/60 dark:bg-red-900/20'
+            : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'}`}>
+            <div className={`text-sm font-bold tabular-nums w-12 pt-0.5 ${overdue ? 'text-red-600 dark:text-red-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{time}</div>
+            <div className="flex-1 min-w-[140px]">
+               <p className="font-semibold text-sm text-gray-900 dark:text-white">
+                  {r.name}
+                  {r.clinicName && <span className="font-normal text-gray-500"> · {r.clinicName}</span>}
+               </p>
+               <a href={`tel:${r.phone}`} className="text-sm text-gray-600 dark:text-gray-300 hover:text-primary-600">{r.phone}</a>
+               {r.callbackNote && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 whitespace-pre-line">{r.callbackNote}</p>}
+               {overdue && localDayKey(r.callbackAt) !== shiftDay(0) && (
+                  <p className="text-[11px] text-red-600 dark:text-red-400 mt-1">Muddati o'tgan: {formatCallback(r.callbackAt)}</p>
+               )}
+            </div>
+            <div className="flex items-center gap-1.5">
+               <a href={`tel:${r.phone}`} className="flex items-center gap-1 px-2.5 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold rounded-lg">
+                  <Phone className="w-3 h-3" /> {t('auto.Qo\'ng\'iroq')}
+               </a>
+               <button
+                  onClick={() => { clearCallback(r.id); onAfterAction?.(); }}
+                  title="Qo'ng'iroq qilindi — rejadan olib tashlash"
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-bold rounded-lg"
+               >
+                  <Check className="w-3 h-3" /> Qildim
+               </button>
+               <button
+                  onClick={() => { openSchedule(r); onAfterAction?.(); }}
+                  title="Boshqa vaqtga ko'chirish"
+                  className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+               >
+                  <Clock className="w-4 h-4" />
+               </button>
+            </div>
+         </div>
+      );
+   };
 
    /** Tayyor oraliqlar: tugma bosilganda sanalar shunga qo'yiladi. */
    const LEAD_RANGE_PRESETS: { id: string; label: string; from: () => string; to: () => string }[] = [
@@ -1618,6 +1808,19 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     </span>
                                  )}
                               </button>
+                              {/* Qayta qo'ng'iroq vaqti. Bosilsa o'zgartiriladi. */}
+                              <button
+                                 type="button"
+                                 onClick={() => openSchedule(req)}
+                                 className={`w-full flex items-center gap-1.5 text-xs pt-1.5 border-t border-gray-100 dark:border-gray-700 ${req.callbackAt
+                                    ? (isOverdue(req) ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-indigo-600 dark:text-indigo-400 font-semibold')
+                                    : 'text-gray-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+                              >
+                                 <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                                 {req.callbackAt
+                                    ? <span className="truncate">Qo'ng'iroq: {formatCallback(req.callbackAt)}{req.callbackNote ? ` · ${req.callbackNote}` : ''}</span>
+                                    : <span>Qo'ng'iroqni rejalashtirish</span>}
+                              </button>
                            </div>
 
                            {/* Lidni sotuvchiga taqsimlash. Superadmin o'zgartiradi, sotuvchi faqat
@@ -1682,6 +1885,104 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                )}
             </div>
          )}
+
+         {/* --- Sotuvchining qo'ng'iroqlar kalendari --- */}
+         {activeTab === 'calendar' && salesAgentMode && (() => {
+            const todayKey = shiftDay(0);
+            const overdueEarlier = scheduledLeads.filter((r: any) => isOverdue(r) && localDayKey(r.callbackAt) < todayKey);
+            const dayCalls = callsByDay[calDay] || [];
+            const dayDate = new Date(`${calDay}T00:00`);
+            return (
+               <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                     <div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                           <Calendar className="w-5 h-5 text-indigo-500" /> Qo'ng'iroqlar kalendari
+                        </h3>
+                        <p className="text-sm text-gray-500">Lidlarga qachon qayta qo'ng'iroq qilishni rejalashtiring — vaqti kelganda eslatma chiqadi.</p>
+                     </div>
+                     <Button onClick={() => openSchedule(null, calDay)}>
+                        <Plus className="w-4 h-4 mr-1" /> Qo'ng'iroq qo'shish
+                     </Button>
+                  </div>
+
+                  {overdueEarlier.length > 0 && (
+                     <Card className="p-4 border-red-200 dark:border-red-900/60">
+                        <p className="text-sm font-bold text-red-600 dark:text-red-400 mb-3">Muddati o'tgan qo'ng'iroqlar ({overdueEarlier.length})</p>
+                        <div className="space-y-2">{overdueEarlier.map((r: any) => renderCallRow(r))}</div>
+                     </Card>
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_1fr] gap-4">
+                     <Card className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                           <button onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500" aria-label="Oldingi oy">
+                              <ChevronLeft className="w-5 h-5" />
+                           </button>
+                           <p className="font-bold text-gray-900 dark:text-white">{UZ_MONTHS_FULL[calMonth.getMonth()]} {calMonth.getFullYear()}</p>
+                           <button onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500" aria-label="Keyingi oy">
+                              <ChevronRight className="w-5 h-5" />
+                           </button>
+                        </div>
+                        <div className="grid grid-cols-7 gap-1 text-center">
+                           {UZ_WEEKDAYS.map(w => <div key={w} className="text-[11px] font-semibold text-gray-400 py-1">{w}</div>)}
+                           {calCells.map((key, i) => {
+                              if (!key) return <div key={`e${i}`} />;
+                              const calls = callsByDay[key] || [];
+                              const hasOverdue = calls.some(isOverdue);
+                              const selected = key === calDay;
+                              const isToday = key === todayKey;
+                              return (
+                                 <button
+                                    key={key}
+                                    onClick={() => setCalDay(key)}
+                                    className={`relative aspect-square rounded-lg text-sm flex flex-col items-center justify-center transition-colors ${selected
+                                       ? 'bg-indigo-600 text-white'
+                                       : isToday
+                                          ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-bold'
+                                          : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                                 >
+                                    {Number(key.slice(8))}
+                                    {calls.length > 0 && (
+                                       <span className={`mt-0.5 min-w-[18px] px-1 rounded-full text-[10px] font-bold leading-4 ${selected
+                                          ? 'bg-white text-indigo-700'
+                                          : hasOverdue ? 'bg-red-500 text-white' : 'bg-indigo-500 text-white'}`}>
+                                          {calls.length}
+                                       </span>
+                                    )}
+                                 </button>
+                              );
+                           })}
+                        </div>
+                        <button
+                           onClick={() => { const d = new Date(); setCalMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setCalDay(todayKey); }}
+                           className="mt-3 w-full text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                        >
+                           Bugunga qaytish
+                        </button>
+                     </Card>
+
+                     <Card className="p-4">
+                        <p className="font-bold text-gray-900 dark:text-white mb-3">
+                           {calDay === todayKey ? 'Bugun' : calDay === shiftDay(-1) ? 'Ertaga' : `${dayDate.getDate()}-${UZ_MONTHS_FULL[dayDate.getMonth()].toLowerCase()}`}
+                           <span className="ml-2 text-sm font-normal text-gray-400">{dayCalls.length} ta qo'ng'iroq</span>
+                        </p>
+                        {dayCalls.length === 0 ? (
+                           <div className="py-10 text-center">
+                              <PhoneCall className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                              <p className="text-sm text-gray-500">Bu kunga qo'ng'iroq rejalashtirilmagan</p>
+                              <button onClick={() => openSchedule(null, calDay)} className="mt-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                                 + Qo'ng'iroq qo'shish
+                              </button>
+                           </div>
+                        ) : (
+                           <div className="space-y-2">{dayCalls.map((r: any) => renderCallRow(r))}</div>
+                        )}
+                     </Card>
+                  </div>
+               </div>
+            );
+         })()}
 
          {/* --- Lidlar statistikasi --- */}
          {/* Lidlar taxtasi kundalik ish uchun; raqamlar va sozlamalar esa
@@ -1972,6 +2273,99 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                <div className="flex justify-end gap-2">
                   <Button variant="secondary" onClick={() => setNoteLead(null)} disabled={noteSaving}>{t('auto.Bekor qilish')}</Button>
                   <Button onClick={saveLeadNote} disabled={noteSaving}>{noteSaving ? 'Saqlanmoqda...' : 'Saqlash'}</Button>
+               </div>
+            </div>
+         </Modal>
+
+         {/* Qayta qo'ng'iroqni rejalashtirish */}
+         <Modal isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Qo'ng'iroqni rejalashtirish">
+            {(() => {
+               const lead = demoRequests.find((r: any) => r.id === scheduleLeadId);
+               const pickable = demoRequests.filter((r: any) => leadStage(r) !== 'Inbox');
+               return (
+                  <div className="space-y-4">
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Lid</label>
+                        <select
+                           value={scheduleLeadId}
+                           onChange={e => {
+                              setScheduleLeadId(e.target.value);
+                              const picked = demoRequests.find((r: any) => r.id === e.target.value);
+                              if (picked?.callbackNote) setScheduleNote(picked.callbackNote);
+                           }}
+                           className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                        >
+                           <option value="">Lidni tanlang…</option>
+                           {pickable.map((r: any) => (
+                              <option key={r.id} value={r.id}>
+                                 {r.name} · {r.phone}{r.callbackAt ? ` (${formatCallback(r.callbackAt)})` : ''}
+                              </option>
+                           ))}
+                        </select>
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sana va vaqt</label>
+                        <input
+                           type="datetime-local"
+                           value={scheduleAt}
+                           onChange={e => setScheduleAt(e.target.value)}
+                           className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                           {[
+                              { label: '1 soatdan keyin', make: () => { const d = new Date(); d.setHours(d.getHours() + 1); return d; } },
+                              { label: 'Ertaga 10:00', make: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); return d; } },
+                              { label: 'Ertaga 15:00', make: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(15, 0, 0, 0); return d; } },
+                              { label: '3 kundan keyin', make: () => { const d = new Date(); d.setDate(d.getDate() + 3); d.setHours(10, 0, 0, 0); return d; } },
+                           ].map(p => (
+                              <button key={p.label} type="button" onClick={() => setScheduleAt(toLocalInputValue(p.make()))}
+                                 className="px-2.5 py-1 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-900/40">
+                                 {p.label}
+                              </button>
+                           ))}
+                        </div>
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Eslatma (ixtiyoriy)</label>
+                        <input
+                           value={scheduleNote}
+                           onChange={e => setScheduleNote(e.target.value)}
+                           maxLength={500}
+                           placeholder="Masalan: narxlarni so'radi, demo ko'rsatish kerak"
+                           className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                        />
+                     </div>
+                     <div className="flex flex-wrap justify-between gap-2">
+                        {lead?.callbackAt ? (
+                           <Button variant="secondary" onClick={() => { clearCallback(lead.id); setScheduleOpen(false); }} disabled={scheduleSaving}>
+                              Rejani olib tashlash
+                           </Button>
+                        ) : <span />}
+                        <div className="flex gap-2">
+                           <Button variant="secondary" onClick={() => setScheduleOpen(false)} disabled={scheduleSaving}>{t('auto.Bekor qilish')}</Button>
+                           <Button onClick={saveSchedule} disabled={scheduleSaving || !scheduleLeadId || !scheduleAt}>
+                              {scheduleSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+                           </Button>
+                        </div>
+                     </div>
+                  </div>
+               );
+            })()}
+         </Modal>
+
+         {/* Qo'ng'iroq eslatmasi */}
+         <Modal isOpen={!!reminder && reminderLeads.length > 0} onClose={() => setReminder(null)} title={reminder?.title || ''} className="max-w-2xl">
+            <div className="space-y-3">
+               <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                  <BellRing className="w-4 h-4 text-amber-500" />
+                  Quyidagi lidlarga qo'ng'iroq qilishingiz kerak:
+               </div>
+               <div className="space-y-2">{reminderLeads.map((r: any) => renderCallRow(r, () => {
+                  setReminder(prev => prev ? { ...prev, ids: prev.ids.filter(id => id !== r.id) } : prev);
+               }))}</div>
+               <div className="flex justify-end gap-2 pt-1">
+                  <Button variant="secondary" onClick={() => { setReminder(null); setSearchParams({ tab: 'calendar' }); }}>Kalendarni ochish</Button>
+                  <Button onClick={() => setReminder(null)}>Tushunarli</Button>
                </div>
             </div>
          </Modal>

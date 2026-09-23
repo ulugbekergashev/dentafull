@@ -3977,13 +3977,34 @@ const getLeadAssignments = async (): Promise<Record<string, string>> => {
     }
 };
 
+// Rejalashtirilgan qayta qo'ng'iroqlar ham xuddi shu usulda saqlanadi:
+// { "<demoRequestId>": { "at": "<ISO>", "note": "..." } }
+const LEAD_CALLBACKS_KEY = 'demo_request_callbacks';
+type LeadCallback = { at: string; note?: string | null };
+
+const getLeadCallbacks = async (): Promise<Record<string, LeadCallback>> => {
+    try {
+        const raw = await getPlatformSetting(LEAD_CALLBACKS_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+};
+
 // SUPER_ADMIN barcha lidlarni, SALES_AGENT esa faqat o'ziga biriktirilganini ko'radi.
 app.get('/api/admin/demo-requests', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
     try {
         const user = (req as any).user;
         const rows: any[] = await prisma.$queryRawUnsafe(`SELECT * FROM "DemoRequest" ORDER BY "createdAt" DESC`);
         const assignments = await getLeadAssignments();
-        const withAgent = rows.map(r => ({ ...r, salesAgentId: assignments[r.id] || null }));
+        const callbacks = await getLeadCallbacks();
+        const withAgent = rows.map(r => ({
+            ...r,
+            salesAgentId: assignments[r.id] || null,
+            callbackAt: callbacks[r.id]?.at || null,
+            callbackNote: callbacks[r.id]?.note || null,
+        }));
         // "Inbox" — superadminning taqsimlash ustuni; sotuvchi uni ko'rmaydi
         res.json(user.role === 'SALES_AGENT'
             ? withAgent.filter(r => r.salesAgentId === user.salesAgentId && r.status !== 'Inbox')
@@ -4026,6 +4047,34 @@ app.put('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_AD
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update demo request' });
+    }
+});
+
+// Qayta qo'ng'iroq vaqtini belgilash; at=null — rejani olib tashlaydi (qo'ng'iroq qilindi).
+app.put('/api/admin/demo-requests/:id/callback', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
+    try {
+        const user = (req as any).user;
+        if (user.role === 'SALES_AGENT') {
+            const assignments = await getLeadAssignments();
+            if (assignments[req.params.id] !== user.salesAgentId) {
+                return res.status(403).json({ error: 'Bu lid sizga biriktirilmagan' });
+            }
+        }
+
+        const at = req.body?.at;
+        const callbacks = await getLeadCallbacks();
+        if (at) {
+            const when = new Date(at);
+            if (isNaN(when.getTime())) return res.status(400).json({ error: "Vaqt noto'g'ri" });
+            const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 500) : '';
+            callbacks[req.params.id] = { at: when.toISOString(), note: note || null };
+        } else {
+            delete callbacks[req.params.id];
+        }
+        await setPlatformSetting(LEAD_CALLBACKS_KEY, JSON.stringify(callbacks));
+        res.json({ success: true, callbackAt: callbacks[req.params.id]?.at || null, callbackNote: callbacks[req.params.id]?.note || null });
+    } catch (error: any) {
+        res.status(500).json({ error: "Qo'ng'iroq vaqtini saqlashda xatolik: " + error.message });
     }
 });
 
@@ -4100,6 +4149,11 @@ app.delete('/api/admin/lead-api-key', authenticateToken, requireRole('SUPER_ADMI
 app.delete('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
     try {
         await prisma.$executeRawUnsafe(`DELETE FROM "DemoRequest" WHERE "id"=$1`, req.params.id);
+        const callbacks = await getLeadCallbacks();
+        if (callbacks[req.params.id]) {
+            delete callbacks[req.params.id];
+            await setPlatformSetting(LEAD_CALLBACKS_KEY, JSON.stringify(callbacks));
+        }
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: 'Failed to delete demo request' });

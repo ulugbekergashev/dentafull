@@ -1068,6 +1068,13 @@ export const api = {
             }),
         remove: (id: string) =>
             fetchJson<any>(`/admin/demo-requests/${id}`, { method: 'DELETE' }),
+        // Qayta qo'ng'iroq vaqti; at=null — rejani olib tashlaydi
+        setCallback: (id: string, at: string | null, note?: string) =>
+            fetchJson<{ success: boolean; callbackAt: string | null; callbackNote: string | null }>(`/admin/demo-requests/${id}/callback`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ at, note }),
+            }),
         // Lidni sotuvchiga biriktirish; null — biriktirishni bekor qiladi (faqat SUPER_ADMIN)
         assign: (id: string, salesAgentId: string | null) =>
             fetchJson<{ success: boolean }>(`/admin/demo-requests/${id}/assign`, {
