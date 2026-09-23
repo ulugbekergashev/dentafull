@@ -35,6 +35,7 @@ import { InstallPWAButton } from './components/InstallPWAButton';
 import { BottomNav } from './components/BottomNav';
 import { Logo } from './components/Logo';
 import { BranchSwitcher } from './components/BranchSwitcher';
+import { NotificationBell } from './components/NotificationBell';
 import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } from './services/api';
 import type { CashCloseInput } from './services/api';
 import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone, canSeeAllPatients, canTakePayment } from './utils/accessControl';
@@ -1124,6 +1125,12 @@ const AppContent: React.FC = () => {
     // Moliya — pul ma'lumoti; "Moliyani ko'rsatish" o'chirilgan rol uni ko'rmasligi kerak
     && (nav.id !== 'finance' || showFinanceForRole)
   );
+  // Qo'ng'iroq faqat klinika xodimlarida: SUPER_ADMIN va sotuvchi boshqa
+  // tizimda ishlaydi, ularning klinika lentasi yo'q.
+  const isStaffRole = userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.SALES_AGENT;
+  // Bildirishnoma qatori bosiladigan bo'ladimi — shu rolga ochiq bo'limlar
+  const allowedModuleIds = useMemo(() => visibleNavigation.map(n => n.id), [visibleNavigation]);
+
   const showPatientPhoneForRole = canSeePatientPhone(accessControl, userRole);
   // Ko'rish doirasi: shifokor faqat o'z qabullarini ko'radimi yoki klinikadagi hammasini.
   // Bemorlar ro'yxatini backend o'zi filtrlaydi, kalendar va bosh sahifa esa
@@ -1266,6 +1273,8 @@ const AppContent: React.FC = () => {
             <Sparkles className="w-3.5 h-3.5 opacity-90" />
             DentaAI
           </button>
+          {/* Telefondan ishlaydigan shifokor/resepshn ham qo'ng'iroqni ko'rsin */}
+          {isStaffRole && <NotificationBell allowedModules={allowedModuleIds} />}
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600 dark:text-gray-300">
             {isSidebarOpen ? <X /> : <Menu />}
           </button>
@@ -1526,6 +1535,11 @@ const AppContent: React.FC = () => {
               >
                 {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
+
+              {/* Bildirishnomalar — til tanlagichidan oldin. Xodim kunda
+                  o'nlab marta qaraydigan narsa, shuning uchun ko'z odatlangan
+                  joyda (o'ng burchakda, profil yonida) turadi. */}
+              {isStaffRole && <NotificationBell allowedModules={allowedModuleIds} />}
 
               {/* Language Switcher - Pill Toggle */}
               <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 rounded-full p-0.5 gap-0.5 border border-gray-200 dark:border-gray-600">

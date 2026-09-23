@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult } from '../types';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -1175,6 +1175,34 @@ export const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
+        },
+    },
+    /**
+     * Sarlavhadagi qo'ng'iroq. Kalit so'rovda uzatilmaydi — server uni
+     * tokendan oladi, ya'ni bir xodim boshqasining lentasini so'rab ololmaydi.
+     */
+    notifications: {
+        // Qo'ng'iroq yopiq turganda faqat shu so'raladi: butun ro'yxatni
+        // yarim daqiqada bir tortib yurishning ma'nosi yo'q.
+        getUnreadCount: () => {
+            if (isDemoMode()) return Promise.resolve({ count: 0 });
+            return fetchJson<{ count: number }>('/notifications/unread-count');
+        },
+        getAll: (limit = 50) => {
+            if (isDemoMode()) return Promise.resolve([] as StaffNotification[]);
+            return fetchJson<StaffNotification[]>(`/notifications?limit=${limit}`);
+        },
+        markRead: (id: string) => {
+            if (isDemoMode()) return Promise.resolve({ success: true });
+            return fetchJson<{ success: true }>(`/notifications/${id}/read`, { method: 'POST' });
+        },
+        markAllRead: () => {
+            if (isDemoMode()) return Promise.resolve({ success: true });
+            return fetchJson<{ success: true }>('/notifications/read-all', { method: 'POST' });
+        },
+        clear: () => {
+            if (isDemoMode()) return Promise.resolve({ success: true });
+            return fetchJson<{ success: true }>('/notifications', { method: 'DELETE' });
         },
     },
     diagnoses: {

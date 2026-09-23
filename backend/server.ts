@@ -97,6 +97,7 @@ if (CRON_DISABLED) {
 const { botManager } = require('./botManager');
 const { smsService, normalizeUzPhone } = require('./smsService');
 const dhp = require('./dhp');
+const notif = require('./notifications');
 const cors = require('cors');
 const axios = require('axios');
 const { prisma } = require('./db');
@@ -2002,6 +2003,13 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
             updateData.sentToCashierAt = sentToCashierAt ? new Date(sentToCashierAt) : null;
         }
 
+        // O'zgarishdan oldingi holat: qo'ng'iroq uchun "nima o'zgardi" kerak
+        // (vaqt ko'chdimi, kassaga endi uzatildimi) — yangi qiymatning o'zi buni aytmaydi.
+        const before = await prisma.appointment.findUnique({
+            where: { id: req.params.id },
+            select: { date: true, time: true, sentToCashierAt: true },
+        });
+
         // Update appointment and fetch necessary data for notification
         const appointment = await prisma.appointment.update({
             where: { id: req.params.id },
@@ -2012,6 +2020,32 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
                 }
             }
         });
+
+        // ── Xodim bildirishnomalari ──
+        // Amalni bajargan odamning o'ziga xabar ketmaydi.
+        const actorKey = notif.recipientKeyOf((req as any).user);
+
+        // Kassaga uzatildi / uzatish bekor qilindi
+        if (sentToCashierAt !== undefined && before) {
+            const wasSent = !!before.sentToCashierAt;
+            const isSent = !!appointment.sentToCashierAt;
+            if (isSent && !wasSent) {
+                await notif.paymentToCashier(appointment, actorKey);
+            } else if (!isSent && wasSent) {
+                await notif.paymentToCashierCancelled(appointment.id);
+            }
+        }
+
+        // Qabul vaqti ko'chirildi — shifokor kunini eski jadval bo'yicha rejalashtirmasin
+        if (before && (date !== undefined || time !== undefined)
+            && (appointment.date !== before.date || appointment.time !== before.time)) {
+            await notif.appointmentMoved(appointment, { date: before.date, time: before.time }, actorKey);
+        }
+
+        // Qabul bekor qilindi — vaqt bo'shadi, o'rniga boshqa bemor yozilishi mumkin
+        if (status === 'Cancelled') {
+            await notif.appointmentCancelled(appointment, 'Bekor qilindi', actorKey);
+        }
 
         // Qabul yakunlandi — bemorning ochiq nazorati (bo'lsa) bajarildi
         if (status === 'Completed') {
@@ -2249,6 +2283,27 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 
         // Muolaja (xizmat) davlat platformasiga — avans/balans emas, faqat klinik xizmat
         dhp.enqueueSafe(transaction.clinicId, 'Procedure', transaction.id);
+
+        // ── Xodim bildirishnomalari ──
+        // Kassada yozuv paydo bo'ldi: "kassaga yuborildi" bildirishnomasi endi
+        // bajarilgan ish — o'zi yopiladi. Bemor kassa oldida turganda resepshn
+        // pulni oladi, qo'ng'iroqda esa hech narsa qolmaydi.
+        if (transaction.patientId && transaction.date) {
+            const sent = await prisma.appointment.findMany({
+                where: {
+                    patientId: transaction.patientId,
+                    date: transaction.date,
+                    NOT: { sentToCashierAt: null },
+                },
+                select: { id: true },
+            });
+            for (const a of sent) await notif.paymentToCashierDone(a.id);
+        }
+        // Pul ataylab qarzga yozildi — klinika egasi buni bilishi kerak
+        if (transaction.isDebt) {
+            await notif.debtCreated(transaction, notif.recipientKeyOf(actor));
+        }
+
         res.json(transaction);
     } catch (error) {
         res.status(500).json({ error: 'Failed to create transaction' });
@@ -2293,6 +2348,16 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
                     data: { balance: { increment: adjustment } }
                 }).catch((err: any) => console.error('Failed to adjust patient balance:', err));
             }
+        }
+
+        // ── Xodim bildirishnomalari ──
+        // Qarz endi yozildi (eskisida yo'q edi) — adminga. Qarz to'langanda esa
+        // yozuv o'zi yopiladi: to'langan qarz hech kimdan ish talab qilmaydi.
+        if (transaction.isDebt && !oldTx.isDebt) {
+            await notif.debtCreated(transaction, notif.recipientKeyOf((req as any).user));
+        }
+        if (transaction.status === 'Paid' && oldTx.status !== 'Paid') {
+            await notif.resolve(notif.TYPES.DEBT_CREATED, transaction.id);
         }
 
         // Summa/usul/holat/sana o'zgarsa kassa raqami o'zgaradi — iz qoldiramiz
@@ -3424,6 +3489,17 @@ app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => 
             data: updateData
         });
         await syncLabOrderExpense(order);
+
+        // Ish tayyor bo'ldi — buyurtma bergan shifokor bemorni chaqira oladi.
+        // Texnik statusni o'zi qo'ygani uchun unga xabar ketmaydi.
+        if (updateData.status === 'Ready') {
+            await notif.labOrderReady(order);
+        }
+        // Bemorga topshirildi — qo'ng'iroqdagi ish yopiladi
+        if (updateData.status === 'Delivered' || updateData.status === 'Cancelled') {
+            await notif.resolve(notif.TYPES.LAB_ORDER_READY, order.id);
+        }
+
         res.json(order);
     } catch (error: any) {
         res.status(500).json({ error: error.message || 'Failed to update lab order' });
@@ -3702,6 +3778,75 @@ app.put('/api/recalls/:id', authenticateToken, async (req, res) => {
     } catch (error: any) {
         console.error('Nazorat yangilash xatosi:', error);
         res.status(500).json({ error: 'Failed to update recall' });
+    }
+});
+
+// ─── Xodim bildirishnomalari (sarlavhadagi qo'ng'iroq) ───────────────────────
+//
+// Lenta har xodimniki alohida: kim qaysi yozuvni oladi va qachon o'qilgan
+// bo'lishi ./notifications.ts da hal qilinadi. Bu yerda faqat "kim so'rayapti"
+// tekshiriladi — kalit tokendan olinadi, so'rovdan emas, aks holda bir xodim
+// boshqasining lentasini o'qiy olardi.
+
+// SUPER_ADMIN va sotuvchida klinika lentasi yo'q: ularga bo'sh javob qaytadi,
+// bu xato emas — ular boshqa tizimda ishlaydi.
+
+app.get('/api/notifications', authenticateToken, async (req: any, res: any) => {
+    try {
+        const key = notif.recipientKeyOf(req.user);
+        if (!key) return res.json([]);
+        res.json(await notif.inbox(key, parseInt(req.query.limit) || 50));
+    } catch (error: any) {
+        console.error('Bildirishnomalarni o\'qish xatosi:', error);
+        res.status(500).json({ error: 'Failed to load notifications' });
+    }
+});
+
+/**
+ * Faqat raqam. Qo'ng'iroq yopiq turganda interfeys shuni so'raydi —
+ * butun ro'yxatni har yarim daqiqada tortib yurishning ma'nosi yo'q.
+ */
+app.get('/api/notifications/unread-count', authenticateToken, async (req: any, res: any) => {
+    try {
+        const key = notif.recipientKeyOf(req.user);
+        if (!key) return res.json({ count: 0 });
+        res.json({ count: await notif.unreadCount(key) });
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to count notifications' });
+    }
+});
+
+app.post('/api/notifications/:id/read', authenticateToken, async (req: any, res: any) => {
+    try {
+        const key = notif.recipientKeyOf(req.user);
+        if (!key) return res.json({ success: true });
+        await notif.markRead(key, req.params.id);
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to mark read' });
+    }
+});
+
+app.post('/api/notifications/read-all', authenticateToken, async (req: any, res: any) => {
+    try {
+        const key = notif.recipientKeyOf(req.user);
+        if (!key) return res.json({ success: true });
+        await notif.markAllRead(key);
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to mark all read' });
+    }
+});
+
+/** Tozalash faqat o'z lentasiga ta'sir qiladi. */
+app.delete('/api/notifications', authenticateToken, async (req: any, res: any) => {
+    try {
+        const key = notif.recipientKeyOf(req.user);
+        if (!key) return res.json({ success: true });
+        await notif.clearInbox(key);
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to clear notifications' });
     }
 });
 
@@ -4242,6 +4387,9 @@ const publicLeadRateLimitOk = (key: string): boolean => {
 
 // Lid tushishi bilan klinikaga Telegramda xabar beradi — lid-genda javob tezligi hal qiluvchi.
 const notifyNewLead = async (clinic: any, lead: any) => {
+    // Ilovadagi qo'ng'iroq — Telegramdan oldin: bot ulanmagan klinikada ham
+    // yangi murojaat ko'rinishi kerak.
+    await notif.newLead(lead);
     try {
         if (!clinic.botToken || !clinic.telegramChatId) return;
 
@@ -5553,7 +5701,7 @@ app.post('/api/facebook/webhook', async (req, res) => {
                         }
 
                         // Create Lead in CRM
-                        await prisma.lead.create({
+                        const fbLead = await prisma.lead.create({
                             data: {
                                 name: fieldData.full_name || 'Facebook User',
                                 phone: fieldData.phone_number || 'N/A',
@@ -5564,6 +5712,8 @@ app.post('/api/facebook/webhook', async (req, res) => {
                                 status: 'New'
                             }
                         });
+                        // Facebookdan kelgan lidni hech kim kutmaydi — qo'ng'iroq aytadi
+                        await notif.newLead(fbLead);
 
                         console.log(`✅ FB Lead saved: ${fieldData.full_name}`);
                     } catch (err: any) {
@@ -5752,6 +5902,17 @@ app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
                     inventoryItemId: itemId,
                 }
             }).catch((err: any) => console.error('Inventory expense error:', err));
+        }
+
+        // Ombor ogohlantirishi. Yozuv muammo turgan vaqtgacha yashaydi: zaxira
+        // to'ldirilsa o'zi o'chadi va keyingi safar tugaganda yana keladi.
+        // Shuning uchun bu yerda "har safar xabar" emas, "holat" boshqariladi.
+        if (updatedItem.minQuantity > 0) {
+            if (updatedItem.quantity <= updatedItem.minQuantity) {
+                await notif.lowStock(updatedItem);
+            } else {
+                await notif.stockRestored(updatedItem.id);
+            }
         }
 
         res.json(updatedItem);
@@ -6077,6 +6238,123 @@ cron.schedule('0 8 * * *', () => {
 }, {
     timezone: "Asia/Tashkent"
 });
+
+// ─── Qo'ng'iroqqa tushadigan kunlik tekshiruvlar ─────────────────────────────
+//
+// Bu yerdagi uchta hodisa hech qanday tugmadan kelib chiqmaydi: ular vaqt
+// o'tgani uchun paydo bo'ladi. Shuning uchun ularni faqat cron topa oladi.
+
+/**
+ * Kassaga yozilmay qolgan qabullar.
+ *
+ * Kun davomida bu normal holat — bemor hali kursida. Muammo kun tugaganda
+ * paydo bo'ladi, shuning uchun kuniga bir marta, ish tugagach tekshiriladi.
+ * Hisob Dashboarddagi "Olinmagan pul" bilan bir xil mantiqda: qabul tugagan,
+ * kassada yozuvi yo'q va shifokor uni kassaga ham uzatmagan.
+ */
+async function notifyUncollectedMoney(date: string) {
+    try {
+        const clinics = await prisma.clinic.findMany({
+            where: { status: 'Active' },
+            select: { id: true },
+        });
+        for (const clinic of clinics) {
+            const appts = await prisma.appointment.findMany({
+                where: {
+                    clinicId: clinic.id,
+                    date,
+                    status: { in: ['Completed', 'Checked-In'] },
+                    sentToCashierAt: null,
+                },
+                select: { doctorId: true, patientId: true, patientName: true },
+            });
+            if (!appts.length) continue;
+
+            // Kassada yozuvi bor qabul bu ro'yxatga kirmaydi — statusi qanday
+            // bo'lishidan qat'i nazar: yozuv bor ekan, pul ko'rinib turibdi.
+            const txs = await prisma.transaction.findMany({
+                where: { clinicId: clinic.id, date },
+                select: { patientId: true, patientName: true },
+            });
+            const recordedIds = new Set(txs.map((t: any) => t.patientId).filter(Boolean));
+            const recordedNames = new Set(txs.map((t: any) => t.patientName));
+
+            const byDoctor = new Map<string, string[]>();
+            for (const a of appts) {
+                if (a.patientId && recordedIds.has(a.patientId)) continue;
+                if (!a.patientId && recordedNames.has(a.patientName)) continue;
+                const key = a.doctorId || '';
+                byDoctor.set(key, [...(byDoctor.get(key) || []), a.patientName]);
+            }
+            for (const [doctorId, names] of byDoctor) {
+                await notif.moneyUncollected({ clinicId: clinic.id, date, doctorId: doctorId || null, names });
+            }
+        }
+    } catch (e: any) {
+        console.error('[notif] olinmagan pul tekshiruvi:', e?.message || e);
+    }
+}
+
+/** Muddati kelgan nazoratlar — resepshn bugun qo'ng'iroq qilishi kerak. */
+async function notifyRecallsDue(date: string) {
+    try {
+        const due = await prisma.recall.findMany({
+            where: { dueDate: { lte: date }, status: { in: ['planned', 'reminded'] } },
+            include: { patient: { select: { firstName: true, lastName: true } } },
+            take: 300,
+        });
+        for (const r of due as any[]) {
+            await notif.recallDue({
+                id: r.id,
+                clinicId: r.clinicId,
+                patientId: r.patientId,
+                patientName: r.patient ? `${r.patient.lastName} ${r.patient.firstName}` : 'Bemor',
+                dueDate: r.dueDate,
+                reason: r.reason,
+            });
+        }
+    } catch (e: any) {
+        console.error('[notif] nazorat tekshiruvi:', e?.message || e);
+    }
+}
+
+/**
+ * Obuna muddati. refId da tugash sanasi bor: muddat uzaytirilsa yangi sana
+ * uchun yangi xabar keladi, uzaytirilmasa kuniga takror yozilmaydi.
+ */
+async function notifySubscriptionExpiry(date: string) {
+    try {
+        const soon = new Date(date);
+        soon.setDate(soon.getDate() + 7);
+        const limit = soon.toISOString().slice(0, 10);
+        const clinics = await prisma.clinic.findMany({
+            where: { status: 'Active', expiryDate: { lte: limit } },
+            select: { id: true, expiryDate: true },
+        });
+        for (const c of clinics) {
+            const daysLeft = Math.round(
+                (new Date(c.expiryDate).getTime() - new Date(date).getTime()) / (24 * 60 * 60 * 1000)
+            );
+            await notif.subscriptionExpiring({ id: c.id, expiryDate: c.expiryDate, daysLeft });
+        }
+    } catch (e: any) {
+        console.error('[notif] obuna tekshiruvi:', e?.message || e);
+    }
+}
+
+// Ertalab 9:00 — kun boshlanishida nima qilish kerakligi ko'rinib tursin.
+cron.schedule('0 9 * * *', () => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' });
+    notifyRecallsDue(today);
+    notifySubscriptionExpiry(today);
+    notif.prune();
+}, { timezone: 'Asia/Tashkent' });
+
+// Kechqurun 20:00 — ish tugagach, lekin odamlar hali ishdaligida.
+cron.schedule('0 20 * * *', () => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' });
+    notifyUncollectedMoney(today);
+}, { timezone: 'Asia/Tashkent' });
 
 
 /**

@@ -1,6 +1,7 @@
 import { Telegraf } from 'telegraf';
 import { message } from 'telegraf/filters';
 import { prisma } from './db';
+import * as notif from './notifications';
 
 class BotManager {
     private bots: Map<string, Telegraf> = new Map(); // token -> Telegraf
@@ -673,6 +674,9 @@ class BotManager {
                         }
                     });
 
+                    // Bemor o'zi yozildi — jadvalda kutilmagan odam paydo bo'lmasin
+                    await notif.botAppointment(newAppointment);
+
                     if (prepaymentEnabled && prepaymentCard && prepaymentAmount > 0) {
                         this.pendingPayments.set(chatId, { appointmentId: newAppointment.id, clinicId: patient.clinicId });
                         await ctx.editMessageText(
@@ -814,6 +818,8 @@ class BotManager {
                         data: { status: 'Cancelled', notes: 'To\'lov rad etildi' },
                         include: { patient: true, doctor: true }
                     });
+                    // Vaqt bo'shadi — resepshn o'rniga boshqa bemorni yozishi mumkin
+                    await notif.appointmentCancelled(appointment, 'To\'lov rad etildi');
                     await ctx.editMessageCaption(
                         `❌ *RAD ETILDI*\n\n` +
                         `👤 Bemor: ${appointment.patient.firstName} ${appointment.patient.lastName}\n` +
@@ -843,7 +849,7 @@ class BotManager {
                 if (!ctx.chat) return;
 
                 try {
-                    await prisma.review.upsert({
+                    const review = await prisma.review.upsert({
                         where: { appointmentId: appointmentId },
                         update: { rating: rating },
                         create: {
@@ -851,6 +857,23 @@ class BotManager {
                             rating: rating
                         }
                     });
+
+                    // Baho qo'ng'iroqqa tushadi. Past baho shifokorga ham boradi:
+                    // bemor hali ketmagan bo'lsa, tuzatish imkoni qoladi.
+                    const rated = await prisma.appointment.findUnique({
+                        where: { id: appointmentId },
+                        select: { clinicId: true, patientName: true, doctorId: true },
+                    });
+                    if (rated) {
+                        await notif.newReview({
+                            id: review.id,
+                            clinicId: rated.clinicId,
+                            patientName: rated.patientName,
+                            rating,
+                            comment: review.comment,
+                            doctorId: rated.doctorId,
+                        });
+                    }
 
                     const stars = "⭐".repeat(rating);
                     await ctx.editMessageText(`✅ Bahoingiz uchun rahmat!\n\nSiz bizni ${rating} ball (${stars}) bilan baholadingiz. Kelajakda xizmatlarimizni yanada yaxshilashda davom etamiz.`);

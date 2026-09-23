@@ -741,6 +741,18 @@ export interface Recall {
   patient?: { id: string; firstName: string; lastName: string; phone: string; doctorId?: string | null };
 }
 
+// Sarlavhadagi qo'ng'iroqdagi bitta yozuv. Lenta har xodimniki alohida —
+// serverda kim nimani oladi backend/notifications.ts da hal qilinadi.
+export interface StaffNotification {
+  id: string;
+  type: string;               // 'payment_to_cashier', 'lab_order_ready', ...
+  title: string;
+  body?: string | null;
+  link?: string | null;       // '/finance', '/patients/<id>'
+  read: boolean;
+  createdAt: string;
+}
+
 // Tashqi lid manbalari (yuboraman.uz va h.k.) uchun integratsiya ma'lumotlari.
 export interface LeadApiKeyInfo {
   apiKey: string | null;
