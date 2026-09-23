@@ -578,19 +578,21 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    const openSchedule = (lead: any | null, day?: string) => {
       setScheduleLeadId(lead?.id || '');
       setScheduleNote(lead?.callbackNote || '');
+      let initial: Date;
       if (lead?.callbackAt) {
-         setScheduleAt(toLocalInputValue(new Date(lead.callbackAt)));
+         initial = new Date(lead.callbackAt);
       } else {
          // Standart: tanlangan kun soat 10:00, bugun bo'lsa — keyingi to'liq soat
-         const base = day ? new Date(`${day}T10:00`) : new Date();
+         initial = day ? new Date(`${day}T10:00`) : new Date();
          if (!day || day === shiftDay(0)) {
             const next = new Date();
             next.setMinutes(0, 0, 0);
             next.setHours(next.getHours() + 1);
-            if (!day || next > base) base.setTime(next.getTime());
+            if (!day || next > initial) initial = next;
          }
-         setScheduleAt(toLocalInputValue(base));
       }
+      setScheduleAt(toLocalInputValue(initial));
+      setPickMonth(new Date(initial.getFullYear(), initial.getMonth(), 1));
       setScheduleOpen(true);
    };
 
@@ -672,15 +674,75 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    });
 
    // Oy to'ri dushanbadan boshlanadi; oldingi/keyingi oy kunlari bo'sh katak
-   const calCells: (string | null)[] = (() => {
-      const first = calMonth;
+   const monthCells = (first: Date): (string | null)[] => {
       const lead = (first.getDay() + 6) % 7;
       const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
       const cells: (string | null)[] = Array(lead).fill(null);
       for (let d = 1; d <= daysInMonth; d++) cells.push(localDayKey(new Date(first.getFullYear(), first.getMonth(), d)));
       while (cells.length % 7) cells.push(null);
       return cells;
-   })();
+   };
+
+   const renderMonthGrid = (
+      month: Date,
+      setMonth: (fn: (m: Date) => Date) => void,
+      selectedKey: string,
+      onPick: (key: string) => void,
+      opts: { disablePast?: boolean } = {}
+   ) => {
+      const todayKey = shiftDay(0);
+      return (
+         <div>
+            <div className="flex items-center justify-between mb-2">
+               <button type="button" onClick={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500" aria-label="Oldingi oy">
+                  <ChevronLeft className="w-5 h-5" />
+               </button>
+               <p className="font-bold text-gray-900 dark:text-white">{UZ_MONTHS_FULL[month.getMonth()]} {month.getFullYear()}</p>
+               <button type="button" onClick={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500" aria-label="Keyingi oy">
+                  <ChevronRight className="w-5 h-5" />
+               </button>
+            </div>
+            <div className="grid grid-cols-7 gap-1 text-center">
+               {UZ_WEEKDAYS.map(w => <div key={w} className="text-[11px] font-semibold text-gray-400 py-1">{w}</div>)}
+               {monthCells(month).map((key, i) => {
+                  if (!key) return <div key={`e${i}`} />;
+                  const calls = callsByDay[key] || [];
+                  const hasOverdue = calls.some(isOverdue);
+                  const selected = key === selectedKey;
+                  const isToday = key === todayKey;
+                  const disabled = !!opts.disablePast && key < todayKey;
+                  return (
+                     <button
+                        type="button"
+                        key={key}
+                        disabled={disabled}
+                        onClick={() => onPick(key)}
+                        className={`relative aspect-square rounded-lg text-sm flex flex-col items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${selected
+                           ? 'bg-indigo-600 text-white'
+                           : isToday
+                              ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-bold'
+                              : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                     >
+                        {Number(key.slice(8))}
+                        {calls.length > 0 && (
+                           <span className={`mt-0.5 min-w-[18px] px-1 rounded-full text-[10px] font-bold leading-4 ${selected
+                              ? 'bg-white text-indigo-700'
+                              : hasOverdue ? 'bg-red-500 text-white' : 'bg-indigo-500 text-white'}`}>
+                              {calls.length}
+                           </span>
+                        )}
+                     </button>
+                  );
+               })}
+            </div>
+         </div>
+      );
+   };
+
+   // Oynadagi kalendar: ko'rinayotgan oy
+   const [pickMonth, setPickMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+   const TIME_SLOTS: string[] = [];
+   for (let h = 9; h <= 20; h++) { TIME_SLOTS.push(`${String(h).padStart(2, '0')}:00`); TIME_SLOTS.push(`${String(h).padStart(2, '0')}:30`); }
 
    const renderCallRow = (r: any, onAfterAction?: () => void) => {
       const d = new Date(r.callbackAt);
@@ -1915,45 +1977,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
                   <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_1fr] gap-4">
                      <Card className="p-4">
-                        <div className="flex items-center justify-between mb-3">
-                           <button onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500" aria-label="Oldingi oy">
-                              <ChevronLeft className="w-5 h-5" />
-                           </button>
-                           <p className="font-bold text-gray-900 dark:text-white">{UZ_MONTHS_FULL[calMonth.getMonth()]} {calMonth.getFullYear()}</p>
-                           <button onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500" aria-label="Keyingi oy">
-                              <ChevronRight className="w-5 h-5" />
-                           </button>
-                        </div>
-                        <div className="grid grid-cols-7 gap-1 text-center">
-                           {UZ_WEEKDAYS.map(w => <div key={w} className="text-[11px] font-semibold text-gray-400 py-1">{w}</div>)}
-                           {calCells.map((key, i) => {
-                              if (!key) return <div key={`e${i}`} />;
-                              const calls = callsByDay[key] || [];
-                              const hasOverdue = calls.some(isOverdue);
-                              const selected = key === calDay;
-                              const isToday = key === todayKey;
-                              return (
-                                 <button
-                                    key={key}
-                                    onClick={() => setCalDay(key)}
-                                    className={`relative aspect-square rounded-lg text-sm flex flex-col items-center justify-center transition-colors ${selected
-                                       ? 'bg-indigo-600 text-white'
-                                       : isToday
-                                          ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-bold'
-                                          : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                                 >
-                                    {Number(key.slice(8))}
-                                    {calls.length > 0 && (
-                                       <span className={`mt-0.5 min-w-[18px] px-1 rounded-full text-[10px] font-bold leading-4 ${selected
-                                          ? 'bg-white text-indigo-700'
-                                          : hasOverdue ? 'bg-red-500 text-white' : 'bg-indigo-500 text-white'}`}>
-                                          {calls.length}
-                                       </span>
-                                    )}
-                                 </button>
-                              );
-                           })}
-                        </div>
+                        {renderMonthGrid(calMonth, setCalMonth, calDay, setCalDay)}
                         <button
                            onClick={() => { const d = new Date(); setCalMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setCalDay(todayKey); }}
                            className="mt-3 w-full text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
@@ -2278,7 +2302,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          </Modal>
 
          {/* Qayta qo'ng'iroqni rejalashtirish */}
-         <Modal isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Qo'ng'iroqni rejalashtirish">
+         <Modal isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Qo'ng'iroqni rejalashtirish" className="max-w-xl">
             {(() => {
                const lead = demoRequests.find((r: any) => r.id === scheduleLeadId);
                const pickable = demoRequests.filter((r: any) => leadStage(r) !== 'Inbox');
@@ -2303,22 +2327,79 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            ))}
                         </select>
                      </div>
+                     {(() => {
+                        const pickDay = scheduleAt.slice(0, 10);
+                        const pickTime = scheduleAt.slice(11, 16);
+                        const nowMs = Date.now();
+                        // Shu kunda boshqa lidlarga band qilingan vaqtlar
+                        const busy: Record<string, string> = {};
+                        (callsByDay[pickDay] || []).forEach((r: any) => {
+                           if (r.id === scheduleLeadId) return;
+                           const d = new Date(r.callbackAt);
+                           busy[`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`] = r.name;
+                        });
+                        const pickedDate = new Date(`${pickDay}T00:00`);
+                        return (
+                           <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Kun</label>
+                              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                                 {renderMonthGrid(pickMonth, setPickMonth, pickDay, key => setScheduleAt(`${key}T${pickTime || '10:00'}`), { disablePast: true })}
+                              </div>
+
+                              <div className="flex items-center justify-between mt-4 mb-2">
+                                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Vaqt{!isNaN(pickedDate.getTime()) && <span className="font-normal text-gray-400"> · {pickedDate.getDate()}-{UZ_MONTHS_FULL[pickedDate.getMonth()].toLowerCase()}</span>}
+                                 </label>
+                                 <input
+                                    type="time"
+                                    value={pickTime}
+                                    onChange={e => e.target.value && setScheduleAt(`${pickDay}T${e.target.value}`)}
+                                    className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1 text-sm text-gray-900 dark:text-white"
+                                    aria-label="Boshqa vaqt"
+                                 />
+                              </div>
+                              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+                                 {TIME_SLOTS.map(slot => {
+                                    const past = new Date(`${pickDay}T${slot}`).getTime() <= nowMs;
+                                    const selected = slot === pickTime;
+                                    const busyBy = busy[slot];
+                                    return (
+                                       <button
+                                          key={slot}
+                                          type="button"
+                                          disabled={past}
+                                          onClick={() => setScheduleAt(`${pickDay}T${slot}`)}
+                                          title={busyBy ? `Band: ${busyBy}` : undefined}
+                                          className={`py-1.5 rounded-lg text-xs font-semibold tabular-nums transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${selected
+                                             ? 'bg-indigo-600 text-white'
+                                             : busyBy
+                                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-900/40'}`}
+                                       >
+                                          {slot}
+                                       </button>
+                                    );
+                                 })}
+                              </div>
+                              {Object.keys(busy).length > 0 && (
+                                 <p className="text-[11px] text-gray-400 mt-1.5">Sariq — bu vaqtda boshqa lidga qo'ng'iroq belgilangan</p>
+                              )}
+                           </div>
+                        );
+                     })()}
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sana va vaqt</label>
-                        <input
-                           type="datetime-local"
-                           value={scheduleAt}
-                           onChange={e => setScheduleAt(e.target.value)}
-                           className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-white"
-                        />
-                        <div className="flex flex-wrap gap-1.5 mt-2">
+                        <div className="flex flex-wrap gap-1.5">
                            {[
                               { label: '1 soatdan keyin', make: () => { const d = new Date(); d.setHours(d.getHours() + 1); return d; } },
                               { label: 'Ertaga 10:00', make: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); return d; } },
                               { label: 'Ertaga 15:00', make: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(15, 0, 0, 0); return d; } },
                               { label: '3 kundan keyin', make: () => { const d = new Date(); d.setDate(d.getDate() + 3); d.setHours(10, 0, 0, 0); return d; } },
                            ].map(p => (
-                              <button key={p.label} type="button" onClick={() => setScheduleAt(toLocalInputValue(p.make()))}
+                              <button key={p.label} type="button" onClick={() => {
+                                 const d = p.make();
+                                 setScheduleAt(toLocalInputValue(d));
+                                 setPickMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+                              }}
                                  className="px-2.5 py-1 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-indigo-50 hover:text-indigo-700 dark:hover:bg-indigo-900/40">
                                  {p.label}
                               </button>
