@@ -176,7 +176,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     () => (isDoctor ? unpaidRows.filter(r => r.source === 'appointment' && !r.sentToCashier) : unpaidRows),
     [unpaidRows, isDoctor]);
 
-  const unpaidSum = useMemo(() => unpaidTotal(visibleUnpaid), [visibleUnpaid]);
+  /**
+   * Qarzlar alohida kartada. Ikkalasi ham bitta ro'yxatdan kelgani uchun
+   * bir pul ikkala kartaga tushmaydi: qabul kassada yozilgan bo'lsa, uni
+   * faqat kassa yozuvi ifodalaydi.
+   */
+  const debtRows = useMemo(() => visibleUnpaid.filter(r => r.isDebt), [visibleUnpaid]);
+  const awaitingRows = useMemo(() => visibleUnpaid.filter(r => !r.isDebt), [visibleUnpaid]);
+  const debtSum = useMemo(() => unpaidTotal(debtRows), [debtRows]);
+  const awaitingSum = useMemo(() => unpaidTotal(awaitingRows), [awaitingRows]);
   // Qatorda "Kassaga yuborish" chiqadimi — faqat kassada yozuvi yo'q qabullarda
   const canSendToCashier = !!onUpdateAppointment;
   // Moliyani ko'rmaydigan xodim summani ham, "To'lovni olish" ni ham ko'rmaydi —
@@ -281,6 +289,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     } finally {
       setSendingToCashier(null);
     }
+  };
+
+  /**
+   * Ro'yxatdagi bitta qator. Ikkala karta ham shu ko'rinishdan foydalanadi:
+   * chapda ism va tafsilot, o'ngda summa bilan tugmalar.
+   */
+  const renderUnpaidRow = (row: UnpaidRow) => {
+    const patient = patients.find(p => p.id === row.patientId)
+      || patients.find(p => `${p.lastName} ${p.firstName}` === row.patientName);
+    // Kassaga uzatish faqat shifokorga ma'noli: u shifokorning o'z ro'yxatini
+    // bo'shatadi. Admin va resepshn butun ro'yxatni ko'radi, ularda bu tugma
+    // bosilsa ham qator joyida qolardi — ya'ni behuda edi.
+    const showSend = isDoctor && row.source === 'appointment' && canSendToCashier;
+    return (
+      <div key={row.key} className="flex items-center gap-3 py-3">
+        <div className="min-w-0 flex-1">
+          <button
+            onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
+            className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+          >
+            {row.patientName}
+          </button>
+          <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${row.isDebt ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+            <span className="truncate">{row.date} · {row.service}</span>
+          </p>
+        </div>
+        {showFinance && (
+          <span className={`text-sm font-bold tabular-nums whitespace-nowrap ${row.isDebt ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
+            {row.amount > 0 ? row.amount.toLocaleString() : '—'}
+          </span>
+        )}
+        {canCollect && (onUpdateTransaction || onAddTransaction) && (
+          <button
+            onClick={() => openPaymentForRow(row)}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
+          >
+            <CreditCard className="w-3.5 h-3.5" /> {t('dashboard.unpaidTake')}
+          </button>
+        )}
+        {showSend && (
+          <button
+            onClick={() => sendRowToCashier(row)}
+            disabled={sendingToCashier === row.key}
+            className="flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 hover:border-primary-400 text-gray-600 dark:text-gray-300 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+          >
+            <Send className="w-3.5 h-3.5" /> {t('dashboard.unpaidSend')}
+          </button>
+        )}
+      </div>
+    );
   };
 
   // AI tab uchun stats obyekti
@@ -625,11 +684,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           )}
 
           {/*
-            Olinmagan pul — yagona ro'yxat. Qarzga yozilgan to'lovlar ham, kassaga
-            umuman yozilmagan qabullar ham shu yerda: klinika uchun ikkalasi bitta
-            narsa — pul kelmagan. Manba faqat qator yonidagi belgi bilan farqlanadi.
+            Ikkita alohida karta. Ro'yxat bitta manbadan quriladi
+            (buildUnpaidRows dublikatni yo'qotadi), keyin qarz belgisi bo'yicha
+            ikkiga bo'linadi — shunda bir pul ikkala kartada ko'rinmaydi.
           */}
-          {visibleUnpaid.length > 0 && (
+          {debtRows.length > 0 && (
+            <Card className="p-6 rounded-[2rem] border border-red-200 dark:border-red-800/50">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                    {t('dashboard.debtsTitleA')} <span className="text-red-500">{t('dashboard.debtsTitleB')}</span>
+                  </h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                    {t('dashboard.debtsDesc')}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  {showFinance && debtSum > 0 && (
+                    <span className="px-3 py-1 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-black rounded-full whitespace-nowrap">
+                      {debtSum.toLocaleString()} UZS
+                    </span>
+                  )}
+                  <span className="text-[10px] font-bold text-gray-400">{debtRows.length} {t('dashboard.count')}</span>
+                </div>
+              </div>
+
+              <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
+                {debtRows.slice(0, DASH_ROW_LIMIT).map(renderUnpaidRow)}
+              </div>
+
+              {debtRows.length > DASH_ROW_LIMIT && (
+                <button
+                  onClick={() => navigate('/finance')}
+                  className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
+                >
+                  {t('dashboard.moreAll')} {debtRows.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </Card>
+          )}
+
+          {/* To'lovi olinmagan qabullar — kassada qarz sifatida yozilmagan pul */}
+          {awaitingRows.length > 0 && (
             <Card className="p-6 rounded-[2rem] border border-amber-200 dark:border-amber-800/50">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="min-w-0">
@@ -641,78 +737,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                  {showFinance && unpaidSum > 0 && (
+                  {showFinance && awaitingSum > 0 && (
                     <span className="px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-black rounded-full whitespace-nowrap">
-                      {unpaidSum.toLocaleString()} UZS
+                      {awaitingSum.toLocaleString()} UZS
                     </span>
                   )}
-                  <span className="text-[10px] font-bold text-gray-400">{visibleUnpaid.length} {t('dashboard.count')}</span>
+                  <span className="text-[10px] font-bold text-gray-400">{awaitingRows.length} {t('dashboard.count')}</span>
                 </div>
               </div>
 
               <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
-                {visibleUnpaid.slice(0, DASH_ROW_LIMIT).map(row => {
-                  const patient = patients.find(p => p.id === row.patientId)
-                    || patients.find(p => `${p.lastName} ${p.firstName}` === row.patientName);
-                  // Kassaga uzatish faqat shifokorga ma'noli: u shifokorning o'z
-                  // ro'yxatini bo'shatadi. Admin va resepshn butun ro'yxatni ko'radi,
-                  // ularda bu tugma bosilsa ham qator joyida qolardi — ya'ni behuda edi.
-                  const showSend = isDoctor && row.source === 'appointment' && canSendToCashier;
-                  // Shifokor kassaga yuborgan-yubormagani kassa uchun ahamiyatsiz —
-                  // ikkalasida ham pul kelmagan. "Yuborish" faqat shifokorning
-                  // ro'yxatini bo'shatadi, bu yerda esa yagona holat ko'rinadi.
-                  // "Qarz" faqat pul ataylab qarzga yozilgan qatorda. Kassada shunchaki
-                  // to'lanmagan yozuv turgani qarz degani emas — u "kutilmoqda".
-                  const dotClass = row.isDebt ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600';
-                  const tag = row.isDebt ? t('dashboard.unpaidTagDebt') : t('dashboard.unpaidTagPending');
-                  return (
-                    // Bitta qator: ism va tafsilot chapda, summa bilan tugmalar o'ngda.
-                    <div key={row.key} className="flex items-center gap-3 py-3">
-                      <div className="min-w-0 flex-1">
-                        <button
-                          onClick={() => patient && onPatientClick && onPatientClick(patient.id)}
-                          className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
-                        >
-                          {row.patientName}
-                        </button>
-                        <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
-                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotClass}`} />
-                          <span className="truncate">{tag} · {row.date} · {row.service}</span>
-                        </p>
-                      </div>
-                      {showFinance && (
-                        <span className={`text-sm font-bold tabular-nums whitespace-nowrap ${row.isDebt ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
-                          {row.amount > 0 ? row.amount.toLocaleString() : '—'}
-                        </span>
-                      )}
-                      {canCollect && (onUpdateTransaction || onAddTransaction) && (
-                        <button
-                          onClick={() => openPaymentForRow(row)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 bg-success hover:bg-success-700 text-white text-[11px] font-bold rounded-lg transition-colors flex-shrink-0"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" /> {t('dashboard.unpaidTake')}
-                        </button>
-                      )}
-                      {showSend && (
-                        <button
-                          onClick={() => sendRowToCashier(row)}
-                          disabled={sendingToCashier === row.key}
-                          className="flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 hover:border-primary-400 text-gray-600 dark:text-gray-300 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
-                        >
-                          <Send className="w-3.5 h-3.5" /> {t('dashboard.unpaidSend')}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                {awaitingRows.slice(0, DASH_ROW_LIMIT).map(renderUnpaidRow)}
               </div>
 
-              {visibleUnpaid.length > DASH_ROW_LIMIT && (
+              {awaitingRows.length > DASH_ROW_LIMIT && (
                 <button
                   onClick={() => navigate('/finance')}
                   className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
                 >
-                  {t('dashboard.moreAll')} {visibleUnpaid.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
+                  {t('dashboard.moreAll')} {awaitingRows.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               )}
             </Card>
