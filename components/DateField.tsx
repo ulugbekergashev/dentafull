@@ -209,8 +209,10 @@ interface DateFieldProps {
  * Sana maydoni: 23.09.2026 ko'rinishida yoziladi yoki oylik kalendardan tanlanadi.
  * Qiymat tashqarida odatdagidek "YYYY-MM-DD" bo'lib qoladi.
  */
-export const DateField: React.FC<DateFieldProps> = ({ value, onChange, label, counts, min, max, required, className = 'w-full', helperText }) => {
+export const DateField: React.FC<DateFieldProps> = ({ value: rawValue, onChange, label, counts, min, max, required, className = 'w-full', helperText }) => {
     const { t } = useLanguage();
+    // Qiymat matn bo'lmasa (masalan xato bilan hodisa obyekti kelsa) sahifa yiqilmasin
+    const value = typeof rawValue === 'string' ? rawValue : '';
     const anchorRef = useRef<HTMLDivElement>(null);
     const [open, setOpen] = useState(false);
     const [text, setText] = useState(formatDobDDMMYYYY(value));

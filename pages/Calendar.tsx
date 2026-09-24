@@ -113,7 +113,8 @@ export const Calendar: React.FC<CalendarProps> = ({
       doctorId: initialDoctorId || (userRole === UserRole.DOCTOR && doctorId ? doctorId : '') || (doctors.length > 0 ? doctors[0].id : ''),
       type: '',
       categoryId: '',
-      date: initialDate || formatDateToISO(new Date()),
+      // Tugma onClick hodisasini uzatib yuborsa ham sana har doim matn bo'lsin
+      date: typeof initialDate === 'string' && initialDate ? initialDate : formatDateToISO(new Date()),
       time: initialTime || '09:00',
       duration: 60,
       notes: ''
@@ -538,7 +539,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           </div>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          <Button onClick={openAddModal} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>
+          <Button onClick={() => openAddModal()} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>
         </div>
       </div>
 
