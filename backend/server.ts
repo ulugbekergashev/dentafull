@@ -1995,8 +1995,11 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'clinicId is required' });
         }
 
+        // Ixtiyoriy: faqat bir kun (bosh sahifadagi navbat har 20 soniyada shu kunni so'raydi).
+        // Noto'g'ri qiymat e'tiborsiz qoladi — eski xatti-harakat (hamma qabullar).
+        const day = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : undefined;
         const appointments = await prisma.appointment.findMany({
-            where: { clinicId: clinicId as string },
+            where: { clinicId: clinicId as string, ...(day ? { date: day } : {}) },
             include: { review: true },
             orderBy: { date: 'asc' }
         });
@@ -2355,8 +2358,11 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'clinicId is required' });
         }
 
+        // Ixtiyoriy: faqat bir kun (bosh sahifa navbatida qabul yakunlanganda so'raladi).
+        // Noto'g'ri qiymat e'tiborsiz qoladi — eski xatti-harakat (hamma yozuvlar).
+        const day = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : undefined;
         const transactions = await prisma.transaction.findMany({
-            where: { clinicId: clinicId as string },
+            where: { clinicId: clinicId as string, ...(day ? { date: day } : {}) },
             orderBy: { date: 'desc' }
         });
         res.json(transactions);

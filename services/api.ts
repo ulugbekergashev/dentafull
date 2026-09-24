@@ -286,6 +286,11 @@ export const api = {
             if (isDemoMode()) return Promise.resolve(DEMO_APPOINTMENTS);
             return fetchJson<Appointment[]>(`/appointments?clinicId=${clinicId}`);
         },
+        // Bir kunlik qabullar — bosh sahifadagi navbatni yangilab turish uchun (yengil so'rov)
+        getByDate: (clinicId: string, date: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_APPOINTMENTS.filter(a => a.date === date));
+            return fetchJson<Appointment[]>(`/appointments?clinicId=${clinicId}&date=${encodeURIComponent(date)}`);
+        },
         create: (data: Omit<Appointment, 'id'>) => {
             if (isDemoMode()) {
                 const newAppt = { ...data, id: `demo-appt-${Date.now()}-${Math.floor(Math.random() * 1000)}` } as Appointment;
@@ -430,6 +435,11 @@ export const api = {
         getAll: (clinicId: string) => {
             if (isDemoMode()) return Promise.resolve(DEMO_TRANSACTIONS);
             return fetchJson<Transaction[]>(`/transactions?clinicId=${clinicId}`);
+        },
+        // Bir kunlik kassa yozuvlari — navbatda qabul yakunlanganda "olinmagan pul" to'g'ri chiqishi uchun
+        getByDate: (clinicId: string, date: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_TRANSACTIONS.filter(t => t.date === date));
+            return fetchJson<Transaction[]>(`/transactions?clinicId=${clinicId}&date=${encodeURIComponent(date)}`);
         },
         create: (data: Omit<Transaction, 'id'>) => {
             if (isDemoMode()) {

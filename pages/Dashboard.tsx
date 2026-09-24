@@ -15,6 +15,8 @@ import { transactionBelongsToDoctor, calculateAppointmentTotal } from '../utils/
 import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from '../utils/unpaid';
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
+import { ArrivalCard } from '../components/ArrivalCard';
+import { DoctorQueueCard } from '../components/DoctorQueueCard';
 import { prefillFromQuery } from '../utils/patientSearch';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -81,6 +83,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const perms = usePerms();
   // Bepul yopish — ruxsatlar jadvalidagi "Pul va to'lovlar" guruhidan
   const canWaive = perms.flag('money', 'waive');
+  // Ish stoli: resepshn "Hozir keldi" dan bemorni shu zahoti navbatga yozadi,
+  // shifokor esa o'z navbatini ko'radi. Qabul yozish ruxsati bo'lmasa karta chiqmaydi.
+  const showArrival = !isDoctor && !!onAddAppointment && perms.can('calendar', 'appts', 'create');
   /** "Bepul deb yopish" oynasi ochilgan qator */
   const [waivingRow, setWaivingRow] = useState<UnpaidRow | null>(null);
   // Shifokor o'z ma'lumotlari bilan cheklanadimi. Ruxsatlar → Ko'rish doirasi
@@ -415,7 +420,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
           {/* Quick Actions — dashboarddan turib bajariladi */}
           <div className="flex items-center gap-2">
-            {perms.menu('patients') && (
+            {/* "Hozir keldi" kartasida o'z qidiruvi bor — ikkinchisi chalg'itadi */}
+            {perms.menu('patients') && !showArrival && (
               <PatientQuickSearch
                 patients={patients}
                 showPhone={showPatientPhone}
@@ -454,6 +460,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
         </div>
       </div>
+
+      {showArrival && onAddAppointment && (
+        <ArrivalCard
+          patients={patients}
+          appointments={appointments}
+          doctors={doctors}
+          showPhone={showPatientPhone}
+          canAddPatient={perms.can('patients', 'card', 'create')}
+          onAddPatient={onAddPatient}
+          onAddAppointment={onAddAppointment}
+          onUpdateAppointment={perms.can('calendar', 'appts', 'edit') ? onUpdateAppointment : undefined}
+          onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+        />
+      )}
+      {isDoctor && doctorId && (
+        <DoctorQueueCard
+          doctorId={doctorId}
+          appointments={appointments}
+          patients={patients}
+          showPhone={showPatientPhone}
+          onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+        />
+      )}
 
       {/* UMUMIY */}
         <div className="space-y-6">

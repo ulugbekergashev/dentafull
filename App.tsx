@@ -1,5 +1,5 @@
 ﻿
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
@@ -41,6 +41,7 @@ import type { CashCloseInput } from './services/api';
 import { makePermChecker } from './utils/permissions';
 import { PermissionsProvider } from './context/PermissionsContext';
 import { formatHeaderDate } from './utils/dateUtils';
+import { useTodaySync } from './hooks/useTodaySync';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { Language } from './i18n/translations';
@@ -390,11 +391,31 @@ const AppContent: React.FC = () => {
           setError('Ma\'lumotlarni yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
         }
       } finally {
+        todaySync.markDataLoaded();
         setIsLoading(false);
       }
     };
     loadData();
   }, [isAuthenticated, clinicId, userRole]);
+
+  // Bosh sahifadagi navbat: bugungi qabullar sahifani yangilamasdan yangilanib turadi
+  const todaySync = useTodaySync({
+    active: isAuthenticated && !isLoading && !error && location.pathname === '/'
+      && (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST || userRole === UserRole.DOCTOR),
+    clinicId,
+    doctorId,
+    isDoctor: userRole === UserRole.DOCTOR,
+    appointments,
+    patients,
+    setAppointments,
+    setTransactions,
+    setPatients,
+    fetchAppointmentsByDate: api.appointments.getByDate,
+    fetchTransactionsByDate: api.transactions.getByDate,
+    fetchPatient: api.patients.getById,
+  });
+  const patientsRef = useRef(patients);
+  patientsRef.current = patients;
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -578,14 +599,18 @@ const AppContent: React.FC = () => {
 
   // Appointment Actions
   const addAppointment = async (appt: Omit<Appointment, 'id'>) => {
+    todaySync.markAppointmentWrite();
     try {
       const newAppt = await api.appointments.create({ ...appt, clinicId });
+      todaySync.markAppointmentWrite();
       setAppointments(prev => {
         const exists = prev.find(a => a.id === newAppt.id);
         if (exists) return prev.map(a => a.id === newAppt.id ? newAppt : a);
         return [...prev, newAppt];
       });
       addToast('success', 'Uchrashuv belgilandi.');
+      // Server shu kungi mavjud qabulga qo'shib yuborishi mumkin — chaqiruvchi buni ko'rsin
+      return newAppt;
     } catch (e: any) {
       addToast('error', e.message || 'Xatolik yuz berdi');
       throw e;
@@ -593,8 +618,10 @@ const AppContent: React.FC = () => {
   };
 
   const updateAppointment = async (id: string, data: Partial<Appointment>) => {
+    todaySync.markAppointmentWrite();
     try {
       const updated = await api.appointments.update(id, data);
+      todaySync.markAppointmentWrite();
       setAppointments(prev => prev.map(a => a.id === id ? updated : a));
       addToast('success', 'Uchrashuv yangilandi.');
     } catch (e: any) {
@@ -604,8 +631,10 @@ const AppContent: React.FC = () => {
   };
 
   const deleteAppointment = async (id: string) => {
+    todaySync.markAppointmentWrite();
     try {
       await api.appointments.delete(id);
+      todaySync.markAppointmentWrite();
       setAppointments(prev => prev.filter(a => a.id !== id));
       addToast('info', 'Uchrashuv bekor qilindi.');
     } catch (e: any) {
@@ -616,8 +645,10 @@ const AppContent: React.FC = () => {
 
   // Transaction Actions
   const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
+    todaySync.markTransactionWrite();
     try {
       const newTx = await api.transactions.create({ ...tx, clinicId });
+      todaySync.markTransactionWrite();
       setTransactions(prev => {
         if (prev.find(t => t.id === newTx.id)) return prev;
         return [newTx, ...prev];
@@ -669,9 +700,11 @@ const AppContent: React.FC = () => {
   };
 
   const deleteTransaction = async (id: string) => {
+    todaySync.markTransactionWrite();
     try {
       const tx = transactions.find(t => t.id === id);
       await api.transactions.delete(id);
+      todaySync.markTransactionWrite();
       setTransactions(prev => prev.filter(t => t.id !== id));
       // Avans/balans to'lovi o'chirilsa bemor hisobini yangilab olamiz
       if (tx?.patientId) {
@@ -714,9 +747,11 @@ const AppContent: React.FC = () => {
   };
 
   const updateTransaction = async (id: string, data: Partial<Transaction>) => {
+    todaySync.markTransactionWrite();
     try {
       console.log('Updating transaction:', id, data);
       const updated = await api.transactions.update(id, { ...data });
+      todaySync.markTransactionWrite();
       setTransactions(prev => prev.map(t => t.id === id ? updated : t));
 
       // If patientId is linked, refetch patient to get updated balance
@@ -1105,6 +1140,22 @@ const AppContent: React.FC = () => {
 
   // --- Navigation ---
   const handlePatientClick = (id: string) => {
+    navigate(`/patients/${id}`);
+  };
+
+  // Navbatdan bemor kartasiga kirish. Bemor ro'yxatda bo'lmasa (shifokor faqat o'z
+  // bemorlarini ko'radi, resepshn esa boshqa shifokorning bemorini unga yozgan) —
+  // avval uni yuklaymiz, aks holda karta "topilmadi" deb ochiladi.
+  const openPatientEnsured = async (id: string) => {
+    if (!patientsRef.current.some(p => p.id === id)) {
+      try {
+        const p = await api.patients.getById(id);
+        setPatients(prev => (prev.some(x => x.id === p.id) ? prev : [p, ...prev]));
+      } catch (e: any) {
+        addToast('error', e?.message || 'Xatolik yuz berdi');
+        return;
+      }
+    }
     navigate(`/patients/${id}`);
   };
 
@@ -1712,7 +1763,7 @@ const AppContent: React.FC = () => {
                     showFinance={showFinanceForRole}
                     canTakePayment={canTakePaymentForRole}
                     seeAllPatients={seeAllPatientsForRole}
-                    onPatientClick={handlePatientClick}
+                    onPatientClick={openPatientEnsured}
                     showPatientPhone={showPatientPhoneForRole}
                     onUpdateAppointment={updateAppointment}
                     onUpdateTransaction={updateTransaction}
