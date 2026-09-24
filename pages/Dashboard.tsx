@@ -5,14 +5,17 @@ import { StatCard } from '../components/StatCard';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
-  Zap, FlaskConical, CreditCard, UserPlus, UserCheck, XCircle, CalendarClock, Bot, Phone, Send
+  Zap, FlaskConical, CreditCard, UserCheck, XCircle, CalendarClock, Bot, Phone, Send, Gift
 } from 'lucide-react';
 import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
 import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { transactionBelongsToDoctor, calculateAppointmentTotal } from '../utils/financialCalculations';
-import { buildUnpaidRows, unpaidTotal, UnpaidRow } from '../utils/unpaid';
+import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from '../utils/unpaid';
+import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
+import { PatientQuickSearch } from '../components/PatientQuickSearch';
+import { prefillFromQuery } from '../utils/patientSearch';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { AddPatientModal } from '../components/AddPatientModal';
@@ -38,7 +41,9 @@ interface DashboardProps {
   onPatientClick?: (id: string) => void;
   onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
   onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
-  onAddPatient?: (data: Omit<Patient, 'id' | 'clinicId'>) => Promise<Patient | void>;
+  onAddPatient?: (data: Omit<Patient, 'id' | 'clinicId'>, options?: { allowDuplicateName?: boolean }) => Promise<Patient | void>;
+  /** Ruxsatlar: bemor telefon raqamini ko'rsatish (qidiruv natijalarida) */
+  showPatientPhone?: boolean;
   onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
   onAddAppointment?: (appt: Omit<Appointment, 'id'>) => Promise<any>;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
@@ -56,10 +61,12 @@ const STAT_GRID_COLS: Record<number, string> = {
   6: 'lg:grid-cols-3 xl:grid-cols-6',
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+  /** Qidiruvdan "Yangi bemor" bosilganda formaga o'tadigan qiymatlar */
+  const [newPatientPrefill, setNewPatientPrefill] = useState<{ firstName?: string; lastName?: string; phone?: string }>({});
   const [isQuickPaymentOpen, setIsQuickPaymentOpen] = useState(false);
   const [payingAppointment, setPayingAppointment] = useState<Appointment | null>(null);
   const [payingDebt, setPayingDebt] = useState<Transaction | null>(null);
@@ -70,6 +77,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // Grafiklar va "jami" kartalar faqat shifokorga. Klinika egasi ularni Moliya →
   // Hisobot da ko'radi (bu yerda takror edi), shifokorda esa Hisobot yo'q.
   const isDoctor = userRole === UserRole.DOCTOR;
+  const isClinicAdmin = userRole === UserRole.CLINIC_ADMIN;
+  /** "Bepul deb yopish" oynasi ochilgan qator */
+  const [waivingRow, setWaivingRow] = useState<UnpaidRow | null>(null);
   // Shifokor o'z ma'lumotlari bilan cheklanadimi. Ruxsatlar → Ko'rish doirasi
   // ochilgan bo'lsa cheklov yo'q — bosh sahifa butun klinikani ko'rsatadi.
   const scopeToMyPatients = isDoctor && !!doctorId && !seeAllPatients;
@@ -329,6 +339,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             <CreditCard className="w-3.5 h-3.5" /> {t('dashboard.unpaidTake')}
           </button>
         )}
+        {isClinicAdmin && onAddTransaction && row.source === 'appointment' && row.appointment && (
+          <button
+            onClick={() => setWaivingRow(row)}
+            title={t('waive.hint')}
+            aria-label={t('waive.action')}
+            className="p-1.5 border border-gray-200 dark:border-gray-700 hover:border-primary-400 text-gray-500 hover:text-primary-600 dark:text-gray-400 rounded-lg transition-colors flex-shrink-0"
+          >
+            <Gift className="w-3.5 h-3.5" />
+          </button>
+        )}
         {showSend && (
           <button
             onClick={() => sendRowToCashier(row)}
@@ -392,13 +412,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
           {/* Quick Actions — dashboarddan turib bajariladi */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => onAddPatient ? setIsAddPatientOpen(true) : navigate('/patients')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              {t('dashboard.quickPatient')}
-            </button>
+            <PatientQuickSearch
+              patients={patients}
+              showPhone={showPatientPhone}
+              onOpen={id => onPatientClick?.(id)}
+              onAddNew={query => {
+                if (!onAddPatient) return navigate('/patients');
+                setNewPatientPrefill(prefillFromQuery(query));
+                setIsAddPatientOpen(true);
+              }}
+            />
             <button
               onClick={() => navigate('/calendar')}
               className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
@@ -1005,6 +1028,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       })()}
         </div>
 
+      {waivingRow?.appointment && onAddTransaction && (
+        <WaiveAppointmentModal
+          isOpen
+          onClose={() => setWaivingRow(null)}
+          patientName={waivingRow.patientName}
+          date={waivingRow.date}
+          amount={waivingRow.amount}
+          onConfirm={async reason => {
+            await onAddTransaction(buildWaivedTransaction(waivingRow.appointment!, services, reason));
+          }}
+        />
+      )}
+
       {/* Tezkor amal modallari */}
       {onAddPatient && (
         <AddPatientModal
@@ -1016,6 +1052,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           doctorId={doctorId}
           compact
           onCreated={(p) => onPatientClick?.(p.id)}
+          patients={patients}
+          onOpenExisting={id => onPatientClick?.(id)}
+          initialValues={newPatientPrefill}
         />
       )}
       {onAddTransaction && (() => {
@@ -1036,6 +1075,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             presetService={payingAppointment?.type}
             presetAmount={presetAmount || undefined}
             presetDate={payingAppointment?.date}
+            canChangeDate={userRole === UserRole.CLINIC_ADMIN}
           />
         );
       })()}

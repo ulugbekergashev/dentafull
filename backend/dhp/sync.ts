@@ -126,6 +126,27 @@ async function completedAppointmentOn(clinicId: string, patientId: string, date:
 
 type LinkRow = { id: string; clinicId: string; resourceType: string; localId: string; remoteId: string | null; versionId: string | null; attempts: number };
 
+/** "(Qisman to'lov)" / "(Qarz)" qo'shimchasisiz xizmat nomi */
+const baseService = (service: string) => (service || '').replace(/\s*\((Qisman to'lov|Qarz)\)\s*$/i, '').trim();
+
+/**
+ * Bitta muolaja kassada bir necha yozuvga bo'linadi: to'lov usullari bo'yicha
+ * (naqd + karta) yoki "(Qisman to'lov)" + "(Qarz)". Platforma uchun u bitta
+ * muolaja — shu bemor, shu kun, shu xizmat bo'yicha eng birinchi yozuvgina ketadi.
+ */
+async function hasEarlierSibling(
+    clinicId: string,
+    tx: { id: string; patientId: string | null; date: string; service: string; createdAt: Date | null },
+): Promise<boolean> {
+    const siblings = await prisma.transaction.findMany({
+        where: { clinicId, patientId: tx.patientId, date: tx.date, NOT: { id: tx.id } },
+        select: { id: true, patientId: true, service: true, type: true, amount: true, createdAt: true },
+    });
+    const order = (t: { id: string; createdAt: Date | null }) => `${t.createdAt ? t.createdAt.toISOString() : ''}|${t.id}`;
+    const base = baseService(tx.service);
+    return siblings.some(s => isClinicalTransaction(s) && baseService(s.service) === base && order(s) < order(tx));
+}
+
 /** Yozuvni bazadan o'qib FHIR resursini quradi. 'skip' — yuboriladigan narsa yo'q. */
 async function buildResource(cfg: ClinicDhp, link: LinkRow): Promise<any | 'skip'> {
     const { clinicId } = cfg.ctx;
@@ -163,6 +184,7 @@ async function buildResource(cfg: ClinicDhp, link: LinkRow): Promise<any | 'skip
         case 'Procedure': {
             const tx = await prisma.transaction.findFirst({ where: { id: link.localId, clinicId } });
             if (!tx || !isClinicalTransaction(tx)) return 'skip';
+            if (await hasEarlierSibling(clinicId, tx)) return 'skip';
             const patientRef = await requireRef(clinicId, 'Patient', tx.patientId!);
             const apptId = await completedAppointmentOn(clinicId, tx.patientId!, tx.date);
             const encounterRef = await optionalRef(clinicId, 'Encounter', apptId);

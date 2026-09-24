@@ -2,8 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { Modal, Button } from './Common';
 import { Patient, Doctor, Transaction, PaymentMethod } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
+import { PaymentPart, balanceUsed, buildPaymentRecords, splitError } from '../utils/paymentSplit';
+import { formatDateToISO } from '../utils/dateUtils';
 import { useLanguage } from '../context/LanguageContext';
 import { tLabel } from '../i18n/labels';
+import { PaymentSplitRows } from './PaymentSplitRows';
+import { DateField } from './DateField';
 import { Plus, Loader2, ChevronDown, X } from 'lucide-react';
 
 /** Bemor profilidagi kabi: id bo'lmasa ham ishlaydi, tanlov nom bo'yicha ketadi */
@@ -29,6 +33,12 @@ interface QuickPaymentModalProps {
     presetService?: string;
     presetAmount?: number;
     presetDate?: string; // Qabul sanasi — isAppointmentPaid shu sana bo'yicha moslashtiradi
+    /**
+     * O'tgan sanaga to'lov yozish (Exceldan ko'chirish, unutilgan to'lov).
+     * Faqat klinika admini uchun — kassir yopilgan kunga orqadan pul yozmasligi kerak.
+     * Qabul to'lovida (presetDate) sana qabulniki bo'lib qoladi, aks holda qabul to'lanmagan ko'rinardi.
+     */
+    canChangeDate?: boolean;
 }
 
 const emptyForm = {
@@ -48,7 +58,7 @@ const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider
  */
 export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
     isOpen, onClose, patients, doctors, services, clinicId, onAddTransaction,
-    presetPatientId, presetDoctorId, presetService, presetAmount, presetDate,
+    presetPatientId, presetDoctorId, presetService, presetAmount, presetDate, canChangeDate = false,
 }) => {
     const { t } = useLanguage();
     const buildPresetForm = () => ({
@@ -68,6 +78,11 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
     /** Tanlangan xizmat nomlari va ularning (o'zgartirilishi mumkin bo'lgan) narxlari */
     const [picked, setPicked] = useState<string[]>([]);
     const [prices, setPrices] = useState<Record<string, string>>({});
+    /** Asosiy usuldan tashqari usullar (bitta to'lovni bo'lish) */
+    const [extras, setExtras] = useState<PaymentPart[]>([]);
+    const todayKey = formatDateToISO(new Date());
+    const [date, setDate] = useState(presetDate || todayKey);
+    const dateEditable = canChangeDate && !presetDate;
 
     React.useEffect(() => {
         if (!isOpen) return;
@@ -77,7 +92,9 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
         setCategoryId('');
         setPicked([]);
         setPrices({});
-    }, [isOpen, presetPatientId, presetDoctorId, presetService, presetAmount]);
+        setExtras([]);
+        setDate(presetDate || formatDateToISO(new Date()));
+    }, [isOpen, presetPatientId, presetDoctorId, presetService, presetAmount, presetDate]);
 
     // Xizmat kategoriyalari ro'yxatning o'zidan olinadi — qo'shimcha prop kerak emas
     const categories = useMemo(() => {
@@ -161,10 +178,12 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
     const grandTotal = paidAmount + debtAmount;
 
     const selectedPatient = patients.find(p => p.id === form.patientId);
+    const patientBalance = selectedPatient?.balance || 0;
+    const splitProblem = splitError(paidAmount, extras, patientBalance);
 
     const handleSave = async () => {
-        if (grandTotal <= 0 || !form.patientId) return;
-        if (form.type === 'Balance' && paidAmount > (selectedPatient?.balance || 0)) {
+        if (grandTotal <= 0 || !form.patientId || splitProblem) return;
+        if (balanceUsed(form.type, paidAmount, extras) > patientBalance) {
             alert(t('patients.details.alerts.insufficientBalance'));
             return;
         }
@@ -172,7 +191,6 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
         try {
             const patient = selectedPatient;
             const doctor = doctors.find(d => d.id === form.doctorId);
-            const date = presetDate || new Date().toISOString().split('T')[0];
             const serviceName = form.service || t("auto.To'lov");
             // Chegirma bazada har doim foiz + summa ko'rinishida saqlanadi
             const discountPercent = discountType === 'percent'
@@ -183,8 +201,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                 : discountVal;
             const common = {
                 patientName: patient ? `${patient.lastName} ${patient.firstName}` : '',
-                date,
-                type: form.type,
+                date: dateEditable ? date : (presetDate || todayKey),
                 clinicId,
                 patientId: form.patientId || undefined,
                 doctorId: form.doctorId || undefined,
@@ -192,23 +209,16 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                 discountPercent,
             };
 
-            if (debtAmount <= 0) {
-                // To'liq to'landi
-                await onAddTransaction({ ...common, amount: grandTotal, service: serviceName, status: 'Paid', discountAmount } as any);
-            } else if (paidAmount <= 0) {
-                // Umuman to'lanmadi — butunlay qarz. `isDebt` shu yerda yoziladi:
-                // ro'yxatlarda "qarz" deb ko'rsatish uchun yagona ishonchli belgi.
-                await onAddTransaction({ ...common, amount: grandTotal, service: serviceName, status: 'Pending', discountAmount, isDebt: true } as any);
-            } else {
-                // Qisman: to'langan qismi va qarz qismi alohida yoziladi
-                await onAddTransaction({
-                    ...common, amount: paidAmount, service: `${serviceName} (Qisman to'lov)`, status: 'Paid',
-                    discountAmount: Math.round(paidAmount * (discountPercent / 100)) || 0,
-                } as any);
-                await onAddTransaction({
-                    ...common, amount: debtAmount, service: `${serviceName} (Qarz)`, status: 'Pending', isDebt: true,
-                    discountAmount: Math.round(debtAmount * (discountPercent / 100)) || 0,
-                } as any);
+            const records = buildPaymentRecords({
+                service: serviceName,
+                primaryMethod: form.type,
+                paidAmount,
+                extras,
+                debtAmount,
+                discountAmount,
+            });
+            for (const record of records) {
+                await onAddTransaction({ ...common, ...record } as any);
             }
             onClose();
         } finally {
@@ -450,15 +460,34 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                     </div>
                     {form.type === 'Balance' && (
                         <p className="mt-1.5 text-xs text-gray-500">
-                            {t("auto.Avansdagi mablag'")}: <strong>{(selectedPatient?.balance || 0).toLocaleString()} UZS</strong>
+                            {t("auto.Avansdagi mablag'")}: <strong>{patientBalance.toLocaleString()} UZS</strong>
                         </p>
                     )}
+                    <PaymentSplitRows
+                        paidAmount={paidAmount}
+                        primaryMethod={form.type}
+                        extras={extras}
+                        onChange={setExtras}
+                        methods={patientBalance > 0 ? [...INCOMING_PAYMENT_METHODS, 'Balance'] : INCOMING_PAYMENT_METHODS}
+                        balance={patientBalance}
+                    />
                 </div>
+
+                {dateEditable && (
+                    <DateField
+                        label={t('payment.date')}
+                        value={date}
+                        onChange={setDate}
+                        max={todayKey}
+                        required
+                        helperText={date !== todayKey ? t('payment.dateHint') : undefined}
+                    />
+                )}
 
                 <div className="flex gap-2 pt-2">
                     <Button variant="secondary" className="flex-1" onClick={onClose}>{t('auto.Bekor')}</Button>
                     <button
-                        disabled={saving || grandTotal <= 0 || !form.patientId}
+                        disabled={saving || grandTotal <= 0 || !form.patientId || !!splitProblem}
                         onClick={handleSave}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-success hover:bg-success-700 disabled:bg-success/50 disabled:cursor-not-allowed transition-all"
                     >

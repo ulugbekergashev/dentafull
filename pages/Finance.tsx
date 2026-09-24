@@ -1143,6 +1143,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
           clinicId={patients[0]?.clinicId || ''}
           onAddTransaction={onAddTransaction}
           presetDoctorId={defaultDoctorId}
+          canChangeDate={userRole === UserRole.CLINIC_ADMIN}
         />
       )}
 

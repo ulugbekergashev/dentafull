@@ -124,6 +124,7 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
                     onPatientClick={onPatientClick}
                     closures={props.closures}
                     canReopen={userRole === UserRole.CLINIC_ADMIN}
+                    canWaive={userRole === UserRole.CLINIC_ADMIN}
                     onCloseDay={props.onCloseDay}
                     onReopenDay={props.onReopenDay}
                     patients={props.patients}

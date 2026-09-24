@@ -6,8 +6,10 @@ import { Search, Plus, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertC
 import { Patient, Doctor, Appointment, Transaction, Clinic, Branch } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { calcAge } from '../utils/dateUtils';
+import { calcAge, formatDateToISO, formatDobDDMMYYYY } from '../utils/dateUtils';
 import { maskPhone } from '../utils/accessControl';
+import { CompletenessFilter, PATIENT_GAP_LABELS, districtName, matchesCompleteness, patientGaps, regionName } from '../utils/patientCompleteness';
+import * as XLSX from 'xlsx';
 
 interface PatientsProps {
   userRole: string;
@@ -61,6 +63,8 @@ export const Patients: React.FC<PatientsProps> = ({
   const [filterBranch, setFilterBranch] = useState('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  /** Kartasi to'liq bo'lmagan bemorlar (tug'ilgan sana / manzil) */
+  const [filterCompleteness, setFilterCompleteness] = useState<CompletenessFilter>('all');
   const [activeStatFilter, setActiveStatFilter] = useState<string | null>(null);
 
   // Form State
@@ -114,6 +118,7 @@ export const Patients: React.FC<PatientsProps> = ({
 
       const matchesDateFrom = !filterDateFrom || p.dob >= filterDateFrom;
       const matchesDateTo = !filterDateTo || p.dob <= filterDateTo;
+      if (!matchesCompleteness(p, filterCompleteness)) return false;
 
       // Stats filters
       let matchesStat = true;
@@ -145,7 +150,14 @@ export const Patients: React.FC<PatientsProps> = ({
 
       return matchesSearch && matchesStatus && matchesGender && matchesDoctor && matchesBranch && matchesDateFrom && matchesDateTo && matchesStat;
     });
-  }, [patients, searchTerm, filterStatus, filterGender, filterDoctor, filterBranch, filterDateFrom, filterDateTo, activeStatFilter, appointments, transactions]);
+  }, [patients, searchTerm, filterStatus, filterGender, filterDoctor, filterBranch, filterDateFrom, filterDateTo, filterCompleteness, activeStatFilter, appointments, transactions]);
+
+  // Filtr ro'yxatida har bir holat yonida soni — hisobot shu yerning o'zida ko'rinadi
+  const completenessCounts = useMemo(() => ({
+    incomplete: patients.filter(p => matchesCompleteness(p, 'incomplete')).length,
+    noDob: patients.filter(p => matchesCompleteness(p, 'noDob')).length,
+    noAddress: patients.filter(p => matchesCompleteness(p, 'noAddress')).length,
+  }), [patients]);
 
   // Stats
   const stats = useMemo(() => {
@@ -187,28 +199,29 @@ export const Patients: React.FC<PatientsProps> = ({
     return doc ? `${doc.lastName} ${doc.firstName}` : null;
   };
 
-  // CSV Export
+  // Excel eksport — joriy filtr bo'yicha. "Yetishmaydi" ustuni ma'lumoti to'liq
+  // bo'lmagan bemorlarni to'ldirib chiqish uchun ro'yxat bo'lib xizmat qiladi.
   const handleExport = () => {
-    const headers = ['ID', 'Familiya', 'Ism', 'Telefon', 'Tug\'ilgan sana', 'Jins', 'Status', 'Shifokor', 'Oxirgi tashrif'];
+    const headers = ['Familiya', 'Ism', 'Telefon', "Tug'ilgan sana", 'Jins', 'Viloyat', 'Tuman', 'Manzil', 'Yetishmaydi', 'Status', 'Shifokor', 'Oxirgi tashrif'];
     const rows = filteredPatients.map((p) => [
-      p.id,
       p.lastName,
       p.firstName,
       showPatientPhone ? p.phone : maskPhone(p.phone),
-      p.dob,
+      formatDobDDMMYYYY(p.dob),
       p.gender === 'Male' ? 'Erkak' : 'Ayol',
+      regionName(p.regionCode),
+      districtName(p.districtCode),
+      p.address || '',
+      patientGaps(p).map(g => PATIENT_GAP_LABELS[g]).join(', '),
       p.status === 'Active' ? 'Faol' : 'Arxiv',
       getPatientDoctorName(p) || t('auto.Biriktirilmagan'),
-      p.lastVisit,
+      p.lastVisit === 'Never' ? '' : formatDobDDMMYYYY(p.lastVisit),
     ]);
-    const csvContent = [headers, ...rows].map((r) => r.join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `bemorlar_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols'] = headers.map((h, i) => ({ wch: Math.min(40, Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length)) + 2) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Bemorlar');
+    XLSX.writeFile(wb, `bemorlar_${formatDateToISO(new Date())}.xlsx`);
   };
 
   // Doctor Assignment
@@ -313,6 +326,7 @@ export const Patients: React.FC<PatientsProps> = ({
     filterBranch !== 'all',
     !!filterDateFrom,
     !!filterDateTo,
+    filterCompleteness !== 'all',
   ].filter(Boolean).length;
 
   return (
@@ -474,6 +488,19 @@ export const Patients: React.FC<PatientsProps> = ({
               </div>
             )}
             <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('patients.completeness.label')}</label>
+              <select
+                value={filterCompleteness}
+                onChange={(e) => setFilterCompleteness(e.target.value as CompletenessFilter)}
+                className="w-full h-9 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent text-sm dark:text-white px-2 focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="all">{t('patients.filter.all')}</option>
+                <option value="incomplete">{t('patients.completeness.incomplete')} ({completenessCounts.incomplete})</option>
+                <option value="noDob">{t('patients.completeness.noDob')} ({completenessCounts.noDob})</option>
+                <option value="noAddress">{t('patients.completeness.noAddress')} ({completenessCounts.noAddress})</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('auto.Tug\'ilganidan boshlab')}</label>
               <input
                 type="date"
@@ -497,7 +524,7 @@ export const Patients: React.FC<PatientsProps> = ({
                 <button
                   onClick={() => {
                     setFilterStatus('all'); setFilterGender('all'); setFilterDoctor('all');
-                    setFilterBranch('all'); setFilterDateFrom(''); setFilterDateTo('');
+                    setFilterBranch('all'); setFilterDateFrom(''); setFilterDateTo(''); setFilterCompleteness('all');
                   }}
                   className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 underline"
                 >

@@ -1,20 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Input, Button } from './Common';
 import { Patient, Doctor, UserRole } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { ChevronDown, Search, Loader2 } from 'lucide-react';
+import { ChevronDown, Search, Loader2, AlertTriangle } from 'lucide-react';
 import { RegionDistrictSelect } from './RegionDistrictSelect';
+import { DateField } from './DateField';
+import { findSimilarPatients } from '../utils/patientSearch';
+import { formatDateToISO, formatDobDDMMYYYY } from '../utils/dateUtils';
 
 interface AddPatientModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onAddPatient: (data: Omit<Patient, 'id' | 'clinicId'>) => Promise<Patient | void>;
+    onAddPatient: (data: Omit<Patient, 'id' | 'clinicId'>, options?: { allowDuplicateName?: boolean }) => Promise<Patient | void>;
     doctors?: Doctor[];
     userRole?: UserRole;
     doctorId?: string; // DOCTOR roli uchun avtomatik biriktirish
     compact?: boolean; // true = faqat asosiy maydonlar ochiq, qolgani yig'iladigan
     onCreated?: (patient: Patient) => void;
+    /** Bazadagi bemorlar — berilsa, formada o'xshash (takror) bemorlar ko'rsatiladi */
+    patients?: Patient[];
+    /** O'xshash bemor ustiga bosilganda — uning kartasini ochish */
+    onOpenExisting?: (patientId: string) => void;
+    /** Oyna ochilganda formaga qo'yiladigan qiymatlar (masalan qidiruv matni) */
+    initialValues?: { firstName?: string; lastName?: string; phone?: string };
 }
 
 const emptyForm = {
@@ -26,6 +35,7 @@ const emptyForm = {
 // Barcha joylar uchun yagona bemor qo'shish modali.
 export const AddPatientModal: React.FC<AddPatientModalProps> = ({
     isOpen, onClose, onAddPatient, doctors = [], userRole, doctorId, compact = false, onCreated,
+    patients, onOpenExisting, initialValues,
 }) => {
     const { t } = useLanguage();
     const [form, setForm] = useState({ ...emptyForm });
@@ -35,6 +45,17 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
     const isDoctor = userRole === UserRole.DOCTOR;
 
     const reset = () => { setForm({ ...emptyForm }); setShowMore(!compact); };
+
+    // Qidiruvdan kelganda yozilgan ism/telefon formaga o'tadi
+    useEffect(() => {
+        if (isOpen && initialValues) setForm({ ...emptyForm, ...initialValues });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
+
+    const similar = useMemo(
+        () => (patients ? findSimilarPatients(patients, form) : []),
+        [patients, form.firstName, form.lastName, form.phone]
+    );
 
     const handleLookupPinfl = async () => {
         if (!form.pinfl || form.pinfl.length < 14) {
@@ -70,6 +91,13 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
             alert(t('auto.Ism va familiyani kiriting'));
             return;
         }
+        // Bir xil ism-familiya — boshqa odam bo'lishi ham mumkin, shuning uchun
+        // to'xtatilmaydi, faqat so'raladi
+        const sameName = similar.some(s => s.reason === 'name')
+            || (patients || []).some(p =>
+                p.firstName.trim().toLowerCase() === form.firstName.trim().toLowerCase()
+                && p.lastName.trim().toLowerCase() === form.lastName.trim().toLowerCase());
+        if (sameName && !window.confirm(t('patientSearch.duplicateConfirm'))) return;
         setSaving(true);
         try {
             const newPatient = await onAddPatient({
@@ -88,7 +116,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                 districtCode: form.districtCode || undefined,
                 status: 'Active',
                 lastVisit: 'Never',
-            } as Omit<Patient, 'id' | 'clinicId'>);
+            } as Omit<Patient, 'id' | 'clinicId'>, { allowDuplicateName: sameName });
             reset();
             onClose();
             if (newPatient && (newPatient as Patient).id) onCreated?.(newPatient as Patient);
@@ -106,6 +134,30 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                     <Input label={t('auto.Ism *')} value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} required />
                 </div>
                 <Input label={t('auto.Telefon')} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+998 90 123 45 67" />
+
+                {similar.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3">
+                        <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5" /> {t('patientSearch.similarTitle')}
+                        </p>
+                        <div className="space-y-1">
+                            {similar.map(({ patient: p, reason }) => (
+                                <button
+                                    key={p.id}
+                                    type="button"
+                                    disabled={!onOpenExisting}
+                                    onClick={() => { onOpenExisting?.(p.id); onClose(); }}
+                                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-left text-sm hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:cursor-default"
+                                >
+                                    <span className="truncate text-gray-900 dark:text-white">{p.lastName} {p.firstName}</span>
+                                    <span className="shrink-0 text-[11px] text-gray-500 dark:text-gray-400 tabular-nums">
+                                        {reason === 'phone' ? t('patientSearch.samePhone') : formatDobDDMMYYYY(p.dob) || t('patientSearch.sameName')}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Qo'shimcha ma'lumot toggle */}
                 {compact && (
@@ -132,7 +184,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <Input label={t("auto.Qo'shimcha telefon")} value={form.secondaryPhone} onChange={e => setForm(f => ({ ...f, secondaryPhone: e.target.value }))} />
-                            <Input label={t("auto.Tug'ilgan sana")} type="date" value={form.dob} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))} />
+                            <DateField label={t("auto.Tug'ilgan sana")} value={form.dob} onChange={dob => setForm(f => ({ ...f, dob }))} max={formatDateToISO(new Date())} />
                         </div>
                         <Input label={t('auto.Manzil')} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
                         <RegionDistrictSelect regionCode={form.regionCode} districtCode={form.districtCode} onChange={v => setForm(f => ({ ...f, ...v }))} />

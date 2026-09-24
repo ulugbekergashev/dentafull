@@ -3,11 +3,13 @@ import { Card, Button, Modal, Input, Select, Badge, SearchableSelect } from '../
 import {
   ChevronLeft, ChevronRight, Plus, Clock, User, FileText,
   XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
-  Search
+  Search, CalendarDays
 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { DateField, DatePopover, MonthGrid, formatDayMonth, weekdayName } from '../components/DateField';
+import { formatDateToISO } from '../utils/dateUtils';
 
 interface CalendarProps {
   appointments: Appointment[];
@@ -34,8 +36,6 @@ export const Calendar: React.FC<CalendarProps> = ({
   appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick
 }) => {
   const { t, language } = useLanguage();
-  // Sana sarlavhasi tanlangan tilda ko'rsatiladi
-  const dateLocale = language === 'ru' ? 'ru-RU' : 'uz-UZ';
   const startHour = currentClinic?.startHour ?? 8;
   const endHour = currentClinic?.endHour ?? 20;
   const HOURS = Array.from({ length: Math.max(1, endHour - startHour + 1) }, (_, i) => i + startHour);
@@ -64,7 +64,7 @@ export const Calendar: React.FC<CalendarProps> = ({
     doctorId: '',
     type: '',
     categoryId: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateToISO(new Date()),
     time: '09:00',
     duration: 60,
     notes: ''
@@ -113,7 +113,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       doctorId: initialDoctorId || (userRole === UserRole.DOCTOR && doctorId ? doctorId : '') || (doctors.length > 0 ? doctors[0].id : ''),
       type: '',
       categoryId: '',
-      date: initialDate || new Date().toISOString().split('T')[0],
+      date: initialDate || formatDateToISO(new Date()),
       time: initialTime || '09:00',
       duration: 60,
       notes: ''
@@ -163,6 +163,30 @@ export const Calendar: React.FC<CalendarProps> = ({
   };
 
   const displayDays = getDisplayDays(currentDate, view);
+
+  // Kunga o'tish: sarlavhadagi sana bosilganda oylik kalendar ochiladi
+  const jumpAnchorRef = React.useRef<HTMLButtonElement>(null);
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const todayKey = formatDateToISO(new Date());
+  const currentKey = formatDateToISO(currentDate);
+  const showsToday = displayDays.some(d => formatDateToISO(d) === todayKey);
+  // Oylik kalendarda har kun ostida qabullar soni — bo'sh kunni tez topish uchun
+  const appointmentCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredAppointments.forEach(a => {
+      if (a.status !== 'Cancelled') counts[a.date] = (counts[a.date] || 0) + 1;
+    });
+    return counts;
+  }, [filteredAppointments]);
+  // Tushda: kun o'zgarmaydi, qaysi soat mintaqasida bo'lmasin
+  const goToDate = (key: string) => { setCurrentDate(new Date(`${key}T12:00`)); setJumpOpen(false); };
+  const headerLabel = (() => {
+    if (view === 'day') return `${formatDayMonth(displayDays[0])}, ${weekdayName(displayDays[0], language)}`;
+    const [first, last] = [displayDays[0], displayDays[6]];
+    return first.getFullYear() === last.getFullYear()
+      ? `${formatDayMonth(first, false)} – ${formatDayMonth(last)}`
+      : `${formatDayMonth(first)} – ${formatDayMonth(last)}`;
+  })();
 
   const activeDoctors = doctors.filter(d => d.status === 'Active');
   const gridColsClass = view === 'week' 
@@ -470,14 +494,33 @@ export const Calendar: React.FC<CalendarProps> = ({
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('calendar.title')}</h1>
           <div className="flex items-center bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 flex-1 sm:flex-none justify-between sm:justify-start">
             <button onClick={handlePrev} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronLeft className="w-4 h-4" /></button>
-            <span className="px-4 text-sm font-medium min-w-[140px] text-center">
-              {view === 'week'
-                ? `${displayDays[0].toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })} - ${displayDays[6].toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}`
-                : displayDays[0].toLocaleDateString(dateLocale, { weekday: 'long', month: 'long', day: 'numeric' })
-              }
-            </span>
+            <button
+              ref={jumpAnchorRef}
+              type="button"
+              onClick={() => setJumpOpen(o => !o)}
+              title={t('datefield.openCalendar')}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium tabular-nums min-w-[150px] rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <CalendarDays className="w-4 h-4 text-gray-400" />
+              {headerLabel}
+            </button>
             <button onClick={handleNext} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronRight className="w-4 h-4" /></button>
           </div>
+          <DatePopover anchorRef={jumpAnchorRef} open={jumpOpen} onClose={() => setJumpOpen(false)}>
+            <MonthGrid value={currentKey} onPick={goToDate} counts={appointmentCounts} />
+            <button type="button" onClick={() => goToDate(todayKey)} className="mt-2 w-full py-1.5 rounded-lg text-xs font-bold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20">
+              {t('datefield.today')}
+            </button>
+          </DatePopover>
+          {!showsToday && (
+            <button
+              type="button"
+              onClick={() => goToDate(todayKey)}
+              className="px-3 py-1.5 text-xs font-bold rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-primary-600 hover:bg-primary-50 dark:hover:bg-gray-700 shrink-0"
+            >
+              {t('datefield.today')}
+            </button>
+          )}
           {/* View Toggle for Desktop/Tablet */}
           <div className="hidden md:flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <button
@@ -684,7 +727,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                   const appDate = new Date(app.date);
                   const dayIndex = displayDays.findIndex(d => d.toDateString() === appDate.toDateString());
                   if (dayIndex === -1 && view === 'week') return null;
-                  if (view === 'day' && app.date !== currentDate.toISOString().split('T')[0]) return null;
+                  if (view === 'day' && app.date !== currentKey) return null;
 
                   const [h, m] = app.time.split(':').map(Number);
                   if (isNaN(h)) return null;
@@ -839,11 +882,12 @@ export const Calendar: React.FC<CalendarProps> = ({
             <Input label={t('calendar.duration')} type="number" value={formData.duration} onChange={e => setFormData({ ...formData, duration: Number(e.target.value) })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <DateField
               label={t('calendar.date')}
-              type="date"
               value={formData.date}
-              onChange={e => setFormData({ ...formData, date: e.target.value })}
+              onChange={date => setFormData({ ...formData, date })}
+              counts={appointmentCounts}
+              required
             />
             <Input label={t('calendar.time')} type="time" value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })} />
           </div>
@@ -1041,11 +1085,11 @@ export const Calendar: React.FC<CalendarProps> = ({
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <DateField
               label={t('patients.modal.dob')}
-              type="date"
               value={patientFormData.dob}
-              onChange={e => setPatientFormData({ ...patientFormData, dob: e.target.value })}
+              onChange={dob => setPatientFormData({ ...patientFormData, dob })}
+              max={todayKey}
               required
             />
           </div>

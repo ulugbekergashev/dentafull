@@ -9,10 +9,14 @@ interface ReceiptModalProps {
    onClose: () => void;
    transaction: Transaction | null;
    clinic: Clinic | undefined;
+   /** Bitta to'lov bir necha usulga bo'lingan bo'lsa — barcha to'langan qismlar */
+   parts?: Transaction[];
 }
 
-export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, transaction, clinic }) => {
+export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, transaction, clinic, parts }) => {
    const printRef = useRef<HTMLDivElement>(null);
+   const paidParts = parts && parts.length > 1 ? parts : null;
+   const paidTotal = paidParts ? paidParts.reduce((sum, p) => sum + p.amount, 0) : transaction?.amount || 0;
 
    const handlePrint = () => {
       const printContents = printRef.current?.innerHTML;
@@ -102,19 +106,28 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ isOpen, onClose, tra
                      <div className="font-bold mb-1">Xizmat:</div>
                      <div className="flex justify-between mb-1">
                         <span style={{ maxWidth: '60%' }}>{transaction.service || 'Davolash'}</span>
-                        <span>{transaction.amount.toLocaleString()} UZS</span>
+                        <span>{paidTotal.toLocaleString()} UZS</span>
                      </div>
                   </div>
 
                   <div className="border-t my-2 py-2">
                      <div className="flex justify-between font-bold text-sm">
                         <span>JAMI TO'LOV:</span>
-                        <span>{transaction.amount.toLocaleString()} UZS</span>
+                        <span>{paidTotal.toLocaleString()} UZS</span>
                      </div>
-                     <div className="flex justify-between mt-1 text-xs">
-                        <span>To'lov usuli:</span>
-                        <span>{getPaymentMethodLabel(transaction.type)}</span>
-                     </div>
+                     {paidParts ? (
+                        paidParts.map(p => (
+                           <div key={p.id} className="flex justify-between mt-1 text-xs">
+                              <span>{getPaymentMethodLabel(p.type)}:</span>
+                              <span>{p.amount.toLocaleString()} UZS</span>
+                           </div>
+                        ))
+                     ) : (
+                        <div className="flex justify-between mt-1 text-xs">
+                           <span>To'lov usuli:</span>
+                           <span>{getPaymentMethodLabel(transaction.type)}</span>
+                        </div>
+                     )}
                   </div>
 
                   <div className="text-center mt-4 mb-2">

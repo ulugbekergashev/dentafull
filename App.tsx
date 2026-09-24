@@ -511,7 +511,9 @@ const AppContent: React.FC = () => {
   };
 
   // Patient Actions
-  const addPatient = async (patient: Omit<Patient, 'id'>) => {
+  // allowDuplicateName — foydalanuvchi o'xshash bemorlarni ko'rib, bu boshqa odam
+  // ekanini tasdiqlagan (AddPatientModal). Qolgan joylarda takror ism to'xtatiladi.
+  const addPatient = async (patient: Omit<Patient, 'id'>, options?: { allowDuplicateName?: boolean }) => {
     try {
       const normalizedFirst = patient.firstName.trim().toLowerCase();
       const normalizedLast = patient.lastName.trim().toLowerCase();
@@ -520,7 +522,7 @@ const AppContent: React.FC = () => {
           p.lastName.trim().toLowerCase() === normalizedLast
       );
 
-      if (isDuplicate) {
+      if (isDuplicate && !options?.allowDuplicateName) {
         throw new Error(t('patients.alerts.duplicateName') || "Bunday ism va familiyali bemor allaqachon mavjud!");
       }
 
@@ -1705,6 +1707,7 @@ const AppContent: React.FC = () => {
                     canTakePayment={canTakePaymentForRole}
                     seeAllPatients={seeAllPatientsForRole}
                     onPatientClick={handlePatientClick}
+                    showPatientPhone={showPatientPhoneForRole}
                     onUpdateAppointment={updateAppointment}
                     onUpdateTransaction={updateTransaction}
                     onAddPatient={addPatient}
@@ -1766,6 +1769,7 @@ const AppContent: React.FC = () => {
                   onUpdatePatient={updatePatient}
                   onAddTransaction={addTransaction}
                   onUpdateTransaction={updateTransaction}
+                  onDeleteTransaction={deleteTransaction}
                   onAddAppointment={addAppointment}
                   onUpdateAppointment={updateAppointment}
                 />

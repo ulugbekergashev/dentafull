@@ -3,10 +3,11 @@ import { useLanguage } from '../context/LanguageContext';
 import {
     ChevronLeft, ChevronRight, Download, Wallet, Banknote, CreditCard,
     TrendingDown, Users, CalendarDays, AlertCircle, Coins, Lock, LockOpen, Check,
-    Plus, Loader2, Printer, Trash2, ArrowDownToLine, Undo2, ListOrdered, Pencil, History, ChevronDown,
+    Plus, Loader2, Printer, Trash2, ArrowDownToLine, Undo2, ListOrdered, Pencil, History, ChevronDown, Gift,
 } from 'lucide-react';
 import { Card, Button, Modal, Input, Select } from '../components/Common';
 import { QuickPaymentModal } from '../components/QuickPaymentModal';
+import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import {
     Transaction, Expense, ExpenseCategory, Doctor, Clinic, Patient, Appointment,
     CashRegisterDay, CashMovement, CashMovementType, CashAuditLog, PaymentMethod,
@@ -29,7 +30,7 @@ import { exportCashBookDay, exportCashBookMonth } from '../utils/cashbookExport'
 import { PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { formatDateToISO } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
-import { isAppointmentRecorded, isDebtTransaction } from '../utils/unpaid';
+import { buildWaivedTransaction, isAppointmentRecorded, isDebtTransaction } from '../utils/unpaid';
 import { api } from '../services/api';
 import { tLabel } from '../i18n/labels';
 
@@ -59,6 +60,8 @@ interface CashBookProps {
     closures?: CashRegisterDay[];
     /** Yopilgan kunni qayta ochish — faqat klinika admini */
     canReopen?: boolean;
+    /** Tugagan qabulni "Bepul deb yopish" — faqat klinika admini */
+    canWaive?: boolean;
     onCloseDay?: (payload: CashCloseArgs) => Promise<any>;
     onReopenDay?: (date: string, shift?: number) => Promise<void>;
     /** Moliya bo'limi ichida tab sifatida ochilganda — o'z sarlavhasini ko'rsatmaydi */
@@ -466,7 +469,7 @@ const ClosureBanner: React.FC<{
 
 export const CashBook: React.FC<CashBookProps> = ({
     transactions, expenses, doctors, currentClinic, onPatientClick,
-    closures = [], canReopen = false, onCloseDay, onReopenDay, embedded = false,
+    closures = [], canReopen = false, canWaive = false, onCloseDay, onReopenDay, embedded = false,
     patients = [], appointments = [], services = [], clinicId = '', onAddTransaction, onAddExpense,
     movements = [], onAddCashMovement, onDeleteCashMovement,
     onUpdateTransaction, onDeleteTransaction,
@@ -497,6 +500,8 @@ export const CashBook: React.FC<CashBookProps> = ({
     // Chek / o'chirish / kassa harakati
     const [receiptTx, setReceiptTx] = useState<Transaction | null>(null);
     const [deletingRow, setDeletingRow] = useState<{ id: string; patientName: string; amount: number } | null>(null);
+    /** "Bepul deb yopish" oynasi ochilgan qabul */
+    const [waivingAppt, setWaivingAppt] = useState<Appointment | null>(null);
     const [deleting, setDeleting] = useState(false);
     const [movementType, setMovementType] = useState<CashMovementType | null>(null);
     const [movementForm, setMovementForm] = useState({ amount: '', note: '', patientId: '' });
@@ -1260,6 +1265,16 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         >
                                             To'lash
                                         </button>
+                                        {canWaive && onAddTransaction && item.kind === 'appointment' && (
+                                            <button
+                                                onClick={() => setWaivingAppt(appointments.find(a => a.id === item.id) || null)}
+                                                title={t('waive.hint')}
+                                                aria-label={t('waive.action')}
+                                                className="shrink-0 p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-primary-600 hover:border-primary-400 transition-colors"
+                                            >
+                                                <Gift className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
                                     </li>
                                 ))}
                             </ul>
@@ -1520,6 +1535,19 @@ export const CashBook: React.FC<CashBookProps> = ({
                         </table>
                     </div>
                 </Card>
+            )}
+
+            {waivingAppt && onAddTransaction && (
+                <WaiveAppointmentModal
+                    isOpen
+                    onClose={() => setWaivingAppt(null)}
+                    patientName={waivingAppt.patientName}
+                    date={waivingAppt.date}
+                    amount={calculateAppointmentTotal(waivingAppt.notes || '', services as any).total}
+                    onConfirm={async reason => {
+                        await onAddTransaction(buildWaivedTransaction(waivingAppt, services as any, reason));
+                    }}
+                />
             )}
 
             {/* ── To'lov qabul qilish ── */}

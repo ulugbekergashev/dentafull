@@ -1,20 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Calendar, CalendarClock, CalendarPlus, ChevronDown, ChevronRight, X, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, CalendarClock, CalendarPlus, ChevronDown, ChevronRight, X, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus, Trash2, Gift } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos } from '../components/PatientPhotos';
 import { VisitWorkflow, ProceduresSection } from '../components/ProceduresSection';
 import { InstallmentsTab } from '../components/InstallmentsTab';
 import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall, PaymentMethod } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
-import { formatDobDDMMYYYY, calcAge } from '../utils/dateUtils';
+import { formatDobDDMMYYYY, calcAge, formatDateToISO } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
+import { buildWaivedTransaction } from '../utils/unpaid';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { tLabel } from '../i18n/labels';
+import { PaymentPart, balanceUsed, buildPaymentRecords, splitError } from '../utils/paymentSplit';
+import { PaymentSplitRows } from '../components/PaymentSplitRows';
+import { DateField } from '../components/DateField';
+import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { maskPhone } from '../utils/accessControl';
 import { printPatientCard } from '../utils/printPatientCard';
 
@@ -37,6 +42,8 @@ interface PatientDetailsProps {
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
    onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<Transaction | void>;
    onUpdateTransaction: (id: string, data: Partial<Transaction>) => void;
+   /** To'lovni o'chirish (Kassa sahifasidagi bilan bir xil) — shifokorga ko'rsatilmaydi */
+   onDeleteTransaction?: (id: string) => Promise<void>;
    onAddAppointment: (appt: Omit<Appointment, 'id'>) => Promise<void>;
    onUpdateAppointment: (id: string, data: Partial<Appointment>) => Promise<void>;
 }
@@ -54,7 +61,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    userRole,
    doctorId: loggedDoctorId,
    showPatientPhone = true,
-   onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onAddAppointment, onUpdateAppointment
+   onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onDeleteTransaction, onAddAppointment, onUpdateAppointment
 }) => {
    const { patientId: patientIdParam } = useParams<{ patientId: string }>();
    const patientId = patientIdProp || patientIdParam || null;
@@ -78,6 +85,17 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
    /** To'lov oynasida xizmatlar ro'yxati ochiqmi */
    const [paymentServicesOpen, setPaymentServicesOpen] = useState(false);
+   /** Asosiy usuldan tashqari to'lov usullari (bitta to'lovni bo'lish) */
+   const [paymentExtras, setPaymentExtras] = useState<PaymentPart[]>([]);
+   /**
+    * To'lov sanasini o'zgartirsa bo'ladimi. Faqat qabulga bog'lanmagan to'lovda
+    * (qo'lda to'lov, avans) — qabul to'lovi qabul sanasiga yozilishi shart,
+    * aks holda qabul "Olinmagan pul" ro'yxatida qolib ketadi.
+    */
+   const [paymentDateEditable, setPaymentDateEditable] = useState(false);
+   const isClinicAdmin = userRole === UserRole.CLINIC_ADMIN;
+   /** "Bepul deb yopish" oynasi ochilgan qabul */
+   const [waivingAppointment, setWaivingAppointment] = useState<Appointment | null>(null);
 
    // Chegirmadan keyingi jami summa (asl narx ma'lum bo'lganda)
    const getDiscountedTotal = (): number => {
@@ -171,6 +189,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Receipt Modal State
    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
    const [receiptTransaction, setReceiptTransaction] = useState<Transaction | null>(null);
+   const [receiptParts, setReceiptParts] = useState<Transaction[]>([]);
 
    // Parse procedures from appointment notes
    const pastProcedures = React.useMemo(() => {
@@ -522,6 +541,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       return t.patientName === fullName || t.patientName === fullNameReverse;
    });
 
+   const todayKey = formatDateToISO(new Date());
+   const paymentSplitProblem = paymentData.service === 'Avans'
+      ? null
+      : splitError(Number(paymentData.paidAmount) || 0, paymentExtras, patient.balance || 0);
+
    // Chap panel va Umumiy tab uchun hisoblangan qiymatlar
    const patientAge = calcAge(patient.dob);
    const patientBalance = patient.balance || 0;
@@ -618,7 +642,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       // Defolt shifokor: kirgan shifokor → bemorga biriktirilgan → individual planda birinchi → bo'sh
       const assignedDoctorId = patient?.doctorId && doctors.some(d => d.id === patient.doctorId) ? patient.doctorId : '';
       const autoDoctorId = defaultDoctorId || assignedDoctorId || (isIndividualPlan && doctors.length > 0 ? doctors[0].id : '');
-      setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: autoDoctorId, appointmentDate: '', discountPercent: '' });
+      setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: autoDoctorId, appointmentDate: formatDateToISO(new Date()), discountPercent: '' });
+      setPaymentExtras([]);
+      setPaymentDateEditable(true);
 
       setDiscountType('percent');
       setManualPaymentCategoryId('');
@@ -682,8 +708,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       const debtAmount = Number(paymentData.debtAmount.toString().replace(/,/g, '')) || 0;
       const totalAmount = paidAmount + debtAmount;
 
+      // Avans kiritishda to'lov bo'linmaydi — u kassaga pul solish
+      const extras = paymentData.service === 'Avans' ? [] : paymentExtras;
+      if (splitError(paidAmount, extras, patient.balance || 0)) {
+         isSubmittingRef.current = false;
+         setIsPaymentSubmitting(false);
+         return;
+      }
+
       // Validate balance if using from-account payment
-      if (paymentData.type === 'Balance' && paidAmount > (patient.balance || 0)) {
+      if (balanceUsed(paymentData.type as PaymentMethod, paidAmount, extras) > (patient.balance || 0)) {
          alert(t('patients.details.alerts.insufficientBalance'));
          isSubmittingRef.current = false;
          setIsPaymentSubmitting(false);
@@ -714,79 +748,34 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          : rawDiscountVal;
 
       try {
-         let finalTransaction: Transaction | null | void = null;
-
-         // Scenario 1: Full Payment (Debt == 0)
-         if (debtAmount <= 0) {
-            finalTransaction = await onAddTransaction({
+         const records = buildPaymentRecords({
+            service: paymentData.service,
+            primaryMethod: paymentData.type as PaymentMethod,
+            paidAmount,
+            extras,
+            debtAmount,
+            discountAmount,
+         });
+         const created: Transaction[] = [];
+         for (const record of records) {
+            const tx = await onAddTransaction({
                patientId: patient.id,
                patientName: `${patient.lastName} ${patient.firstName}`,
-               date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
-               amount: totalAmount,
-               service: paymentData.service,
-               type: paymentData.type as any,
-               status: 'Paid',
+               date: paymentData.appointmentDate || formatDateToISO(new Date()),
                doctorId: paymentData.doctorId || '',
                doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                discountPercent,
-               discountAmount: discountAmount
-            });
+               ...record,
+            } as Omit<Transaction, 'id'>);
+            if (tx) created.push(tx);
          }
-         // Scenario 2: No Payment (Paid == 0)
-         else if (paidAmount <= 0) {
-            finalTransaction = await onAddTransaction({
-               patientId: patient.id,
-               patientName: `${patient.lastName} ${patient.firstName}`,
-               date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
-               amount: totalAmount,
-               service: paymentData.service,
-               type: paymentData.type as any,
-               status: 'Pending',
-               // Ataylab qarzga yozildi — ro'yxatlarda "qarz" deb ko'rsatiladi
-               isDebt: true,
-               doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
-               discountPercent,
-               discountAmount: discountAmount
-            });
-         }
-         // Scenario 3: Partial Payment (Paid > 0 && Debt > 0)
-         else {
-            // 1. Paid Part
-            finalTransaction = await onAddTransaction({
-               patientId: patient.id,
-               patientName: `${patient.lastName} ${patient.firstName}`,
-               date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
-               amount: paidAmount,
-               service: `${paymentData.service} (Qisman to'lov)`,
-               type: paymentData.type as any,
-               status: 'Paid',
-               doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
-               discountPercent,
-               discountAmount: Math.round(paidAmount * (discountPercent / 100)) || 0
-            });
-
-            // 2. Pending Part (Debt)
-            await onAddTransaction({
-               patientId: patient.id,
-               patientName: `${patient.lastName} ${patient.firstName}`,
-               date: paymentData.appointmentDate || new Date().toISOString().split('T')[0],
-               amount: debtAmount,
-               service: `${paymentData.service} (Qarz)`,
-               type: paymentData.type as any,
-               status: 'Pending',
-               isDebt: true,
-               doctorId: paymentData.doctorId || '',
-               doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
-               discountPercent,
-               discountAmount: Math.round(debtAmount * (discountPercent / 100)) || 0
-            });
-         }
+         const paidCreated = created.filter(tx => tx.status === 'Paid');
+         const finalTransaction = paidCreated[0] || created[0] || null;
 
          // Verify if clinic has receipt enabled
          if (finalTransaction && currentClinic?.enableReceipts) {
-            setReceiptTransaction(finalTransaction as Transaction);
+            setReceiptTransaction(finalTransaction);
+            setReceiptParts(paidCreated);
             setIsReceiptModalOpen(true);
          }
 
@@ -795,6 +784,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setPaymentData({ amount: '', paidAmount: '', debtAmount: '', service: '', type: 'Cash', status: 'Paid', doctorId: defaultDoctorId, appointmentDate: '', discountPercent: '' });
          setManualPaymentServiceIds([]);
          setManualPaymentPrices({});
+         setPaymentExtras([]);
          setVisitKey(prev => prev + 1);
       } catch (error: any) {
          console.error('Payment processing failed', error);
@@ -1046,6 +1036,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                appointmentDate: today,
                discountPercent: ''
             });
+            setPaymentExtras([]);
+            setPaymentDateEditable(false);
             setIsPaymentModalOpen(true);
          }
       } catch (error: any) {
@@ -1523,6 +1515,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                    appointmentDate: app.date,
                                                    discountPercent: ''
                                                 });
+                                                setPaymentExtras([]);
+                                                setPaymentDateEditable(false);
                                                 setIsPaymentModalOpen(true);
                                              }}>{t('auto.To\'lov')}</Button>
                                              <Button size="sm" variant="secondary" className="bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800" onClick={() => {
@@ -1550,6 +1544,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                       alert("To'lov avans hisobidan muvaffaqiyatli amalga oshirildi!");
                                                    }
                                                 }}>{t('auto.Hisobdan')}</Button>
+                                             )}
+                                             {isClinicAdmin && (
+                                                <Button size="sm" variant="secondary" title={t('waive.hint')} onClick={() => setWaivingAppointment(app)}>
+                                                   <Gift className="w-4 h-4 mr-1" /> {t('waive.action')}
+                                                </Button>
                                              )}
                                           </td>
                                        </tr>
@@ -1594,9 +1593,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           type: 'Cash',
                                           status: 'Paid',
                                           doctorId: doctors.length > 0 ? doctors[0].id : '',
-                                          appointmentDate: new Date().toISOString().split('T')[0],
+                                          appointmentDate: formatDateToISO(new Date()),
                                           discountPercent: ''
                                        });
+                                       setPaymentExtras([]);
+                                       setPaymentDateEditable(true);
                                        setIsPaymentModalOpen(true);
                                     }}
                                  >
@@ -1616,7 +1617,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                                        <td className="p-4 text-gray-900 dark:text-white">{transaction.date || 'N/A'}</td>
                                        <td className="p-4 text-gray-600 dark:text-gray-300">{transaction.service}</td>
-                                       <td className="p-4 text-gray-600 dark:text-gray-300">{transaction.type}</td>
+                                       <td className="p-4 text-gray-600 dark:text-gray-300">{tLabel(t, getPaymentMethodLabel(transaction.type))}</td>
                                        <td className="p-4 text-gray-900 dark:text-white font-medium">{(Number(transaction.amount) || 0).toLocaleString()} UZS</td>
                                        <td className="p-4">
                                           {transaction.discountPercent ? (
@@ -1647,6 +1648,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                 setEditPaymentMethod(transaction.type);
                                                 setIsPaymentEditModalOpen(true);
                                              }}><Edit className="w-4 h-4" /></Button>
+                                          )}
+                                          {userRole !== UserRole.DOCTOR && onDeleteTransaction && (
+                                             <Button size="sm" variant="secondary" title={t('payment.delete')} className="hover:text-red-600" onClick={async () => {
+                                                const msg = t('payment.deleteConfirm')
+                                                   .replace('{service}', transaction.service || '—')
+                                                   .replace('{amount}', (Number(transaction.amount) || 0).toLocaleString());
+                                                if (!window.confirm(msg)) return;
+                                                try { await onDeleteTransaction(transaction.id); } catch { /* xatolik toast orqali */ }
+                                             }}><Trash2 className="w-4 h-4" /></Button>
                                           )}
                                        </td>
                                     </tr>
@@ -2159,10 +2169,30 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            ]
                         }
                      />
+                     {paymentData.service !== 'Avans' && (
+                        <PaymentSplitRows
+                           paidAmount={Number(paymentData.paidAmount) || 0}
+                           primaryMethod={paymentData.type as PaymentMethod}
+                           extras={paymentExtras}
+                           onChange={setPaymentExtras}
+                           methods={(patient?.balance || 0) > 0 ? [...INCOMING_PAYMENT_METHODS, 'Balance'] : INCOMING_PAYMENT_METHODS}
+                           balance={patient?.balance || 0}
+                        />
+                     )}
                   </div>
+                  {paymentDateEditable && isClinicAdmin && (
+                     <DateField
+                        label={t('payment.date')}
+                        value={paymentData.appointmentDate || todayKey}
+                        onChange={v => setPaymentData(prev => ({ ...prev, appointmentDate: v }))}
+                        max={todayKey}
+                        required
+                        helperText={(paymentData.appointmentDate || todayKey) !== todayKey ? t('payment.dateHint') : undefined}
+                     />
+                  )}
                   <div className="flex justify-end gap-2 pt-4">
                      <Button type="button" variant="secondary" onClick={() => setIsPaymentModalOpen(false)} disabled={isPaymentSubmitting}>{t('auto.Bekor qilish')}</Button>
-                     <Button type="submit" disabled={isPaymentSubmitting}>
+                     <Button type="submit" disabled={isPaymentSubmitting || !!paymentSplitProblem}>
                         {isPaymentSubmitting ? t('auto.Saqlanmoqda...') : t('auto.Saqlash')}
                      </Button>
                   </div>
@@ -2540,7 +2570,20 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             onClose={() => setIsReceiptModalOpen(false)}
             transaction={receiptTransaction}
             clinic={currentClinic}
+            parts={receiptParts}
          />
+         {waivingAppointment && (
+            <WaiveAppointmentModal
+               isOpen
+               onClose={() => setWaivingAppointment(null)}
+               patientName={`${patient.lastName} ${patient.firstName}`}
+               date={waivingAppointment.date}
+               amount={calculateAppointmentTotal(waivingAppointment.notes || '', services).total}
+               onConfirm={async reason => {
+                  await onAddTransaction(buildWaivedTransaction(waivingAppointment, services, reason));
+               }}
+            />
+         )}
       </>
    );
 };

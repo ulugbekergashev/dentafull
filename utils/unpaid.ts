@@ -145,3 +145,34 @@ export function buildUnpaidRows(
 export function unpaidTotal(rows: UnpaidRow[]): number {
     return rows.reduce((acc, r) => acc + (r.amount > 0 ? r.amount : 0), 0);
 }
+
+/**
+ * "Bepul deb yopish" — tugagan qabul uchun pul olinmaydi (bepul muolaja, kafolat,
+ * adashib ochilgan qabul). Kassaga 0 so'mlik yozuv tushadi, chegirma esa to'liq
+ * narx: qabul "Olinmagan pul"dan chiqadi, kechilgan summa chegirma sifatida
+ * hisobotda ko'rinadi, Kassada esa yozuvning o'zi iz bo'lib qoladi.
+ * Adashib yopilsa, shu yozuvni o'chirish kifoya — qabul ro'yxatga qaytadi.
+ */
+export function buildWaivedTransaction(
+    app: Pick<Appointment, 'patientId' | 'patientName' | 'date' | 'doctorId' | 'doctorName' | 'clinicId' | 'type' | 'notes'>,
+    services: Service[],
+    reason: string
+): Omit<Transaction, 'id'> {
+    const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
+    const name = breakdown ? breakdown.split('||')[0].split('|')[0] : (app.type || '—');
+    const note = reason.trim();
+    return {
+        patientId: app.patientId,
+        patientName: app.patientName,
+        date: app.date,
+        clinicId: app.clinicId,
+        doctorId: app.doctorId,
+        doctorName: app.doctorName,
+        amount: 0,
+        type: 'Cash',
+        service: `${name} (Bepul${note ? `: ${note}` : ''})`,
+        status: 'Paid',
+        discountPercent: total > 0 ? 100 : 0,
+        discountAmount: total,
+    };
+}
