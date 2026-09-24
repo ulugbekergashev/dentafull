@@ -38,7 +38,8 @@ import { BranchSwitcher } from './components/BranchSwitcher';
 import { NotificationBell } from './components/NotificationBell';
 import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } from './services/api';
 import type { CashCloseInput } from './services/api';
-import { parseAccessControl, isModuleHidden, canSeeFinance, canSeePatientPhone, canSeeAllPatients, canTakePayment } from './utils/accessControl';
+import { makePermChecker } from './utils/permissions';
+import { PermissionsProvider } from './context/PermissionsContext';
 import { formatHeaderDate } from './utils/dateUtils';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
@@ -1112,11 +1113,13 @@ const AppContent: React.FC = () => {
     : userRole === UserRole.SALES_AGENT ? SALES_NAVIGATION
       : CLINIC_NAVIGATION;
 
-  // Ruxsatlar (Xodimlar → Ruxsatlar): rol bo'yicha modul/moliya/telefon ko'rinishi
-  const accessControl = parseAccessControl(currentClinic);
-  const showFinanceForRole = canSeeFinance(accessControl, userRole);
+  // Ruxsatlar (Xodimlar → Ruxsatlar): klinika sozlamasidan bir marta hisoblanadi,
+  // sahifalar esa usePerms() bilan o'qiydi. Klinika egasi hech narsa bilan cheklanmaydi.
+  const perms = useMemo(() => makePermChecker(userRole, currentClinic?.accessControl), [userRole, currentClinic?.accessControl]);
+  // Bosh sahifadagi tushum, o'rtacha chek va qarz summalari
+  const showFinanceForRole = perms.flag('money', 'amounts');
   // Tugagan qabulda "To'lovni olish" tugmasi chiqadimi, yoki faqat "Kassaga yuborish"
-  const canTakePaymentForRole = canTakePayment(accessControl, userRole);
+  const canTakePaymentForRole = perms.flag('money', 'payCreate');
   // Bo'lim ko'rsatilmagan bo'lsa qaysi biri ochiladi — SuperAdminDashboard
   // dagi standart bilan bir xil bo'lishi shart, aks holda birinchi kirishda
   // yuqorida bir bo'lim, sahifada boshqasi faol ko'rinardi.
@@ -1124,21 +1127,23 @@ const AppContent: React.FC = () => {
 
   const visibleNavigation = CURRENT_NAVIGATION.filter(nav =>
     nav.roles.includes(userRole)
-    && !isModuleHidden(accessControl, userRole, nav.id)
-    // Moliya — pul ma'lumoti; "Moliyani ko'rsatish" o'chirilgan rol uni ko'rmasligi kerak
-    && (nav.id !== 'finance' || showFinanceForRole)
+    // Bosh sahifa har doim ochiq; qolganini ruxsatlar jadvali hal qiladi
+    && (nav.id === 'dashboard' || perms.menu(nav.id))
   );
+  // Menyuda yo'q bo'lim manzil orqali ham ochilmasin — route umuman ro'yxatga olinmaydi
+  const canOpen = (moduleId: string) => perms.menu(moduleId);
   // Qo'ng'iroq faqat klinika xodimlarida: SUPER_ADMIN va sotuvchi boshqa
   // tizimda ishlaydi, ularning klinika lentasi yo'q.
   const isStaffRole = userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.SALES_AGENT;
   // Bildirishnoma qatori bosiladigan bo'ladimi — shu rolga ochiq bo'limlar
   const allowedModuleIds = useMemo(() => visibleNavigation.map(n => n.id), [visibleNavigation]);
 
-  const showPatientPhoneForRole = canSeePatientPhone(accessControl, userRole);
+  // Telefon raqami bemor bo'limi yopiq bo'lsa ham (bosh sahifa, kalendar) shu sozlamaga bo'ysunadi
+  const showPatientPhoneForRole = perms.owner || perms.perms?.patients?.sp.phone === true;
   // Ko'rish doirasi: shifokor faqat o'z qabullarini ko'radimi yoki klinikadagi hammasini.
   // Bemorlar ro'yxatini backend o'zi filtrlaydi, kalendar va bosh sahifa esa
   // to'liq ro'yxatni oladi — shuning uchun ularga bu bayroq uzatiladi.
-  const seeAllPatientsForRole = canSeeAllPatients(accessControl, userRole);
+  const seeAllPatientsForRole = perms.scopeAll();
 
   // --- Main Render ---
   // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
@@ -1255,6 +1260,7 @@ const AppContent: React.FC = () => {
   );
 
   return (
+    <PermissionsProvider value={perms}>
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
       <InstallPWAButton />
@@ -1718,25 +1724,27 @@ const AppContent: React.FC = () => {
                 } />
               )}
 
-              <Route path="/patients" element={
-                <Patients
-                  userRole={userRole}
-                  patients={scopedPatients}
-                  doctors={scopedDoctors}
-                  appointments={scopedAppointments}
-                  transactions={scopedTransactions}
-                  showPatientPhone={showPatientPhoneForRole}
-                  onPatientClick={handlePatientClick}
-                  onAddPatient={addPatient}
-                  onDeletePatient={deletePatient}
-                  onUpdatePatient={updatePatient}
-                  currentClinic={currentClinic}
-                  branches={branches}
-                  activeBranchId={activeBranchId}
-                />
-              } />
+              {canOpen('patients') && (
+                <Route path="/patients" element={
+                  <Patients
+                    userRole={userRole}
+                    patients={scopedPatients}
+                    doctors={scopedDoctors}
+                    appointments={scopedAppointments}
+                    transactions={scopedTransactions}
+                    showPatientPhone={showPatientPhoneForRole}
+                    onPatientClick={handlePatientClick}
+                    onAddPatient={addPatient}
+                    onDeletePatient={deletePatient}
+                    onUpdatePatient={updatePatient}
+                    currentClinic={currentClinic}
+                    branches={branches}
+                    activeBranchId={activeBranchId}
+                  />
+                } />
+              )}
 
-              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
+              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && canOpen('leads') && (
                 <Route path="/leads" element={
                   <Leads
                     leads={scopedLeads}
@@ -1752,53 +1760,57 @@ const AppContent: React.FC = () => {
                 } />
               )}
 
-              <Route path="/patients/:patientId" element={
-                <PatientDetails
-                  patients={patients}
-                  appointments={appointments}
-                  transactions={transactions}
-                  doctors={doctors}
-                  services={services}
-                  categories={categories}
-                  currentClinic={currentClinic}
-                  plans={plans}
-                  userRole={userRole}
-                  doctorId={doctorId}
-                  showPatientPhone={showPatientPhoneForRole}
-                  onBack={() => navigate('/patients')}
-                  onUpdatePatient={updatePatient}
-                  onAddTransaction={addTransaction}
-                  onUpdateTransaction={updateTransaction}
-                  onDeleteTransaction={deleteTransaction}
-                  onAddAppointment={addAppointment}
-                  onUpdateAppointment={updateAppointment}
-                />
-              } />
+              {canOpen('patients') && (
+                <Route path="/patients/:patientId" element={
+                  <PatientDetails
+                    patients={patients}
+                    appointments={appointments}
+                    transactions={transactions}
+                    doctors={doctors}
+                    services={services}
+                    categories={categories}
+                    currentClinic={currentClinic}
+                    plans={plans}
+                    userRole={userRole}
+                    doctorId={doctorId}
+                    showPatientPhone={showPatientPhoneForRole}
+                    onBack={() => navigate('/patients')}
+                    onUpdatePatient={updatePatient}
+                    onAddTransaction={addTransaction}
+                    onUpdateTransaction={updateTransaction}
+                    onDeleteTransaction={deleteTransaction}
+                    onAddAppointment={addAppointment}
+                    onUpdateAppointment={updateAppointment}
+                  />
+                } />
+              )}
 
-              <Route path="/calendar" element={
-                <Calendar
-                  appointments={scopedAppointments}
-                  patients={scopedPatients}
-                  doctors={scopedDoctors}
-                  services={services}
-                  categories={categories}
-                  onAddAppointment={addAppointment}
-                  onUpdateAppointment={updateAppointment}
-                  onDeleteAppointment={deleteAppointment}
-                  onAddPatient={addPatient}
-                  userRole={userRole}
-                  doctorId={doctorId}
-                  seeAllPatients={seeAllPatientsForRole}
-                  currentClinic={currentClinic}
-                  plans={plans}
-                  onPatientClick={handlePatientClick}
-                />
-              } />
+              {canOpen('calendar') && (
+                <Route path="/calendar" element={
+                  <Calendar
+                    appointments={scopedAppointments}
+                    patients={scopedPatients}
+                    doctors={scopedDoctors}
+                    services={services}
+                    categories={categories}
+                    onAddAppointment={addAppointment}
+                    onUpdateAppointment={updateAppointment}
+                    onDeleteAppointment={deleteAppointment}
+                    onAddPatient={addPatient}
+                    userRole={userRole}
+                    doctorId={doctorId}
+                    seeAllPatients={seeAllPatientsForRole}
+                    currentClinic={currentClinic}
+                    plans={plans}
+                    onPatientClick={handlePatientClick}
+                  />
+                } />
+              )}
 
               {/* Eski manzil — zakladkalar buzilmasligi uchun yo'naltiriladi */}
               <Route path="/cashbook" element={<Navigate to="/finance" replace />} />
 
-              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && showFinanceForRole && (
+              {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && canOpen('finance') && (
                 <Route path="/finance" element={
                   <FinanceHub
                     userRole={userRole}
@@ -1830,113 +1842,129 @@ const AppContent: React.FC = () => {
                 } />
               )}
 
-              <Route path="/queue" element={
-                <OnlineQueue
-                  doctors={scopedDoctors}
-                  patients={scopedPatients}
-                  appointments={scopedAppointments}
-                  clinicId={clinicId}
-                  userRole={userRole}
-                  currentClinic={currentClinic}
-                />
-              } />
+              {canOpen('queue') && (
+                <Route path="/queue" element={
+                  <OnlineQueue
+                    doctors={scopedDoctors}
+                    patients={scopedPatients}
+                    appointments={scopedAppointments}
+                    clinicId={clinicId}
+                    userRole={userRole}
+                    currentClinic={currentClinic}
+                  />
+                } />
+              )}
 
-              <Route path="/lab" element={
-                <LabOrders
-                  clinicId={clinicId}
-                  labTechnicians={labTechnicians}
-                  labOrders={labOrders}
-                  setLabOrders={setLabOrders}
-                  doctors={doctors}
-                  patients={patients}
-                  onExpensesChanged={refreshExpenses}
-                  defaultDoctorName={(() => {
-                    if (userRole !== UserRole.DOCTOR) return undefined;
-                    const d = doctors.find(x => x.id === doctorId);
-                    return d ? `Dr. ${d.lastName} ${d.firstName}` : undefined;
-                  })()}
-                />
-              } />
+              {canOpen('lab') && (
+                <Route path="/lab" element={
+                  <LabOrders
+                    clinicId={clinicId}
+                    labTechnicians={labTechnicians}
+                    labOrders={labOrders}
+                    setLabOrders={setLabOrders}
+                    doctors={doctors}
+                    patients={patients}
+                    onExpensesChanged={refreshExpenses}
+                    defaultDoctorName={(() => {
+                      if (userRole !== UserRole.DOCTOR) return undefined;
+                      const d = doctors.find(x => x.id === doctorId);
+                      return d ? `Dr. ${d.lastName} ${d.firstName}` : undefined;
+                    })()}
+                  />
+                } />
+              )}
 
               {(userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST) && (
                 <>
                   {/* Xodimlar: ro'yxat (ilgari Sozlamalarda edi), statistika va ruxsatlar */}
-                  <Route path="/doctors" element={
-                    <Staff
-                      userRole={userRole}
-                      doctors={doctors}
-                      analyticsDoctors={scopedDoctors}
-                      expenses={scopedExpenses}
-                      labOrders={labOrders}
-                      receptionists={receptionists}
-                      labTechnicians={labTechnicians}
-                      onAddDoctor={addDoctor}
-                      onUpdateDoctor={updateDoctor}
-                      onDeleteDoctor={deleteDoctor}
-                      onAddReceptionist={addReceptionist}
-                      onUpdateReceptionist={updateReceptionist}
-                      onDeleteReceptionist={deleteReceptionist}
-                      onAddLabTechnician={addLabTechnician}
-                      onUpdateLabTechnician={updateLabTechnician}
-                      onDeleteLabTechnician={deleteLabTechnician}
-                      branches={branches}
-                      currentClinic={currentClinic}
-                      plans={plans}
-                      appointments={scopedAppointments}
-                      services={services}
-                      transactions={scopedTransactions}
-                      reviews={reviews}
-                    />
-                  } />
+                  {canOpen('doctors') && (
+                    <Route path="/doctors" element={
+                      <Staff
+                        userRole={userRole}
+                        doctors={doctors}
+                        analyticsDoctors={scopedDoctors}
+                        expenses={scopedExpenses}
+                        labOrders={labOrders}
+                        receptionists={receptionists}
+                        labTechnicians={labTechnicians}
+                        onAddDoctor={addDoctor}
+                        onUpdateDoctor={updateDoctor}
+                        onDeleteDoctor={deleteDoctor}
+                        onAddReceptionist={addReceptionist}
+                        onUpdateReceptionist={updateReceptionist}
+                        onDeleteReceptionist={deleteReceptionist}
+                        onAddLabTechnician={addLabTechnician}
+                        onUpdateLabTechnician={updateLabTechnician}
+                        onDeleteLabTechnician={deleteLabTechnician}
+                        branches={branches}
+                        currentClinic={currentClinic}
+                        plans={plans}
+                        appointments={scopedAppointments}
+                        services={services}
+                        transactions={scopedTransactions}
+                        reviews={reviews}
+                      />
+                    } />
+                  )}
 
                   {/* Xodim profili: shifokor, resepshn yoki texnik */}
-                  <Route path="/doctors/receptionist/:staffId" element={renderStaffProfile('receptionist')} />
-                  <Route path="/doctors/technician/:staffId" element={renderStaffProfile('labTech')} />
-                  <Route path="/doctors/:staffId" element={renderStaffProfile('doctor')} />
+                  {canOpen('doctors') && (
+                    <>
+                      <Route path="/doctors/receptionist/:staffId" element={renderStaffProfile('receptionist')} />
+                      <Route path="/doctors/technician/:staffId" element={renderStaffProfile('labTech')} />
+                      <Route path="/doctors/:staffId" element={renderStaffProfile('doctor')} />
+                    </>
+                  )}
 
-                  <Route path="/inventory" element={
-                    <Inventory
-                      items={inventoryItems}
-                      userName={userName}
-                      onAddItem={addInventoryItem}
-                      onUpdateStock={updateInventoryStock}
-                      onDeleteItem={deleteInventoryItem}
-                    />
-                  } />
+                  {canOpen('inventory') && (
+                    <Route path="/inventory" element={
+                      <Inventory
+                        items={inventoryItems}
+                        userName={userName}
+                        onAddItem={addInventoryItem}
+                        onUpdateStock={updateInventoryStock}
+                        onDeleteItem={deleteInventoryItem}
+                      />
+                    } />
+                  )}
 
-                  <Route path="/messages" element={
-                    <MessagesManagement
-                      clinicId={clinicId}
-                      currentClinic={currentClinic}
-                      doctors={doctors}
-                      addToast={addToast}
-                    />
-                  } />
+                  {canOpen('messages') && (
+                    <Route path="/messages" element={
+                      <MessagesManagement
+                        clinicId={clinicId}
+                        currentClinic={currentClinic}
+                        doctors={doctors}
+                        addToast={addToast}
+                      />
+                    } />
+                  )}
 
-                  <Route path="/settings" element={
-                    <Settings
-                      userRole={userRole}
-                      services={services}
-                      categories={categories}
-                      doctors={doctors}
-                      onAddService={addService}
-                      onUpdateService={updateService}
-                      onDeleteService={deleteService}
-                      onAddCategory={addCategory}
-                      onDeleteCategory={deleteCategory}
-                      branches={branches}
-                      patientCountByBranch={patients.reduce((acc, p) => {
-                        const key = p.branchId || '';
-                        acc[key] = (acc[key] || 0) + 1;
-                        return acc;
-                      }, {} as Record<string, number>)}
-                      onAddBranch={addBranch}
-                      onUpdateBranch={updateBranch}
-                      onDeleteBranch={deleteBranch}
-                      currentClinic={currentClinic}
-                      plans={plans}
-                    />
-                  } />
+                  {canOpen('settings') && (
+                    <Route path="/settings" element={
+                      <Settings
+                        userRole={userRole}
+                        services={services}
+                        categories={categories}
+                        doctors={doctors}
+                        onAddService={addService}
+                        onUpdateService={updateService}
+                        onDeleteService={deleteService}
+                        onAddCategory={addCategory}
+                        onDeleteCategory={deleteCategory}
+                        branches={branches}
+                        patientCountByBranch={patients.reduce((acc, p) => {
+                          const key = p.branchId || '';
+                          acc[key] = (acc[key] || 0) + 1;
+                          return acc;
+                        }, {} as Record<string, number>)}
+                        onAddBranch={addBranch}
+                        onUpdateBranch={updateBranch}
+                        onDeleteBranch={deleteBranch}
+                        currentClinic={currentClinic}
+                        plans={plans}
+                      />
+                    } />
+                  )}
                 </>
               )}
 
@@ -1964,6 +1992,7 @@ const AppContent: React.FC = () => {
       {/* Subscription Block Modal */}
       <SubscriptionBlockModal isOpen={isSubscriptionBlocked} />
     </div>
+    </PermissionsProvider>
   );
 };
 

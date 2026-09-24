@@ -16,6 +16,7 @@ import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from 
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
 import { prefillFromQuery } from '../utils/patientSearch';
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { AddPatientModal } from '../components/AddPatientModal';
@@ -77,7 +78,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // Grafiklar va "jami" kartalar faqat shifokorga. Klinika egasi ularni Moliya →
   // Hisobot da ko'radi (bu yerda takror edi), shifokorda esa Hisobot yo'q.
   const isDoctor = userRole === UserRole.DOCTOR;
-  const isClinicAdmin = userRole === UserRole.CLINIC_ADMIN;
+  const perms = usePerms();
+  // Bepul yopish — ruxsatlar jadvalidagi "Pul va to'lovlar" guruhidan
+  const canWaive = perms.flag('money', 'waive');
   /** "Bepul deb yopish" oynasi ochilgan qator */
   const [waivingRow, setWaivingRow] = useState<UnpaidRow | null>(null);
   // Shifokor o'z ma'lumotlari bilan cheklanadimi. Ruxsatlar → Ko'rish doirasi
@@ -339,7 +342,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             <CreditCard className="w-3.5 h-3.5" /> {t('dashboard.unpaidTake')}
           </button>
         )}
-        {isClinicAdmin && onAddTransaction && row.source === 'appointment' && row.appointment && (
+        {canWaive && onAddTransaction && row.source === 'appointment' && row.appointment && (
           <button
             onClick={() => setWaivingRow(row)}
             title={t('waive.hint')}
@@ -412,24 +415,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
           {/* Quick Actions — dashboarddan turib bajariladi */}
           <div className="flex items-center gap-2">
-            <PatientQuickSearch
-              patients={patients}
-              showPhone={showPatientPhone}
-              onOpen={id => onPatientClick?.(id)}
-              onAddNew={query => {
-                if (!onAddPatient) return navigate('/patients');
-                setNewPatientPrefill(prefillFromQuery(query));
-                setIsAddPatientOpen(true);
-              }}
-            />
-            <button
-              onClick={() => navigate('/calendar')}
-              className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              {t('dashboard.quickAppointment')}
-            </button>
-            {!isReceptionist && (
+            {perms.menu('patients') && (
+              <PatientQuickSearch
+                patients={patients}
+                showPhone={showPatientPhone}
+                canAdd={perms.can('patients', 'card', 'create')}
+                onOpen={id => onPatientClick?.(id)}
+                onAddNew={query => {
+                  if (!onAddPatient) return navigate('/patients');
+                  setNewPatientPrefill(prefillFromQuery(query));
+                  setIsAddPatientOpen(true);
+                }}
+              />
+            )}
+            {perms.menu('calendar') && (
+              <button
+                onClick={() => navigate('/calendar')}
+                className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                {t('dashboard.quickAppointment')}
+              </button>
+            )}
+            {!isReceptionist && canTakePayment && (
               <button
                 onClick={() => {
                   if (!onAddTransaction) return navigate('/finance');
@@ -1075,7 +1083,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             presetService={payingAppointment?.type}
             presetAmount={presetAmount || undefined}
             presetDate={payingAppointment?.date}
-            canChangeDate={userRole === UserRole.CLINIC_ADMIN}
+            canChangeDate={perms.flag('money', 'backdate')}
+            maxDiscountPercent={perms.limit('money', 'discount')}
           />
         );
       })()}

@@ -4,6 +4,7 @@ import { Users, BarChart3, Shield } from 'lucide-react';
 import { StaffManagement } from '../components/StaffManagement';
 import { AccessControlSettings } from '../components/AccessControlSettings';
 import { StaffStatistics } from '../components/StaffStatistics';
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 import {
    UserRole, Doctor, Receptionist, LabTechnician, Clinic, SubscriptionPlan, Branch,
@@ -53,16 +54,17 @@ interface StaffProps {
 export const Staff: React.FC<StaffProps> = ({ userRole, analyticsDoctors, appointments, services, transactions, reviews, expenses, labOrders, ...management }) => {
    const { t } = useLanguage();
    const isAdmin = userRole === UserRole.CLINIC_ADMIN;
+   const canStats = usePerms().can('doctors', 'stats', 'view');
 
    const [searchParams, setSearchParams] = useSearchParams();
    const requested = searchParams.get('tab');
-   const activeTab: TabKey = requested === 'stats' ? 'stats'
+   const activeTab: TabKey = requested === 'stats' && canStats ? 'stats'
       : requested === 'access' && isAdmin ? 'access'
          : 'list';
 
    const tabs: { key: TabKey; label: string; icon: React.ElementType; subtitle: string }[] = [
       { key: 'list', label: t('staff.tabs.list'), icon: Users, subtitle: t('staff.subtitle.list') },
-      { key: 'stats', label: t('staff.tabs.stats'), icon: BarChart3, subtitle: t('staff.subtitle.stats') },
+      ...(canStats ? [{ key: 'stats' as const, label: t('staff.tabs.stats'), icon: BarChart3, subtitle: t('staff.subtitle.stats') }] : []),
       ...(isAdmin ? [{ key: 'access' as const, label: t('staff.tabs.access'), icon: Shield, subtitle: t('staff.subtitle.access') }] : []),
    ];
    const current = tabs.find(tab => tab.key === activeTab) || tabs[0];
@@ -118,7 +120,13 @@ export const Staff: React.FC<StaffProps> = ({ userRole, analyticsDoctors, appoin
                currentClinic={management.currentClinic}
             />
          )}
-         {activeTab === 'access' && <AccessControlSettings currentClinic={management.currentClinic} />}
+         {activeTab === 'access' && (
+            <AccessControlSettings
+               currentClinic={management.currentClinic}
+               doctorCount={management.doctors.length}
+               receptionistCount={(management.receptionists || []).length}
+            />
+         )}
       </div>
    );
 };

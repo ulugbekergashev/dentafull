@@ -1,3 +1,4 @@
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button } from '../components/Common';
@@ -141,8 +142,15 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     clinicId, currentClinic, doctors, addToast
 }) => {
     const { t } = useLanguage();
+    // Ruxsatlar: shablon/avtomatika sozlash va ko'p bemorga qo'lda yuborish alohida.
+    // "Tarix" har doim ochiq — nima yuborilganini ko'rish hech kimga zarar qilmaydi.
+    const perms = usePerms();
+    const canAutomation = perms.flag('messages', 'automation');
+    const canBulk = perms.flag('messages', 'bulk');
 
-    const [activeTab, setActiveTab] = useState<'templates' | 'auto' | 'manual' | 'history'>('templates');
+    const [activeTab, setActiveTab] = useState<'templates' | 'auto' | 'manual' | 'history'>(
+        canAutomation ? 'templates' : canBulk ? 'manual' : 'history'
+    );
 
     // ── Ma'lumotlar ──
     const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -639,9 +647,11 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
     );
 
     const TABS = [
-        { id: 'templates' as const, label: 'Shablonlar', icon: MessageSquare },
-        { id: 'auto' as const, label: 'Avtomatik', icon: Clock },
-        { id: 'manual' as const, label: "Qo'lda", icon: Send },
+        ...(canAutomation ? [
+            { id: 'templates' as const, label: 'Shablonlar', icon: MessageSquare },
+            { id: 'auto' as const, label: 'Avtomatik', icon: Clock },
+        ] : []),
+        ...(canBulk ? [{ id: 'manual' as const, label: "Qo'lda", icon: Send }] : []),
         { id: 'history' as const, label: 'Tarix', icon: CalendarDays },
     ];
 
@@ -675,7 +685,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             </div>
 
             {/* ═══ SHABLONLAR ═══ */}
-            {activeTab === 'templates' && (
+            {activeTab === 'templates' && canAutomation && (
                 <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap gap-1.5">
@@ -776,7 +786,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             )}
 
             {/* ═══ AVTOMATIK ═══ */}
-            {activeTab === 'auto' && (
+            {activeTab === 'auto' && canAutomation && (
                 <div className="space-y-4">
                     {/* Chastota chegarasi — bir bemorga N kunda bittadan ko'p xabar ketmasin */}
                     <Card className="p-5">
@@ -1063,7 +1073,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             )}
 
             {/* ═══ QO'LDA ═══ */}
-            {activeTab === 'manual' && (
+            {activeTab === 'manual' && canBulk && (
                 <div className="space-y-4">
                     {/* Kanal tanlash */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

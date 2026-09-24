@@ -12,6 +12,8 @@ interface PatientQuickSearchProps {
     /** Yangi bemor qo'shish — qidiruv matni formaga o'tadi */
     onAddNew: (query: string) => void;
     showPhone?: boolean;
+    /** Yangi bemor qo'shish ruxsati — bo'lmasa faqat qidiruv qoladi */
+    canAdd?: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ interface PatientQuickSearchProps {
  * yerning o'zidan yangi bemor qo'shiladi. Qadam qo'shilmaydi — yozilgan ism
  * yoki telefon formaga tayyor bo'lib o'tadi, takror bemor esa oldindan ko'rinadi.
  */
-export const PatientQuickSearch: React.FC<PatientQuickSearchProps> = ({ patients, onOpen, onAddNew, showPhone = true }) => {
+export const PatientQuickSearch: React.FC<PatientQuickSearchProps> = ({ patients, onOpen, onAddNew, showPhone = true, canAdd = true }) => {
     const { t } = useLanguage();
     const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
@@ -28,7 +30,7 @@ export const PatientQuickSearch: React.FC<PatientQuickSearchProps> = ({ patients
 
     const results = useMemo(() => searchPatients(patients, query), [patients, query]);
     // Oxirgi qator — "Yangi bemor"; klaviatura bilan unga ham o'tiladi
-    const itemCount = results.length + 1;
+    const itemCount = results.length + (canAdd ? 1 : 0);
     useEffect(() => { setActive(0); }, [query]);
 
     useEffect(() => {
@@ -42,12 +44,14 @@ export const PatientQuickSearch: React.FC<PatientQuickSearchProps> = ({ patients
 
     const choose = (index: number) => {
         if (index < results.length) onOpen(results[index].id);
-        else onAddNew(query);
+        else if (canAdd) onAddNew(query);
+        else return;
         setOpen(false);
         setQuery('');
     };
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (itemCount === 0) return;
         if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive(a => (a + 1) % itemCount); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => (a - 1 + itemCount) % itemCount); }
         else if (e.key === 'Enter' && query.trim()) { e.preventDefault(); choose(active); }
@@ -69,15 +73,17 @@ export const PatientQuickSearch: React.FC<PatientQuickSearchProps> = ({ patients
                     aria-label={t('patientSearch.placeholder')}
                     className="w-40 sm:w-52 bg-transparent border-none px-2 py-2 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-0 outline-none"
                 />
-                <button
-                    type="button"
-                    onClick={() => choose(results.length)}
-                    title={t('dashboard.quickPatient')}
-                    aria-label={t('dashboard.quickPatient')}
-                    className="m-0.5 flex items-center gap-1 px-2.5 py-1.5 bg-primary hover:bg-primary-700 text-white text-xs font-bold rounded-lg transition-colors"
-                >
-                    <UserPlus className="w-3.5 h-3.5" />
-                </button>
+                {canAdd && (
+                    <button
+                        type="button"
+                        onClick={() => choose(results.length)}
+                        title={t('dashboard.quickPatient')}
+                        aria-label={t('dashboard.quickPatient')}
+                        className="m-0.5 flex items-center gap-1 px-2.5 py-1.5 bg-primary hover:bg-primary-700 text-white text-xs font-bold rounded-lg transition-colors"
+                    >
+                        <UserPlus className="w-3.5 h-3.5" />
+                    </button>
+                )}
             </div>
 
             {showList && (
@@ -99,7 +105,7 @@ export const PatientQuickSearch: React.FC<PatientQuickSearchProps> = ({ patients
                             </p>
                         </button>
                     ))}
-                    <button
+                    {canAdd && <button
                         type="button"
                         onMouseEnter={() => setActive(results.length)}
                         onClick={() => choose(results.length)}
@@ -107,7 +113,7 @@ export const PatientQuickSearch: React.FC<PatientQuickSearchProps> = ({ patients
                     >
                         <UserPlus className="w-4 h-4 shrink-0" />
                         <span className="truncate">{t('patientSearch.addNew')}: «{query.trim()}»</span>
-                    </button>
+                    </button>}
                 </div>
             )}
         </div>

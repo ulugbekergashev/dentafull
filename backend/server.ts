@@ -97,6 +97,7 @@ if (CRON_DISABLED) {
 const { botManager } = require('./botManager');
 const { smsService, normalizeUzPhone } = require('./smsService');
 const dhp = require('./dhp');
+import { makePermChecker, PermChecker } from './permissions';
 const notif = require('./notifications');
 const cors = require('cors');
 const axios = require('axios');
@@ -383,24 +384,84 @@ const canAccessClinic = (req: any, clinicId: string): boolean => {
     return u?.clinicId === clinicId;
 };
 
-// Shifokor klinikadagi BARCHA bemorlarni ko'radimi (Xodimlar → Ruxsatlar →
-// "Ko'rish doirasi"). Sozlama clinic.accessControl JSON ichida saqlanadi:
-// { doctor: { seeAllPatients: true } }. Sozlama yo'q yoki buzuq bo'lsa — false,
-// ya'ni hozirgi xatti-harakat (faqat o'z bemorlari) saqlanadi.
-const doctorSeesAllPatients = async (clinicId: string): Promise<boolean> => {
+// ─── Xodimlar ruxsatlari (Xodimlar → Ruxsatlar) ──────────────────────────────
+// Katalog va hisoblash `permissions.ts` da (frontend bilan bir xil fayl).
+// Sozlama clinic.accessControl JSON matnida — alohida ustun yoki migratsiya yo'q.
+// Sozlama yo'q yoki buzuq bo'lsa — "Standart", ya'ni jadvaldan oldingi xatti-harakat.
+//
+// Har so'rovda bazaga bormaslik uchun 30 soniyalik kesh. Klinika egasi ruxsatni
+// o'zgartirganda (PUT /access-control) kesh darhol tozalanadi.
+const PERM_CACHE_TTL_MS = 30_000;
+const permCache = new Map<string, { at: number; raw: string | null }>();
+
+async function clinicAccessControl(clinicId: string): Promise<string | null> {
+    const hit = permCache.get(clinicId);
+    if (hit && Date.now() - hit.at < PERM_CACHE_TTL_MS) return hit.raw;
     try {
-        const clinic = await prisma.clinic.findUnique({
-            where: { id: clinicId },
-            select: { accessControl: true },
-        });
-        const raw = clinic?.accessControl;
-        if (!raw) return false;
-        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        return parsed?.doctor?.seeAllPatients === true;
-    } catch {
-        return false; // xato bo'lsa — cheklangan holat, ochiq emas
+        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { accessControl: true } });
+        const raw = clinic?.accessControl ?? null;
+        permCache.set(clinicId, { at: Date.now(), raw });
+        return raw;
+    } catch (e: any) {
+        console.error('Ruxsatlarni o\'qishda xatolik:', e?.message || e);
+        return hit?.raw ?? null;
     }
-};
+}
+
+const invalidatePermCache = (clinicId: string) => { permCache.delete(clinicId); };
+
+/** So'rov egasining ruxsatlari. Klinika egasi, super admin va laborant cheklanmaydi. */
+async function permsOf(req: any): Promise<PermChecker> {
+    const u = req?.user;
+    if (u?.role !== 'DOCTOR' && u?.role !== 'RECEPTIONIST') return makePermChecker(u?.role, null);
+    return makePermChecker(u.role, u.clinicId ? await clinicAccessControl(u.clinicId) : null);
+}
+
+const denyPerm = (res: any, what: string) => res.status(403).json({ error: `Ruxsat yo'q: ${what}` });
+
+/** Ruxsat bo'lmasa 403 qaytaradi. Endpoint boshida: if (!(await allow(...))) return; */
+async function allow(req: any, res: any, check: (p: PermChecker) => boolean, what: string): Promise<boolean> {
+    if (check(await permsOf(req))) return true;
+    denyPerm(res, what);
+    return false;
+}
+
+/** Bugungi sana klinika vaqti bo'yicha (Toshkent) — YYYY-MM-DD */
+const todayTashkent = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' });
+
+/**
+ * Yangi to'lov: qabul qilish ruxsati, chegirma limiti, bepul yopish va o'tgan sana.
+ * O'tgan sanadagi to'lov o'sha kundagi qabul uchun bo'lsa (Olinmagan pul ro'yxatidan)
+ * bu "o'tgan sanaga yozish" emas — qabul qaysi kuni bo'lgan bo'lsa, to'lov o'sha kunga tushadi.
+ */
+async function allowPaymentCreate(req: any, res: any): Promise<boolean> {
+    const p = await permsOf(req);
+    if (p.owner) return true;
+    const b = req.body || {};
+    if (!p.flag('money', 'payCreate')) { denyPerm(res, "to'lov qabul qilish"); return false; }
+    const discount = Number(b.discountPercent) || 0;
+    const waive = b.status === 'Paid' && Number(b.amount) <= 0 && discount >= 100;
+    if (waive) {
+        if (!p.flag('money', 'waive')) { denyPerm(res, 'bepul deb yopish'); return false; }
+    } else {
+        const max = p.limit('money', 'discount');
+        if (discount > max) { denyPerm(res, max > 0 ? `chegirma ${max}% dan oshmasin` : 'chegirma berish'); return false; }
+    }
+    const date = String(b.date || '').slice(0, 10);
+    if (date && date < todayTashkent() && !p.flag('money', 'backdate')) {
+        const visit = b.patientId ? await prisma.appointment.findFirst({
+            where: { clinicId: req.user?.clinicId, patientId: String(b.patientId), date, NOT: { status: 'Cancelled' } },
+            select: { id: true },
+        }) : null;
+        if (!visit) { denyPerm(res, "o'tgan sanaga to'lov yozish"); return false; }
+    }
+    return true;
+}
+
+// Shifokor klinikadagi BARCHA bemorlarni ko'radimi (Xodimlar → Ruxsatlar → Bemorlar →
+// ko'rish doirasi). Sozlama yo'q yoki buzuq bo'lsa — false, ya'ni faqat o'z bemorlari.
+const doctorSeesAllPatients = async (clinicId: string): Promise<boolean> =>
+    makePermChecker('DOCTOR', await clinicAccessControl(clinicId)).scopeAll();
 
 // ─── Markaziy (yagona) xabar yuborish funksiyasi ─────────────────────────────
 // Barcha kanallar (Telegram/SMS) shu yerdan o'tadi va yagona TelegramLog tarixiga yoziladi.
@@ -613,6 +674,7 @@ app.get('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => 
 // PUT SMS settings (save credentials + mode)
 app.put('/api/clinics/:id/sms-settings', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { notificationMode, eskizEmail, eskizPassword, eskizNick } = req.body;
         const clinicId = req.params.id;
@@ -662,6 +724,7 @@ app.get('/api/clinics/:id/sms-balance', authenticateToken, async (req, res) => {
 // POST Test SMS
 app.post('/api/clinics/:id/sms-test', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { phone } = req.body;
         if (!phone) return res.status(400).json({ error: 'Telefon raqam kiritilsin' });
@@ -727,6 +790,7 @@ const submitTemplateToEskizModeration = async (templateId: string, clinicId: str
 
 app.post('/api/message-templates', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'automation'), "shablon va avtomatik xabarlar"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { name, text } = req.body;
@@ -746,6 +810,7 @@ app.post('/api/message-templates', authenticateToken, async (req, res) => {
 
 app.put('/api/message-templates/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'automation'), "shablon va avtomatik xabarlar"))) return;
         if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
         const { name, text } = req.body;
         const existing = await prisma.messageTemplate.findUnique({ where: { id: req.params.id } });
@@ -777,6 +842,7 @@ app.put('/api/message-templates/:id', authenticateToken, async (req, res) => {
 // moderatsiyaga yuboradi, so'ng holatini o'qiydi.
 app.post('/api/message-templates/:id/sync-eskiz-status', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'automation'), "shablon va avtomatik xabarlar"))) return;
         if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
         const existing = await prisma.messageTemplate.findUnique({ where: { id: req.params.id } });
         if (!existing) return res.status(404).json({ error: 'Shablon topilmadi' });
@@ -807,6 +873,7 @@ app.post('/api/message-templates/:id/sync-eskiz-status', authenticateToken, asyn
 
 app.delete('/api/message-templates/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'automation'), "shablon va avtomatik xabarlar"))) return;
         if (!(await assertOwnership(req, res, 'messageTemplate', req.params.id))) return;
         const usedByRules = await prisma.automationRule.count({ where: { templateId: req.params.id } });
         if (usedByRules > 0) {
@@ -849,6 +916,7 @@ app.get('/api/automation-rules', authenticateToken, async (req, res) => {
 
 app.post('/api/automation-rules', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'automation'), "shablon va avtomatik xabarlar"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { name, templateId, trigger, hoursBefore, channel, doctorId, segment, schedule } = req.body;
@@ -895,6 +963,7 @@ app.post('/api/automation-rules', authenticateToken, async (req, res) => {
 
 app.put('/api/automation-rules/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'automation'), "shablon va avtomatik xabarlar"))) return;
         if (!(await assertOwnership(req, res, 'automationRule', req.params.id))) return;
         const { name, templateId, trigger, hoursBefore, channel, doctorId, active, segment, schedule } = req.body;
         if (trigger !== undefined && !AUTOMATION_TRIGGERS.includes(trigger)) return res.status(400).json({ error: 'Noto\'g\'ri trigger turi' });
@@ -931,6 +1000,7 @@ app.put('/api/automation-rules/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/automation-rules/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'automation'), "shablon va avtomatik xabarlar"))) return;
         if (!(await assertOwnership(req, res, 'automationRule', req.params.id))) return;
         await prisma.automationRule.delete({ where: { id: req.params.id } });
         await deleteExtras(req.params.id); // yon jadvalda yetim yozuv qolmasin
@@ -990,6 +1060,7 @@ async function runBulkSend(clinicId: string, clinic: any, patients: any[], messa
 
 app.post('/api/messages/send-bulk', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'bulk'), "ko'p bemorga xabar yuborish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { patientIds, segment, message, channel, ignoreCooldown } = req.body;
@@ -1061,6 +1132,7 @@ app.get('/api/messages/saved-segments', authenticateToken, async (req, res) => {
 
 app.post('/api/messages/saved-segments', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'bulk'), "ko'p bemorga xabar yuborish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { name, segment } = req.body;
@@ -1074,6 +1146,7 @@ app.post('/api/messages/saved-segments', authenticateToken, async (req, res) => 
 
 app.delete('/api/messages/saved-segments/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'bulk'), "ko'p bemorga xabar yuborish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         await deleteSegment(clinicId as string, req.params.id);
@@ -1187,6 +1260,7 @@ app.get('/api/messages/settings', authenticateToken, async (req, res) => {
 
 app.put('/api/messages/settings', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'automation'), "shablon va avtomatik xabarlar"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const days = parseInt(req.body?.cooldownDays);
@@ -1210,6 +1284,7 @@ app.put('/api/messages/settings', authenticateToken, async (req, res) => {
 // Chastota chegarasiga bo'ysunmaydi va bemorlarga tegmaydi.
 app.post('/api/messages/test-send', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'bulk') || p.flag('messages', 'automation'), "sinov xabari"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { message, channel, phone, patientId } = req.body;
@@ -1303,6 +1378,7 @@ app.get('/api/messages/logs', authenticateToken, async (req, res) => {
 // Yangi urinish natijasi (Sent yoki Failed) sendUnified tomonidan alohida log qilinadi.
 app.post('/api/messages/retry', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('messages', 'bulk'), "ko'p bemorga xabar yuborish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const { logIds } = req.body;
@@ -1718,6 +1794,7 @@ function normalizeRegion(regionCode: unknown, districtCode: unknown): { regionCo
 
 app.post('/api/patients', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'card', 'create'), "bemor qo'shish"))) return;
         const { firstName, lastName, phone, clinicId, dob, gender, medicalHistory, pinfl, address, secondaryPhone, passport, regionCode, districtCode } = req.body;
 
         // 1. Validate required fields
@@ -1800,6 +1877,7 @@ app.get('/api/patients/:id', authenticateToken, async (req, res) => {
 // birma-bir ochib chiqishga to'g'ri kelardi.
 app.post('/api/patients/assign-branch', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'card', 'edit'), "bemor kartasini tahrirlash"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
@@ -1835,6 +1913,23 @@ app.post('/api/patients/assign-branch', authenticateToken, async (req, res) => {
 app.put('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'patient', req.params.id))) return;
+        // Ruxsatlar: faqat kasallik tarixi, faqat surat yoki karta ma'lumotlari
+        {
+            const perm = await permsOf(req);
+            const body: any = req.body || {};
+            const keys = Object.keys(body).filter(k => body[k] !== undefined);
+            const historyOnly = keys.length > 0 && keys.every(k => k === 'medicalHistory');
+            const photoOnly = keys.length > 0 && keys.every(k => k === 'avatarUrl' || k === 'portraitUrl');
+            if (historyOnly) {
+                if (!perm.can('patients', 'history', 'edit')) return denyPerm(res, "kasallik tarixini o'zgartirish");
+            } else if (photoOnly) {
+                if (!(perm.can('patients', 'card', 'edit') || perm.can('patients', 'card', 'create') || perm.can('patients', 'photos', 'create'))) return denyPerm(res, 'surat yuklash');
+            } else {
+                if (!perm.can('patients', 'card', 'edit')) return denyPerm(res, 'bemor kartasini tahrirlash');
+                // Kasallik tarixini tahrirlash ruxsati bo'lmasa, umumiy formadan ham o'zgarmaydi
+                if (!perm.can('patients', 'history', 'edit')) delete body.medicalHistory;
+            }
+        }
         const { firstName, lastName, phone, dob, lastVisit, status, gender, medicalHistory, address, telegramChatId, secondaryPhone, clinicId, avatarUrl, portraitUrl, doctorId, pinfl, passport, regionCode, districtCode } = req.body;
         const updateData: any = {};
         if (firstName !== undefined) updateData.firstName = firstName;
@@ -1880,6 +1975,7 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/patients/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'card', 'delete'), "bemorni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'patient', req.params.id))) return;
         await prisma.patient.update({
             where: { id: req.params.id },
@@ -1912,6 +2008,14 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
 
 app.post('/api/appointments', authenticateToken, async (req, res) => {
     try {
+        {
+            // Tugagan tashrifni yozish (shifokor qabulni yakunlaganda) — klinik ish, kalendar emas
+            const st = String(req.body?.status || '');
+            const ok = st === 'Completed' || st === 'Checked-In'
+                ? await allow(req, res, p => p.menu('patients') || p.can('calendar', 'appts', 'create'), "tashrifni yozish")
+                : await allow(req, res, p => p.can('calendar', 'appts', 'create'), "qabul yozish");
+            if (!ok) return;
+        }
         const { patientId, date, time, notes, clinicId } = req.body;
 
         // 1. Check for existing appointment for this patient on this date
@@ -1983,6 +2087,18 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
 app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
     try {
         if (!(await assertOwnership(req, res, 'appointment', req.params.id))) return;
+        // Ruxsatlar: holat, izoh va kassaga yuborish — kundalik klinik ish, har doim mumkin.
+        // Kun, vaqt, shifokor yoki davomiylikni o'zgartirish — qabulni tahrirlash.
+        {
+            const perm = await permsOf(req);
+            if (!perm.owner) {
+                const cur = await prisma.appointment.findUnique({ where: { id: req.params.id }, select: { date: true, time: true, doctorId: true, duration: true } });
+                const body: any = req.body || {};
+                const moved = cur && (['date', 'time', 'doctorId', 'duration'] as const)
+                    .some(k => body[k] !== undefined && String(body[k]) !== String((cur as any)[k]));
+                if (moved && !perm.can('calendar', 'appts', 'edit')) return denyPerm(res, "qabulni ko'chirish");
+            }
+        }
         // Sanitize body to only include valid Appointment fields
         const { patientId, patientName, doctorId, doctorName, type, date, time, duration, status, reminderSent, notes, clinicId, sentToCashierAt } = req.body;
         const updateData: any = {};
@@ -2102,6 +2218,7 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('calendar', 'appts', 'delete'), "qabulni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'appointment', req.params.id))) return;
         await prisma.appointment.delete({
             where: { id: req.params.id }
@@ -2115,6 +2232,7 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
 // Manual Appointment Reminder
 app.post('/api/appointments/:id/remind', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('calendar', 'remind'), "eslatma yuborish"))) return;
         if (!(await assertOwnership(req, res, 'appointment', req.params.id))) return;
         const appointment = await prisma.appointment.findUnique({
             where: { id: req.params.id },
@@ -2145,6 +2263,7 @@ app.post('/api/appointments/:id/remind', authenticateToken, async (req, res) => 
 // Manual Debt Reminder
 app.post('/api/patients/:id/remind-debt', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('patients', 'message'), "bemorga xabar yuborish"))) return;
         if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const { amount } = req.body;
         const patient = await prisma.patient.findUnique({
@@ -2176,6 +2295,7 @@ app.post('/api/patients/:id/remind-debt', authenticateToken, async (req, res) =>
 // Manual Custom Message
 app.post('/api/patients/:id/send-message', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('patients', 'message'), "bemorga xabar yuborish"))) return;
         if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const { message } = req.body;
         const patient = await prisma.patient.findUnique({
@@ -2247,6 +2367,7 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
 
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     try {
+        if (!(await allowPaymentCreate(req, res))) return;
         const actor = (req as any).user;
         const txBranchId = await resolveBranchId(req, getScopedClinicId(req) || req.body?.clinicId || null);
         const transaction = await prisma.transaction.create({
@@ -2315,6 +2436,27 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
         if (!(await assertOwnership(req, res, 'transaction', req.params.id))) return;
         const oldTx = await prisma.transaction.findUnique({ where: { id: req.params.id } });
         if (!oldTx) return res.status(404).json({ error: 'Transaction not found' });
+
+        // Ruxsatlar: to'lanmagan yozuvni to'langan qilish yoki qarzni kamaytirish — bu
+        // qarzni yopish (to'lov qabul qilish). Boshqa har qanday o'zgarish — tahrirlash.
+        {
+            const perm = await permsOf(req);
+            if (!perm.owner) {
+                const upd: any = req.body || {};
+                const changed = ['amount', 'type', 'status', 'date', 'service', 'discountPercent', 'discountAmount', 'patientId', 'doctorId', 'isDebt']
+                    .filter(k => upd[k] !== undefined && String(upd[k]) !== String((oldTx as any)[k]));
+                const newAmount = Number(upd.amount);
+                const collecting = oldTx.status !== 'Paid' && (
+                    (upd.status === 'Paid'
+                        && changed.every(k => ['status', 'type', 'date', 'amount'].includes(k))
+                        && !(newAmount > oldTx.amount))
+                    || (changed.length === 1 && changed[0] === 'amount' && newAmount > 0 && newAmount < oldTx.amount)
+                );
+                if (changed.length > 0 && !(collecting ? perm.flag('money', 'payCreate') : perm.flag('money', 'payEdit'))) {
+                    return denyPerm(res, collecting ? "to'lov qabul qilish" : "to'lovni tahrirlash");
+                }
+            }
+        }
 
         // createdAt va "kim qabul qildi" — tashqaridan o'zgartirilmaydi.
         const { createdAt: _ignored, receivedById: _rid, receivedByName: _rn, ...updateData } = req.body || {};
@@ -2386,6 +2528,7 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('money', 'payDelete'), "to'lovni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'transaction', req.params.id))) return;
         const transaction = await prisma.transaction.findUnique({ where: { id: req.params.id } });
         if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
@@ -2447,6 +2590,7 @@ app.get('/api/expenses', authenticateToken, async (req, res) => {
 
 app.post('/api/expenses', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('finance', 'expenses', 'create'), "xarajat qo'shish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
@@ -2487,6 +2631,7 @@ app.post('/api/expenses', authenticateToken, async (req, res) => {
 
 app.put('/api/expenses/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('finance', 'expenses', 'edit'), "xarajatni tahrirlash"))) return;
         if (!(await assertOwnership(req, res, 'expense', req.params.id))) return;
 
         const { date, amount, category, title, method, note, doctorId, receptionistId } = req.body;
@@ -2516,6 +2661,7 @@ app.put('/api/expenses/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/expenses/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('finance', 'expenses', 'delete'), "xarajatni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'expense', req.params.id))) return;
         await prisma.expense.delete({ where: { id: req.params.id } });
         res.json({ success: true });
@@ -2596,6 +2742,7 @@ const optionalAmount = (v: any): number | null => {
 
 app.post('/api/cash-register/close', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('finance', 'closeday'), "kunni yopish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
@@ -2649,8 +2796,9 @@ app.post('/api/cash-register/close', authenticateToken, async (req, res) => {
 });
 
 // Qayta ochish — faqat klinika admini (registrator o'z xatosini yashira olmasin)
-app.delete('/api/cash-register/:date', authenticateToken, requireRole('CLINIC_ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+app.delete('/api/cash-register/:date', authenticateToken, requireRole('CLINIC_ADMIN', 'SUPER_ADMIN', 'RECEPTIONIST'), async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('finance', 'reopen'), "yopilgan kunni qayta ochish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
@@ -2696,6 +2844,7 @@ app.get('/api/cash-movements', authenticateToken, async (req, res) => {
 
 app.post('/api/cash-movements', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('finance', 'encash'), "inkassatsiya va qaytarish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
         const user = (req as any).user;
@@ -2738,6 +2887,7 @@ app.post('/api/cash-movements', authenticateToken, async (req, res) => {
 
 app.delete('/api/cash-movements/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('finance', 'encash'), "inkassatsiya va qaytarish"))) return;
         if (!(await assertOwnership(req, res, 'cashMovement', req.params.id))) return;
         const user = (req as any).user;
         const movement = await prisma.cashMovement.findUnique({ where: { id: req.params.id } });
@@ -2800,6 +2950,7 @@ app.get('/api/installments', authenticateToken, async (req, res) => {
 
 app.post('/api/installments', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('money', 'payCreate'), "bo'lib to'lash shartnomasi"))) return;
         const { patientId, clinicId, doctorId, service, totalAmount, totalPaid, startDate, endDate, status, items } = req.body;
         
         const plan = await prisma.installmentPlan.create({
@@ -2825,6 +2976,7 @@ app.post('/api/installments', authenticateToken, async (req, res) => {
 
 app.post('/api/installments/:id/pay', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('money', 'payCreate'), "to'lov qabul qilish"))) return;
         const itemId = req.params.id;
         const { date, paymentMethod } = req.body;
         
@@ -2880,6 +3032,7 @@ app.post('/api/installments/:id/pay', authenticateToken, async (req, res) => {
 
 app.delete('/api/installments/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('money', 'payDelete'), "shartnomani o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'installmentPlan', req.params.id))) return;
         await prisma.installmentPlan.delete({ where: { id: req.params.id } });
         res.json({ success: true });
@@ -2948,6 +3101,7 @@ app.get('/api/doctors', authenticateToken, async (req, res) => {
 
 app.post('/api/doctors', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'create'), "xodim qo'shish"))) return;
         const { firstName, lastName, specialty, phone, email, status, clinicId, username, password, percentage, salaryType, fixedSalary } = req.body;
 
         // Check subscription limit
@@ -3023,6 +3177,7 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
 
 app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'edit'), "xodimni tahrirlash"))) return;
         if (!(await assertOwnership(req, res, 'doctor', req.params.id))) return;
         const { username } = req.body;
         if (username) {
@@ -3087,6 +3242,7 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/doctors/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'delete'), "xodimni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'doctor', req.params.id))) return;
         await prisma.doctor.update({
             where: { id: req.params.id },
@@ -3227,6 +3383,7 @@ app.get('/api/receptionists', authenticateToken, async (req, res) => {
 
 app.post('/api/receptionists', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'create'), "xodim qo'shish"))) return;
         const { firstName, lastName, phone, username, password, clinicId } = req.body;
 
         if (!firstName || !lastName || !username || !password) {
@@ -3263,6 +3420,7 @@ app.post('/api/receptionists', authenticateToken, async (req, res) => {
 
 app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'edit'), "xodimni tahrirlash"))) return;
         if (!(await assertOwnership(req, res, 'receptionist', req.params.id))) return;
         const { username } = req.body;
         if (username) {
@@ -3292,6 +3450,7 @@ app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/receptionists/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'delete'), "xodimni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'receptionist', req.params.id))) return;
         await prisma.receptionist.update({
             where: { id: req.params.id },
@@ -3324,6 +3483,7 @@ app.get('/api/lab-technicians', authenticateToken, async (req: any, res: any) =>
 
 app.post('/api/lab-technicians', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'create'), "xodim qo'shish"))) return;
         const { firstName, lastName, specialty, phone, clinicId, username, password } = req.body;
         if (!firstName || !lastName || !phone || !clinicId) {
             return res.status(400).json({ error: 'Barcha maydonlar to\'ldirilishi shart' });
@@ -3347,6 +3507,7 @@ app.post('/api/lab-technicians', authenticateToken, async (req: any, res: any) =
 
 app.put('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'edit'), "xodimni tahrirlash"))) return;
         if (!(await assertOwnership(req, res, 'labTechnician', req.params.id))) return;
         const { firstName, lastName, specialty, phone, status, username, password } = req.body;
         if (username) {
@@ -3375,6 +3536,7 @@ app.put('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any
 
 app.delete('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await allow(req, res, p => p.can('doctors', 'list', 'delete'), "xodimni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'labTechnician', req.params.id))) return;
         await (prisma as any).labTechnician.update({
             where: { id: req.params.id },
@@ -3411,6 +3573,7 @@ app.get('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
 
 app.post('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await allow(req, res, p => p.can('lab', 'orders', 'create'), "buyurtma qo'shish"))) return;
         const { patientName, doctorName, technicianId, technicianName, clinicId, orderType, material, toothNumbers, notes, deadline, price, priority, clinicianNotes } = req.body;
         if (!patientName || !technicianId || !clinicId || !orderType || !deadline) {
             return res.status(400).json({ error: 'Majburiy maydonlar to\'ldirilmagan' });
@@ -3478,6 +3641,7 @@ const syncLabOrderExpense = async (order: any) => {
 
 app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await allow(req, res, p => p.can('lab', 'orders', 'edit'), "buyurtmani o'zgartirish"))) return;
         if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return;
         const updateData: any = { ...req.body };
         // If status is being set to 'Delivered', set deliveredAt
@@ -3508,6 +3672,7 @@ app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => 
 
 app.delete('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
     try {
+        if (!(await allow(req, res, p => p.can('lab', 'orders', 'delete'), "buyurtmani o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return;
         await prisma.expense.deleteMany({ where: { labOrderId: req.params.id } });
         await (prisma as any).labOrder.delete({ where: { id: req.params.id } });
@@ -3520,6 +3685,7 @@ app.delete('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) 
 // --- Inventory Log Delete ---
 app.delete('/api/inventory/logs/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('inventory', 'items', 'delete'), "ombor yozuvini o'chirish"))) return;
         const log = await (prisma as any).inventoryLog.findUnique({
             where: { id: req.params.id }
         });
@@ -3562,6 +3728,7 @@ app.get('/api/categories', authenticateToken, async (req, res) => {
 
 app.post('/api/categories', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'services', 'create'), "xizmat qo'shish"))) return;
         const category = await prisma.serviceCategory.create({
             data: req.body
         });
@@ -3573,6 +3740,7 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
 
 app.put('/api/categories/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'services', 'edit'), "narxni o'zgartirish"))) return;
         if (!(await assertOwnership(req, res, 'serviceCategory', req.params.id))) return;
         const category = await prisma.serviceCategory.update({
             where: { id: req.params.id },
@@ -3586,6 +3754,7 @@ app.put('/api/categories/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/categories/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'services', 'delete'), "xizmatni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'serviceCategory', req.params.id))) return;
         await prisma.serviceCategory.delete({
             where: { id: req.params.id }
@@ -3852,6 +4021,7 @@ app.delete('/api/notifications', authenticateToken, async (req: any, res: any) =
 
 app.post('/api/services', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'services', 'create'), "xizmat qo'shish"))) return;
         const service = await prisma.service.create({
             data: req.body
         });
@@ -3863,6 +4033,7 @@ app.post('/api/services', authenticateToken, async (req, res) => {
 
 app.put('/api/services/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'services', 'edit'), "narxni o'zgartirish"))) return;
         // Egalik tekshiruvi (Service id butun son)
         const u = (req as any).user;
         if (u?.role !== 'SUPER_ADMIN') {
@@ -3882,6 +4053,7 @@ app.put('/api/services/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/services/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'services', 'delete'), "xizmatni o'chirish"))) return;
         const u = (req as any).user;
         if (u?.role !== 'SUPER_ADMIN') {
             const existing = await prisma.service.findUnique({ where: { id: parseInt(req.params.id) } });
@@ -4262,6 +4434,7 @@ const pickLeadFields = (body: any) => {
 
 app.post('/api/leads', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('leads', 'leads', 'create'), "lid qo'shish"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) {
             return res.status(400).json({ error: 'clinicId is required' });
@@ -4284,6 +4457,7 @@ app.post('/api/leads', authenticateToken, async (req, res) => {
 
 app.put('/api/leads/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('leads', 'leads', 'edit') || (p.flag('leads', 'convert') && req.body?.status === 'Booked'), "lidni o'zgartirish"))) return;
         if (!(await assertOwnership(req, res, 'lead', req.params.id))) return;
         // clinicId yangilanmaydi: aks holda lidni begona klinikaga ko'chirib yuborish mumkin edi.
         const lead = await prisma.lead.update({
@@ -4298,6 +4472,7 @@ app.put('/api/leads/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/leads/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('leads', 'leads', 'delete'), "lidni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'lead', req.params.id))) return;
         await prisma.lead.delete({
             where: { id: req.params.id }
@@ -4795,6 +4970,7 @@ const DHP_ENVIRONMENTS = ['playground', 'production'];
 
 app.post('/api/clinics/:id/dmed-settings', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { dmedEnabled, dmedApiKey, dmedApiSecret, dmedClinicId, dhpEnvironment } = req.body;
         const data: any = {};
@@ -4816,6 +4992,7 @@ app.post('/api/clinics/:id/dmed-settings', authenticateToken, async (req, res) =
 // Kalitlarni tekshirish: token olinadimi, STIR bo'yicha tashkilot topiladimi
 app.post('/api/clinics/:id/dmed-test', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const clinic = await prisma.clinic.findUnique({ where: { id: req.params.id }, select: { dmedApiKey: true, dmedApiSecret: true, dhpEnvironment: true, inn: true } });
         const clientId = String(req.body?.dmedApiKey || clinic?.dmedApiKey || '').trim();
@@ -4859,6 +5036,7 @@ app.get('/api/dhp/status', authenticateToken, async (req, res) => {
 // Navbatni hozir o'tkazish (cron'ni kutmasdan)
 app.post('/api/dhp/sync-now', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
         res.json(await dhp.processClinic(clinicId));
@@ -4870,6 +5048,7 @@ app.post('/api/dhp/sync-now', authenticateToken, async (req, res) => {
 // Xato bo'lganlarni qayta navbatga qo'yish
 app.post('/api/dhp/retry', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
         res.json({ retried: await dhp.retryErrors(clinicId) });
@@ -4881,6 +5060,7 @@ app.post('/api/dhp/retry', authenticateToken, async (req, res) => {
 // Bitta yozuvni qo'lda navbatga qo'yish (masalan, bemor kartasidan)
 app.post('/api/dhp/enqueue', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         const clinicId = getScopedClinicId(req);
         if (!clinicId) return res.status(400).json({ error: 'clinicId talab qilinadi' });
         const { resourceType, localId } = req.body || {};
@@ -4902,6 +5082,7 @@ app.post('/api/dhp/enqueue', authenticateToken, async (req, res) => {
 // klinika admini uchun xavfsiz maydonlargina ruxsat etilgan alohida endpoint.
 app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { name, address, phone, email, ownerPhone, startHour, endHour, enableReceipts, inn } = req.body;
         // STIR: faqat raqamlar (9 ta) — DHP Organization identifikatori
@@ -4956,6 +5137,8 @@ app.put('/api/clinics/:id/access-control', authenticateToken, requireRole('CLINI
             where: { id: req.params.id },
             data: { accessControl: accessControl ? JSON.stringify(accessControl) : null } as any
         });
+        // Yangi ruxsatlar keyingi so'rovdanoq amal qilsin
+        invalidatePermCache(req.params.id);
         res.json({ success: true, clinic });
     } catch (error: any) {
         console.error('Access control update error:', error);
@@ -4966,6 +5149,7 @@ app.put('/api/clinics/:id/access-control', authenticateToken, requireRole('CLINI
 // --- Bot Settings ---
 app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { botToken, ownerPhone } = req.body;
         const clinicId = req.params.id;
@@ -5013,6 +5197,7 @@ app.get('/api/clinics/:id/prepayment-settings', authenticateToken, async (req, r
 
 app.put('/api/clinics/:id/prepayment-settings', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { prepaymentEnabled, prepaymentCardNumber, prepaymentAmount } = req.body;
         const clinic = await prisma.clinic.update({
@@ -5070,6 +5255,7 @@ app.get('/api/icd10', authenticateToken, async (req, res) => {
 
 app.post('/api/diagnoses', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'history', 'edit'), "tashxis qo'shish"))) return;
         const { patientId, code, date, notes, status, clinicId } = req.body;
         if (!(await assertPatientOwnership(req, res, patientId))) return;
 
@@ -5123,6 +5309,7 @@ app.get('/api/diagnoses', authenticateToken, async (req, res) => {
 
 app.delete('/api/diagnoses/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'history', 'edit'), "tashxisni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'patientDiagnosis', req.params.id))) return;
         await prisma.patientDiagnosis.delete({
             where: { id: req.params.id }
@@ -5137,6 +5324,7 @@ app.delete('/api/diagnoses/:id', authenticateToken, async (req, res) => {
 // --- Patient Photos ---
 app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'photos', 'create'), "surat yuklash"))) return;
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
@@ -5168,6 +5356,7 @@ app.post('/api/patients/:id/photos', authenticateToken, upload.single('photo'), 
 // Avatar upload
 app.post('/api/patients/:id/avatar', authenticateToken, upload.single('photo'), async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'card', 'edit') || p.can('patients', 'card', 'create'), "bemor suratini o'zgartirish"))) return;
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const patientId = req.params.id;
@@ -5192,6 +5381,7 @@ app.post('/api/patients/:id/avatar', authenticateToken, upload.single('photo'), 
 // Portrait upload
 app.post('/api/patients/:id/portrait', authenticateToken, upload.single('photo'), async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'card', 'edit') || p.can('patients', 'card', 'create'), "bemor suratini o'zgartirish"))) return;
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const patientId = req.params.id;
@@ -5233,6 +5423,7 @@ app.get('/api/patients/:id/photos', authenticateToken, async (req, res) => {
 
 app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'photos', 'delete'), "suratni o'chirish"))) return;
         const photo = await prisma.patientPhoto.findUnique({
             where: { id: req.params.id }
         });
@@ -5290,6 +5481,7 @@ app.get('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
 
 app.post('/api/patients/:id/teeth', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('patients', 'chart', 'edit'), "tish kartasini o'zgartirish"))) return;
         if (!(await assertPatientOwnership(req, res, req.params.id))) return;
         const patientId = req.params.id;
         const { number, conditions, notes } = req.body;
@@ -5340,6 +5532,7 @@ app.get('/api/facebook/config-check', authenticateToken, (req, res) => {
 });
 
 app.post('/api/facebook/save-config', authenticateToken, async (req, res) => {
+    if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
     const { appId, appSecret } = req.body;
     if (!appId || !appSecret) return res.status(400).json({ error: 'appId and appSecret are required' });
 
@@ -5477,6 +5670,7 @@ app.get('/api/facebook/pages', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/facebook/select-page', authenticateToken, async (req, res) => {
+    if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
     const { pageId, pageAccessToken, pageName } = req.body;
     const clinicId = getScopedClinicId(req);
 
@@ -5520,6 +5714,7 @@ app.post('/api/facebook/select-page', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/facebook/disconnect', authenticateToken, async (req, res) => {
+    if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
     const clinicId = getScopedClinicId(req);
     if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
 
@@ -5860,6 +6055,7 @@ app.get('/api/inventory/analytics', authenticateToken, async (req, res) => {
 
 app.post('/api/inventory', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('inventory', 'items', 'create'), "mahsulot qo'shish"))) return;
         const { name, unit, quantity, minQuantity, clinicId, initialCost } = req.body;
 
         const item = await prisma.inventoryItem.create({
@@ -5896,6 +6092,12 @@ app.post('/api/inventory', authenticateToken, async (req, res) => {
 
 app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
     try {
+        {
+            // Bemor kartasidagi material sarfi — klinik ish; omborda kirim-chiqim alohida ruxsat
+            const b: any = req.body || {};
+            const patientUse = b.type === 'OUT' && !!b.patientId;
+            if (!(await allow(req, res, p => (patientUse && p.menu('patients')) || p.can('inventory', 'moves', 'create'), 'kirim-chiqim'))) return;
+        }
         const { change, type, note, userName, patientId, cost } = req.body;
         const itemId = req.params.id;
 
@@ -6020,6 +6222,7 @@ app.get('/api/inventory/logs', authenticateToken, async (req, res) => {
 
 app.delete('/api/inventory/:id', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.can('inventory', 'items', 'delete'), "mahsulotni o'chirish"))) return;
         if (!(await assertOwnership(req, res, 'inventoryItem', req.params.id))) return;
         // Delete logs first, then item (cascade should handle this but being explicit)
         await prisma.inventoryLog.deleteMany({
@@ -6460,6 +6663,7 @@ async function sendDailyClinicReports() {
 // Batch: Send reminders for tomorrow's appointments
 app.post('/api/batch/remind-appointments', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('calendar', 'remind'), "eslatma yuborish"))) return;
         const { clinicId, message } = req.body;
         console.log(`🔔 Manual trigger: Sending appointment reminders for clinic ${clinicId || 'ALL'}...`);
 
@@ -6481,6 +6685,7 @@ app.post('/api/batch/remind-appointments', authenticateToken, async (req, res) =
 // Batch: Send debt reminders
 app.post('/api/batch/remind-debts', authenticateToken, async (req, res) => {
     try {
+        if (!(await allow(req, res, p => p.flag('patients', 'message'), "bemorga xabar yuborish"))) return;
         const { clinicId, debtors } = req.body; // Accept debtors list from frontend
 
         if (!clinicId) {
@@ -7376,6 +7581,25 @@ app.post('/api/ai/act', authenticateToken, async (req: any, res: any) => {
                 success: true,
                 action: { id: newId, name: p.name, preview: again.preview },
             });
+        }
+
+        // Ruxsatlar jadvali: xodim o'zi qila olmaydigan amalni AI orqali ham bajarib bo'lmaydi
+        {
+            const perm = await permsOf(req);
+            const AI_PERMS: Record<string, (x: PermChecker) => boolean> = {
+                send_reminder: x => x.flag('patients', 'message'),
+                send_message: x => x.flag('patients', 'message'),
+                book_appointment: x => x.can('calendar', 'appts', 'create'),
+                update_lead_status: x => x.can('leads', 'leads', 'edit'),
+                add_charge: x => x.flag('money', 'payCreate'),
+                record_payment: x => x.flag('money', 'payCreate'),
+                add_procedure: x => x.menu('patients'),
+                add_cash: x => x.flag('finance', 'encash'),
+            };
+            const check = AI_PERMS[p.name];
+            if (check && !check(perm)) {
+                return res.json({ success: false, message: "Bu amal uchun ruxsatingiz yo'q (Xodimlar → Ruxsatlar)." });
+            }
         }
 
         const result = await executeAction(

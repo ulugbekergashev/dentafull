@@ -4,6 +4,7 @@ import { Card, Button } from './Common';
 import { useStaffEditors, StaffEditorsProps } from '../hooks/useStaffEditors';
 import { Receptionist, LabTechnician } from '../types';
 import { Edit, Trash2, Plus, ChevronDown, ChevronRight, Stethoscope, Phone, FlaskConical } from 'lucide-react';
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 import { fmt, fullName, initials } from '../utils/staffStats';
 
@@ -50,6 +51,10 @@ export const StaffManagement: React.FC<StaffManagementProps> = (props) => {
    const { t } = useLanguage();
    const navigate = useNavigate();
    const editors = useStaffEditors(props);
+   const perms = usePerms();
+   const canCreate = perms.can('doctors', 'list', 'create');
+   const canEdit = perms.can('doctors', 'list', 'edit');
+   const canDelete = perms.can('doctors', 'list', 'delete');
    const [filter, setFilter] = useState<'all' | StaffKind>('all');
    const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
 
@@ -126,7 +131,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = (props) => {
                      </button>
                   ))}
                </div>
-               <div className="relative">
+               {canCreate && <div className="relative">
                   <Button size="sm" onClick={() => setIsAddMenuOpen(open => !open)} aria-expanded={isAddMenuOpen}>
                      <Plus className="w-4 h-4 mr-1.5" />{t('staff.add')}<ChevronDown className="w-4 h-4 ml-1" />
                   </Button>
@@ -143,7 +148,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = (props) => {
                         </div>
                      </>
                   )}
-               </div>
+               </div>}
             </div>
 
             <div className="overflow-x-auto">
@@ -178,7 +183,7 @@ export const StaffManagement: React.FC<StaffManagementProps> = (props) => {
                            {branches.length > 0 && (
                               <td className="px-3 py-3">
                                  {row.kind === 'doctor' ? (
-                                    <select value={row.branchId || ''} onChange={(e) => onUpdateDoctor(row.id, { branchId: e.target.value || null })} title={t('branches.doctorBranch')}
+                                    <select value={row.branchId || ''} disabled={!canEdit} onChange={(e) => onUpdateDoctor(row.id, { branchId: e.target.value || null })} title={t('branches.doctorBranch')}
                                        className="h-8 max-w-[160px] rounded-md border border-gray-200 dark:border-gray-700 bg-transparent text-xs text-gray-600 dark:text-gray-300 px-2 focus:ring-2 focus:ring-primary-500">
                                        <option value="">{t('branches.doctorAllBranches')}</option>
                                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -192,8 +197,8 @@ export const StaffManagement: React.FC<StaffManagementProps> = (props) => {
                            </td>
                            <td className="px-5 py-3">
                               <div className="flex items-center justify-end gap-1">
-                                 <button onClick={row.edit} title="Tahrirlash" className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md"><Edit className="w-4 h-4" /></button>
-                                 <button onClick={row.remove} title="O'chirish" className="p-2 text-gray-400 hover:text-red-600 rounded-md"><Trash2 className="w-4 h-4" /></button>
+                                 {canEdit && <button onClick={row.edit} title="Tahrirlash" className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md"><Edit className="w-4 h-4" /></button>}
+                                 {canDelete && <button onClick={row.remove} title="O'chirish" className="p-2 text-gray-400 hover:text-red-600 rounded-md"><Trash2 className="w-4 h-4" /></button>}
                                  <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600" />
                               </div>
                            </td>

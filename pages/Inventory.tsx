@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, Button, Input, Modal } from '../components/Common';
 import { InventoryItem } from '../types';
 import { Package, Plus, Minus, Trash2, AlertCircle } from 'lucide-react';
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage, TranslationKey } from '../context/LanguageContext';
 
 interface InventoryProps {
@@ -16,6 +17,10 @@ export const Inventory: React.FC<InventoryProps> = ({
     items, userName, onAddItem, onUpdateStock, onDeleteItem
 }) => {
     const { t } = useLanguage();
+    const perms = usePerms();
+    const canAddItem = perms.can('inventory', 'items', 'create');
+    const canDeleteItem = perms.can('inventory', 'items', 'delete');
+    const canMoveStock = perms.can('inventory', 'moves', 'create');
     // Add Item Modal State
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [addForm, setAddForm] = useState({ name: '', unit: '', quantity: '0', minQuantity: '10', initialCost: '' });
@@ -71,10 +76,12 @@ export const Inventory: React.FC<InventoryProps> = ({
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('inventory.title')}</h1>
                     <p className="text-sm text-gray-500 mt-1">{t('inventory.subtitle')}</p>
                 </div>
-                <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
-                    <Package className="w-4 h-4 mr-2" />
-                    {t('inventory.newItem')}
-                </Button>
+                {canAddItem && (
+                    <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
+                        <Package className="w-4 h-4 mr-2" />
+                        {t('inventory.newItem')}
+                    </Button>
+                )}
             </div>
 
             <Card className="p-0 overflow-hidden">
@@ -85,9 +92,11 @@ export const Inventory: React.FC<InventoryProps> = ({
                         </div>
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t('inventory.empty')}</h3>
                         <p className="text-gray-500 dark:text-gray-400 mb-4">{t('inventory.emptyDesc')}</p>
-                        <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
-                            {t('inventory.addFirst')}
-                        </Button>
+                        {canAddItem && (
+                            <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
+                                {t('inventory.addFirst')}
+                            </Button>
+                        )}
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -127,6 +136,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center justify-end gap-2">
+                                                    {canMoveStock && <>
                                                     <button
                                                         onClick={() => handleOpenStockModal(item, 'IN')}
                                                         className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors"
@@ -141,13 +151,14 @@ export const Inventory: React.FC<InventoryProps> = ({
                                                     >
                                                         <Minus className="w-4 h-4" />
                                                     </button>
-                                                    <button
+                                                    </>}
+                                                    {canDeleteItem && <button
                                                         onClick={() => setDeleteConfirm(item)}
                                                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
                                                         title={t('common.delete')}
                                                     >
                                                         <Trash2 className="w-4 h-4" />
-                                                    </button>
+                                                    </button>}
                                                 </div>
                                             </td>
                                         </tr>

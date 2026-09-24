@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Lead, Doctor, Appointment, ServiceCategory, Service, Clinic } from '../types';
 import { api, isDemoMode } from '../services/api';
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -108,6 +109,11 @@ export const Leads: React.FC<LeadsProps> = ({
     onConvertLead
 }) => {
     const { t } = useLanguage();
+    const perms = usePerms();
+    const canCreate = perms.can('leads', 'leads', 'create');
+    const canEdit = perms.can('leads', 'leads', 'edit');
+    const canDelete = perms.can('leads', 'leads', 'delete');
+    const canConvert = perms.flag('leads', 'convert') && perms.can('patients', 'card', 'create') && perms.can('calendar', 'appts', 'create');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
     const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
@@ -161,10 +167,13 @@ export const Leads: React.FC<LeadsProps> = ({
     };
 
     const moveLead = (leadId: string, newStatus: string) => {
+        if (!canEdit) return;
         onUpdateLead(leadId, { status: newStatus as any });
     };
 
     const handleConvertClick = (leadId: string) => {
+        // Bemorga aylantirish bemor kartasini ham ochadi — ikkala ruxsat kerak
+        if (!canConvert) return;
         setConvertingLeadId(leadId);
         setApptData(prev => ({
             ...prev,
@@ -422,13 +431,15 @@ export const Leads: React.FC<LeadsProps> = ({
                             className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all dark:text-white"
                         />
                     </div>
-                    <button
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-600 active:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap"
-                    >
-                        <Plus className="w-5 h-5" />
-                        <span className="hidden sm:inline">{t('leads.newLead')}</span>
-                    </button>
+                    {canCreate && (
+                        <button
+                            onClick={() => setIsAddModalOpen(true)}
+                            className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-600 active:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap"
+                        >
+                            <Plus className="w-5 h-5" />
+                            <span className="hidden sm:inline">{t('leads.newLead')}</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -462,7 +473,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                     {columnLeads.map(lead => (
                                         <div
                                             key={lead.id}
-                                            draggable
+                                            draggable={canEdit}
                                             onDragStart={(e) => handleDragStart(e, lead.id)}
                                             onDragEnd={handleDragEnd}
                                             className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow group relative cursor-grab active:cursor-grabbing"
@@ -482,7 +493,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                                     >
                                                         <Eye className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <button
+                                                    {canDelete && <button
                                                         onClick={() => {
                                                             if (window.confirm(t('common.confirm'))) {
                                                                 onDeleteLead(lead.id);
@@ -491,7 +502,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                                         className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
                                                     >
                                                         <X className="w-3.5 h-3.5" />
-                                                    </button>
+                                                    </button>}
                                                 </div>
                                             </div>
 
@@ -533,7 +544,7 @@ export const Leads: React.FC<LeadsProps> = ({
 
                                             {/* Stage transition buttons */}
                                             <div className="pt-3 border-t border-gray-50 dark:border-gray-700/50 flex flex-wrap gap-1">
-                                                {STAGES.filter(s => s.id !== stage.id).map(s => (
+                                                {STAGES.filter(s => s.id !== stage.id && (s.id === 'Booked' ? canConvert : canEdit)).map(s => (
                                                     <button
                                                         key={s.id}
                                                         onClick={() => s.id === 'Booked' ? handleConvertClick(lead.id) : moveLead(lead.id, s.id)}

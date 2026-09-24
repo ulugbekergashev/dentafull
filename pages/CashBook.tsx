@@ -62,6 +62,18 @@ interface CashBookProps {
     canReopen?: boolean;
     /** Tugagan qabulni "Bepul deb yopish" — faqat klinika admini */
     canWaive?: boolean;
+    /** Ruxsatlar: qarzni yopish va to'lov olish (onAddTransaction bilan birga) */
+    canCollect?: boolean;
+    /** Ruxsatlar: yozilgan to'lovni tahrirlash (qalam belgisi) */
+    canEditPayment?: boolean;
+    /** Ruxsatlar: o'tgan kunni ochib, shu kunga yangi to'lov yozish */
+    canBackdate?: boolean;
+    /** Ruxsatlar: kunlik xarajatlar ro'yxatini ko'rish */
+    showExpenses?: boolean;
+    /** Ruxsatlar: kassani Excelga yuklab olish */
+    canExport?: boolean;
+    /** Ruxsatlar: bitta to'lovda eng ko'p chegirma, foizda */
+    maxDiscountPercent?: number;
     onCloseDay?: (payload: CashCloseArgs) => Promise<any>;
     onReopenDay?: (date: string, shift?: number) => Promise<void>;
     /** Moliya bo'limi ichida tab sifatida ochilganda — o'z sarlavhasini ko'rsatmaydi */
@@ -470,6 +482,7 @@ const ClosureBanner: React.FC<{
 export const CashBook: React.FC<CashBookProps> = ({
     transactions, expenses, doctors, currentClinic, onPatientClick,
     closures = [], canReopen = false, canWaive = false, onCloseDay, onReopenDay, embedded = false,
+    canCollect = true, canEditPayment = true, canBackdate = true, showExpenses = true, canExport = true, maxDiscountPercent = 100,
     patients = [], appointments = [], services = [], clinicId = '', onAddTransaction, onAddExpense,
     movements = [], onAddCashMovement, onDeleteCashMovement,
     onUpdateTransaction, onDeleteTransaction,
@@ -866,9 +879,11 @@ export const CashBook: React.FC<CashBookProps> = ({
 
                 <div className="flex flex-wrap items-center gap-3">
                     {/* Kassaga pul kirishi va chiqishi — kundalik amallar */}
-                    {view === 'day' && (onAddTransaction || onAddExpense) && (
+                    {view === 'day' && (onAddTransaction || onAddExpense || onAddCashMovement) && (
                         <div className="flex items-center gap-2">
-                            {onAddTransaction && (
+                            {/* O'tgan kunga yangi to'lov — faqat ruxsati borga. Qabul to'lovi
+                                ("Olinmagan pul" ro'yxatidan) o'sha kun uchun baribir mumkin. */}
+                            {onAddTransaction && (canBackdate || date >= today) && (
                                 <button
                                     onClick={() => setIsPaymentOpen(true)}
                                     className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
@@ -977,9 +992,9 @@ export const CashBook: React.FC<CashBookProps> = ({
                         </div>
                     )}
 
-                    <Button variant="secondary" onClick={handleExport} className="h-9">
+                    {canExport && <Button variant="secondary" onClick={handleExport} className="h-9">
                         <Download className="w-4 h-4 mr-2" /> {t('auto.Excel')}
-                    </Button>
+                    </Button>}
 
                     {view === 'day' && onCloseDay && !closureStatus.closed && (
                         <Button onClick={openCloseModal} className="h-9">
@@ -1180,7 +1195,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             >
                                                 <Printer className="w-4 h-4" />
                                             </button>
-                                            {onUpdateTransaction && (
+                                            {onUpdateTransaction && canEditPayment && (
                                                 <button
                                                     onClick={() => {
                                                         const tx = transactions.find(t => t.id === row.id);
@@ -1248,7 +1263,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                         <span className="text-sm font-bold tabular-nums shrink-0 text-amber-600 dark:text-amber-400">
                                             {item.amount ? num(item.amount) : '—'}
                                         </span>
-                                        <button
+                                        {canCollect && onAddTransaction && <button
                                             onClick={() => {
                                                 if (item.kind === 'debt' && item.tx) openDebt(item.tx);
                                                 else {
@@ -1264,7 +1279,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                             className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors"
                                         >
                                             To'lash
-                                        </button>
+                                        </button>}
                                         {canWaive && onAddTransaction && item.kind === 'appointment' && (
                                             <button
                                                 onClick={() => setWaivingAppt(appointments.find(a => a.id === item.id) || null)}
@@ -1282,7 +1297,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     </Card>
 
                     {/* ── Kunlik xarajatlar ── */}
-                    <Card className="overflow-hidden">
+                    {showExpenses && <Card className="overflow-hidden">
                         <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <TrendingDown className="w-4 h-4 text-gray-400" />
@@ -1324,7 +1339,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                                 ))}
                             </ul>
                         )}
-                    </Card>
+                    </Card>}
 
                     {/* ── Kassa harakatlari ── */}
                     <Card className="overflow-hidden">
@@ -1566,6 +1581,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     onAddTransaction={onAddTransaction}
                     // Ko'rilayotgan kunga yoziladi, bugungi kunga emas
                     presetDate={date}
+                    maxDiscountPercent={maxDiscountPercent}
                 />
             )}
 

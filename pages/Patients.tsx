@@ -10,6 +10,7 @@ import { calcAge, formatDateToISO, formatDobDDMMYYYY } from '../utils/dateUtils'
 import { maskPhone } from '../utils/accessControl';
 import { CompletenessFilter, PATIENT_GAP_LABELS, districtName, matchesCompleteness, patientGaps, regionName } from '../utils/patientCompleteness';
 import * as XLSX from 'xlsx';
+import { usePerms } from '../context/PermissionsContext';
 
 interface PatientsProps {
   userRole: string;
@@ -44,6 +45,11 @@ export const Patients: React.FC<PatientsProps> = ({
   activeBranchId = null,
 }) => {
   const { t } = useLanguage();
+  const perms = usePerms();
+  const canAdd = perms.can('patients', 'card', 'create');
+  const canEdit = perms.can('patients', 'card', 'edit');
+  const canDelete = perms.can('patients', 'card', 'delete');
+  const canExport = perms.can('patients', 'card', 'export');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -352,25 +358,29 @@ export const Patients: React.FC<PatientsProps> = ({
         </div>
         
         <div className="flex flex-wrap gap-3 w-full lg:w-auto">
-          <Button
-            variant="secondary" 
-            className="flex-1 lg:flex-none justify-center gap-2 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all active:scale-95 py-2.5"
-            onClick={handleExport}
-          >
-            <Download className="w-4 h-4" />
-            <span className="whitespace-nowrap">{t('patients.buttons.export')}</span>
-          </Button>
+          {canExport && (
+            <Button
+              variant="secondary" 
+              className="flex-1 lg:flex-none justify-center gap-2 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all active:scale-95 py-2.5"
+              onClick={handleExport}
+            >
+              <Download className="w-4 h-4" />
+              <span className="whitespace-nowrap">{t('patients.buttons.export')}</span>
+            </Button>
+          )}
           
-          <Button 
-            className="flex-1 lg:flex-none justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white shadow-lg shadow-primary-500/25 transition-all active:scale-95 py-2.5 border-none"
-            onClick={() => {
-              setFormData((prev) => ({ ...prev, branchId: activeBranchId || '' }));
-              setIsAddModalOpen(true);
-            }}
-          >
-            <Plus className="w-4 h-4" /> 
-            <span className="whitespace-nowrap">{t('patients.buttons.add')}</span>
-          </Button>
+          {canAdd && (
+            <Button 
+              className="flex-1 lg:flex-none justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white shadow-lg shadow-primary-500/25 transition-all active:scale-95 py-2.5 border-none"
+              onClick={() => {
+                setFormData((prev) => ({ ...prev, branchId: activeBranchId || '' }));
+                setIsAddModalOpen(true);
+              }}
+            >
+              <Plus className="w-4 h-4" /> 
+              <span className="whitespace-nowrap">{t('patients.buttons.add')}</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -627,13 +637,13 @@ export const Patients: React.FC<PatientsProps> = ({
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-1">
-                      <button
+                      {canEdit && <button
                         onClick={(e) => openAssignModal(e, patient)}
                         className="text-emerald-600 hover:text-emerald-800 dark:hover:text-emerald-400 p-1.5 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                         title={t('patients.actions.assign')}
                       >
                         <UserCheck className="w-4 h-4" />
-                      </button>
+                      </button>}
                       <button
                         onClick={(e) => { e.stopPropagation(); onPatientClick(patient.id); }}
                         className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-400 p-1.5 rounded-md hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
@@ -641,7 +651,7 @@ export const Patients: React.FC<PatientsProps> = ({
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button
+                      {canDelete && <button
                         onClick={(e) => {
                           e.stopPropagation();
                           if (confirm(t('patients.deleteConfirm'))) onDeletePatient(patient.id);
@@ -650,7 +660,7 @@ export const Patients: React.FC<PatientsProps> = ({
                         title={t('patients.actions.delete')}
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>

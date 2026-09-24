@@ -10,6 +10,7 @@ import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { DateField, DatePopover, MonthGrid, formatDayMonth, weekdayName } from '../components/DateField';
 import { formatDateToISO } from '../utils/dateUtils';
+import { usePerms } from '../context/PermissionsContext';
 
 interface CalendarProps {
   appointments: Appointment[];
@@ -36,6 +37,12 @@ export const Calendar: React.FC<CalendarProps> = ({
   appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick
 }) => {
   const { t, language } = useLanguage();
+  const perms = usePerms();
+  const canCreate = perms.can('calendar', 'appts', 'create');
+  const canEdit = perms.can('calendar', 'appts', 'edit');
+  const canDelete = perms.can('calendar', 'appts', 'delete');
+  const canRemind = perms.flag('calendar', 'remind');
+  const canAddPatient = perms.can('patients', 'card', 'create');
   const startHour = currentClinic?.startHour ?? 8;
   const endHour = currentClinic?.endHour ?? 20;
   const HOURS = Array.from({ length: Math.max(1, endHour - startHour + 1) }, (_, i) => i + startHour);
@@ -103,6 +110,8 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   // Open Add Modal with default values selected if available
   const openAddModal = (initialDate?: string, initialTime?: string, initialDoctorId?: string) => {
+    // Bo'sh katakni bosish ham shu yerga keladi — qabul yozish ruxsati bo'lmasa hech narsa ochilmaydi
+    if (!canCreate) return;
     setEditingApptId(null);
     // Check if clinic is on individual plan
     const isIndividualPlan = currentClinic?.planId === 'individual';
@@ -539,7 +548,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           </div>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          <Button onClick={() => openAddModal()} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>
+          {canCreate && <Button onClick={() => openAddModal()} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>}
         </div>
       </div>
 
@@ -829,7 +838,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                 onChange={(val) => setFormData({ ...formData, patientId: val })}
               />
             </div>
-            {!editingApptId && (
+            {!editingApptId && canAddPatient && (
               <Button
                 type="button"
                 variant="secondary"
@@ -928,13 +937,15 @@ export const Calendar: React.FC<CalendarProps> = ({
                 <p className="text-gray-500 text-sm">{selectedAppointment.type}</p>
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => openEditModal(selectedAppointment)}
-                  className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:text-gray-400 dark:hover:bg-gray-800 rounded-md transition-colors"
-                  title={t('auto.Qabulni tahrirlash')}
-                >
-                  <Edit2 className="w-5 h-5" />
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => openEditModal(selectedAppointment)}
+                    className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:text-gray-400 dark:hover:bg-gray-800 rounded-md transition-colors"
+                    title={t('auto.Qabulni tahrirlash')}
+                  >
+                    <Edit2 className="w-5 h-5" />
+                  </button>
+                )}
                 <Badge status={selectedAppointment.status} />
               </div>
             </div>
@@ -964,14 +975,16 @@ export const Calendar: React.FC<CalendarProps> = ({
                 {/* Initial States: Pending, Confirmed or Checked-In (Legacy support) */}
                 {(selectedAppointment.status === 'Pending' || selectedAppointment.status === 'Confirmed' || selectedAppointment.status === 'Checked-In') && (
                   <div className="flex flex-wrap gap-2 w-full">
-                    <Button
-                      variant="secondary"
-                      className={`${remindedAppts.has(selectedAppointment.id) ? 'bg-green-100 text-green-700 border-green-200' : ''} flex-1`}
-                      onClick={() => openMessageModal(selectedAppointment)}
-                    >
-                      <Send className="w-4 h-4 mr-2" />
-                      {t('calendar.sendMessage')}
-                    </Button>
+                    {canRemind && (
+                      <Button
+                        variant="secondary"
+                        className={`${remindedAppts.has(selectedAppointment.id) ? 'bg-green-100 text-green-700 border-green-200' : ''} flex-1`}
+                        onClick={() => openMessageModal(selectedAppointment)}
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        {t('calendar.sendMessage')}
+                      </Button>
+                    )}
 
                     <button
                       onClick={() => handleStatusUpdate('No-Show')}
@@ -995,7 +1008,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                 {(selectedAppointment.status === 'Completed' || selectedAppointment.status === 'Cancelled' || selectedAppointment.status === 'No-Show') && (
                   <div className="flex gap-2">
                     <Button variant="secondary" onClick={() => setSelectedAppointment(null)}>{t('common.close')}</Button>
-                    <Button
+                    {canDelete && <Button
                       variant="ghost"
                       className="text-red-500 hover:text-red-700"
                       onClick={async () => {
@@ -1008,7 +1021,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       }}
                     >
                       {t('common.delete')}
-                    </Button>
+                    </Button>}
                   </div>
                 )}
               </div>

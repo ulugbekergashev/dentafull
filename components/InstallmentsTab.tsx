@@ -13,9 +13,13 @@ interface InstallmentsTabProps {
    services: Service[];
    initialCreateData?: { service: string; amount: number; doctorId: string };
    onInitialDataConsumed?: () => void;
+   /** Ruxsatlar: shartnoma tuzish va qismni to'lash — to'lov qabul qilish ruxsati */
+   canCreate?: boolean;
+   /** Shartnomani o'chirish — to'lovni o'chirish ruxsati */
+   canDelete?: boolean;
 }
 
-export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, clinicId, doctors, services, initialCreateData, onInitialDataConsumed }) => {
+export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, clinicId, doctors, services, initialCreateData, onInitialDataConsumed, canCreate = true, canDelete = true }) => {
    const { t } = useLanguage();
    const [plans, setPlans] = useState<InstallmentPlan[]>([]);
    const [loading, setLoading] = useState(true);
@@ -144,9 +148,11 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
          <div className="flex justify-between items-center">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Bo'lib to'lash (Rassrochka)</h3>
-            <Button onClick={() => setIsCreateModalOpen(true)}>
-               <Plus className="w-4 h-4 mr-2" /> Yangi shartnoma
-            </Button>
+            {canCreate && (
+               <Button onClick={() => setIsCreateModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" /> Yangi shartnoma
+               </Button>
+            )}
          </div>
 
          {plans.length === 0 ? (
@@ -156,7 +162,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
                </div>
                <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Bo'lib to'lash rejalari yo'q</h4>
                <p className="text-gray-500 dark:text-gray-400 mb-6">Bu bemor uchun hali hech qanday muddatli to'lov shartnomasi tuzilmagan.</p>
-               <Button onClick={() => setIsCreateModalOpen(true)}>Shartnoma qo'shish</Button>
+               {canCreate && <Button onClick={() => setIsCreateModalOpen(true)}>Shartnoma qo'shish</Button>}
             </Card>
          ) : (
             <div className="space-y-4">
@@ -185,9 +191,9 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
                               <p className="text-gray-500 dark:text-gray-400 mb-1">Qoldiq</p>
                               <p className="font-medium text-red-600 dark:text-red-400">{(plan.totalAmount - plan.totalPaid).toLocaleString()} UZS</p>
                            </div>
-                           <button onClick={() => handleDelete(plan.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full dark:hover:bg-red-900/20 transition-colors self-start">
+                           {canDelete && <button onClick={() => handleDelete(plan.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full dark:hover:bg-red-900/20 transition-colors self-start">
                               <X className="w-4 h-4" />
-                           </button>
+                           </button>}
                         </div>
                      </div>
 
@@ -222,7 +228,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
                                  
                                  <div className="flex items-center gap-4">
                                     <p className="font-bold text-gray-900 dark:text-gray-100">{item.amount.toLocaleString()} UZS</p>
-                                    {item.status === 'Pending' && (
+                                    {canCreate && item.status === 'Pending' && (
                                        <Button size="sm" onClick={() => {
                                           setPaymentItem(item);
                                           setIsPayModalOpen(true);

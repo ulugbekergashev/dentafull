@@ -1,3 +1,4 @@
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { FlaskConical, Plus, Search, Clock, CheckCircle, Package, Truck, X, Edit2, Trash2, AlertCircle, ChevronDown, User, Stethoscope, Calendar } from 'lucide-react';
@@ -35,6 +36,10 @@ const emptyForm = {
 
 export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [], onExpensesChanged, defaultDoctorName }) => {
     const { t } = useLanguage();
+    const perms = usePerms();
+    const canCreate = perms.can('lab', 'orders', 'create');
+    const canEdit = perms.can('lab', 'orders', 'edit');
+    const canDelete = perms.can('lab', 'orders', 'delete');
 
   const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -145,9 +150,11 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('auto.Dental texnik buyurtmalarini boshqaring')}</p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium shadow-md hover:shadow-lg active:scale-95 transition-all">
-          <Plus className="w-4 h-4" /> {t('auto.Buyurtma qo\'shish')}
-        </button>
+        {canCreate && (
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium shadow-md hover:shadow-lg active:scale-95 transition-all">
+            <Plus className="w-4 h-4" /> {t('auto.Buyurtma qo\'shish')}
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -229,17 +236,17 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {/* Quick status change */}
-                    {order.status === 'Pending' && (
+                    {canEdit && order.status === 'Pending' && (
                       <button onClick={() => handleStatusChange(order, 'In-Progress')} className="px-2.5 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium">{t('auto.Boshlash')}</button>
                     )}
-                    {order.status === 'In-Progress' && (
+                    {canEdit && order.status === 'In-Progress' && (
                       <button onClick={() => handleStatusChange(order, 'Ready')} className="px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium">{t('auto.Tayyor')}</button>
                     )}
-                    {order.status === 'Ready' && (
+                    {canEdit && order.status === 'Ready' && (
                       <button onClick={() => handleStatusChange(order, 'Delivered')} className="px-2.5 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">{t('auto.Topshirish')}</button>
                     )}
-                    <button onClick={() => openEdit(order)} className="p-1.5 text-gray-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => handleDelete(order.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    {canEdit && <button onClick={() => openEdit(order)} className="p-1.5 text-gray-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>}
+                    {canDelete && <button onClick={() => handleDelete(order.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                 </div>
               </div>

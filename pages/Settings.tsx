@@ -13,6 +13,7 @@ import { tPlanFeature } from '../i18n/labels';
 import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal } from 'lucide-react';
 import { api, API_URL } from '../services/api';
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 
 // Sozlamalar — klinikaning o'z sozlamalari:
@@ -52,6 +53,12 @@ export const Settings: React.FC<SettingsProps> = ({
 }) => {
    const { t, language } = useLanguage();
    const isAdmin = userRole === UserRole.CLINIC_ADMIN;
+   // Ruxsatlar: xizmat/narxlar va klinika sozlamalari alohida. Klinika egasida hammasi ochiq.
+   const perms = usePerms();
+   const canAddService = perms.can('settings', 'services', 'create');
+   const canEditService = perms.can('settings', 'services', 'edit');
+   const canDeleteService = perms.can('settings', 'services', 'delete');
+   const canEditClinic = perms.can('settings', 'clinic', 'edit');
    type SettingsTab = 'clinic' | 'branches' | 'services' | 'features' | 'integrations' | 'plan';
    type IntegrationTab = 'messaging' | 'dmed' | 'ai' | 'leadApi';
    // Boshqa sahifadan aniq bo'limga yo'naltirish uchun: /settings?tab=leadApi.
@@ -59,6 +66,7 @@ export const Settings: React.FC<SettingsProps> = ({
    const [initialTab, initialIntegration] = ((): [SettingsTab, IntegrationTab] => {
       try {
          const tab = new URLSearchParams(window.location.search).get('tab') || '';
+         if (!canEditClinic && tab !== 'services' && tab !== 'plan') return ['services', 'messaging'];
          if (tab === 'clinic' || tab === 'general') return ['clinic', 'messaging'];
          if (tab === 'branches' && isAdmin) return ['branches', 'messaging'];
          if (tab === 'features') return ['features', 'messaging'];
@@ -731,12 +739,15 @@ export const Settings: React.FC<SettingsProps> = ({
    }
 
    const tabs: { id: SettingsTab; name: string; icon: React.ElementType }[] = [
-      { id: 'clinic', name: t('settings.tabs.clinic'), icon: Building2 },
+      ...(canEditClinic ? [{ id: 'clinic' as const, name: t('settings.tabs.clinic'), icon: Building2 }] : []),
       // Filiallarni faqat klinika egasi boshqaradi
       ...(isAdmin ? [{ id: 'branches' as const, name: t('branches.title'), icon: MapPin }] : []),
       { id: 'services', name: t('settings.tabs.servicesPrices'), icon: DollarSign },
-      { id: 'features', name: t('settings.tabs.features'), icon: SlidersHorizontal },
-      { id: 'integrations', name: t('settings.tabs.integrations'), icon: Plug },
+      // Imkoniyatlar va integratsiyalar — klinika sozlamalari; ruxsatsiz xodim ularni ko'rmaydi
+      ...(canEditClinic ? [
+         { id: 'features' as const, name: t('settings.tabs.features'), icon: SlidersHorizontal },
+         { id: 'integrations' as const, name: t('settings.tabs.integrations'), icon: Plug },
+      ] : []),
       { id: 'plan', name: t('settings.tabs.plan'), icon: CreditCard },
    ];
 
@@ -774,7 +785,7 @@ export const Settings: React.FC<SettingsProps> = ({
             <div className="lg:col-span-3 space-y-6">
 
                {/* Klinika: ma'lumotlar va ish vaqti */}
-               {activeTab === 'clinic' && (
+               {activeTab === 'clinic' && canEditClinic && (
                   <div className="space-y-6">
                      <Card className="p-6">
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">{t('settings.general.info')}</h3>
@@ -918,7 +929,7 @@ export const Settings: React.FC<SettingsProps> = ({
                )}
 
                {/* Maxsus imkoniyatlar: yoqib-o'chiriladigan qo'shimcha funksiyalar */}
-               {activeTab === 'features' && (
+               {activeTab === 'features' && canEditClinic && (
                   <div className="space-y-6">
                      {/* Chek chiqarish — umumiy ma'lumotlar bilan bitta so'rovda saqlanadi */}
                      <Card className="p-6">
@@ -1052,7 +1063,7 @@ export const Settings: React.FC<SettingsProps> = ({
                      <Card className="col-span-1 h-fit p-4">
                         <div className="flex justify-between items-center mb-4">
                            <h3 className="font-medium text-gray-900 dark:text-white">{t('settings.services.categories')}</h3>
-                           <Button size="sm" variant="secondary" onClick={() => setIsCategoryModalOpen(true)}>+</Button>
+                           {canAddService && <Button size="sm" variant="secondary" onClick={() => setIsCategoryModalOpen(true)}>+</Button>}
                         </div>
                         <div className="space-y-1">
                            <button
@@ -1069,9 +1080,9 @@ export const Settings: React.FC<SettingsProps> = ({
                                  >
                                     {cat.name}
                                  </button>
-                                 <button onClick={() => handleDeleteCategory(cat.id)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500">
+                                 {canDeleteService && <button onClick={() => handleDeleteCategory(cat.id)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500">
                                     <Trash2 className="w-3 h-3" />
-                                 </button>
+                                 </button>}
                               </div>
                            ))}
                         </div>
@@ -1085,7 +1096,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('settings.services.title')}</h3>
                                  <p className="text-sm text-gray-500">{t('settings.services.subtitle')}</p>
                               </div>
-                              <Button size="sm" onClick={() => handleOpenServiceModal()}>{t('auto.Xizmat Qo\'shish')}</Button>
+                              {canAddService && <Button size="sm" onClick={() => handleOpenServiceModal()}>{t('auto.Xizmat Qo\'shish')}</Button>}
                            </div>
 
                            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
@@ -1108,13 +1119,13 @@ export const Settings: React.FC<SettingsProps> = ({
                                              <td className="px-4 py-3 text-gray-500">{s.recallMonths ? `${s.recallMonths} ${t('patients.details.recall.months')}` : '—'}</td>
                                              <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-1">
-                                                   <button
+                                                   {canEditService && <button
                                                       onClick={() => handleOpenServiceModal(s)}
                                                       className="text-primary-600 hover:text-primary-800 p-1 hover:bg-primary-50 rounded transition-colors"
                                                    >
                                                       <Edit className="w-4 h-4" />
-                                                   </button>
-                                                   {onDeleteService && s.id && (
+                                                   </button>}
+                                                   {canDeleteService && onDeleteService && s.id && (
                                                       <button
                                                          onClick={async () => {
                                                             if (!window.confirm(`"${s.name}" xizmatini o'chirishni tasdiqlaysizmi?`)) return;
@@ -1145,7 +1156,7 @@ export const Settings: React.FC<SettingsProps> = ({
                )}
 
                {/* Integratsiyalar: tashqi xizmatlar bilan ulanishlar bir joyda */}
-               {activeTab === 'integrations' && (
+               {activeTab === 'integrations' && canEditClinic && (
                   <div className="space-y-6">
                      <div className="flex flex-wrap items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit max-w-full">
                         {integrationTabs.map(item => (

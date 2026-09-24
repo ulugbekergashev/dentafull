@@ -39,6 +39,8 @@ interface QuickPaymentModalProps {
      * Qabul to'lovida (presetDate) sana qabulniki bo'lib qoladi, aks holda qabul to'lanmagan ko'rinardi.
      */
     canChangeDate?: boolean;
+    /** Ruxsatlar: bitta to'lovda eng ko'p chegirma, foizda (100 — cheklovsiz, 0 — chegirma yo'q) */
+    maxDiscountPercent?: number;
 }
 
 const emptyForm = {
@@ -59,6 +61,7 @@ const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider
 export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
     isOpen, onClose, patients, doctors, services, clinicId, onAddTransaction,
     presetPatientId, presetDoctorId, presetService, presetAmount, presetDate, canChangeDate = false,
+    maxDiscountPercent = 100,
 }) => {
     const { t } = useLanguage();
     const buildPresetForm = () => ({
@@ -161,7 +164,9 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
     const setDiscount = (raw: string) => {
         const val = Number(raw) || 0;
         if (val < 0) return;
-        if (discountType === 'percent' && val > 100) return;
+        if (discountType === 'percent' && val > Math.min(100, maxDiscountPercent)) return;
+        // Summali chegirma ham foiz chegarasidan oshmasin — server ham shuni tekshiradi
+        if (discountType === 'amount' && maxDiscountPercent < 100 && val > Math.floor(baseTotal * maxDiscountPercent / 100)) return;
         const total = discountType === 'percent'
             ? Math.round(baseTotal * (1 - val / 100))
             : Math.max(0, baseTotal - val);
@@ -362,8 +367,11 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                 </div>
 
                 {/* ── Chegirma ── */}
-                <div>
-                    <label className={labelCls}>{t('auto.Chegirma')}</label>
+                {maxDiscountPercent > 0 && <div>
+                    <label className={labelCls}>
+                        {t('auto.Chegirma')}
+                        {maxDiscountPercent < 100 && <span className="ml-1 normal-case font-medium text-gray-400">({t('payment.discountLimit').replace('{n}', String(maxDiscountPercent))})</span>}
+                    </label>
                     <div className="flex gap-2">
                         <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shrink-0">
                             {(['percent', 'amount'] as const).map(kind => (
@@ -382,7 +390,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                         <input
                             type="number"
                             min="0"
-                            max={discountType === 'percent' ? 100 : undefined}
+                            max={discountType === 'percent' ? Math.min(100, maxDiscountPercent) : undefined}
                             value={form.discount}
                             onChange={e => setDiscount(e.target.value)}
                             onWheel={e => e.currentTarget.blur()}
@@ -396,7 +404,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                             {' '}({discountType === 'percent' ? `${discountVal}%` : `${Math.round((discountVal / baseTotal) * 100)}%`})
                         </div>
                     )}
-                </div>
+                </div>}
 
                 {/* ── To'langan va qolgan qarz ── */}
                 <div className="grid grid-cols-2 gap-3">

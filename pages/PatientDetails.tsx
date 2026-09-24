@@ -20,6 +20,7 @@ import { PaymentPart, balanceUsed, buildPaymentRecords, splitError } from '../ut
 import { PaymentSplitRows } from '../components/PaymentSplitRows';
 import { DateField } from '../components/DateField';
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
+import { usePerms } from '../context/PermissionsContext';
 import { maskPhone } from '../utils/accessControl';
 import { printPatientCard } from '../utils/printPatientCard';
 
@@ -93,7 +94,33 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     * aks holda qabul "Olinmagan pul" ro'yxatida qolib ketadi.
     */
    const [paymentDateEditable, setPaymentDateEditable] = useState(false);
-   const isClinicAdmin = userRole === UserRole.CLINIC_ADMIN;
+   // Ruxsatlar jadvali (Xodimlar → Ruxsatlar). Klinika egasida hammasi ochiq.
+   const perms = usePerms();
+   const canPayCreate = perms.flag('money', 'payCreate');
+   const canPayEdit = perms.flag('money', 'payEdit');
+   const canPayDelete = perms.flag('money', 'payDelete');
+   const canWaive = perms.flag('money', 'waive');
+   const canBackdate = perms.flag('money', 'backdate');
+   const maxDiscount = perms.limit('money', 'discount');
+   const canEditCard = perms.can('patients', 'card', 'edit');
+   const canViewHistory = perms.can('patients', 'history', 'view');
+   const canEditHistory = perms.can('patients', 'history', 'edit');
+   const canViewChart = perms.can('patients', 'chart', 'view');
+   const canEditChart = perms.can('patients', 'chart', 'edit');
+   const canViewPhotos = perms.can('patients', 'photos', 'view');
+   const canViewPayments = perms.can('patients', 'payhist', 'view');
+   const canMessage = perms.flag('patients', 'message');
+   const canBook = perms.can('calendar', 'appts', 'create');
+   const tabAllowed = (id: string) =>
+      id === 'chart' ? canViewChart
+         : id === 'photos' ? canViewPhotos
+            : id === 'payments' || id === 'installments' ? canViewPayments
+               : true;
+   // Ruxsati yo'q tab ochiq qolib ketmasin (masalan havola orqali kelganda)
+   useEffect(() => {
+      if (!tabAllowed(activeTab)) setActiveTab('overview');
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [activeTab, canViewChart, canViewPhotos, canViewPayments]);
    /** "Bepul deb yopish" oynasi ochilgan qabul */
    const [waivingAppointment, setWaivingAppointment] = useState<Appointment | null>(null);
 
@@ -463,7 +490,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                status: 'Paid',
                type: editPaymentMethod as any,
                service: `${editingTransaction.service} (Qarzdorlik yopildi)`,
-               date: new Date().toISOString().split('T')[0]
+               date: formatDateToISO(new Date()),
+               // Chegirma asl qarz yozuvida qoladi — bu yerda takrorlansa hisobotda ikki marta
+               // sanalardi (Kassa va bosh sahifadagi qarz to'lovi ham chegirmasiz yozadi)
+               discountPercent: 0,
+               discountAmount: 0,
+               isDebt: false,
             });
 
             // 2. Reduce the original Pending amount
@@ -477,7 +509,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                status: 'Paid',
                amount: newAmount,
                type: editPaymentMethod as any,
-               date: new Date().toISOString().split('T')[0]
+               date: formatDateToISO(new Date())
             });
          }
       } else {
@@ -740,11 +772,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       const doctor = doctors.find(d => d.id === paymentData.doctorId);
       // Calculate discount percent and amount based on discount type
       const rawDiscountVal = Number(paymentData.discountPercent) || 0;
+      // Chegirma asl narxga nisbatan hisoblanadi. Ilgari chegirmadan keyingi summaga
+      // nisbatan olinardi: 100 000 dan 10 000 chegirma 11% bo'lib saqlanardi va
+      // chegirma limiti (masalan 10%) bilan server uni rad etgan bo'lardi.
+      // Asl narx noma'lum bo'lsa (xizmat tanlanmagan) — avvalgidek to'lov summasi.
+      const discountBase = (Number(paymentData.amount) || 0) > 0 ? Number(paymentData.amount) : totalAmount;
       const discountPercent = discountType === 'percent'
          ? rawDiscountVal
-         : (totalAmount > 0 ? Math.round((rawDiscountVal / totalAmount) * 100) : 0);
+         : (discountBase > 0 ? Math.round((rawDiscountVal / discountBase) * 100) : 0);
       const discountAmount = discountType === 'percent'
-         ? Math.round(totalAmount * (rawDiscountVal / 100))
+         ? Math.round(discountBase * (rawDiscountVal / 100))
          : rawDiscountVal;
 
       try {
@@ -1018,8 +1055,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          setPendingProcedures([]);
          setVisitKey(prev => prev + 1);
 
-         // 3. Qabul yakunlangach — darhol to'lov oynasini oldindan to'ldirib ochamiz
-         if (total > 0) {
+         // 3. Qabul yakunlangach — darhol to'lov oynasini oldindan to'ldirib ochamiz.
+         // To'lov qabul qilish ruxsati bo'lmasa qabul "Olinmagan pul"da kassirni kutadi.
+         if (total > 0 && canPayCreate) {
             const breakdown = procedures.map(p => `${p.serviceName}|${p.price}`).join('||') + `||TOTAL|${total}`;
             setDiscountType('percent');
             // Oldingi qo'lda tanlov qolib ketsa, oyna tayyor ro'yxat o'rniga tanlash maydonini ko'rsatardi
@@ -1078,7 +1116,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               <span className="text-primary-600 dark:text-primary-200">{patient.firstName?.[0]}{patient.lastName?.[0]}</span>
                            )}
                         </div>
-                        <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                        {canEditCard && <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
                            <Edit className="w-5 h-5" />
                            <input
                               type="file"
@@ -1089,7 +1127,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  if (file) handleImageUpload('avatar', file);
                               }}
                            />
-                        </label>
+                        </label>}
                      </div>
                      <div className="min-w-0 space-y-1">
                         <h2 className="text-lg font-bold text-gray-900 dark:text-white leading-tight break-words">{patient.firstName} {patient.lastName}</h2>
@@ -1146,8 +1184,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               <span className="block text-[11px] text-gray-500 dark:text-gray-400">{activeRecall.kind === 'treatment' ? t('patients.details.recall.kindTreatment') : t('patients.details.recall.kindCheckup')}</span>
                               {activeRecall.status !== 'booked' && (
                                  <span className="block text-xs">
-                                    <button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-sky-700 hover:underline dark:text-sky-300">{t('patients.details.recall.book')}</button>
-                                    <span className="mx-1 text-gray-300">·</span>
+                                    {canBook && <><button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-sky-700 hover:underline dark:text-sky-300">{t('patients.details.recall.book')}</button>
+                                    <span className="mx-1 text-gray-300">·</span></>}
                                     <button type="button" onClick={() => cancelRecall(activeRecall.id)} className="text-gray-500 hover:text-red-600">{t('patients.details.recall.cancel')}</button>
                                  </span>
                               )}
@@ -1185,15 +1223,17 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                   {/* Amallar: bitta asosiy tugma + ikonkalar qatori (nomi hover da) */}
                   <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                     <Button className="w-full" onClick={() => openApptModal()}>
-                        <CalendarPlus className="w-4 h-4 mr-2" /> {t('patients.details.newAppointment')}
-                     </Button>
-                     <div className="mt-2 grid grid-cols-5 gap-1">
+                     {canBook && (
+                        <Button className="w-full" onClick={() => openApptModal()}>
+                           <CalendarPlus className="w-4 h-4 mr-2" /> {t('patients.details.newAppointment')}
+                        </Button>
+                     )}
+                     <div className="mt-2 flex gap-1 [&>button]:flex-1">
                         {[
-                           { icon: Edit, label: t('patients.details.editProfile'), onClick: handleEditOpen },
+                           ...(canEditCard ? [{ icon: Edit, label: t('patients.details.editProfile'), onClick: handleEditOpen }] : []),
                            { icon: CalendarClock, label: t('patients.details.recall.schedule'), onClick: openRecallModal },
-                           { icon: Send, label: t('patients.details.sendMessage'), onClick: () => { setMessageType('Custom'); setMessageText(''); setIsMessageModalOpen(true); } },
-                           { icon: UserPlus, label: patient.doctorId ? t('patients.details.changeDoctor') : t('patients.details.assignDoctor'), onClick: () => setIsAssignDoctorModalOpen(true) },
+                           ...(canMessage ? [{ icon: Send, label: t('patients.details.sendMessage'), onClick: () => { setMessageType('Custom'); setMessageText(''); setIsMessageModalOpen(true); } }] : []),
+                           ...(canEditCard ? [{ icon: UserPlus, label: patient.doctorId ? t('patients.details.changeDoctor') : t('patients.details.assignDoctor'), onClick: () => setIsAssignDoctorModalOpen(true) }] : []),
                            {
                               icon: Printer, label: t('patients.details.printCard'), onClick: () => printPatientCard({
                                  patient,
@@ -1233,7 +1273,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      { id: 'payments', label: t('patients.details.tabs.payments'), icon: CreditCard },
                      { id: 'installments', label: t('patients.details.tabs.installments'), icon: Clock },
                      { id: 'materials', label: t('patients.details.tabs.materials'), icon: Package },
-                  ].map(tab => (
+                  ].filter(tab => tabAllowed(tab.id)).map(tab => (
                      <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
@@ -1266,39 +1306,42 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                      {/* Kasallik tarixi: oddiy matn maydoni. Tayyor ro'yxat (14 ta chip)
                          faqat so'ralganda ochiladi — birinchi ko'rgan odamni cho'chitmasin. */}
-                     <Card className="p-6 space-y-3">
+                     {canViewHistory && <Card className="p-6 space-y-3">
                         <div className="flex items-center justify-between gap-3">
                            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                               <Activity className="w-5 h-5" /> {t('patients.details.medicalHistory.title')}
                            </h3>
-                           <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-8 text-xs"
-                              onClick={() => {
-                                 onUpdatePatient(patient.id, { medicalHistory: historyText });
-                                 alert(t('common.save'));
-                              }}
-                           >
-                              {t('common.save')}
-                           </Button>
+                           {canEditHistory && (
+                              <Button
+                                 size="sm"
+                                 variant="secondary"
+                                 className="h-8 text-xs"
+                                 onClick={() => {
+                                    onUpdatePatient(patient.id, { medicalHistory: historyText });
+                                    alert(t('common.save'));
+                                 }}
+                              >
+                                 {t('common.save')}
+                              </Button>
+                           )}
                         </div>
                         <textarea
                            className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/40 px-3 py-2 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary-300 outline-none resize-y"
                            rows={5}
                            value={historyText}
+                           readOnly={!canEditHistory}
                            onChange={(e) => setHistoryText(e.target.value)}
                            placeholder={t('patients.details.medicalHistory.placeholder')}
                         />
-                        <button
+                        {canEditHistory && <button
                            type="button"
                            onClick={() => setShowQuickSelect(v => !v)}
                            className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
                         >
                            {t('patients.details.medicalHistory.pickFromList')}
                            <ChevronRight className={`w-4 h-4 transition-transform ${showQuickSelect ? 'rotate-90' : ''}`} />
-                        </button>
-                        {showQuickSelect && (
+                        </button>}
+                        {canEditHistory && showQuickSelect && (
                            <div className="flex flex-wrap gap-2">
                               {[
                                  "SOG'LOM(SHIKOYATI YO'Q )",
@@ -1335,13 +1378,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               ))}
                            </div>
                         )}
-                     </Card>
+                     </Card>}
                   </div>
                )}
 
 
                {/* Dental Chart Tab */}
-               {activeTab === 'chart' && (
+               {activeTab === 'chart' && canViewChart && (
                   <div className="space-y-4">
                      <div className="flex justify-between items-center">
                         <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('patients.details.chart.title')}</h3>
@@ -1351,15 +1394,22 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </div>
                      <TeethChart
                         initialData={teethData}
-                        onSave={handleSaveTeeth}
+                        readOnly={!canEditChart}
+                        onSave={canEditChart ? handleSaveTeeth : undefined}
                         procedures={allProceduresHistory}
                      />
                   </div>
                )}
 
                {/* Photos Tab */}
-               {activeTab === 'photos' && (
-                  <PatientPhotos patientId={patient.id} clinicId={patient.clinicId} token={token} />
+               {activeTab === 'photos' && canViewPhotos && (
+                  <PatientPhotos
+                     patientId={patient.id}
+                     clinicId={patient.clinicId}
+                     token={token}
+                     canUpload={perms.can('patients', 'photos', 'create')}
+                     canDelete={perms.can('patients', 'photos', 'delete')}
+                  />
                )}
 
                {/* Appointments Tab */}
@@ -1415,7 +1465,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <Card className="overflow-hidden">
                         <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">{t('patients.details.appointments.history')}</h3>
-                           <Button size="sm" onClick={openApptModal}>{t('patients.details.appointments.new')}</Button>
+                           {canBook && <Button size="sm" onClick={openApptModal}>{t('patients.details.appointments.new')}</Button>}
                         </div>
                         <div className="overflow-x-auto">
                            <table className="w-full text-left text-sm">
@@ -1463,7 +1513,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                )}
 
                {/* Payments Tab */}
-               {activeTab === 'payments' && (
+               {activeTab === 'payments' && canViewPayments && (
                   <div className="space-y-6">
                      {/* Pending Payments Section */}
                      <Card className="overflow-hidden border-yellow-200 dark:border-yellow-800">
@@ -1501,6 +1551,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
                                           <td className="p-4"><Badge status="Pending" /></td>
                                           <td className="p-4 flex gap-2 flex-wrap">
+                                             {canPayCreate && (<>
                                              <Button size="sm" onClick={() => {
                                                 const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
                                                 setDiscountType('percent');
@@ -1545,7 +1596,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                    }
                                                 }}>{t('auto.Hisobdan')}</Button>
                                              )}
-                                             {isClinicAdmin && (
+                                             </>)}
+                                             {canWaive && (
                                                 <Button size="sm" variant="secondary" title={t('waive.hint')} onClick={() => setWaivingAppointment(app)}>
                                                    <Gift className="w-4 h-4 mr-1" /> {t('waive.action')}
                                                 </Button>
@@ -1580,6 +1632,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  </p>
                               </div>
                               <div className="flex gap-2">
+                                 {canPayCreate && (<>
                                  <Button 
                                     size="sm" 
                                     variant="secondary"
@@ -1604,6 +1657,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                     <Plus className="w-4 h-4 mr-2" /> {t('patients.details.modals.advanceTitle')}
                                  </Button>
                                  <Button size="sm" onClick={handlePaymentModalOpen}>{t('patients.details.payments.newPayment')}</Button>
+                                 </>)}
                               </div>
                            </div>
                         </div>
@@ -1631,7 +1685,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                        </td>
                                        <td className="p-4"><Badge status={transaction.status} /></td>
                                        <td className="p-4 flex gap-2">
-                                          {userRole !== UserRole.DOCTOR && transaction.status === 'Pending' && (
+                                          {canPayCreate && transaction.status === 'Pending' && (
                                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
                                                 setEditingTransaction(transaction);
                                                 setEditPaymentAmount(transaction.amount.toString());
@@ -1640,7 +1694,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                 setIsPaymentEditModalOpen(true);
                                              }}>{t('patients.details.payments.payAction')}</Button>
                                           )}
-                                          {userRole !== UserRole.DOCTOR && (
+                                          {canPayEdit && (
                                              <Button size="sm" variant="secondary" onClick={() => {
                                                 setEditingTransaction(transaction);
                                                 setEditPaymentAmount(transaction.amount.toString());
@@ -1649,7 +1703,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                 setIsPaymentEditModalOpen(true);
                                              }}><Edit className="w-4 h-4" /></Button>
                                           )}
-                                          {userRole !== UserRole.DOCTOR && onDeleteTransaction && (
+                                          {canPayDelete && onDeleteTransaction && (
                                              <Button size="sm" variant="secondary" title={t('payment.delete')} className="hover:text-red-600" onClick={async () => {
                                                 const msg = t('payment.deleteConfirm')
                                                    .replace('{service}', transaction.service || '—')
@@ -1668,10 +1722,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </Card>
                   </div>
                )}
-               {activeTab === 'installments' && patient && currentClinic && (
+               {activeTab === 'installments' && canViewPayments && patient && currentClinic && (
                   <InstallmentsTab 
                      patientId={patient.id} 
                      clinicId={currentClinic.id} 
+                     canCreate={canPayCreate}
+                     canDelete={canPayDelete}
                      doctors={doctors}
                      services={services}
                      initialCreateData={installmentQuickOpen || undefined}
@@ -1993,9 +2049,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         </div>
                      </div>
                   )}
-                  {paymentData.service !== 'Avans' && (
+                  {paymentData.service !== 'Avans' && maxDiscount > 0 && (
                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('auto.Chegirma')}</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                           {t('auto.Chegirma')}
+                           {maxDiscount < 100 && <span className="ml-1 font-normal text-gray-400">({t('payment.discountLimit').replace('{n}', String(maxDiscount))})</span>}
+                        </label>
                         <div className="flex gap-2">
                            {/* Discount type selector */}
                            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shrink-0">
@@ -2030,13 +2089,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  label=""
                                  type="number"
                                  min="0"
-                                 max={discountType === 'percent' ? 100 : undefined}
+                                 max={discountType === 'percent' ? Math.min(100, maxDiscount) : undefined}
                                  value={paymentData.discountPercent}
                                  onChange={e => {
                                     const val = Number(e.target.value);
                                     const baseTotal = Number(paymentData.amount) || 0;
                                     if (discountType === 'percent') {
-                                       if (val < 0 || val > 100) return;
+                                       if (val < 0 || val > Math.min(100, maxDiscount)) return;
                                        const discountedTotal = baseTotal > 0 ? Math.round(baseTotal * (1 - val / 100)) : 0;
                                        setPaymentData({
                                           ...paymentData,
@@ -2045,8 +2104,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           debtAmount: '0'
                                        });
                                     } else {
-                                       // Fixed amount discount
+                                       // Fixed amount discount — foiz chegarasidan oshmasin (server ham tekshiradi)
                                        if (val < 0) return;
+                                       if (maxDiscount < 100 && val > Math.floor(baseTotal * maxDiscount / 100)) return;
                                        const discountedTotal = baseTotal > 0 ? Math.max(0, baseTotal - val) : 0;
                                        // Store equivalent percent for data consistency
                                        const equivalentPercent = baseTotal > 0 ? Math.round((val / baseTotal) * 100) : 0;
@@ -2180,7 +2240,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         />
                      )}
                   </div>
-                  {paymentDateEditable && isClinicAdmin && (
+                  {paymentDateEditable && canBackdate && (
                      <DateField
                         label={t('payment.date')}
                         value={paymentData.appointmentDate || todayKey}

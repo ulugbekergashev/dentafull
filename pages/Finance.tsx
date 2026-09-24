@@ -9,6 +9,7 @@ import { api } from '../services/api';
 import { tLabel } from '../i18n/labels';
 import { useLanguage } from '../context/LanguageContext';
 import { calculateTotalFinancials, calculateDoctorShares, transactionBelongsToDoctor } from '../utils/financialCalculations';
+import { usePerms } from '../context/PermissionsContext';
 import { exportFinanceToExcel } from '../utils/excelExport';
 import {
   PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, getPaymentMethodLabel,
@@ -38,6 +39,8 @@ interface FinanceProps {
   onDeleteExpense?: (id: string) => Promise<void>;
   /** Moliya bo'limi ichida tab sifatida ochilganda — o'z sarlavhasini ko'rsatmaydi */
   embedded?: boolean;
+  /** Ruxsatlar: hisobotni Excelga yuklab olish */
+  canExport?: boolean;
 }
 
 import { Doctor, InstallmentPlan } from '../types';
@@ -54,7 +57,8 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   Other: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
 };
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, receptionists = [], currentClinic, labOrders, onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense, embedded = false }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, receptionists = [], currentClinic, labOrders, onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense, embedded = false, canExport = true }) => {
+  const perms = usePerms();
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
@@ -504,7 +508,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                   className="h-9"
                 />
               </div>
-              <Button variant="secondary" onClick={handleExport} className="h-10 mt-6 sm:mt-0"><Download className="w-4 h-4 mr-2" /> {t('finance.exportCsv')}</Button>
+              {canExport && <Button variant="secondary" onClick={handleExport} className="h-10 mt-6 sm:mt-0"><Download className="w-4 h-4 mr-2" /> {t('finance.exportCsv')}</Button>}
             </div>
           )}
         </div>
@@ -1143,7 +1147,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
           clinicId={patients[0]?.clinicId || ''}
           onAddTransaction={onAddTransaction}
           presetDoctorId={defaultDoctorId}
-          canChangeDate={userRole === UserRole.CLINIC_ADMIN}
+          canChangeDate={perms.flag('money', 'backdate')}
+          maxDiscountPercent={perms.limit('money', 'discount')}
         />
       )}
 

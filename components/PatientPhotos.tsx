@@ -11,9 +11,12 @@ interface PatientPhotosProps {
     patientId: string;
     clinicId: string;
     token: string;
+    /** Ruxsatlar: surat yuklash va o'chirish (ko'rish ruxsati sahifa darajasida tekshiriladi) */
+    canUpload?: boolean;
+    canDelete?: boolean;
 }
 
-export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicId, token }) => {
+export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicId, token, canUpload = true, canDelete = true }) => {
     const { t } = useLanguage();
     const [photos, setPhotos] = useState<PatientPhoto[]>([]);
     const [loading, setLoading] = useState(true);
@@ -138,10 +141,12 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('patients.details.photos.title')}</h3>
-                <Button onClick={() => setIsUploadModalOpen(true)}>
-                    <Upload className="w-4 h-4 mr-2" />
-                    {t('patients.details.photos.uploadBtn')}
-                </Button>
+                {canUpload && (
+                    <Button onClick={() => setIsUploadModalOpen(true)}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        {t('patients.details.photos.uploadBtn')}
+                    </Button>
+                )}
             </div>
 
             {loading ? (
@@ -150,9 +155,11 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                 <div className="text-center py-10 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-gray-300 dark:border-gray-700">
                     <Camera className="w-12 h-12 mx-auto text-gray-400 mb-3" />
                     <p className="text-gray-500">{t('patients.details.photos.noPhotos')}</p>
-                    <Button variant="ghost" size="sm" className="mt-2" onClick={() => setIsUploadModalOpen(true)}>
-                        {t('patients.details.photos.uploadFirst')}
-                    </Button>
+                    {canUpload && (
+                        <Button variant="ghost" size="sm" className="mt-2" onClick={() => setIsUploadModalOpen(true)}>
+                            {t('patients.details.photos.uploadFirst')}
+                        </Button>
+                    )}
                 </div>
             ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -166,12 +173,14 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                             />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-3">
                                 <div className="flex justify-end">
-                                    <button
-                                        onClick={() => handleDelete(photo.id)}
-                                        className="p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
+                                    {canDelete && (
+                                        <button
+                                            onClick={() => handleDelete(photo.id)}
+                                            className="p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </div>
                                 <div>
                                     <span className="inline-block px-2 py-1 bg-black/60 text-white text-xs rounded mb-1">
@@ -279,14 +288,16 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                                         {new Date(viewPhoto.date).toLocaleString()}
                                     </p>
                                 </div>
-                                <Button
-                                    variant="danger"
-                                    size="sm"
-                                    onClick={() => handleDelete(viewPhoto.id)}
-                                >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    {t('common.delete')}
-                                </Button>
+                                {canDelete && (
+                                    <Button
+                                        variant="danger"
+                                        size="sm"
+                                        onClick={() => handleDelete(viewPhoto.id)}
+                                    >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        {t('common.delete')}
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>

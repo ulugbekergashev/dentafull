@@ -1,3 +1,4 @@
+import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -66,8 +67,17 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
 
     const { userRole, transactions, expenses, doctors, currentClinic, onPatientClick } = props;
 
-    // Hisobot — tahlil va foyda; buni faqat klinika rahbariyati ko'radi.
-    const canSeeReports = userRole === UserRole.CLINIC_ADMIN;
+    // Ruxsatlar jadvali: Kassa ichidagi har bir amal alohida. Klinika egasida hammasi ochiq.
+    const perms = usePerms();
+    // Hisobot — tahlil va foyda; standartda faqat klinika egasi ko'radi.
+    const canSeeReports = perms.can('finance', 'reports', 'view');
+    const payCreate = perms.flag('money', 'payCreate');
+    const payEdit = perms.flag('money', 'payEdit');
+    const payDelete = perms.flag('money', 'payDelete');
+    const expCreate = perms.can('finance', 'expenses', 'create');
+    const expEdit = perms.can('finance', 'expenses', 'edit');
+    const expDelete = perms.can('finance', 'expenses', 'delete');
+    const encash = perms.flag('finance', 'encash');
 
     const [searchParams, setSearchParams] = useSearchParams();
     const requested = searchParams.get('tab') as TabKey | null;
@@ -123,21 +133,28 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
                     currentClinic={currentClinic}
                     onPatientClick={onPatientClick}
                     closures={props.closures}
-                    canReopen={userRole === UserRole.CLINIC_ADMIN}
-                    canWaive={userRole === UserRole.CLINIC_ADMIN}
-                    onCloseDay={props.onCloseDay}
+                    canReopen={perms.flag('finance', 'reopen')}
+                    canWaive={perms.flag('money', 'waive')}
+                    canCollect={payCreate}
+                    canEditPayment={payEdit}
+                    canBackdate={perms.flag('money', 'backdate')}
+                    showExpenses={perms.can('finance', 'expenses', 'view')}
+                    canExport={perms.can('finance', 'cashbook', 'export')}
+                    maxDiscountPercent={perms.limit('money', 'discount')}
+                    onCloseDay={perms.flag('finance', 'closeday') ? props.onCloseDay : undefined}
                     onReopenDay={props.onReopenDay}
                     patients={props.patients}
                     appointments={props.appointments}
                     services={props.services}
                     clinicId={props.clinicId || currentClinic?.id || ''}
-                    onAddTransaction={props.onAddTransaction}
-                    onAddExpense={props.onAddExpense}
+                    onAddTransaction={payCreate ? props.onAddTransaction : undefined}
+                    onAddExpense={expCreate ? props.onAddExpense : undefined}
                     movements={props.movements}
-                    onAddCashMovement={props.onAddCashMovement}
-                    onDeleteCashMovement={props.onDeleteCashMovement}
-                    onUpdateTransaction={props.onUpdateTransaction}
-                    onDeleteTransaction={props.onDeleteTransaction}
+                    onAddCashMovement={encash ? props.onAddCashMovement : undefined}
+                    onDeleteCashMovement={encash ? props.onDeleteCashMovement : undefined}
+                    // Qarzni yopish ham to'lovni yangilaydi — shuning uchun olish yoki tahrirlashdan biri yetarli
+                    onUpdateTransaction={payCreate || payEdit ? props.onUpdateTransaction : undefined}
+                    onDeleteTransaction={payDelete ? props.onDeleteTransaction : undefined}
                 />
             ) : (
                 <Finance
@@ -154,10 +171,11 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
                     receptionists={props.receptionists}
                     currentClinic={props.currentClinic}
                     labOrders={props.labOrders}
-                    onAddTransaction={props.onAddTransaction}
-                    onAddExpense={props.onAddExpense}
-                    onUpdateExpense={props.onUpdateExpense}
-                    onDeleteExpense={props.onDeleteExpense}
+                    onAddTransaction={payCreate ? props.onAddTransaction : undefined}
+                    onAddExpense={expCreate ? props.onAddExpense : undefined}
+                    onUpdateExpense={expEdit ? props.onUpdateExpense : undefined}
+                    onDeleteExpense={expDelete ? props.onDeleteExpense : undefined}
+                    canExport={perms.can('finance', 'reports', 'export')}
                 />
             )}
         </div>
