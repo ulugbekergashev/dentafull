@@ -59,13 +59,17 @@ export interface InstallmentDue {
     overdue: boolean;
 }
 
-/** Faol rejalardagi to'lanmagan bo'laklar: muddati o'tgan yoki yaqin kunlarda keladiganlar */
-export function installmentDues(plans: InstallmentPlan[], today: string, horizonDays = 3): InstallmentDue[] {
+/**
+ * Faol rejalardagi to'lanmagan bo'laklar: muddati o'tgan yoki yaqin kunlarda keladiganlar.
+ * Reja ichida bemor ma'lumoti kelmasa (masalan, demo) — bemorlar ro'yxatidan olinadi.
+ */
+export function installmentDues(plans: InstallmentPlan[], today: string, horizonDays = 3, patients: Patient[] = []): InstallmentDue[] {
     const horizon = addDaysISO(today, horizonDays);
+    const byId = new Map(patients.map(p => [p.id, p] as [string, Patient]));
     const out: InstallmentDue[] = [];
     for (const plan of plans || []) {
         if (!plan || plan.status !== 'Active') continue;
-        const patient = plan.patient;
+        const patient = plan.patient || byId.get(plan.patientId);
         for (const item of plan.items || []) {
             if (item.status !== 'Pending') continue;
             const date = String(item.expectedDate || '').slice(0, 10);

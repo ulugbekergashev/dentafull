@@ -266,8 +266,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     return () => { alive = false; };
   }, [clinicId, isDesk, showFinance]);
   const dueInstallments = useMemo(
-    () => (showFinance ? installmentDues(installmentPlans, localToday, 3) : []),
-    [installmentPlans, localToday, showFinance]);
+    () => (showFinance ? installmentDues(installmentPlans, localToday, 3, patients) : []),
+    [installmentPlans, localToday, showFinance, patients]);
   const lab = useMemo(() => labSummary(labOrders, localToday), [labOrders, localToday]);
   const calls = useMemo(() => buildCallList({
     appointments, patients, recalls: dueRecalls, leads, today: localToday, includeLeads: perms.menu('leads'),

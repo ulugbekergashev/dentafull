@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Plus, X, AlertTriangle, Loader2 } from 'lucide-react';
+import { Search, Plus, X, AlertTriangle, Loader2, UserPlus } from 'lucide-react';
 import { Appointment, Clinic, Doctor, Patient, Service } from '../types';
 import { DateField, weekdayShort, formatDayMonth } from './DateField';
 import { useLanguage } from '../context/LanguageContext';
@@ -10,8 +10,8 @@ import { doctorQueue, minutesOf, nowHHMM, planArrival } from '../utils/queue';
 import { addDaysISO, daySlots } from '../utils/desk';
 
 type Mode = 'now' | 'today' | 'day';
-type NewPatientForm = { lastName: string; firstName: string; phone: string };
-const EMPTY_NEW: NewPatientForm = { lastName: '', firstName: '', phone: '' };
+type NewPatientForm = { lastName: string; firstName: string; phone: string; dob: string; gender: 'Male' | 'Female' };
+const EMPTY_NEW: NewPatientForm = { lastName: '', firstName: '', phone: '', dob: '', gender: 'Male' };
 
 export interface BookingPanelProps {
     open: boolean;
@@ -219,6 +219,13 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
         setQuery('');
         setError(null);
     };
+    // "Yangi bemor" — qidiruvda yozilgan ism/telefon formaga o'tadi
+    const openNewPatient = () => {
+        setNewForm({ ...EMPTY_NEW, ...(q ? prefillFromQuery(q) : {}) });
+        setPatientId(null);
+        setNewMode(true);
+        setError(null);
+    };
     const chooseDoctor = (id: string) => {
         setDoctorId(id);
         setDoctorTouched(true);
@@ -250,7 +257,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     && p.lastName.trim().toLowerCase() === lastName.toLowerCase());
                 if (same && !window.confirm(t('patientSearch.duplicateConfirm'))) return;
                 const created = await onAddPatient({
-                    firstName, lastName, phone: newForm.phone.trim(), dob: '', gender: 'Male',
+                    firstName, lastName, phone: newForm.phone.trim(), dob: newForm.dob, gender: newForm.gender,
                     medicalHistory: '', status: 'Active', lastVisit: 'Never',
                     // Yangi bemor o'sha shifokorga biriktiriladi — "faqat o'z bemorlari"ni
                     // ko'radigan shifokor ham uning kartasini ocha olsin
@@ -357,6 +364,24 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                     <input value={newForm.firstName} onChange={e => setNewForm(f => ({ ...f, firstName: e.target.value }))} placeholder={t('auto.Ism *')} aria-label={t('auto.Ism *')} className="h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm dark:text-white" />
                                 </div>
                                 <input value={newForm.phone} onChange={e => setNewForm(f => ({ ...f, phone: e.target.value }))} placeholder={`${t('auto.Telefon')} *`} aria-label={t('auto.Telefon')} inputMode="tel" className="h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm dark:text-white" />
+                                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
+                                    <DateField label={t("auto.Tug'ilgan sana")} value={newForm.dob} onChange={dob => setNewForm(f => ({ ...f, dob }))} max={today} className="w-full" />
+                                    <div className="flex h-10 rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden" role="radiogroup" aria-label={t('auto.Jinsi')}>
+                                        {(['Male', 'Female'] as const).map(g => (
+                                            <button
+                                                key={g}
+                                                type="button"
+                                                role="radio"
+                                                aria-checked={newForm.gender === g}
+                                                onClick={() => setNewForm(f => ({ ...f, gender: g }))}
+                                                className={`px-3 text-xs font-bold transition-colors ${newForm.gender === g ? 'bg-primary text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
+                                            >
+                                                {g === 'Male' ? t('auto.Erkak') : t('auto.Ayol')}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('booking.newHint')}</p>
                                 {similar.length > 0 && (
                                     <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
                                         <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
@@ -375,17 +400,28 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                             </div>
                         ) : (
                             <>
-                                <label className="flex items-center gap-2.5 h-11 px-3.5 rounded-xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus-within:border-primary-400">
-                                    <Search className="w-4 h-4 text-gray-400 shrink-0" />
-                                    <input
-                                        value={query}
-                                        onChange={e => setQuery(e.target.value)}
-                                        placeholder={t('booking.searchPlaceholder')}
-                                        aria-label={t('booking.patient')}
-                                        autoFocus
-                                        className="flex-1 min-w-0 bg-transparent border-none outline-none focus:ring-0 p-0 text-sm text-gray-900 dark:text-white placeholder:text-gray-400"
-                                    />
-                                </label>
+                                <div className="flex items-center gap-2">
+                                    <label className="flex-1 min-w-0 flex items-center gap-2.5 h-11 px-3.5 rounded-xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus-within:border-primary-400">
+                                        <Search className="w-4 h-4 text-gray-400 shrink-0" />
+                                        <input
+                                            value={query}
+                                            onChange={e => setQuery(e.target.value)}
+                                            placeholder={t('booking.searchPlaceholder')}
+                                            aria-label={t('booking.patient')}
+                                            autoFocus
+                                            className="flex-1 min-w-0 bg-transparent border-none outline-none focus:ring-0 p-0 text-sm text-gray-900 dark:text-white placeholder:text-gray-400"
+                                        />
+                                    </label>
+                                    {canAddPatient && onAddPatient && (
+                                        <button
+                                            type="button"
+                                            onClick={openNewPatient}
+                                            className="shrink-0 flex items-center gap-1.5 h-11 px-3.5 rounded-xl border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 text-sm font-bold hover:bg-primary-50 dark:hover:bg-primary-900/30"
+                                        >
+                                            <UserPlus className="w-4 h-4" /> {t('patientSearch.addNew')}
+                                        </button>
+                                    )}
+                                </div>
                                 {q.length >= 2 && (
                                     <div className="rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
                                         {results.map(p => {
@@ -404,7 +440,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                         })}
                                         {results.length === 0 && <p className="px-3 py-2.5 text-xs text-gray-500">{t('patientSearch.notFound')}</p>}
                                         {canAddPatient && onAddPatient && (
-                                            <button type="button" onClick={() => { setNewForm(prefillFromQuery(q)); setNewMode(true); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-primary-600 dark:text-primary-400 bg-gray-50 dark:bg-gray-800/60 hover:bg-primary-50 dark:hover:bg-primary-900/20">
+                                            <button type="button" onClick={openNewPatient} className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-primary-600 dark:text-primary-400 bg-gray-50 dark:bg-gray-800/60 hover:bg-primary-50 dark:hover:bg-primary-900/20">
                                                 <Plus className="w-4 h-4" /> {t('patientSearch.addNew')}: «{q}»
                                             </button>
                                         )}

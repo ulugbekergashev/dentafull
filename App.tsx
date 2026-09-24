@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, CalendarPlus
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -123,7 +123,7 @@ const AppContent: React.FC = () => {
   // avval bosh sahifaga qaytish kerak edi. Shifokor esa Kalendar yoki
   // Bemor kartasida turadi va savolni aynan o'sha yerda beradi.
   const [aiOpen, setAiOpen] = useState(false);
-  // "Qabul" yon paneli — istalgan sahifadan ochiladi (null — yopiq)
+  // "Qabul" yon paneli — bosh sahifadagi "Qabul" tugmasidan ochiladi (null — yopiq)
   const [bookingFor, setBookingFor] = useState<{ patientId?: string } | null>(null);
   const [aiAutoVoice, setAiAutoVoice] = useState(false);
 
@@ -1331,16 +1331,6 @@ const AppContent: React.FC = () => {
             Boshqaruv panelidagi tab esa olib tashlandi. Bunisiz telefondan
             ishlaydigan shifokor AI ga umuman kira olmasdi. */}
         <div className="flex items-center gap-2">
-          {canBook && (
-            <button
-              onClick={() => openBooking()}
-              aria-label={t('booking.open')}
-              title={t('booking.open')}
-              className="p-2 rounded-xl bg-primary text-white shadow-sm active:scale-95 transition-transform"
-            >
-              <CalendarPlus className="w-4 h-4" />
-            </button>
-          )}
           <button
             onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
             aria-label="DentaAI"
@@ -1584,18 +1574,6 @@ const AppContent: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 xl:gap-3 shrink-0">
-              {/* Qabul — istalgan sahifadan yon panelda yoziladi, Kalendarga o'tmasdan */}
-              {canBook && (
-                <button
-                  onClick={() => openBooking()}
-                  title={t('booking.open')}
-                  aria-label={t('booking.open')}
-                  className="flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl text-white font-bold text-[13px] bg-primary hover:bg-primary-700 shadow-sm hover:shadow-md active:scale-[0.97] transition-all"
-                >
-                  <CalendarPlus className="w-4 h-4" />
-                  <span className="hidden xl:inline">{t('booking.open')}</span>
-                </button>
-              )}
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
                   Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
                   lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
