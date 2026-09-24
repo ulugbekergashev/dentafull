@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Plus, X, ArrowUpRight, Loader2, AlertTriangle } from 'lucide-react';
+import { Search, Plus, X, ArrowUpRight, Loader2, AlertTriangle, CalendarPlus } from 'lucide-react';
 import { Appointment, Doctor, Patient } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { searchPatients, prefillFromQuery, findSimilarPatients } from '../utils/patientSearch';
@@ -18,6 +18,8 @@ interface ArrivalCardProps {
     onAddAppointment: (appt: Omit<Appointment, 'id'>) => Promise<any>;
     onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
     onPatientClick?: (id: string) => void;
+    /** "Boshqa kun yoki vaqtga" — qabul oynasini shu bemor bilan ochish */
+    onBookLater?: (sel: { patientId?: string; newPatient?: { lastName: string; firstName: string; phone: string } }) => void;
 }
 
 const initialsOf = (name: string) => name.replace(/^Dr\.\s*/, '').split(/\s+/).map(w => w.charAt(0)).join('').slice(0, 2).toUpperCase();
@@ -29,7 +31,7 @@ const initialsOf = (name: string) => name.replace(/^Dr\.\s*/, '').split(/\s+/).m
  */
 export const ArrivalCard: React.FC<ArrivalCardProps> = ({
     patients, appointments, doctors, showPhone = true, canAddPatient,
-    onAddPatient, onAddAppointment, onUpdateAppointment, onPatientClick,
+    onAddPatient, onAddAppointment, onUpdateAppointment, onPatientClick, onBookLater,
 }) => {
     const { t } = useLanguage();
     const [query, setQuery] = useState('');
@@ -293,6 +295,16 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
 
                 {!ready && q.length < 2 && (
                     <p className="text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">{t('arrival.idle')}</p>
+                )}
+
+                {onBookLater && (
+                    <button
+                        type="button"
+                        onClick={() => onBookLater(selected ? { patientId: selected.id } : newMode ? { newPatient: { ...form } } : {})}
+                        className="self-start inline-flex items-center gap-1.5 text-[13px] font-bold text-primary-600 dark:text-primary-400 hover:underline"
+                    >
+                        <CalendarPlus className="w-4 h-4" /> {t('arrival.otherTime')}
+                    </button>
                 )}
 
                 {notice && (

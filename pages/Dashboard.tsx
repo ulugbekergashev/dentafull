@@ -17,6 +17,7 @@ import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
 import { ArrivalCard } from '../components/ArrivalCard';
 import { DoctorQueueCard } from '../components/DoctorQueueCard';
+import { AppointmentQuickModal } from '../components/AppointmentQuickModal';
 import { prefillFromQuery } from '../utils/patientSearch';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -86,6 +87,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // Ish stoli: resepshn "Hozir keldi" dan bemorni shu zahoti navbatga yozadi,
   // shifokor esa o'z navbatini ko'radi. Qabul yozish ruxsati bo'lmasa karta chiqmaydi.
   const showArrival = !isDoctor && !!onAddAppointment && perms.can('calendar', 'appts', 'create');
+  // "Qabul" tugmasi qabul oynasini shu yerning o'zida ochadi (Kalendarga o'tmasdan).
+  // Shifokor umuman yo'q bo'lsa — Kalendarga (u yerda individual tarif uchun shifokor avtomatik yaratiladi).
+  const canBookHere = !!onAddAppointment && perms.can('calendar', 'appts', 'create') && doctors.length > 0;
+  const [bookFor, setBookFor] = useState<{ patientId?: string; newPatient?: { lastName: string; firstName: string; phone: string } } | null>(null);
   /** "Bepul deb yopish" oynasi ochilgan qator */
   const [waivingRow, setWaivingRow] = useState<UnpaidRow | null>(null);
   // Shifokor o'z ma'lumotlari bilan cheklanadimi. Ruxsatlar → Ko'rish doirasi
@@ -436,7 +441,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             )}
             {perms.menu('calendar') && (
               <button
-                onClick={() => navigate('/calendar')}
+                onClick={() => (canBookHere ? setBookFor({}) : navigate('/calendar'))}
                 className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
                 <Calendar className="w-3.5 h-3.5" />
@@ -472,6 +477,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           onAddAppointment={onAddAppointment}
           onUpdateAppointment={perms.can('calendar', 'appts', 'edit') ? onUpdateAppointment : undefined}
           onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+          onBookLater={canBookHere ? sel => setBookFor(sel) : undefined}
+        />
+      )}
+      {canBookHere && onAddAppointment && (
+        <AppointmentQuickModal
+          isOpen={!!bookFor}
+          onClose={() => setBookFor(null)}
+          patients={patients}
+          doctors={doctors}
+          services={services}
+          appointments={filteredAppointmentsByDoctor}
+          currentClinic={currentClinic}
+          defaultDoctorId={isDoctor ? doctorId : undefined}
+          initialPatientId={bookFor?.patientId}
+          initialNewPatient={bookFor?.newPatient}
+          showPhone={showPatientPhone}
+          canAddPatient={perms.can('patients', 'card', 'create')}
+          canMove={perms.can('calendar', 'appts', 'edit') && !!onUpdateAppointment}
+          onAddPatient={onAddPatient}
+          onAddAppointment={onAddAppointment}
+          onUpdateAppointment={onUpdateAppointment}
         />
       )}
       {isDoctor && doctorId && (
