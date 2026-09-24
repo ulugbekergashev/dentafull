@@ -4,10 +4,11 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, CalendarPlus
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
+import { BookingPanel } from './components/BookingPanel';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
 import { Calendar } from './pages/Calendar';
@@ -122,6 +123,8 @@ const AppContent: React.FC = () => {
   // avval bosh sahifaga qaytish kerak edi. Shifokor esa Kalendar yoki
   // Bemor kartasida turadi va savolni aynan o'sha yerda beradi.
   const [aiOpen, setAiOpen] = useState(false);
+  // "Qabul" yon paneli — istalgan sahifadan ochiladi (null — yopiq)
+  const [bookingFor, setBookingFor] = useState<{ patientId?: string } | null>(null);
   const [aiAutoVoice, setAiAutoVoice] = useState(false);
 
   // Global hot key. Panel YOPIQ bo'lganda uni ochadi va darhol
@@ -1186,6 +1189,11 @@ const AppContent: React.FC = () => {
   // Qo'ng'iroq faqat klinika xodimlarida: SUPER_ADMIN va sotuvchi boshqa
   // tizimda ishlaydi, ularning klinika lentasi yo'q.
   const isStaffRole = userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.SALES_AGENT;
+  // Qabul yozish paneli: klinika xodimi, ruxsati bor va kamida bitta shifokor bor bo'lsa.
+  // Shifokor yo'q klinika Kalendar orqali yozadi (u yerda individual tarifda shifokor avtomatik yaratiladi).
+  const canBook = (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST || userRole === UserRole.DOCTOR)
+    && !!clinicId && perms.can('calendar', 'appts', 'create') && doctors.length > 0;
+  const openBooking = (opts?: { patientId?: string }) => setBookingFor(opts || {});
   // Bildirishnoma qatori bosiladigan bo'ladimi — shu rolga ochiq bo'limlar
   const allowedModuleIds = useMemo(() => visibleNavigation.map(n => n.id), [visibleNavigation]);
 
@@ -1323,6 +1331,16 @@ const AppContent: React.FC = () => {
             Boshqaruv panelidagi tab esa olib tashlandi. Bunisiz telefondan
             ishlaydigan shifokor AI ga umuman kira olmasdi. */}
         <div className="flex items-center gap-2">
+          {canBook && (
+            <button
+              onClick={() => openBooking()}
+              aria-label={t('booking.open')}
+              title={t('booking.open')}
+              className="p-2 rounded-xl bg-primary text-white shadow-sm active:scale-95 transition-transform"
+            >
+              <CalendarPlus className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
             aria-label="DentaAI"
@@ -1566,6 +1584,18 @@ const AppContent: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 xl:gap-3 shrink-0">
+              {/* Qabul — istalgan sahifadan yon panelda yoziladi, Kalendarga o'tmasdan */}
+              {canBook && (
+                <button
+                  onClick={() => openBooking()}
+                  title={t('booking.open')}
+                  aria-label={t('booking.open')}
+                  className="flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl text-white font-bold text-[13px] bg-primary hover:bg-primary-700 shadow-sm hover:shadow-md active:scale-[0.97] transition-all"
+                >
+                  <CalendarPlus className="w-4 h-4" />
+                  <span className="hidden xl:inline">{t('booking.open')}</span>
+                </button>
+              )}
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
                   Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
                   lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
@@ -1710,6 +1740,26 @@ const AppContent: React.FC = () => {
         autoVoice={aiAutoVoice}
       />
 
+      {canBook && (
+        <BookingPanel
+          open={!!bookingFor}
+          onClose={() => setBookingFor(null)}
+          initialPatientId={bookingFor?.patientId}
+          patients={scopedPatients}
+          doctors={scopedDoctors}
+          services={services}
+          appointments={scopedAppointments}
+          currentClinic={currentClinic}
+          defaultDoctorId={userRole === UserRole.DOCTOR ? doctorId : undefined}
+          showPhone={showPatientPhoneForRole}
+          canAddPatient={perms.can('patients', 'card', 'create')}
+          canMove={perms.can('calendar', 'appts', 'edit')}
+          onAddPatient={addPatient}
+          onAddAppointment={addAppointment}
+          onUpdateAppointment={updateAppointment}
+        />
+      )}
+
       <main className="flex-1 lg:pt-28 min-h-screen flex flex-col items-center">
         <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 sm:py-6 lg:py-8 flex-1 overflow-x-clip pb-24 lg:pb-8">
           <Routes>
@@ -1770,6 +1820,7 @@ const AppContent: React.FC = () => {
                     onAddPatient={addPatient}
                     onAddTransaction={addTransaction}
                     onAddAppointment={addAppointment}
+                    onOpenBooking={canBook ? openBooking : undefined}
                     addToast={addToast}
                   />
                 } />

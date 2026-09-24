@@ -27,6 +27,9 @@ const langOf = (language: string): 'uz' | 'ru' => (language === 'ru' ? 'ru' : 'u
 
 export const weekdayName = (date: Date, language: string): string => WEEKDAYS_FULL[langOf(language)][date.getDay()];
 
+/** Qisqa hafta kuni ("Pa", "Чт") — kunlar qatori uchun */
+export const weekdayShort = (date: Date, language: string): string => WEEKDAYS_SHORT[langOf(language)][(date.getDay() + 6) % 7];
+
 /** "23.09" yoki "23.09.2026" — Date obyektidan, zona siljishisiz */
 export const formatDayMonth = (date: Date, withYear = true): string => {
     const dd = String(date.getDate()).padStart(2, '0');

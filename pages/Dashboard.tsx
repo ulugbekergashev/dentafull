@@ -8,16 +8,18 @@ import {
   Zap, FlaskConical, CreditCard, UserCheck, XCircle, CalendarClock, Bot, Phone, Send, Gift
 } from 'lucide-react';
 import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
-import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall } from '../types';
+import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall, InstallmentPlan } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
-import { getCurrentMonthRange } from '../utils/dateUtils';
+import { getCurrentMonthRange, formatDateToISO } from '../utils/dateUtils';
 import { transactionBelongsToDoctor, calculateAppointmentTotal } from '../utils/financialCalculations';
 import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from '../utils/unpaid';
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
-import { ArrivalCard } from '../components/ArrivalCard';
 import { DoctorQueueCard } from '../components/DoctorQueueCard';
-import { AppointmentQuickModal } from '../components/AppointmentQuickModal';
+import { DeskToday } from '../components/DeskToday';
+import { DeskMoneyCard, DeskLabCard, DeskCallsCard } from '../components/DeskCards';
+import { buildCallList, installmentDues, labSummary } from '../utils/desk';
+import { nowHHMM } from '../utils/queue';
 import { prefillFromQuery } from '../utils/patientSearch';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -50,6 +52,8 @@ interface DashboardProps {
   showPatientPhone?: boolean;
   onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
   onAddAppointment?: (appt: Omit<Appointment, 'id'>) => Promise<any>;
+  /** "Qabul" yon panelini ochish (App darajasida, istalgan sahifadan ochiladi) */
+  onOpenBooking?: (opts?: { patientId?: string }) => void;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -65,7 +69,7 @@ const STAT_GRID_COLS: Record<number, string> = {
   6: 'lg:grid-cols-3 xl:grid-cols-6',
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment, onOpenBooking }) => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -84,13 +88,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const perms = usePerms();
   // Bepul yopish — ruxsatlar jadvalidagi "Pul va to'lovlar" guruhidan
   const canWaive = perms.flag('money', 'waive');
-  // Ish stoli: resepshn "Hozir keldi" dan bemorni shu zahoti navbatga yozadi,
-  // shifokor esa o'z navbatini ko'radi. Qabul yozish ruxsati bo'lmasa karta chiqmaydi.
-  const showArrival = !isDoctor && !!onAddAppointment && perms.can('calendar', 'appts', 'create');
-  // "Qabul" tugmasi qabul oynasini shu yerning o'zida ochadi (Kalendarga o'tmasdan).
+  // Resepshn va admin uchun bosh sahifa — ish stoli: navbat, bugungi qabullar, pul,
+  // laboratoriya va qo'ng'iroqlar. Shifokorda o'z navbati (DoctorQueueCard).
+  const isDesk = !isDoctor;
+  // "Qabul" tugmasi yon panelni ochadi (Kalendarga o'tmasdan).
   // Shifokor umuman yo'q bo'lsa — Kalendarga (u yerda individual tarif uchun shifokor avtomatik yaratiladi).
-  const canBookHere = !!onAddAppointment && perms.can('calendar', 'appts', 'create') && doctors.length > 0;
-  const [bookFor, setBookFor] = useState<{ patientId?: string; newPatient?: { lastName: string; firstName: string; phone: string } } | null>(null);
+  const canBookHere = !!onOpenBooking && perms.can('calendar', 'appts', 'create') && doctors.length > 0;
+  const canMoveAppt = perms.can('calendar', 'appts', 'edit') && !!onUpdateAppointment;
   /** "Bepul deb yopish" oynasi ochilgan qator */
   const [waivingRow, setWaivingRow] = useState<UnpaidRow | null>(null);
   // Shifokor o'z ma'lumotlari bilan cheklanadimi. Ruxsatlar → Ko'rish doirasi
@@ -245,8 +249,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   };
 
   const hasMoneyCards = visibleUnpaid.length > 0;
-  // O'ng ustunda nazorat ro'yxati ham turadi
-  const hasSideCards = hasMoneyCards || visibleRecalls.length > 0;
+  // O'ng ustunda nazorat ro'yxati ham turadi. Resepshn va adminda bular
+  // yuqoridagi ish stoli kartalarida — jadval butun kenglikni oladi.
+  const hasSideCards = isDoctor && (hasMoneyCards || visibleRecalls.length > 0);
+
+  // ── Ish stoli ma'lumotlari (resepshn / admin) ──
+  const localToday = formatDateToISO(new Date());
+  // Bo'lib to'lash: muddati kelgan yoki 3 kun ichida keladigan to'lovlar
+  const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
+  useEffect(() => {
+    if (!clinicId || !isDesk || !showFinance) return;
+    let alive = true;
+    api.installments.getAll(clinicId)
+      .then(data => { if (alive) setInstallmentPlans(Array.isArray(data) ? data : []); })
+      .catch(() => { /* ro'yxatsiz ham sahifa ishlaydi */ });
+    return () => { alive = false; };
+  }, [clinicId, isDesk, showFinance]);
+  const dueInstallments = useMemo(
+    () => (showFinance ? installmentDues(installmentPlans, localToday, 3) : []),
+    [installmentPlans, localToday, showFinance]);
+  const lab = useMemo(() => labSummary(labOrders, localToday), [labOrders, localToday]);
+  const calls = useMemo(() => buildCallList({
+    appointments, patients, recalls: dueRecalls, leads, today: localToday, includeLeads: perms.menu('leads'),
+  }), [appointments, patients, dueRecalls, leads, localToday, perms]);
+  // "Keldi" — keyinroqqa yozilgan bemor erta keldi: qabuli hozirga ko'chadi va navbatga tushadi
+  const arriveNow = async (a: Appointment) => {
+    if (!onUpdateAppointment) return;
+    await onUpdateAppointment(a.id, { time: nowHHMM() });
+  };
 
 
   const openDebtPayment = (tx: Transaction) => {
@@ -314,6 +344,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     }
   };
 
+  /** Qatordagi sana: bugun — "bugun", joriy yil — "20.09", boshqa yil — "20.09.2025" */
+  const rowDate = (iso: string) => {
+    const d = String(iso || '').slice(0, 10);
+    if (d === formatDateToISO(new Date())) return t('desk.today');
+    const [y, m, day] = d.split('-');
+    return y === String(new Date().getFullYear()) ? `${day}.${m}` : `${day}.${m}.${y}`;
+  };
+  /** Xizmat nomidan narx izohini ("[200 000 UZS]") olib tashlash — summa alohida ko'rinadi */
+  const rowService = (s: string) => String(s || '').split('||')[0].replace(/\s*\[[\d\s.,]+\s*UZS\]/gi, '').trim();
+
   /**
    * Ro'yxatdagi bitta qator. Ikkala karta ham shu ko'rinishdan foydalanadi:
    * chapda ism va tafsilot, o'ngda summa bilan tugmalar.
@@ -334,9 +374,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           >
             {row.patientName}
           </button>
-          <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
+          <p className="flex items-center gap-1.5 text-[11px] text-gray-400 min-w-0">
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${row.isDebt ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
-            <span className="truncate">{row.date} · {row.service}</span>
+            <span className="truncate">{[rowDate(row.date), rowService(row.service)].filter(Boolean).join(' · ')}</span>
+            {/* Shifokor bemorni kassaga yubordi — u hozir kassa oldida turibdi */}
+            {!isDoctor && row.source === 'appointment' && row.sentToCashier && (
+              <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 text-[10px] font-bold">{t('desk.sentToCashier')}</span>
+            )}
           </p>
         </div>
         {showFinance && (
@@ -425,8 +469,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
           {/* Quick Actions — dashboarddan turib bajariladi */}
           <div className="flex items-center gap-2">
-            {/* "Hozir keldi" kartasida o'z qidiruvi bor — ikkinchisi chalg'itadi */}
-            {perms.menu('patients') && !showArrival && (
+            {perms.menu('patients') && (
               <PatientQuickSearch
                 patients={patients}
                 showPhone={showPatientPhone}
@@ -441,14 +484,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             )}
             {perms.menu('calendar') && (
               <button
-                onClick={() => (canBookHere ? setBookFor({}) : navigate('/calendar'))}
+                onClick={() => (canBookHere ? onOpenBooking!() : navigate('/calendar'))}
                 className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
                 <Calendar className="w-3.5 h-3.5" />
                 {t('dashboard.quickAppointment')}
               </button>
             )}
-            {!isReceptionist && canTakePayment && (
+            {canTakePayment && (!isReceptionist || showFinance) && (
               <button
                 onClick={() => {
                   if (!onAddTransaction) return navigate('/finance');
@@ -466,39 +509,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </div>
       </div>
 
-      {showArrival && onAddAppointment && (
-        <ArrivalCard
-          patients={patients}
-          appointments={appointments}
-          doctors={doctors}
-          showPhone={showPatientPhone}
-          canAddPatient={perms.can('patients', 'card', 'create')}
-          onAddPatient={onAddPatient}
-          onAddAppointment={onAddAppointment}
-          onUpdateAppointment={perms.can('calendar', 'appts', 'edit') ? onUpdateAppointment : undefined}
-          onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
-          onBookLater={canBookHere ? sel => setBookFor(sel) : undefined}
-        />
-      )}
-      {canBookHere && onAddAppointment && (
-        <AppointmentQuickModal
-          isOpen={!!bookFor}
-          onClose={() => setBookFor(null)}
-          patients={patients}
-          doctors={doctors}
-          services={services}
-          appointments={filteredAppointmentsByDoctor}
-          currentClinic={currentClinic}
-          defaultDoctorId={isDoctor ? doctorId : undefined}
-          initialPatientId={bookFor?.patientId}
-          initialNewPatient={bookFor?.newPatient}
-          showPhone={showPatientPhone}
-          canAddPatient={perms.can('patients', 'card', 'create')}
-          canMove={perms.can('calendar', 'appts', 'edit') && !!onUpdateAppointment}
-          onAddPatient={onAddPatient}
-          onAddAppointment={onAddAppointment}
-          onUpdateAppointment={onUpdateAppointment}
-        />
+      {isDesk && (
+        <>
+          <DeskToday
+            appointments={appointments}
+            doctors={doctors}
+            onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+            onArrived={canMoveAppt ? arriveNow : undefined}
+            onOpenBooking={canBookHere ? () => onOpenBooking!() : undefined}
+            onSeeAll={() => navigate('/calendar')}
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
+            <DeskMoneyCard
+              awaiting={awaitingRows}
+              debts={debtRows}
+              installments={dueInstallments}
+              today={localToday}
+              showAmounts={showFinance}
+              renderRow={renderUnpaidRow}
+              onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+              onSeeAll={perms.menu('finance') ? () => navigate('/finance') : undefined}
+            />
+            {perms.menu('lab') && (
+              <DeskLabCard
+                summary={lab}
+                patients={patients}
+                showPhone={showPatientPhone}
+                onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+                onOpenLab={() => navigate('/lab')}
+              />
+            )}
+            <DeskCallsCard
+              items={calls}
+              showPhone={showPatientPhone}
+              onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+              onOpenLeads={perms.menu('leads') ? () => navigate('/leads') : undefined}
+              onDismissRecall={dismissRecall}
+            />
+          </div>
+        </>
       )}
       {isDoctor && doctorId && (
         <DoctorQueueCard

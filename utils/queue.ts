@@ -89,10 +89,3 @@ export function mergeDay<T extends { id: string; date: string }>(prev: T[], fres
     if (sig(current) === sig(incoming)) return prev;
     return [...prev.filter(a => a.date !== day), ...incoming];
 }
-
-/** Keyingi yarim soatlik vaqt ("10:12" → "10:30"). Kun tugagan bo'lsa — ertalabki boshlanish */
-export function nextSlotHHMM(d: Date = new Date(), startHour = 9): string {
-    const mins = Math.ceil((d.getHours() * 60 + d.getMinutes() + 1) / 30) * 30;
-    if (mins >= 24 * 60) return `${pad(startHour)}:00`;
-    return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
-}

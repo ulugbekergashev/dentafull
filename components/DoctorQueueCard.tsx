@@ -74,7 +74,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                     </div>
                     <span className="flex items-baseline gap-2 shrink-0">
                         <span className="text-4xl sm:text-5xl font-black leading-none text-primary">{queue.length}</span>
-                        <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">{t('arrival.waitingPeople')}</span>
+                        <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">{t('myQueue.waitingPeople')}</span>
                     </span>
                 </div>
 
