@@ -4068,6 +4068,119 @@ app.post('/api/desk/calls', authenticateToken, async (req: any, res: any) => {
     }
 });
 
+// ─── Bosh sahifa xaritasi: bemor kabinetda ───────────────────────────────────
+//
+// Bemor kabinetga kirganini shifokor ("Kirish") yoki resepshn ("Kirdi") belgilaydi.
+// Qabulning o'z holati (Appointment.status) o'zgarmaydi: pul hisoblari va boshqa
+// bo'limlar "Checked-In"/"Completed" ga qarab ishlashda davom etadi, qabul
+// yakunlanganda esa bu belgi o'z-o'zidan ahamiyatini yo'qotadi.
+//
+// Migratsiyasiz, qo'ng'iroqlar jurnali kabi: PlatformSetting'da har klinikaga
+// BITTA qator va faqat bugungi kun.
+const DESK_FLOW_MAX = 1000;
+const DESK_APPT_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
+type DeskFlowEntry = { in: string; by?: string | null };
+type DeskFlowDay = { date: string; entries: Record<string, DeskFlowEntry> };
+
+const deskFlowKey = (clinicId: string) => `desk:flow:${clinicId}`;
+
+const parseDeskFlow = (raw: string | null): DeskFlowDay | null => {
+    if (!raw) return null;
+    try {
+        const v = JSON.parse(raw);
+        if (v && typeof v.date === 'string' && v.entries && typeof v.entries === 'object') return v;
+    } catch { /* buzilgan qiymat — kun yangidan boshlanadi */ }
+    return null;
+};
+
+/** Xaritani klinika egasi, resepshn va shifokor ishlatadi. Klinika tokendan olinadi. */
+const deskFlowClinic = (req: any, res: any): string | null => {
+    if (!['CLINIC_ADMIN', 'RECEPTIONIST', 'SUPER_ADMIN', 'DOCTOR'].includes(req.user?.role)) {
+        res.status(403).json({ error: "Ruxsat yo'q: bemorlar oqimi" });
+        return null;
+    }
+    const clinicId = getScopedClinicId(req);
+    if (!clinicId) {
+        res.status(400).json({ error: 'clinicId is required' });
+        return null;
+    }
+    return clinicId;
+};
+
+app.get('/api/desk/flow', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = deskFlowClinic(req, res);
+        if (!clinicId) return;
+        const date = String(req.query.date || '');
+        if (!DESK_DATE_RE.test(date)) return res.status(400).json({ error: "date YYYY-MM-DD bo'lishi kerak" });
+        const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "value" FROM "PlatformSetting" WHERE "key"=$1`, deskFlowKey(clinicId));
+        const day = parseDeskFlow(rows.length ? rows[0].value : null);
+        res.json({ date, entries: day && day.date === date ? day.entries : {} });
+    } catch (error: any) {
+        console.error("Bemorlar oqimini o'qishda xatolik:", error?.message || error);
+        res.status(500).json({ error: "Bemorlar oqimini o'qib bo'lmadi" });
+    }
+});
+
+// Bitta qabulga belgi: inChair true — kabinetga kirdi, false — navbatga qaytarildi.
+app.post('/api/desk/flow', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = deskFlowClinic(req, res);
+        if (!clinicId) return;
+        const { date, appointmentId, inChair } = req.body || {};
+        if (!DESK_DATE_RE.test(String(date || ''))) return res.status(400).json({ error: "date YYYY-MM-DD bo'lishi kerak" });
+        if (!DESK_APPT_ID_RE.test(String(appointmentId || ''))) return res.status(400).json({ error: "Noto'g'ri qabul" });
+        if (typeof inChair !== 'boolean') return res.status(400).json({ error: "Noto'g'ri inChair" });
+
+        const appt = await prisma.appointment.findFirst({
+            where: { id: appointmentId, clinicId },
+            select: { doctorId: true, date: true },
+        });
+        if (!appt) return res.status(404).json({ error: 'Qabul topilmadi' });
+        // Shifokor faqat o'z bemorini belgilaydi
+        if (req.user?.role === 'DOCTOR' && (!req.user?.doctorId || appt.doctorId !== req.user.doctorId)) {
+            return res.status(403).json({ error: "Ruxsat yo'q: boshqa shifokorning bemori" });
+        }
+        if (appt.date !== date) return res.status(400).json({ error: 'Qabul bugungi emas' });
+
+        const storageKey = deskFlowKey(clinicId);
+        const by = req.user?.name || null;
+        // Resepshn va shifokor bir vaqtda bosishi mumkin: qiymat o'qilganidan beri
+        // o'zgarmagan bo'lsagina yoziladi, aks holda qaytadan o'qib urinadi.
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "value" FROM "PlatformSetting" WHERE "key"=$1`, storageKey);
+            const raw: string | null = rows.length ? rows[0].value : null;
+            const current = parseDeskFlow(raw);
+            // Kechadan ochiq qolgan sahifa bugungi belgilarni o'chirib yubormasin
+            if (current && current.date > date) return res.status(409).json({ error: 'Sahifa eskirgan — yangilang' });
+            const day: DeskFlowDay = current && current.date === date ? current : { date, entries: {} };
+
+            if (inChair) {
+                // Qayta bosilsa kirgan vaqti saqlanadi — taymer boshidan boshlanmaydi
+                const prev = day.entries[appointmentId];
+                day.entries[appointmentId] = { in: prev?.in || new Date().toISOString(), by: prev?.by ?? by };
+            } else {
+                delete day.entries[appointmentId];
+            }
+            if (Object.keys(day.entries).length > DESK_FLOW_MAX) return res.status(413).json({ error: "Bugungi belgilar to'lib qoldi" });
+
+            const next = JSON.stringify(day);
+            const written: number = rows.length
+                ? await prisma.$executeRawUnsafe(
+                    `UPDATE "PlatformSetting" SET "value"=$2,"updatedAt"=CURRENT_TIMESTAMP WHERE "key"=$1 AND "value" IS NOT DISTINCT FROM $3`,
+                    storageKey, next, raw)
+                : await prisma.$executeRawUnsafe(
+                    `INSERT INTO "PlatformSetting" ("key","value","updatedAt") VALUES ($1,$2,CURRENT_TIMESTAMP) ON CONFLICT ("key") DO NOTHING`,
+                    storageKey, next);
+            if (written === 1) return res.json({ date, entries: day.entries });
+        }
+        res.status(409).json({ error: "Band — qayta urinib ko'ring" });
+    } catch (error: any) {
+        console.error('Bemorlar oqimini yozishda xatolik:', error?.message || error);
+        res.status(500).json({ error: "Belgini saqlab bo'lmadi" });
+    }
+});
+
 // ─── Xodim bildirishnomalari (sarlavhadagi qo'ng'iroq) ───────────────────────
 //
 // Lenta har xodimniki alohida: kim qaysi yozuvni oladi va qachon o'qilgan

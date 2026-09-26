@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { Appointment, Patient } from '../types';
+import { Appointment, FlowLog, Patient } from '../types';
+import { LiveTimer } from './LiveTimer';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDateToISO, calcAge } from '../utils/dateUtils';
 import { maskPhone } from '../utils/accessControl';
-import { doctorDone, doctorLater, doctorQueue, healthAlert, minutesOf, nowHHMM, waitMinutes, waitTone } from '../utils/queue';
+import { doctorDone, doctorLater, doctorQueue, healthAlert, isOpenAppointment, minutesOf, nowHHMM, waitMinutes, waitTone } from '../utils/queue';
 
 interface DoctorQueueCardProps {
     doctorId: string;
@@ -13,6 +14,10 @@ interface DoctorQueueCardProps {
     showPhone?: boolean;
     /** Bemor kartasini ochish — bemorlar bo'limi yopiq bo'lsa berilmaydi */
     onPatientClick?: (id: string) => void;
+    /** Bugun kim kabinetga kirgan (bosh sahifa xaritasi bilan bir xil manba) */
+    inChair?: FlowLog;
+    /** "Kirish" — bemor kabinetga kirdi: resepshn xaritasida u kabinetga o'tadi */
+    onEnter?: (appointment: Appointment) => void;
 }
 
 const WAIT_CHIP: Record<'normal' | 'warn' | 'late', string> = {
@@ -23,10 +28,12 @@ const WAIT_CHIP: Record<'normal' | 'warn' | 'late', string> = {
 
 /**
  * "Mening navbatim" — shifokorning bosh sahifasi. Vaqti kelgan bugungi qabullar
- * navbat tartibida; birinchisi katta, "Kirish" bemor kartasini ochadi. Qabul
- * kartada yakunlanganda bemor navbatdan chiqadi.
+ * navbat tartibida; birinchisi katta, "Kirish" bemor kartasini ochadi va bemorni
+ * "kabinetda" deb belgilaydi (resepshn xaritasida u kabinetga o'tadi). Kabinetdagi
+ * bemor ro'yxat boshida taymer bilan turadi. Qabul kartada yakunlanganda bemor
+ * navbatdan chiqadi.
  */
-export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appointments, patients, showPhone = true, onPatientClick }) => {
+export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appointments, patients, showPhone = true, onPatientClick, inChair, onEnter }) => {
     const { t } = useLanguage();
     const [, setTick] = useState(0);
     useEffect(() => {
@@ -38,9 +45,20 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
     const nowMin = minutesOf(nowHHMM());
     const byId = useMemo(() => new Map(patients.map(p => [p.id, p])), [patients]);
 
-    const queue = doctorQueue(appointments, doctorId, today, nowMin);
-    const later = doctorLater(appointments, doctorId, today, nowMin);
+    const log = inChair || {};
+    // Kabinetdagi bemor(lar) birinchi — vaqti hali kelmagan bo'lsa ham
+    const seated = appointments
+        .filter(a => a.date === today && a.doctorId === doctorId && isOpenAppointment(a) && !!log[a.id])
+        .sort((a, b) => Date.parse(log[b.id].in) - Date.parse(log[a.id].in));
+    const queue = [...seated, ...doctorQueue(appointments, doctorId, today, nowMin).filter(a => !log[a.id])];
+    const waitingCount = queue.length - seated.length;
+    const later = doctorLater(appointments, doctorId, today, nowMin).filter(a => !log[a.id]);
     const done = doctorDone(appointments, doctorId, today);
+    const sinceOf = (a: Appointment) => (log[a.id] ? Date.parse(log[a.id].in) : null);
+    const enter = (a: Appointment) => {
+        onEnter?.(a);
+        onPatientClick!(a.patientId);
+    };
 
     const waitText = (a: Appointment) => {
         const m = waitMinutes(a, nowMin);
@@ -71,7 +89,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">{t('myQueue.subtitle')}</p>
                     </div>
                     <span className="flex items-baseline gap-2 shrink-0">
-                        <span className="text-4xl sm:text-5xl font-black leading-none text-primary">{queue.length}</span>
+                        <span className="text-4xl sm:text-5xl font-black leading-none text-primary">{waitingCount}</span>
                         <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">{t('myQueue.waitingPeople')}</span>
                     </span>
                 </div>
@@ -87,7 +105,13 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                             <span className="text-sm text-primary-800 dark:text-primary-300">{firstSub}</span>
                             <span className="flex gap-1.5 flex-wrap">
                                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200">{serviceOf(first)}</span>
-                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${WAIT_CHIP[waitTone(waitMinutes(first, nowMin))]}`}>{waitText(first)}</span>
+                                {sinceOf(first) ? (
+                                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full bg-primary-600 text-white">
+                                        {t('myQueue.inChair')} · <LiveTimer since={sinceOf(first)!} className="tabular-nums" />
+                                    </span>
+                                ) : (
+                                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${WAIT_CHIP[waitTone(waitMinutes(first, nowMin))]}`}>{waitText(first)}</span>
+                                )}
                                 {firstAlert && (
                                     <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 max-w-full truncate" title={firstAlert}>{firstAlert}</span>
                                 )}
@@ -96,7 +120,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                         {canOpen(first) && (
                             <button
                                 type="button"
-                                onClick={() => onPatientClick!(first.patientId)}
+                                onClick={() => enter(first)}
                                 className="shrink-0 flex items-center justify-center gap-2 h-14 px-7 rounded-2xl bg-primary hover:bg-primary-700 text-white text-[17px] font-extrabold shadow-lg shadow-primary-500/30 active:scale-95 transition-all"
                             >
                                 {t('myQueue.enter')}
@@ -116,7 +140,13 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                         <span className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
                             <span className="text-[15px] font-bold text-gray-900 dark:text-white">{a.patientName}</span>
                             <span className="text-[13px] text-gray-500 dark:text-gray-400">{serviceOf(a)}</span>
-                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${WAIT_CHIP[waitTone(waitMinutes(a, nowMin))]}`}>{waitText(a)}</span>
+                            {sinceOf(a) ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary-600 text-white">
+                                    {t('myQueue.inChair')} · <LiveTimer since={sinceOf(a)!} className="tabular-nums" />
+                                </span>
+                            ) : (
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${WAIT_CHIP[waitTone(waitMinutes(a, nowMin))]}`}>{waitText(a)}</span>
+                            )}
                             {(() => {
                                 const alert = healthAlert(byId.get(a.patientId)?.medicalHistory);
                                 return alert ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 max-w-[220px] truncate" title={alert}>{alert}</span> : null;
@@ -125,7 +155,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                         {canOpen(a) && (
                             <button
                                 type="button"
-                                onClick={() => onPatientClick!(a.patientId)}
+                                onClick={() => enter(a)}
                                 aria-label={`${t('myQueue.enter')}: ${a.patientName}`}
                                 className="shrink-0 h-[38px] px-4 rounded-xl border border-primary-200 dark:border-primary-800 bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 text-[13px] font-bold hover:bg-primary-50 dark:hover:bg-primary-900/20"
                             >

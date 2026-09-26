@@ -764,6 +764,18 @@ export interface CallLogChange {
   result?: CallResult | null;
 }
 
+// Bosh sahifa xaritasi: bemor kabinetga kirgan payt (backend: /api/desk/flow).
+// Kalit — qabul id. Qabulning holati o'zgarmaydi: bu faqat "hozir kabinetda" belgisi,
+// qabul yakunlanganda (Completed) o'z-o'zidan ahamiyatini yo'qotadi.
+export interface FlowEntry {
+  /** Kabinetga kirgan payt (ISO) */
+  in: string;
+  /** Kim belgilagan */
+  by?: string | null;
+}
+
+export type FlowLog = Record<string, FlowEntry>;
+
 // Sarlavhadagi qo'ng'iroqdagi bitta yozuv. Lenta har xodimniki alohida —
 // serverda kim nimani oladi backend/notifications.ts da hal qilinadi.
 export interface StaffNotification {

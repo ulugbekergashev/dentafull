@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog } from '../types';
 import { applyCallChange } from '../utils/desk';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
@@ -6,6 +6,8 @@ const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
 const DEMO_CASH_MOVEMENTS: CashMovement[] = [];
 // Demo: bugungi qo'ng'iroq natijalari ham faqat sessiya davomida
 let DEMO_CALLS: { date: string; entries: CallLog } = { date: '', entries: {} };
+// Demo: bosh sahifa xaritasidagi "kabinetda" belgilari ham faqat sessiya davomida
+let DEMO_FLOW: { date: string; entries: FlowLog } = { date: '', entries: {} };
 
 export interface CashCloseInput {
     clinicId: string;
@@ -1210,6 +1212,26 @@ export const api = {
                 return Promise.resolve(DEMO_CALLS);
             }
             return fetchJson<{ date: string; entries: CallLog }>('/desk/calls', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        /** Bosh sahifa xaritasi: bugun kim kabinetga kirgan (qabul id → kirgan payt) */
+        getFlow: (clinicId: string, date: string) => {
+            if (isDemoMode()) return Promise.resolve({ date, entries: DEMO_FLOW.date === date ? DEMO_FLOW.entries : {} });
+            return fetchJson<{ date: string; entries: FlowLog }>(`/desk/flow?clinicId=${encodeURIComponent(clinicId)}&date=${date}`);
+        },
+        /** inChair: true — bemor kabinetga kirdi, false — navbatga qaytarildi */
+        setFlow: (data: { clinicId: string; date: string; appointmentId: string; inChair: boolean }) => {
+            if (isDemoMode()) {
+                const entries: FlowLog = { ...(DEMO_FLOW.date === data.date ? DEMO_FLOW.entries : {}) };
+                if (data.inChair) entries[data.appointmentId] = entries[data.appointmentId] || { in: new Date().toISOString(), by: 'Demo' };
+                else delete entries[data.appointmentId];
+                DEMO_FLOW = { date: data.date, entries };
+                return Promise.resolve(DEMO_FLOW);
+            }
+            return fetchJson<{ date: string; entries: FlowLog }>('/desk/flow', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),

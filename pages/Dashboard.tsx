@@ -16,13 +16,14 @@ import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from 
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
 import { DoctorQueueCard } from '../components/DoctorQueueCard';
-import { DeskToday } from '../components/DeskToday';
+import { ClinicMap, FlowPayment } from '../components/ClinicMap';
 import { PeriodPicker, Period, PeriodKey, periodOf, formatPeriodRange } from '../components/PeriodPicker';
 import { DeskMoneyCard, DeskLabCard, DeskCallsCard, CallActions } from '../components/DeskCards';
 import { BookingRequest } from '../components/BookingPanel';
 import { buildCallList, callSummary, confirmDay, confirmProgress, labSummary } from '../utils/desk';
 import { minutesOf, nowHHMM } from '../utils/queue';
 import { useCallLog } from '../hooks/useCallLog';
+import { useDeskFlow } from '../hooks/useDeskFlow';
 import { prefillFromQuery } from '../utils/patientSearch';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -305,6 +306,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   }, [isDesk]);
   const callLog = useCallLog(clinicId, localToday, isDesk);
   const logCall = callLog.apply;
+  // Bosh sahifa xaritasi: kim kabinetda. Shifokor "Kirish" ni bosganda belgilanadi,
+  // resepshn xaritada "Kirdi" orqali belgilaydi — qabulning holati o'zgarmaydi.
+  const deskFlow = useDeskFlow(clinicId, localToday, isDesk || (isDoctor && !!doctorId));
   const calls = useMemo(() => buildCallList({
     appointments, patients, recalls: dueRecalls, leads, today: localToday, nowMin,
     includeLeads: perms.menu('leads'), log: callLog.entries,
@@ -466,6 +470,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const openPaymentForRow = (row: UnpaidRow) => {
     if (row.source === 'debt' && row.transaction) openDebtPayment(row.transaction);
     else if (row.appointment) openPaymentForAppointment(row.appointment);
+  };
+
+  /**
+   * Xaritadagi "Qabul yakunlandi" qatori uchun: shu qabulning puli olinganmi.
+   * Manba "Kutilayotgan to'lovlar" bilan bir xil — ikkala joyda holat bir xil ko'rinadi,
+   * "To'lov" ham o'sha oynani ochadi.
+   */
+  const paymentFor = (a: Appointment): FlowPayment => {
+    const row = visibleUnpaid.find(r =>
+      (r.source === 'appointment' && r.appointment?.id === a.id)
+      || (r.source === 'debt' && r.date === a.date
+        && (r.patientId && a.patientId ? r.patientId === a.patientId : r.patientName === a.patientName)));
+    if (!row) return { state: 'paid' };
+    return {
+      state: row.source === 'debt' ? 'debt' : 'unpaid',
+      pay: canCollect && (onUpdateTransaction || onAddTransaction) ? () => openPaymentForRow(row) : undefined,
+    };
+  };
+
+  // "Yakunlash" xaritada — kalendardagi holat o'zgartirish bilan bir xil
+  const finishAppointment = async (a: Appointment) => {
+    if (!onUpdateAppointment) return;
+    await onUpdateAppointment(a.id, { status: 'Completed' });
   };
 
   // "Kassaga yuborish" — shifokor pulga tegmaydi, qator resepshn ro'yxatida qoladi
@@ -655,13 +682,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       {isDesk && (
         <>
-          <DeskToday
+          <ClinicMap
             appointments={appointments}
             doctors={doctors}
+            flowLog={deskFlow.entries}
             onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
             onArrived={canMoveAppt ? arriveNow : undefined}
+            onEnter={a => deskFlow.set(a.id, true)}
+            onUndoEnter={a => deskFlow.set(a.id, false)}
+            onFinish={canMoveAppt ? finishAppointment : undefined}
+            payment={paymentFor}
             onOpenBooking={canBookHere ? () => onOpenBooking!() : undefined}
-            onSeeAll={() => navigate('/calendar')}
+            onSeeAll={perms.menu('calendar') ? () => navigate('/calendar') : undefined}
           />
           {/* Kutilayotgan to'lovlar — alohida blok, butun kenglikda */}
           <DeskMoneyCard
@@ -707,6 +739,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           patients={patients}
           showPhone={showPatientPhone}
           onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+          inChair={deskFlow.entries}
+          onEnter={a => { void deskFlow.set(a.id, true); }}
         />
       )}
 
