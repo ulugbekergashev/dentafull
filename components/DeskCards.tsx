@@ -9,7 +9,7 @@ import { Card } from './Common';
 import { weekdayShort } from './DateField';
 import { useLanguage } from '../context/LanguageContext';
 import { UnpaidRow } from '../utils/unpaid';
-import { addDaysISO, CallItem, CallKind, InstallmentDue, LabSummary } from '../utils/desk';
+import { addDaysISO, CallItem, CallKind, LabSummary } from '../utils/desk';
 
 /**
  * Bosh sahifadagi "diqqat talab qiladi" kartalari: pul, laboratoriya, qo'ng'iroqlar.
@@ -70,7 +70,6 @@ interface DeskMoneyCardProps {
     /** Kassada kutilayotgan (qabul tugagan, pul olinmagan) */
     awaiting: UnpaidRow[];
     debts: UnpaidRow[];
-    installments: InstallmentDue[];
     today: string;
     showAmounts: boolean;
     /** Dashboard'dagi mavjud qator: "To'lovni olish" va "Bepul" tugmalari bilan */
@@ -84,20 +83,18 @@ const MONEY_LIMIT = 4;
 
 /**
  * Kutilayotgan to'lovlar — bosh sahifada alohida, butun kenglikdagi blok.
- * Bo'limlar (to'lov kutilmoqda, qarzlar, bo'lib to'lash) yonma-yon ustunlarda;
- * bo'sh bo'lim ustun egallamaydi.
+ * Bo'limlar (to'lov kutilmoqda, qarzlar) yonma-yon ustunlarda; bo'sh bo'lim
+ * ustun egallamaydi. Bo'lib to'lash bu yerda yo'q — u Bemor kartasida.
  */
-export const DeskMoneyCard: React.FC<DeskMoneyCardProps> = ({ awaiting, debts, installments, today, showAmounts, renderRow, onPatientClick, onSeeAll }) => {
+export const DeskMoneyCard: React.FC<DeskMoneyCardProps> = ({ awaiting, debts, showAmounts, renderRow, onSeeAll }) => {
     const { t } = useLanguage();
     // Shifokor kassaga yuborgan bemor hozir kassa oldida turibdi — birinchi
     const atDesk = (r: UnpaidRow) => (r.source === 'appointment' && r.sentToCashier ? 1 : 0);
     const sortedAwaiting = [...awaiting].sort((a, b) => atDesk(b) - atDesk(a) || b.date.localeCompare(a.date));
-    const total = [...awaiting, ...debts].reduce((s, r) => s + (r.amount || 0), 0)
-        + installments.reduce((s, d) => s + d.amount, 0);
-    const count = awaiting.length + debts.length + installments.length;
-    const hidden = Math.max(0, awaiting.length - MONEY_LIMIT) + Math.max(0, debts.length - MONEY_LIMIT) + Math.max(0, installments.length - MONEY_LIMIT);
-    const sectionCount = [awaiting, debts, installments].filter(l => l.length > 0).length;
-    const cols = sectionCount >= 3 ? 'lg:grid-cols-2 xl:grid-cols-3' : sectionCount === 2 ? 'lg:grid-cols-2' : '';
+    const total = [...awaiting, ...debts].reduce((s, r) => s + (r.amount || 0), 0);
+    const count = awaiting.length + debts.length;
+    const hidden = Math.max(0, awaiting.length - MONEY_LIMIT) + Math.max(0, debts.length - MONEY_LIMIT);
+    const twoCols = awaiting.length > 0 && debts.length > 0;
 
     return (
         <Shell
@@ -112,7 +109,7 @@ export const DeskMoneyCard: React.FC<DeskMoneyCardProps> = ({ awaiting, debts, i
             footer={hidden > 0 ? <MoreLink text={t('desk.moreAll').replace('{n}', String(hidden))} onClick={onSeeAll} /> : undefined}
         >
             {count === 0 ? <Empty text={t('desk.moneyEmpty')} /> : (
-                <div className={`grid grid-cols-1 gap-x-8 gap-y-2 ${cols}`}>
+                <div className={`grid grid-cols-1 gap-x-8 gap-y-2 ${twoCols ? 'lg:grid-cols-2' : ''}`}>
                     {sortedAwaiting.length > 0 && (
                         <section className="min-w-0">
                             <SectionTitle text={t('desk.moneyAwaiting')} count={awaiting.length} tone="text-amber-600 dark:text-amber-400" />
@@ -123,36 +120,6 @@ export const DeskMoneyCard: React.FC<DeskMoneyCardProps> = ({ awaiting, debts, i
                         <section className="min-w-0">
                             <SectionTitle text={t('desk.moneyDebts')} count={debts.length} tone="text-red-600 dark:text-red-400" />
                             <div className="divide-y divide-gray-50 dark:divide-gray-700/50">{debts.slice(0, MONEY_LIMIT).map(renderRow)}</div>
-                        </section>
-                    )}
-                    {installments.length > 0 && (
-                        <section className="min-w-0">
-                            <SectionTitle text={t('desk.moneyInstallments')} count={installments.length} tone="text-violet-600 dark:text-violet-400" />
-                            <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                                {installments.slice(0, MONEY_LIMIT).map(d => (
-                                    <div key={d.key} className="flex items-center gap-3 py-3">
-                                        <div className="min-w-0 flex-1">
-                                            <button type="button" onClick={() => onPatientClick?.(d.patientId)} disabled={!onPatientClick}
-                                                className="block max-w-full truncate text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">
-                                                {d.patientName || '—'}
-                                            </button>
-                                            <p className="text-[11px] text-gray-400 truncate">
-                                                <span className={d.overdue ? 'text-red-500 font-semibold' : d.expectedDate === today ? 'text-amber-600 font-semibold' : ''}>
-                                                    {d.overdue ? t('desk.overdueSince').replace('{date}', ddmm(d.expectedDate)) : d.expectedDate === today ? t('desk.dueToday') : t('desk.dueOn').replace('{date}', ddmm(d.expectedDate))}
-                                                </span>
-                                                {d.service ? ` · ${d.service}` : ''}
-                                            </p>
-                                        </div>
-                                        {showAmounts && <span className="text-sm font-bold tabular-nums whitespace-nowrap text-gray-900 dark:text-white">{d.amount.toLocaleString()}</span>}
-                                        {onPatientClick && (
-                                            <button type="button" onClick={() => onPatientClick(d.patientId)} aria-label={t('desk.openCard')} title={t('desk.openCard')}
-                                                className="shrink-0 p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-primary-600 hover:border-primary-400">
-                                                <ArrowUpRight className="w-3.5 h-3.5" />
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
                         </section>
                     )}
                 </div>

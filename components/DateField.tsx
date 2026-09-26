@@ -47,6 +47,17 @@ export function parseDDMMYYYY(text: string): string | null {
     return formatDateToISO(date);
 }
 
+/**
+ * Kalendarga o'tish uchun yozilgan sana: "26.09.2026", "26.09.26" yoki "26.09"
+ * (joriy yil). Mavjud bo'lmagan sana uchun null.
+ */
+export function parseJumpDate(text: string, now: Date = new Date()): string | null {
+    const m = text.trim().match(/^(\d{1,2})[.\-/](\d{1,2})(?:[.\-/](\d{2}|\d{4}))?$/);
+    if (!m) return null;
+    const year = !m[3] ? now.getFullYear() : m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+    return parseDDMMYYYY(`${m[1]}.${m[2]}.${year}`);
+}
+
 /** Yozilayotgan raqamlarga nuqtalarni o'zi qo'yadi: "23092026" → "23.09.2026" */
 const maskDigits = (raw: string): string => {
     const digits = raw.replace(/\D/g, '').slice(0, 8);
@@ -135,6 +146,52 @@ export const MonthGrid: React.FC<MonthGridProps> = ({ value, onPick, counts, min
     );
 };
 
+/**
+ * Kalendar oynasining tepasidagi maydon: sanani bosmasdan yozib o'tish.
+ * To'liq sana (26.09.2026) yozilishi bilan o'tadi; qisqasi (26.09) — Enter bilan.
+ */
+export const DateJumpInput: React.FC<{ onSubmit: (iso: string) => void }> = ({ onSubmit }) => {
+    const { t } = useLanguage();
+    const [text, setText] = useState('');
+    const [invalid, setInvalid] = useState(false);
+    // Sichqonchali kompyuterda darrov yozish mumkin; telefonda klaviatura o'zi ochilib, kalendarni yopmasin
+    const [autoFocus] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: fine)').matches);
+
+    const change = (raw: string) => {
+        const masked = maskDigits(raw);
+        setText(masked);
+        setInvalid(false);
+        if (masked.length === 10) {
+            const iso = parseDDMMYYYY(masked);
+            if (iso) onSubmit(iso);
+            else setInvalid(true);
+        }
+    };
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const iso = parseJumpDate(text);
+        if (iso) onSubmit(iso);
+        else setInvalid(true);
+    };
+
+    return (
+        <form onSubmit={submit} className="mb-2">
+            <input
+                type="text"
+                inputMode="numeric"
+                autoFocus={autoFocus}
+                value={text}
+                onChange={e => change(e.target.value)}
+                placeholder={t('datefield.jumpPlaceholder')}
+                aria-label={t('datefield.jumpLabel')}
+                aria-invalid={invalid}
+                className={`h-9 w-full rounded-lg border bg-transparent px-3 text-sm tabular-nums placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:text-white ${invalid ? 'border-red-400 dark:border-red-500' : 'border-gray-300 dark:border-gray-700'}`}
+            />
+            {invalid && <p className="mt-1 text-[11px] text-red-500" role="alert">{t('datefield.jumpInvalid')}</p>}
+        </form>
+    );
+};
+
 interface DatePopoverProps {
     anchorRef: React.RefObject<HTMLElement>;
     open: boolean;
@@ -143,7 +200,7 @@ interface DatePopoverProps {
 }
 
 const POPOVER_WIDTH = 288;
-const POPOVER_HEIGHT = 340;
+const POPOVER_HEIGHT = 390; // yozish maydoni bilan
 
 /**
  * Ochiladigan oyna — body'ga portal orqali chiziladi. Modal tanasi

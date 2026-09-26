@@ -8,7 +8,7 @@ import {
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { DateField, DatePopover, MonthGrid, formatDayMonth, weekdayName } from '../components/DateField';
+import { DateField, DateJumpInput, DatePopover, MonthGrid, formatDayMonth, weekdayName } from '../components/DateField';
 import { formatDateToISO } from '../utils/dateUtils';
 import { usePerms } from '../context/PermissionsContext';
 
@@ -517,6 +517,8 @@ export const Calendar: React.FC<CalendarProps> = ({
             <button onClick={handleNext} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronRight className="w-4 h-4" /></button>
           </div>
           <DatePopover anchorRef={jumpAnchorRef} open={jumpOpen} onClose={() => setJumpOpen(false)}>
+            {/* Sanani bosmasdan yozib ham o'tish mumkin: 26.09.2026 yoki 26.09 + Enter */}
+            <DateJumpInput onSubmit={goToDate} />
             <MonthGrid value={currentKey} onPick={goToDate} counts={appointmentCounts} />
             <button type="button" onClick={() => goToDate(todayKey)} className="mt-2 w-full py-1.5 rounded-lg text-xs font-bold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20">
               {t('datefield.today')}

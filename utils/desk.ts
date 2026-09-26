@@ -1,4 +1,4 @@
-import { Appointment, CallLog, CallLogChange, CallLogEntry, InstallmentPlan, LabOrder, Lead, Patient, Recall } from '../types';
+import { Appointment, CallLog, CallLogChange, CallLogEntry, LabOrder, Lead, Patient, Recall } from '../types';
 import { isOpenAppointment, minutesOf } from './queue';
 
 /**
@@ -43,51 +43,6 @@ export function labSummary(orders: LabOrder[], today: string): LabSummary {
         dueToday: active.filter(o => o.deadline === today).sort(byUrgency),
         inProgress: active.filter(o => !o.deadline || o.deadline > today).length,
     };
-}
-
-// ── Bo'lib to'lash ───────────────────────────────────────────────────────────
-
-export interface InstallmentDue {
-    key: string;
-    planId: string;
-    patientId: string;
-    patientName: string;
-    phone?: string;
-    service: string;
-    amount: number;
-    expectedDate: string;
-    overdue: boolean;
-}
-
-/**
- * Faol rejalardagi to'lanmagan bo'laklar: muddati o'tgan yoki yaqin kunlarda keladiganlar.
- * Reja ichida bemor ma'lumoti kelmasa (masalan, demo) — bemorlar ro'yxatidan olinadi.
- */
-export function installmentDues(plans: InstallmentPlan[], today: string, horizonDays = 3, patients: Patient[] = []): InstallmentDue[] {
-    const horizon = addDaysISO(today, horizonDays);
-    const byId = new Map(patients.map(p => [p.id, p] as [string, Patient]));
-    const out: InstallmentDue[] = [];
-    for (const plan of plans || []) {
-        if (!plan || plan.status !== 'Active') continue;
-        const patient = plan.patient || byId.get(plan.patientId);
-        for (const item of plan.items || []) {
-            if (item.status !== 'Pending') continue;
-            const date = String(item.expectedDate || '').slice(0, 10);
-            if (!date || date > horizon) continue;
-            out.push({
-                key: item.id,
-                planId: plan.id,
-                patientId: plan.patientId,
-                patientName: patient ? `${patient.lastName} ${patient.firstName}` : '',
-                phone: patient?.phone,
-                service: plan.service || '',
-                amount: Number(item.amount) || 0,
-                expectedDate: date,
-                overdue: date < today,
-            });
-        }
-    }
-    return out.sort((a, b) => a.expectedDate.localeCompare(b.expectedDate));
 }
 
 // ── Qo'ng'iroqlar ro'yxati ───────────────────────────────────────────────────

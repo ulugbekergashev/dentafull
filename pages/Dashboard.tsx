@@ -8,7 +8,7 @@ import {
   Zap, FlaskConical, CreditCard, UserCheck, XCircle, CalendarClock, Bot, Phone, Send, Gift
 } from 'lucide-react';
 import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
-import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall, InstallmentPlan } from '../types';
+import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { formatDateToISO, formatHeaderDate } from '../utils/dateUtils';
 import { transactionBelongsToDoctor, calculateAppointmentTotal } from '../utils/financialCalculations';
@@ -20,7 +20,7 @@ import { DeskToday } from '../components/DeskToday';
 import { PeriodPicker, Period, PeriodKey, periodOf, formatPeriodRange } from '../components/PeriodPicker';
 import { DeskMoneyCard, DeskLabCard, DeskCallsCard, CallActions } from '../components/DeskCards';
 import { BookingRequest } from '../components/BookingPanel';
-import { buildCallList, callSummary, confirmDay, confirmProgress, installmentDues, labSummary } from '../utils/desk';
+import { buildCallList, callSummary, confirmDay, confirmProgress, labSummary } from '../utils/desk';
 import { minutesOf, nowHHMM } from '../utils/queue';
 import { useCallLog } from '../hooks/useCallLog';
 import { prefillFromQuery } from '../utils/patientSearch';
@@ -293,19 +293,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
   // ── Ish stoli ma'lumotlari (resepshn / admin) ──
   const localToday = formatDateToISO(new Date());
-  // Bo'lib to'lash: muddati kelgan yoki 3 kun ichida keladigan to'lovlar
-  const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
-  useEffect(() => {
-    if (!clinicId || !isDesk || !showFinance) return;
-    let alive = true;
-    api.installments.getAll(clinicId)
-      .then(data => { if (alive) setInstallmentPlans(Array.isArray(data) ? data : []); })
-      .catch(() => { /* ro'yxatsiz ham sahifa ishlaydi */ });
-    return () => { alive = false; };
-  }, [clinicId, isDesk, showFinance]);
-  const dueInstallments = useMemo(
-    () => (showFinance ? installmentDues(installmentPlans, localToday, 3, patients) : []),
-    [installmentPlans, localToday, showFinance, patients]);
   const lab = useMemo(() => labSummary(labOrders, localToday), [labOrders, localToday]);
 
   // ── Qo'ng'iroqlar (obzvon) ──
@@ -680,7 +667,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           <DeskMoneyCard
             awaiting={awaitingRows}
             debts={debtRows}
-            installments={dueInstallments}
             today={localToday}
             showAmounts={showFinance}
             renderRow={renderUnpaidRow}

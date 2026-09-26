@@ -2156,6 +2156,9 @@ export const translations = {
     'datefield.openCalendar': 'Kalendarni ochish',
     'datefield.prevMonth': 'Oldingi oy',
     'datefield.nextMonth': 'Keyingi oy',
+    'datefield.jumpLabel': "Sanaga o'tish",
+    'datefield.jumpPlaceholder': 'Sanani yozing: 26.09.2026',
+    'datefield.jumpInvalid': "Bunday sana yo'q — masalan 26.09.2026 yoki 26.09",
     // To'lov: bir necha usul, sana, o'chirish
     'payment.split.add': "Boshqa usul qo'shish",
     'payment.split.method': "To'lov usuli",
@@ -4216,6 +4219,9 @@ export const translations = {
     'datefield.openCalendar': 'Открыть календарь',
     'datefield.prevMonth': 'Предыдущий месяц',
     'datefield.nextMonth': 'Следующий месяц',
+    'datefield.jumpLabel': 'Перейти к дате',
+    'datefield.jumpPlaceholder': 'Введите дату: 26.09.2026',
+    'datefield.jumpInvalid': 'Нет такой даты — например 26.09.2026 или 26.09',
     // Оплата: несколько способов, дата, удаление
     'payment.split.add': 'Добавить другой способ',
     'payment.split.method': 'Способ оплаты',
