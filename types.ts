@@ -741,6 +741,29 @@ export interface Recall {
   patient?: { id: string; firstName: string; lastName: string; phone: string; doctorId?: string | null };
 }
 
+// Bosh sahifadagi "Qo'ng'iroq qilish kerak" ro'yxati: bugungi natijalar jurnali
+// (backend: /api/desk/calls). Kalit — ro'yxat qatori: 'cf-<qabul>', 'ld-<lid>' va h.k.
+// Natija bo'lsa qator ro'yxatdan chiqadi.
+export type CallResult = 'confirmed' | 'cancelled' | 'rescheduled' | 'booked' | 'thinking' | 'rejected' | 'dismissed' | 'greeted';
+
+export interface CallLogEntry {
+  /** Bugun necha marta ko'tarmadi */
+  n?: number;
+  r?: CallResult;
+  /** Oxirgi amal vaqti (ISO) */
+  at: string;
+  /** Kim bosgan */
+  by?: string | null;
+}
+
+export type CallLog = Record<string, CallLogEntry>;
+
+/** noAnswer: +1 ko'tarmadi, -1 qaytarish; result: null — natijani olib tashlash */
+export interface CallLogChange {
+  noAnswer?: 1 | -1;
+  result?: CallResult | null;
+}
+
 // Sarlavhadagi qo'ng'iroqdagi bitta yozuv. Lenta har xodimniki alohida —
 // serverda kim nimani oladi backend/notifications.ts da hal qilinadi.
 export interface StaffNotification {

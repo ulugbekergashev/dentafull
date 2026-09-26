@@ -1,10 +1,10 @@
-import { Appointment, InstallmentPlan, LabOrder, Lead, Patient, Recall } from '../types';
-import { minutesOf } from './queue';
+import { Appointment, CallLog, CallLogChange, CallLogEntry, InstallmentPlan, LabOrder, Lead, Patient, Recall } from '../types';
+import { isOpenAppointment, minutesOf } from './queue';
 
 /**
  * Resepshn ish stoli (bosh sahifa) uchun tanlovlar — sof funksiyalar.
- * Hammasi ilovada allaqachon yuklangan ma'lumotdan hisoblanadi, bazaga yangi
- * so'rov yoki ustun kerak emas.
+ * Hammasi ilovada allaqachon yuklangan ma'lumotdan (va qo'ng'iroqlar uchun
+ * bugungi jurnaldan) hisoblanadi, bazaga yangi ustun kerak emas.
  */
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -94,8 +94,12 @@ export function installmentDues(plans: InstallmentPlan[], today: string, horizon
 
 /**
  * Resepshn bugun qo'ng'iroq qilishi kerak bo'lganlar — bitta ro'yxatda, muhimlik
- * tartibida: kelmaganlar (qayta yozish), yangi lidlar (tez javob muhim), ertangi
- * tasdiqlanmagan qabullar, nazoratga chaqirish, tug'ilgan kunlar.
+ * tartibida: kelmaganlar (qayta yozish), yangi lidlar (tez javob muhim),
+ * tasdiqlanmagan qabullar (bugungi va keyingi ish kuni), nazoratga chaqirish,
+ * tug'ilgan kunlar. Bugun ko'tarmaganlar ro'yxat oxiriga — qayta urinishga tushadi.
+ *
+ * Qatorning natijasi o'z yozuviga yoziladi (qabul, lid, nazorat holati); boshqa
+ * joyi yo'q natijalar va "ko'tarmadi" urinishlari — bugungi jurnalda (CallLog).
  */
 export type CallKind = 'noshow' | 'lead' | 'confirm' | 'recall' | 'birthday';
 
@@ -104,9 +108,14 @@ export interface CallItem {
     kind: CallKind;
     name: string;
     phone?: string;
+    /** Bemor kartasidagi ikkinchi raqam */
+    secondaryPhone?: string;
     patientId?: string;
+    appointmentId?: string;
+    leadId?: string;
     recallId?: string;
-    /** Qabul vaqti (kelmagan / ertangi) */
+    /** Qabul kuni va vaqti (kelmagan / tasdiqlash) */
+    apptDate?: string;
     time?: string;
     doctorName?: string;
     /** Nazorat muddati */
@@ -116,6 +125,14 @@ export interface CallItem {
     note?: string;
     /** Tug'ilgan kunda to'ladigan yosh */
     age?: number;
+    /** Tasdiqlash: klinikaga birinchi marta keladi — bunday bemor ko'proq kelmay qoladi */
+    firstVisit?: boolean;
+    /** Tasdiqlash: oldin qabulga kelmay qolgan */
+    missedBefore?: boolean;
+    /** Bugun necha marta ko'tarmadi; oxirgisi qachon va kim qo'ng'iroq qilgan */
+    attempts: number;
+    lastAttemptAt?: string;
+    lastAttemptBy?: string | null;
 }
 
 interface CallInput {
@@ -124,64 +141,159 @@ interface CallInput {
     recalls: Recall[];
     leads: Lead[];
     today: string;
+    /** Hozirgi vaqt (kun boshidan daqiqa): bugungi qabulning vaqti o'tgan bo'lsa tasdiqlash kech */
+    nowMin: number;
     includeLeads: boolean;
+    log?: CallLog;
 }
 
 const byTime = (a: Appointment, b: Appointment) => minutesOf(a.time) - minutesOf(b.time);
 
-export function buildCallList({ appointments, patients, recalls, leads, today, includeLeads }: CallInput): CallItem[] {
-    const tomorrow = addDaysISO(today, 1);
+/** Jurnalga bitta o'zgarish. Backenddagi (/api/desk/calls) qoida bilan bir xil. */
+export function applyCallChange(log: CallLog, key: string, change: CallLogChange, at: string, by: string | null = null): CallLog {
+    const prev = log[key];
+    const entry: CallLogEntry = { ...(prev || {}), at, by };
+    if (change.noAnswer !== undefined) entry.n = Math.max(0, Math.min(99, (prev?.n || 0) + change.noAnswer));
+    if (change.result !== undefined) {
+        if (change.result === null) delete entry.r;
+        else entry.r = change.result;
+    }
+    if (!entry.n) delete entry.n;
+    const next = { ...log };
+    if (!entry.n && !entry.r) delete next[key];
+    else next[key] = entry;
+    return next;
+}
+
+/**
+ * Qaysi kunning qabullari tasdiqlanadi: ertangi. Ertaga birorta qabul bo'lmasa
+ * (masalan yakshanba — dam olish kuni), qabuli bor eng yaqin kun (3 kungacha).
+ */
+export function confirmDay(appointments: Appointment[], today: string, maxAhead = 3): string {
+    for (let i = 1; i <= maxAhead; i++) {
+        const day = addDaysISO(today, i);
+        if (appointments.some(a => a.date === day && isOpenAppointment(a))) return day;
+    }
+    return addDaysISO(today, 1);
+}
+
+/** O'sha kunning nechta qabuli bor va nechtasi tasdiqlangan (boshqa kompyuterda tasdiqlangani ham) */
+export function confirmProgress(appointments: Appointment[], day: string, log: CallLog = {}): { total: number; confirmed: number } {
+    let total = 0;
+    let confirmed = 0;
+    for (const a of appointments) {
+        if (a.date !== day || !isOpenAppointment(a)) continue;
+        const r = log[`cf-${a.id}`]?.r;
+        if (r === 'cancelled') continue;
+        total++;
+        if (a.status !== 'Pending' || r === 'confirmed' || r === 'rescheduled') confirmed++;
+    }
+    return { total, confirmed };
+}
+
+/** Bugungi jurnal bo'yicha qisqa hisob — karta pastidagi qator uchun */
+export function callSummary(log: CallLog): { confirmed: number; cancelled: number; booked: number; noAnswer: number } {
+    const s = { confirmed: 0, cancelled: 0, booked: 0, noAnswer: 0 };
+    for (const e of Object.values(log)) {
+        if (e.r === 'confirmed' || e.r === 'rescheduled') s.confirmed++;
+        else if (e.r === 'cancelled') s.cancelled++;
+        else if (e.r === 'booked') s.booked++;
+        else if (!e.r && e.n) s.noAnswer++;
+    }
+    return s;
+}
+
+export function buildCallList({ appointments, patients, recalls, leads, today, nowMin, includeLeads, log = {} }: CallInput): CallItem[] {
+    const confirmOn = confirmDay(appointments, today);
     const byId = new Map(patients.map(p => [p.id, p]));
-    const out: CallItem[] = [];
+    // Keyingi kunlarga yozilgan bemor — kelmagan yoki nazorat uchun qo'ng'iroq shart emas
+    // (masalan, boshqa kompyuterdan yoki botdan yozilgan)
+    const upcoming = new Set(appointments.filter(a => a.date > today && isOpenAppointment(a)).map(a => a.patientId));
+    const comesToday = new Set(appointments.filter(a => a.date === today && isOpenAppointment(a)).map(a => a.patientId));
+    const visited = new Set<string>();
+    const missed = new Set<string>();
+    for (const a of appointments) {
+        if (a.date >= today) continue;
+        if (a.status === 'Completed') visited.add(a.patientId);
+        else if (a.status === 'No-Show') missed.add(a.patientId);
+    }
+    const phones = (patientId: string) => {
+        const p = byId.get(patientId);
+        return { phone: p?.phone, secondaryPhone: p?.secondaryPhone || undefined };
+    };
+
+    const fresh: CallItem[] = [];
+    const retry: CallItem[] = [];
+    const push = (item: Omit<CallItem, 'attempts'>) => {
+        const entry = log[item.key];
+        if (entry?.r) return; // natija yozilgan
+        const attempts = entry?.n || 0;
+        const full: CallItem = { ...item, attempts, lastAttemptAt: attempts ? entry!.at : undefined, lastAttemptBy: attempts ? entry!.by : undefined };
+        (attempts ? retry : fresh).push(full);
+    };
 
     appointments
-        .filter(a => a.date === today && a.status === 'No-Show')
+        .filter(a => a.date === today && a.status === 'No-Show' && !upcoming.has(a.patientId))
         .sort(byTime)
-        .forEach(a => out.push({
-            key: `ns-${a.id}`, kind: 'noshow', name: a.patientName, phone: byId.get(a.patientId)?.phone,
-            patientId: a.patientId, time: a.time, doctorName: a.doctorName,
+        .forEach(a => push({
+            key: `ns-${a.id}`, kind: 'noshow', name: a.patientName, ...phones(a.patientId),
+            patientId: a.patientId, appointmentId: a.id, apptDate: a.date, time: a.time, doctorName: a.doctorName,
         }));
 
     if (includeLeads) {
         leads
             .filter(l => l.status === 'New')
             .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
-            .forEach(l => out.push({
-                key: `ld-${l.id}`, kind: 'lead', name: l.name, phone: l.phone, note: l.service || l.source || undefined,
+            .forEach(l => push({
+                key: `ld-${l.id}`, kind: 'lead', name: l.name, phone: l.phone, leadId: l.id,
+                note: l.service || l.source || undefined,
             }));
     }
 
     appointments
-        .filter(a => a.date === tomorrow && a.status === 'Pending')
-        .sort(byTime)
-        .forEach(a => out.push({
-            key: `cf-${a.id}`, kind: 'confirm', name: a.patientName, phone: byId.get(a.patientId)?.phone,
-            patientId: a.patientId, time: a.time, doctorName: a.doctorName,
-        }));
+        .filter(a => a.status === 'Pending'
+            && ((a.date === today && minutesOf(a.time) > nowMin) || a.date === confirmOn))
+        .sort((a, b) => a.date.localeCompare(b.date) || byTime(a, b))
+        .forEach(a => {
+            const p = byId.get(a.patientId);
+            push({
+                key: `cf-${a.id}`, kind: 'confirm', name: a.patientName, ...phones(a.patientId),
+                patientId: a.patientId, appointmentId: a.id, apptDate: a.date, time: a.time, doctorName: a.doctorName,
+                // Tizimga ko'chirilgan eski bemorda qabullar tarixi bo'lmasligi mumkin — oxirgi tashrif sanasi bor
+                firstVisit: !!p && !visited.has(a.patientId) && (!p.lastVisit || p.lastVisit === 'Never'),
+                missedBefore: missed.has(a.patientId),
+            });
+        });
 
     recalls
-        .filter(r => r.status === 'planned' || r.status === 'reminded')
+        .filter(r => (r.status === 'planned' || r.status === 'reminded') && !upcoming.has(r.patientId) && !comesToday.has(r.patientId))
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-        .forEach(r => out.push({
-            key: `rc-${r.id}`, kind: 'recall',
-            name: r.patient ? `${r.patient.lastName} ${r.patient.firstName}` : (byId.get(r.patientId) ? `${byId.get(r.patientId)!.lastName} ${byId.get(r.patientId)!.firstName}` : '—'),
-            phone: r.patient?.phone || byId.get(r.patientId)?.phone,
-            patientId: r.patientId, recallId: r.id, date: r.dueDate, overdue: r.dueDate < today,
-            note: r.reason || undefined,
-        }));
+        .forEach(r => {
+            const p = byId.get(r.patientId);
+            push({
+                key: `rc-${r.id}`, kind: 'recall',
+                name: r.patient ? `${r.patient.lastName} ${r.patient.firstName}` : (p ? `${p.lastName} ${p.firstName}` : '—'),
+                phone: r.patient?.phone || p?.phone, secondaryPhone: p?.secondaryPhone || undefined,
+                patientId: r.patientId, recallId: r.id, date: r.dueDate, overdue: r.dueDate < today,
+                note: r.reason || undefined,
+            });
+        });
 
     const monthDay = today.slice(5);
     patients
         .filter(p => p.status !== 'Archived' && typeof p.dob === 'string' && p.dob.slice(5, 10) === monthDay)
         .forEach(p => {
             const year = Number(p.dob.slice(0, 4));
-            out.push({
-                key: `bd-${p.id}`, kind: 'birthday', name: `${p.lastName} ${p.firstName}`, phone: p.phone,
+            push({
+                key: `bd-${p.id}`, kind: 'birthday', name: `${p.lastName} ${p.firstName}`,
+                phone: p.phone, secondaryPhone: p.secondaryPhone || undefined,
                 patientId: p.id, age: year > 1900 ? Number(today.slice(0, 4)) - year : undefined,
             });
         });
 
-    return out;
+    // Ko'tarmaganlar — eng oldin urinilgani birinchi (qayta qo'ng'iroq navbati)
+    retry.sort((a, b) => String(a.lastAttemptAt || '').localeCompare(String(b.lastAttemptAt || '')));
+    return [...fresh, ...retry];
 }
 
 // ── Qabul uchun bo'sh vaqtlar ────────────────────────────────────────────────

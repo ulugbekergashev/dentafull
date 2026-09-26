@@ -1,8 +1,11 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange } from '../types';
+import { applyCallChange } from '../utils/desk';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
 const DEMO_CASH_MOVEMENTS: CashMovement[] = [];
+// Demo: bugungi qo'ng'iroq natijalari ham faqat sessiya davomida
+let DEMO_CALLS: { date: string; entries: CallLog } = { date: '', entries: {} };
 
 export interface CashCloseInput {
     clinicId: string;
@@ -1189,6 +1192,25 @@ export const api = {
             if (isDemoMode()) return Promise.resolve({ id, ...data } as Recall);
             return fetchJson<Recall>(`/recalls/${id}`, {
                 method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+    },
+    /** Bosh sahifadagi "Qo'ng'iroq qilish kerak": bugungi natijalar jurnali */
+    desk: {
+        getCalls: (clinicId: string, date: string) => {
+            if (isDemoMode()) return Promise.resolve({ date, entries: DEMO_CALLS.date === date ? DEMO_CALLS.entries : {} });
+            return fetchJson<{ date: string; entries: CallLog }>(`/desk/calls?clinicId=${encodeURIComponent(clinicId)}&date=${date}`);
+        },
+        logCall: (data: { clinicId: string; date: string; key: string } & CallLogChange) => {
+            if (isDemoMode()) {
+                const base = DEMO_CALLS.date === data.date ? DEMO_CALLS.entries : {};
+                DEMO_CALLS = { date: data.date, entries: applyCallChange(base, data.key, data, new Date().toISOString(), 'Demo') };
+                return Promise.resolve(DEMO_CALLS);
+            }
+            return fetchJson<{ date: string; entries: CallLog }>('/desk/calls', {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });

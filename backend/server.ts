@@ -3956,6 +3956,118 @@ app.put('/api/recalls/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// ─── Bosh sahifa: qo'ng'iroq natijalari ──────────────────────────────────────
+//
+// "Qo'ng'iroq qilish kerak" ro'yxatidagi qatorga resepshn natija yozadi. Qabul,
+// lid va nazoratning holati o'z jadvalida o'zgaradi — bu yerda faqat o'sha
+// jadvallarda joyi yo'q narsa saqlanadi: "ko'tarmadi" urinishlari va ro'yxatdan
+// olish ("tabrikladim", "kerak emas"). Holatni o'zgartirgan natijalar ham
+// yoziladi: ertangi qabullar va lidlar boshqa kompyuterda qayta yuklanmaydi,
+// jurnal orqali ikkinchi resepshn ham qator yopilganini ko'radi.
+//
+// Migratsiyasiz: PlatformSetting'da har klinikaga BITTA qator va faqat bugungi
+// kun. Yangi kun boshlanganda qator yangidan yoziladi — jadval o'smaydi.
+const DESK_CALL_RESULTS = ['confirmed', 'cancelled', 'rescheduled', 'booked', 'thinking', 'rejected', 'dismissed', 'greeted'];
+const DESK_CALL_KEY_RE = /^(cf|ns|ld|rc|bd)-[A-Za-z0-9_-]{1,80}$/;
+const DESK_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DESK_CALLS_MAX = 2000;
+type DeskCallEntry = { n?: number; r?: string; at: string; by?: string | null };
+type DeskCallDay = { date: string; entries: Record<string, DeskCallEntry> };
+
+const deskCallsKey = (clinicId: string) => `desk:calls:${clinicId}`;
+
+const parseDeskCalls = (raw: string | null): DeskCallDay | null => {
+    if (!raw) return null;
+    try {
+        const v = JSON.parse(raw);
+        if (v && typeof v.date === 'string' && v.entries && typeof v.entries === 'object') return v;
+    } catch { /* buzilgan qiymat — kun yangidan boshlanadi */ }
+    return null;
+};
+
+/** Ish stoli faqat klinika egasi va resepshnda. Klinika tokendan olinadi. */
+const deskCallsClinic = (req: any, res: any): string | null => {
+    if (!['CLINIC_ADMIN', 'RECEPTIONIST', 'SUPER_ADMIN'].includes(req.user?.role)) {
+        res.status(403).json({ error: "Ruxsat yo'q: qo'ng'iroqlar ro'yxati" });
+        return null;
+    }
+    const clinicId = getScopedClinicId(req);
+    if (!clinicId) {
+        res.status(400).json({ error: 'clinicId is required' });
+        return null;
+    }
+    return clinicId;
+};
+
+app.get('/api/desk/calls', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = deskCallsClinic(req, res);
+        if (!clinicId) return;
+        const date = String(req.query.date || '');
+        if (!DESK_DATE_RE.test(date)) return res.status(400).json({ error: "date YYYY-MM-DD bo'lishi kerak" });
+        const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "value" FROM "PlatformSetting" WHERE "key"=$1`, deskCallsKey(clinicId));
+        const day = parseDeskCalls(rows.length ? rows[0].value : null);
+        res.json({ date, entries: day && day.date === date ? day.entries : {} });
+    } catch (error: any) {
+        console.error("Qo'ng'iroqlar jurnalini o'qishda xatolik:", error?.message || error);
+        res.status(500).json({ error: "Qo'ng'iroqlar jurnalini o'qib bo'lmadi" });
+    }
+});
+
+// Bitta qatorga o'zgarish: noAnswer (+1 ko'tarmadi / -1 qaytarish) va/yoki
+// result (natija; null — natijani olib tashlash).
+app.post('/api/desk/calls', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = deskCallsClinic(req, res);
+        if (!clinicId) return;
+        const { date, key, noAnswer, result } = req.body || {};
+        if (!DESK_DATE_RE.test(String(date || ''))) return res.status(400).json({ error: "date YYYY-MM-DD bo'lishi kerak" });
+        if (!DESK_CALL_KEY_RE.test(String(key || ''))) return res.status(400).json({ error: "Noto'g'ri qator" });
+        if (noAnswer !== undefined && noAnswer !== 1 && noAnswer !== -1) return res.status(400).json({ error: "Noto'g'ri noAnswer" });
+        if (result !== undefined && result !== null && !DESK_CALL_RESULTS.includes(result)) return res.status(400).json({ error: "Noto'g'ri natija" });
+        if (noAnswer === undefined && result === undefined) return res.status(400).json({ error: "O'zgarish yo'q" });
+
+        const storageKey = deskCallsKey(clinicId);
+        const by = req.user?.name || null;
+        // Ikki resepshn bir vaqtda bosishi mumkin: qiymat o'qilganidan beri
+        // o'zgarmagan bo'lsagina yoziladi, aks holda qaytadan o'qib urinadi.
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "value" FROM "PlatformSetting" WHERE "key"=$1`, storageKey);
+            const raw: string | null = rows.length ? rows[0].value : null;
+            const current = parseDeskCalls(raw);
+            // Kechadan ochiq qolgan sahifa bugungi jurnalni o'chirib yubormasin
+            if (current && current.date > date) return res.status(409).json({ error: 'Sahifa eskirgan — yangilang' });
+            const day: DeskCallDay = current && current.date === date ? current : { date, entries: {} };
+
+            const prev = day.entries[key];
+            const entry: DeskCallEntry = { ...(prev || {}), at: new Date().toISOString(), by };
+            if (noAnswer !== undefined) entry.n = Math.max(0, Math.min(99, (prev?.n || 0) + noAnswer));
+            if (result !== undefined) {
+                if (result === null) delete entry.r;
+                else entry.r = result;
+            }
+            if (!entry.n) delete entry.n;
+            if (!entry.n && !entry.r) delete day.entries[key];
+            else day.entries[key] = entry;
+            if (Object.keys(day.entries).length > DESK_CALLS_MAX) return res.status(413).json({ error: "Bugungi jurnal to'lib qoldi" });
+
+            const next = JSON.stringify(day);
+            const written: number = rows.length
+                ? await prisma.$executeRawUnsafe(
+                    `UPDATE "PlatformSetting" SET "value"=$2,"updatedAt"=CURRENT_TIMESTAMP WHERE "key"=$1 AND "value" IS NOT DISTINCT FROM $3`,
+                    storageKey, next, raw)
+                : await prisma.$executeRawUnsafe(
+                    `INSERT INTO "PlatformSetting" ("key","value","updatedAt") VALUES ($1,$2,CURRENT_TIMESTAMP) ON CONFLICT ("key") DO NOTHING`,
+                    storageKey, next);
+            if (written === 1) return res.json({ date, entries: day.entries });
+        }
+        res.status(409).json({ error: "Band — qayta urinib ko'ring" });
+    } catch (error: any) {
+        console.error("Qo'ng'iroq natijasini yozishda xatolik:", error?.message || error);
+        res.status(500).json({ error: "Qo'ng'iroq natijasini saqlab bo'lmadi" });
+    }
+});
+
 // ─── Xodim bildirishnomalari (sarlavhadagi qo'ng'iroq) ───────────────────────
 //
 // Lenta har xodimniki alohida: kim qaysi yozuvni oladi va qachon o'qilgan

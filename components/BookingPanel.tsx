@@ -12,12 +12,31 @@ import { addDaysISO, daySlots } from '../utils/desk';
 type Mode = 'now' | 'today' | 'day';
 type NewPatientForm = { lastName: string; firstName: string; phone: string; dob: string; gender: 'Male' | 'Female' };
 const EMPTY_NEW: NewPatientForm = { lastName: '', firstName: '', phone: '', dob: '', gender: 'Male' };
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Panel nima bilan ochiladi. Bo'sh — toza forma. */
+export interface BookingRequest {
+    /** Shu bemor tanlangan holda */
+    patientId?: string;
+    /** Mavjud qabulni boshqa kun yoki vaqtga ko'chirish (qo'ng'iroqda kelishilgan) */
+    rescheduleId?: string;
+    /** Yangi bemor formasi shu ma'lumot bilan (lid) */
+    newPatient?: { firstName?: string; lastName?: string; phone?: string; dob?: string; address?: string };
+    mode?: Mode;
+    notes?: string;
+    /**
+     * Bemor bilan hozir telefonda kelishildi (qo'ng'iroq ro'yxatidan). Qabul shu sanagacha
+     * (odatda ertaga) bo'lsa, darhol tasdiqlangan — ertangi tasdiqlash ro'yxatiga tushmaydi.
+     */
+    confirmedUpTo?: string;
+    /** Qabul saqlangandan keyin */
+    onDone?: () => void;
+}
 
 export interface BookingPanelProps {
     open: boolean;
     onClose: () => void;
-    /** Panel shu bemor tanlangan holda ochiladi */
-    initialPatientId?: string;
+    request?: BookingRequest | null;
     patients: Patient[];
     doctors: Doctor[];
     services: Service[];
@@ -43,9 +62,12 @@ const TIME_RE = /^\d{1,2}:\d{2}$/;
  *  - Bugun yoki Boshqa kun: shifokorning bo'sh vaqtlaridan biri tanlanadi.
  * Bir bemorga bir kunda bitta qabul (bazadagi cheklov): o'sha kuni yozilgan bo'lsa
  * yangi qabul ochilmaydi — mavjudi tanlangan vaqtga ko'chadi.
+ *
+ * "Qabulni ko'chirish" (request.rescheduleId): bosh sahifadagi qo'ng'iroq ro'yxatidan
+ * ochiladi. Yangi qabul ochilmaydi — o'sha qabulning kuni va vaqti o'zgaradi.
  */
 export const BookingPanel: React.FC<BookingPanelProps> = ({
-    open, onClose, initialPatientId, patients, doctors, services, appointments, currentClinic,
+    open, onClose, request, patients, doctors, services, appointments, currentClinic,
     defaultDoctorId, showPhone = true, canAddPatient, canMove, onAddPatient, onAddAppointment, onUpdateAppointment,
 }) => {
     const { t, language } = useLanguage();
@@ -58,6 +80,13 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
     const [patientId, setPatientId] = useState<string | null>(null);
     const [newMode, setNewMode] = useState(false);
     const [newForm, setNewForm] = useState<NewPatientForm>(EMPTY_NEW);
+    /** Formada ko'rinmaydigan, lekin yangi bemor kartasiga yoziladigan ma'lumot (lid manzili) */
+    const [newExtra, setNewExtra] = useState<{ address?: string } | null>(null);
+    /** Ko'chirilayotgan qabul (bo'lsa panel "Qabulni ko'chirish" rejimida) */
+    const [rescheduleId, setRescheduleId] = useState<string | null>(null);
+    // Har ochilish — yangi sessiya. Vaqt tanlovi shu bo'yicha qayta hisoblanadi: oldingi
+    // ochilishdagi kun, shifokor va rejim bir xil bo'lsa ham, eski holatdan tanlangan vaqt qolmasin.
+    const [session, setSession] = useState(0);
     const [mode, setMode] = useState<Mode>('now');
     const [doctorId, setDoctorId] = useState('');
     // Qo'lda tanlanmagan bo'lsa, "Hozir"da shifokor navbat o'zgarishi bilan eng bo'shiga o'tadi
@@ -98,25 +127,57 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
         return queues.find(q => q.n === min)!.doctor.id;
     }, [queues]);
 
-    // Har ochilganda toza forma (yoki tanlangan bemor bilan)
+    // Har ochilganda toza forma (yoki so'rovdagi bemor, ko'chiriladigan qabul, lid bilan)
     useEffect(() => {
-        if (!open) return;
-        const pre = initialPatientId ? patients.find(p => p.id === initialPatientId) : undefined;
+        if (!open) {
+            // Keyingi oddiy "Qabul" bir lahza ham "ko'chirish" bo'lib ko'rinmasin
+            setRescheduleId(null);
+            return;
+        }
+        const req = request || {};
+        const moving = req.rescheduleId
+            ? appointments.find(a => a.id === req.rescheduleId && a.status !== 'Cancelled' && a.status !== 'Completed')
+            : undefined;
+        const preId = moving?.patientId || req.patientId;
+        const pre = preId ? patients.find(p => p.id === preId) : undefined;
+        // Lid: yangi bemor formasi uning ismi va telefoni bilan ochiladi. Bemor
+        // qo'shish ruxsati bo'lmasa — qidiruvga telefon yoziladi (bazada bo'lsa topiladi).
+        const lead = !pre && req.newPatient ? req.newPatient : null;
+        const leadForm = !!lead && canAddPatient && !!onAddPatient;
+        setRescheduleId(moving && pre ? moving.id : null);
         setPatientId(pre ? pre.id : null);
-        setQuery(pre ? `${pre.lastName} ${pre.firstName}` : '');
-        setNewMode(false);
-        setNewForm(EMPTY_NEW);
-        setMode('now');
+        setQuery(pre ? `${pre.lastName} ${pre.firstName}` : lead && !leadForm ? (lead.phone || '') : '');
+        setNewMode(leadForm);
+        setNewForm(leadForm ? {
+            ...EMPTY_NEW,
+            lastName: lead!.lastName || '',
+            firstName: lead!.firstName || '',
+            phone: lead!.phone || '',
+            dob: lead!.dob && ISO_DATE_RE.test(lead!.dob) ? lead!.dob : '',
+        } : EMPTY_NEW);
+        setNewExtra(leadForm && lead!.address ? { address: lead!.address } : null);
         const own = defaultDoctorId && doctors.some(d => d.id === defaultDoctorId) ? defaultDoctorId : '';
-        setDoctorTouched(!!own);
-        setDoctorId(own || bestId || activeDoctors[0]?.id || doctors[0]?.id || '');
-        setDate(addDaysISO(today, 1));
+        if (moving && pre) {
+            setMode(moving.date === today ? 'today' : 'day');
+            setDoctorTouched(true);
+            setDoctorId(doctors.some(d => d.id === moving.doctorId) ? moving.doctorId : (own || bestId || activeDoctors[0]?.id || ''));
+            setDate(moving.date > today ? moving.date : addDaysISO(today, 1));
+            setDuration(Number(moving.duration) || 30);
+            // Xizmat saqlanadi — ro'yxatda bo'lsa tanlangan holda ko'rinsin
+            setType(services.some(s => s.name === moving.type) ? moving.type : '');
+        } else {
+            setMode(req.mode || 'now');
+            setDoctorTouched(!!own);
+            setDoctorId(own || bestId || activeDoctors[0]?.id || doctors[0]?.id || '');
+            setDate(addDaysISO(today, 1));
+            setDuration(30);
+            setType('');
+        }
         setTime('');
-        setType('');
-        setDuration(30);
-        setNotes('');
+        setNotes(req.notes || '');
         setError(null);
         setSaving(false);
+        setSession(s => s + 1);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
@@ -130,19 +191,26 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
     const existing = patientId
         ? appointments.find(a => a.patientId === patientId && a.date === targetDate && a.status !== 'Cancelled')
         : undefined;
+    // Ko'chirish: qabulning o'zi. Tanlangan kunda bemorning BOSHQA qabuli bo'lsa — to'qnashuv
+    // (bir kunda bitta qabul), uni jimgina ustiga yozib yubormaymiz.
+    const moving = rescheduleId ? appointments.find(a => a.id === rescheduleId) : undefined;
+    const conflict = moving && existing && existing.id !== moving.id ? existing : undefined;
+    const freeAppointmentId = (moving || existing)?.id;
 
     const slots = useMemo(() => (mode === 'now' || !doctorId || !targetDate ? [] : daySlots(appointments, doctorId, targetDate, {
-        startHour, endHour, nowMin: targetDate === today ? nowMin : undefined, ignoreAppointmentId: existing?.id,
-    })), [mode, doctorId, targetDate, appointments, startHour, endHour, today, nowMin, existing?.id]);
+        startHour, endHour, nowMin: targetDate === today ? nowMin : undefined, ignoreAppointmentId: freeAppointmentId,
+    })), [mode, doctorId, targetDate, appointments, startHour, endHour, today, nowMin, freeAppointmentId]);
     const visibleSlots = slots.filter(s => !s.past);
 
-    // Shifokor, kun yoki rejim o'zgarsa — birinchi bo'sh vaqt tanlanadi
+    // Shifokor, kun yoki rejim o'zgarsa — birinchi bo'sh vaqt tanlanadi.
+    // Ko'chirishda qabulning o'z vaqti (bo'sh bo'lsa): ko'pincha faqat kun o'zgaradi.
     useEffect(() => {
         if (!open || mode === 'now') return;
-        const first = slots.find(s => !s.busy && !s.past);
+        const own = moving ? slots.find(s => s.time === moving.time && !s.busy && !s.past) : undefined;
+        const first = own || slots.find(s => !s.busy && !s.past);
         setTime(first ? first.time : '');
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, mode, doctorId, targetDate]);
+    }, [open, session, mode, doctorId, targetDate]);
 
     const q = query.trim();
     const results = useMemo(
@@ -172,6 +240,12 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
     /** Formani yuborishga nima xalal beradi (bo'lmasa null) */
     const blocked: string | null = (() => {
         if (!doctor) return t('booking.noDoctor');
+        if (moving) {
+            if (!canMove || !onUpdateAppointment) return t('booking.cantMove').replace('{time}', moving.time);
+            if (conflict) return t('booking.rescheduleConflict').replace('{time}', conflict.time).replace('{doctor}', conflict.doctorName);
+            if (sameTime) return t('booking.sameTime').replace('{time}', time).replace('{patient}', sameTime.patientName);
+            return null;
+        }
         if (mode === 'now' && nowPlan) {
             if (nowPlan.kind === 'already-done') return t('booking.alreadyDone');
             if (nowPlan.kind === 'already-waiting') return t('booking.alreadyWaiting').replace('{doctor}', nowPlan.appointment.doctorName);
@@ -262,6 +336,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     // Yangi bemor o'sha shifokorga biriktiriladi — "faqat o'z bemorlari"ni
                     // ko'radigan shifokor ham uning kartasini ocha olsin
                     doctorId: doctor.id,
+                    ...(newExtra?.address ? { address: newExtra.address } : {}),
                 } as Omit<Patient, 'id' | 'clinicId'>, { allowDuplicateName: same });
                 if (!created || !(created as Patient).id) return;
                 patient = created as Patient;
@@ -273,6 +348,29 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
             if (!patient) return;
             const name = `${patient.lastName} ${patient.firstName}`;
 
+            // Ko'chirish: yangi qabul ochilmaydi — o'sha qabulning kuni va vaqti o'zgaradi
+            if (moving) {
+                if (!onUpdateAppointment) return;
+                const other = appointments.find(a => a.patientId === patient!.id && a.date === targetDate && a.status !== 'Cancelled' && a.id !== moving.id);
+                if (other) {
+                    setError(t('booking.rescheduleConflict').replace('{time}', other.time).replace('{doctor}', other.doctorName));
+                    return;
+                }
+                await onUpdateAppointment(moving.id, {
+                    date: targetDate, time: apptTime, doctorId: doctor.id, doctorName, duration: dur,
+                    ...(type ? { type } : {}),
+                    ...(notes.trim() ? { notes: moving.notes ? `${moving.notes}\n${notes.trim()}` : notes.trim() } : {}),
+                    // Yangi vaqt bemor bilan telefonda kelishildi — tasdiqlangan
+                    status: 'Confirmed',
+                });
+                request?.onDone?.();
+                onClose();
+                return;
+            }
+
+            // Oldindan yozilgan qabul odatda "kutilmoqda". Qo'ng'iroqda hozir kelishilgan va
+            // yaqin kunga (ertagacha) bo'lsa — tasdiqlangan: unga ertaga yana qo'ng'iroq shart emas.
+            const agreed = mode === 'now' || (!!request?.confirmedUpTo && targetDate <= request.confirmedUpTo);
             const moveTo = async (appt: Appointment): Promise<boolean> => {
                 if (appt.status === 'Completed') { setError(t('booking.alreadyDoneDay')); return false; }
                 if (!canMove || !onUpdateAppointment) { setError(t('booking.cantMove').replace('{time}', appt.time)); return false; }
@@ -281,7 +379,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     ...(type ? { type } : {}),
                     ...(notes.trim() ? { notes: appt.notes ? `${appt.notes}\n${notes.trim()}` : notes.trim() } : {}),
                     // "Kelmadi" deb belgilangan edi — endi keldi yoki qayta yozildi
-                    status: appt.status === 'No-Show' ? (mode === 'now' ? 'Confirmed' : 'Pending') : appt.status,
+                    status: appt.status === 'No-Show' ? (agreed ? 'Confirmed' : 'Pending') : appt.status,
                 });
                 return true;
             };
@@ -299,7 +397,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     patientId: patient.id, patientName: name, doctorId: doctor.id, doctorName,
                     type: type || 'Konsultatsiya', date: targetDate, time: apptTime, duration: dur,
                     // Hozir kelgan bemor shu yerda — tasdiqlangan; oldindan yozilgan — kutilmoqda
-                    status: mode === 'now' ? 'Confirmed' : 'Pending',
+                    status: agreed ? 'Confirmed' : 'Pending',
                     notes: notes.trim(),
                 } as Omit<Appointment, 'id'>);
                 // Boshqa xodim hozirgina shu kunga yozgan bo'lsa, server yangisini ochmay o'shani qaytaradi
@@ -307,6 +405,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     if (!(await moveTo(saved))) return;
                 }
             }
+            request?.onDone?.();
             onClose();
         } catch {
             // Xatolik ilova toasti orqali ko'rsatiladi, panel ochiq qoladi
@@ -321,18 +420,28 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
     const dayCount = (iso: string) => appointments.filter(a => a.date === iso && a.status !== 'Cancelled' && (!doctorId || a.doctorId === doctorId)).length;
     const submitLabel = (() => {
         const dn = doctor ? `Dr. ${doctor.lastName}` : '';
+        if (moving) {
+            const when = `${dateLabel(targetDate)}, ${TIME_RE.test(time) ? time : '—'}`;
+            return t('booking.submitReschedule').replace('{when}', when).replace('{doctor}', dn);
+        }
         if (mode === 'now') return willMove ? t('booking.submitMoveNow').replace('{doctor}', dn) : t('booking.submitNow').replace('{doctor}', dn);
         const when = `${dateLabel(targetDate)}, ${TIME_RE.test(time) ? time : '—'}`;
         return (willMove ? t('booking.submitMove') : t('booking.submitBook')).replace('{when}', when).replace('{doctor}', dn);
     })();
     const sectionLabel = 'text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400';
+    // Ko'chirishda "Hozir" yo'q: bemor hozir kelgan bo'lsa, bosh sahifadagi "Keldi" bor
+    const modes = ([
+        ['now', t('booking.modeNow'), t('booking.modeNowSub').replace('{time}', nowStr)],
+        ['today', t('booking.modeToday'), t('booking.modeTodaySub')],
+        ['day', t('booking.modeDay'), t('booking.modeDaySub')],
+    ] as const).filter(([m]) => !moving || m !== 'now');
 
     return (
         <div className="fixed inset-0 z-[55] flex justify-end" role="dialog" aria-modal="true" aria-labelledby="booking-title">
             <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-[1px] animate-in" onClick={onClose} />
             <form onSubmit={submit} className="relative w-full max-w-[480px] h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl animate-in">
                 <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-                    <h2 id="booking-title" className="text-lg font-black text-gray-900 dark:text-white">{t('booking.title')}</h2>
+                    <h2 id="booking-title" className="text-lg font-black text-gray-900 dark:text-white">{moving ? t('booking.rescheduleTitle') : t('booking.title')}</h2>
                     <button type="button" onClick={onClose} aria-label={t('common.close')} className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">
                         <X className="w-5 h-5" />
                     </button>
@@ -348,10 +457,12 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                 <span className="flex-1 min-w-0">
                                     <span className="block text-[15px] font-bold text-gray-900 dark:text-white truncate">{selected.lastName} {selected.firstName}</span>
                                     <span className="block text-xs text-primary-800 dark:text-primary-300 truncate">
-                                        {[(showPhone ? selected.phone : maskPhone(selected.phone)) || null, patientInfo(selected) || null].filter(Boolean).join(' · ')}
+                                        {moving
+                                            ? t('booking.rescheduleFrom').replace('{when}', `${dateLabel(moving.date)}, ${moving.time}`).replace('{doctor}', moving.doctorName)
+                                            : [(showPhone ? selected.phone : maskPhone(selected.phone)) || null, patientInfo(selected) || null].filter(Boolean).join(' · ')}
                                     </span>
                                 </span>
-                                <button type="button" onClick={clearPatient} className="text-xs font-bold text-primary-700 dark:text-primary-300 hover:underline shrink-0">{t('booking.change')}</button>
+                                {!moving && <button type="button" onClick={clearPatient} className="text-xs font-bold text-primary-700 dark:text-primary-300 hover:underline shrink-0">{t('booking.change')}</button>}
                             </div>
                         ) : newMode ? (
                             <div className="flex flex-col gap-2 p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
@@ -453,12 +564,8 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     {/* Qachon */}
                     <div className="space-y-2">
                         <span className={sectionLabel}>{t('booking.when')}</span>
-                        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t('booking.when')}>
-                            {([
-                                ['now', t('booking.modeNow'), t('booking.modeNowSub').replace('{time}', nowStr)],
-                                ['today', t('booking.modeToday'), t('booking.modeTodaySub')],
-                                ['day', t('booking.modeDay'), t('booking.modeDaySub')],
-                            ] as const).map(([m, title, sub]) => (
+                        <div className={`grid ${modes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2`} role="radiogroup" aria-label={t('booking.when')}>
+                            {modes.map(([m, title, sub]) => (
                                 <button
                                     key={m}
                                     type="button"
@@ -639,7 +746,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                         className="w-full h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder:text-gray-400"
                     />
 
-                    {willMove && !blocked && (
+                    {willMove && !moving && !blocked && (
                         <p className="text-[13px] px-3 py-2 rounded-xl bg-primary-50 text-primary-800 dark:bg-primary-900/20 dark:text-primary-300">
                             {mode === 'now' && nowPlan?.kind === 'move'
                                 ? t('booking.willMoveNow').replace('{time}', nowPlan.appointment.time)

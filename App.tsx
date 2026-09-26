@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
-import { BookingPanel } from './components/BookingPanel';
+import { BookingPanel, BookingRequest } from './components/BookingPanel';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
 import { Calendar } from './pages/Calendar';
@@ -123,8 +123,8 @@ const AppContent: React.FC = () => {
   // avval bosh sahifaga qaytish kerak edi. Shifokor esa Kalendar yoki
   // Bemor kartasida turadi va savolni aynan o'sha yerda beradi.
   const [aiOpen, setAiOpen] = useState(false);
-  // "Qabul" yon paneli — bosh sahifadagi "Qabul" tugmasidan ochiladi (null — yopiq)
-  const [bookingFor, setBookingFor] = useState<{ patientId?: string } | null>(null);
+  // "Qabul" yon paneli — bosh sahifadagi "Qabul" tugmasidan va qo'ng'iroq ro'yxatidan ochiladi (null — yopiq)
+  const [bookingFor, setBookingFor] = useState<BookingRequest | null>(null);
   const [aiAutoVoice, setAiAutoVoice] = useState(false);
 
   // Global hot key. Panel YOPIQ bo'lganda uni ochadi va darhol
@@ -620,13 +620,14 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const updateAppointment = async (id: string, data: Partial<Appointment>) => {
+  // silent — chaqiruvchi natijani o'zi ko'rsatadi (bosh sahifadagi qo'ng'iroq ro'yxati)
+  const updateAppointment = async (id: string, data: Partial<Appointment>, opts?: { silent?: boolean }) => {
     todaySync.markAppointmentWrite();
     try {
       const updated = await api.appointments.update(id, data);
       todaySync.markAppointmentWrite();
       setAppointments(prev => prev.map(a => a.id === id ? updated : a));
-      addToast('success', 'Uchrashuv yangilandi.');
+      if (!opts?.silent) addToast('success', 'Uchrashuv yangilandi.');
     } catch (e: any) {
       addToast('error', e.message || 'Xatolik yuz berdi');
       throw e;
@@ -826,12 +827,15 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const updateLead = async (id: string, data: Partial<Lead>) => {
+  // true — saqlandi (xato bo'lsa toast chiqadi va false qaytadi)
+  const updateLead = async (id: string, data: Partial<Lead>): Promise<boolean> => {
     try {
       const updated = await api.leads.update(id, data);
       setLeads(prev => prev.map(l => l.id === id ? updated : l));
+      return true;
     } catch (e: any) {
       addToast('error', e.message || 'Xatolik yuz berdi');
+      return false;
     }
   };
 
@@ -1193,7 +1197,7 @@ const AppContent: React.FC = () => {
   // Shifokor yo'q klinika Kalendar orqali yozadi (u yerda individual tarifda shifokor avtomatik yaratiladi).
   const canBook = (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST || userRole === UserRole.DOCTOR)
     && !!clinicId && perms.can('calendar', 'appts', 'create') && doctors.length > 0;
-  const openBooking = (opts?: { patientId?: string }) => setBookingFor(opts || {});
+  const openBooking = (opts?: BookingRequest) => setBookingFor(opts || {});
   // Bildirishnoma qatori bosiladigan bo'ladimi — shu rolga ochiq bo'limlar
   const allowedModuleIds = useMemo(() => visibleNavigation.map(n => n.id), [visibleNavigation]);
 
@@ -1722,7 +1726,7 @@ const AppContent: React.FC = () => {
         <BookingPanel
           open={!!bookingFor}
           onClose={() => setBookingFor(null)}
-          initialPatientId={bookingFor?.patientId}
+          request={bookingFor}
           patients={scopedPatients}
           doctors={scopedDoctors}
           services={services}
@@ -1795,6 +1799,7 @@ const AppContent: React.FC = () => {
                     showPatientPhone={showPatientPhoneForRole}
                     onUpdateAppointment={updateAppointment}
                     onUpdateTransaction={updateTransaction}
+                    onUpdateLead={updateLead}
                     onAddPatient={addPatient}
                     onAddTransaction={addTransaction}
                     onAddAppointment={addAppointment}

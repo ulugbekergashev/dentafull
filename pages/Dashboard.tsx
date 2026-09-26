@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Card, Badge, Input, Modal, Button } from '../components/Common';
-import { StatCard } from '../components/StatCard';
+import { DashReports, ReportItem } from '../components/DashReports';
 import {
   Users, Calendar, DollarSign, TrendingUp, TrendingDown,
   CheckCircle, Clock, AlertCircle, Plus, ChevronRight, Star, ArrowLeft,
@@ -18,9 +18,11 @@ import { PatientQuickSearch } from '../components/PatientQuickSearch';
 import { DoctorQueueCard } from '../components/DoctorQueueCard';
 import { DeskToday } from '../components/DeskToday';
 import { PeriodPicker, Period, PeriodKey, periodOf, formatPeriodRange } from '../components/PeriodPicker';
-import { DeskMoneyCard, DeskLabCard, DeskCallsCard } from '../components/DeskCards';
-import { buildCallList, installmentDues, labSummary } from '../utils/desk';
-import { nowHHMM } from '../utils/queue';
+import { DeskMoneyCard, DeskLabCard, DeskCallsCard, CallActions } from '../components/DeskCards';
+import { BookingRequest } from '../components/BookingPanel';
+import { buildCallList, callSummary, confirmDay, confirmProgress, installmentDues, labSummary } from '../utils/desk';
+import { minutesOf, nowHHMM } from '../utils/queue';
+import { useCallLog } from '../hooks/useCallLog';
 import { prefillFromQuery } from '../utils/patientSearch';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -46,15 +48,18 @@ interface DashboardProps {
   canTakePayment?: boolean; // Ruxsatlar: pulni o'zi qabul qila oladimi yoki faqat kassaga uzatadimi
   seeAllPatients?: boolean; // Ruxsatlar → Ko'rish doirasi: shifokor butun klinika ma'lumotini ko'rsinmi
   onPatientClick?: (id: string) => void;
-  onUpdateAppointment?: (id: string, data: Partial<Appointment>) => Promise<void>;
+  /** silent — "Uchrashuv yangilandi" chiqmaydi (natijani qo'ng'iroq kartasi o'zi ko'rsatadi) */
+  onUpdateAppointment?: (id: string, data: Partial<Appointment>, opts?: { silent?: boolean }) => Promise<void>;
   onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
+  /** true — saqlandi; xatoni ilova o'zi ko'rsatadi */
+  onUpdateLead?: (id: string, data: Partial<Lead>) => Promise<boolean>;
   onAddPatient?: (data: Omit<Patient, 'id' | 'clinicId'>, options?: { allowDuplicateName?: boolean }) => Promise<Patient | void>;
   /** Ruxsatlar: bemor telefon raqamini ko'rsatish (qidiruv natijalarida) */
   showPatientPhone?: boolean;
   onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
   onAddAppointment?: (appt: Omit<Appointment, 'id'>) => Promise<any>;
   /** "Qabul" yon panelini ochish (App darajasida, istalgan sahifadan ochiladi) */
-  onOpenBooking?: (opts?: { patientId?: string }) => void;
+  onOpenBooking?: (opts?: BookingRequest) => void;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -62,15 +67,7 @@ interface DashboardProps {
 // dashboard umumiy holatni ko'rsatadi, to'liq ro'yxat o'z sahifasida.
 const DASH_ROW_LIMIT = 4;
 
-// Kartalar soniga qarab ustunlar — qatorda bo'sh katak qolmasin
-const STAT_GRID_COLS: Record<number, string> = {
-  2: 'lg:grid-cols-2',
-  3: 'lg:grid-cols-3',
-  4: 'lg:grid-cols-4',
-  6: 'lg:grid-cols-3 xl:grid-cols-6',
-};
-
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onAddPatient, onAddTransaction, onAddAppointment, onOpenBooking }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onUpdateLead, onAddPatient, onAddTransaction, onAddAppointment, onOpenBooking, addToast }) => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -310,9 +307,120 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     () => (showFinance ? installmentDues(installmentPlans, localToday, 3, patients) : []),
     [installmentPlans, localToday, showFinance, patients]);
   const lab = useMemo(() => labSummary(labOrders, localToday), [labOrders, localToday]);
+
+  // ── Qo'ng'iroqlar (obzvon) ──
+  // Bugungi tasdiqlashda vaqti o'tgan qabul chiqmasligi uchun daqiqa sayin yangilanadi
+  const [nowMin, setNowMin] = useState(() => minutesOf(nowHHMM()));
+  useEffect(() => {
+    if (!isDesk) return;
+    const id = setInterval(() => setNowMin(minutesOf(nowHHMM())), 60000);
+    return () => clearInterval(id);
+  }, [isDesk]);
+  const callLog = useCallLog(clinicId, localToday, isDesk);
+  const logCall = callLog.apply;
   const calls = useMemo(() => buildCallList({
-    appointments, patients, recalls: dueRecalls, leads, today: localToday, includeLeads: perms.menu('leads'),
-  }), [appointments, patients, dueRecalls, leads, localToday, perms]);
+    appointments, patients, recalls: dueRecalls, leads, today: localToday, nowMin,
+    includeLeads: perms.menu('leads'), log: callLog.entries,
+  }), [appointments, patients, dueRecalls, leads, localToday, nowMin, perms, callLog.entries]);
+  const callProgress = useMemo(() => {
+    const day = confirmDay(appointments, localToday);
+    return { day, ...confirmProgress(appointments, day, callLog.entries) };
+  }, [appointments, localToday, callLog.entries]);
+  const callStats = useMemo(() => callSummary(callLog.entries), [callLog.entries]);
+
+  const canLeadEdit = !!onUpdateLead && perms.can('leads', 'leads', 'edit');
+  const canLeadBook = !!onUpdateLead && canBookHere && (perms.flag('leads', 'convert') || perms.can('leads', 'leads', 'edit'));
+  const doneText = (key: string, name: string) => t(key as any).replace('{name}', name);
+  const setLeadStatus = async (c: { leadId?: string; key: string; name: string }, status: Lead['status'], result: 'thinking' | 'rejected') => {
+    // Saqlanmasa qator ochiq qoladi (xatoni ilova toasti ko'rsatgan)
+    if (!c.leadId || !(await onUpdateLead!(c.leadId, { status }))) throw new Error('lead not saved');
+    void logCall(c.key, { result });
+    return {
+      text: doneText(result === 'thinking' ? 'desk.call.done.thinking' : 'desk.call.done.rejected', c.name),
+      undo: async () => {
+        if (await onUpdateLead!(c.leadId!, { status: 'New' })) void logCall(c.key, { result: null });
+      },
+    };
+  };
+  const callActions: CallActions = {
+    confirm: onUpdateAppointment ? async c => {
+      await onUpdateAppointment(c.appointmentId!, { status: 'Confirmed' }, { silent: true });
+      void logCall(c.key, { result: 'confirmed' });
+      return {
+        text: doneText('desk.call.done.confirmed', c.name),
+        undo: async () => {
+          await onUpdateAppointment(c.appointmentId!, { status: 'Pending' }, { silent: true });
+          void logCall(c.key, { result: null });
+        },
+      };
+    } : undefined,
+    // Qaytarib bo'lmaydi: shifokorga "bekor qilindi" xabari ketgan. Shuning uchun oldin so'raladi.
+    cancel: onUpdateAppointment ? async c => {
+      await onUpdateAppointment(c.appointmentId!, { status: 'Cancelled' }, { silent: true });
+      void logCall(c.key, { result: 'cancelled' });
+      return { text: doneText('desk.call.done.cancelled', c.name), tone: 'danger' };
+    } : undefined,
+    reschedule: canBookHere && canMoveAppt ? c => onOpenBooking!({
+      rescheduleId: c.appointmentId,
+      onDone: () => { void logCall(c.key, { result: 'rescheduled' }); },
+    }) : undefined,
+    book: canBookHere ? c => onOpenBooking!({
+      patientId: c.patientId,
+      mode: 'day',
+      confirmedUpTo: callProgress.day,
+      onDone: () => { void logCall(c.key, { result: 'booked' }); },
+    }) : undefined,
+    bookLead: canLeadBook ? c => {
+      const lead = leads.find(l => l.id === c.leadId);
+      if (!lead) return;
+      // Lidlar sahifasidagi "Bemorga aylantirish" bilan bir xil: birinchi so'z — ism
+      const [firstName = '', ...rest] = lead.name.trim().split(/\s+/);
+      onOpenBooking!({
+        newPatient: { firstName, lastName: rest.join(' '), phone: lead.phone, dob: lead.dob, address: lead.address },
+        mode: 'day',
+        confirmedUpTo: callProgress.day,
+        notes: lead.service ? t('desk.call.leadInterest').replace('{service}', lead.service) : undefined,
+        onDone: () => {
+          void onUpdateLead!(lead.id, { status: 'Booked' });
+          void logCall(c.key, { result: 'booked' });
+        },
+      });
+    } : undefined,
+    thinking: canLeadEdit ? c => setLeadStatus(c, 'Thinking', 'thinking') : undefined,
+    reject: canLeadEdit ? c => setLeadStatus(c, 'Cancelled', 'rejected') : undefined,
+    dismiss: async c => {
+      if (c.kind === 'recall' && c.recallId) {
+        const recall = dueRecalls.find(r => r.id === c.recallId);
+        try {
+          await api.recalls.update(c.recallId, { status: 'cancelled' });
+        } catch (e: any) {
+          addToast?.('error', e?.message || t('common.error'));
+          throw e;
+        }
+        setDueRecalls(prev => prev.filter(r => r.id !== c.recallId));
+        // Boshqa kompyuterdagi ro'yxat ham yopilsin (nazoratlar u yerda qayta yuklanmaydi)
+        void logCall(c.key, { result: 'dismissed' });
+        return {
+          text: doneText('desk.call.done.dismissed', c.name),
+          undo: recall ? async () => {
+            await api.recalls.update(recall.id, { status: recall.status });
+            setDueRecalls(prev => (prev.some(r => r.id === recall.id) ? prev : [...prev, recall]));
+            void logCall(c.key, { result: null });
+          } : undefined,
+        };
+      }
+      const result = c.kind === 'birthday' ? 'greeted' : 'dismissed';
+      await logCall(c.key, { result });
+      return {
+        text: doneText(result === 'greeted' ? 'desk.call.done.greeted' : 'desk.call.done.dismissed', c.name),
+        undo: () => logCall(c.key, { result: null }),
+      };
+    },
+    noAnswer: async c => {
+      await logCall(c.key, { noAnswer: 1 });
+      return { text: doneText('desk.call.done.noAnswer', c.name), tone: 'missed', undo: () => logCall(c.key, { noAnswer: -1 }) };
+    },
+  };
   // "Keldi" — keyinroqqa yozilgan bemor erta keldi: qabuli hozirga ko'chadi va navbatga tushadi
   const arriveNow = async (a: Appointment) => {
     if (!onUpdateAppointment) return;
@@ -460,6 +568,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     );
   };
 
+  // "Hisobotlar" blokidagi raqamlar — tepadagi 4–6 ta katta karta o'rniga bir nechtasi.
+  // "Kutilmoqda" summasi yo'q: olinmagan pul "Kutilayotgan to'lovlar" blokida turibdi.
+  const reportItems: ReportItem[] = [
+    ...(isDoctor ? [{
+      key: 'patients', label: t('dashboard.reports.patients'), value: totalPatients.toLocaleString(),
+      hint: `+${activePatients} ${t('dashboard.active')}`,
+    }] : []),
+    {
+      key: 'appts', label: t('dashboard.reports.appts'), value: periodAppointmentsCount,
+      hint: pendingAppointments > 0 ? `${pendingAppointments} ${t('dashboard.pending').toLowerCase()}` : t('dashboard.allOk'),
+    },
+    ...(showFinance && isDoctor ? [{
+      key: 'avg', label: t('dashboard.reports.avgCheck'), value: avgCheck.toLocaleString(), unit: 'UZS', hint: t('dashboard.perPatient'),
+    }] : []),
+    ...(showFinance ? [{
+      key: 'revenue', label: t('dashboard.reports.revenue'), value: totalRevenue.toLocaleString(), unit: 'UZS', accent: true,
+    }] : []),
+    ...(!isDoctor && perms.menu('leads') ? [{
+      key: 'leads', label: t('dashboard.reports.leads'), value: newLeadsCount, hint: t('dashboard.fromAds'),
+    }] : []),
+  ];
+  // To'liq hisobot — Moliya → Hisobot (shifokorda Moliya sahifasi yo'q)
+  const canOpenFullReport = (userRole === UserRole.CLINIC_ADMIN || isReceptionist)
+    && perms.menu('finance') && perms.can('finance', 'reports', 'view');
+
   // AI tab uchun stats obyekti
   const aiStats = useMemo(() => ({
     todayAppointments: todayAppointments.length,
@@ -543,33 +676,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             onOpenBooking={canBookHere ? () => onOpenBooking!() : undefined}
             onSeeAll={() => navigate('/calendar')}
           />
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
-            <DeskMoneyCard
-              awaiting={awaitingRows}
-              debts={debtRows}
-              installments={dueInstallments}
-              today={localToday}
-              showAmounts={showFinance}
-              renderRow={renderUnpaidRow}
-              onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
-              onSeeAll={perms.menu('finance') ? () => navigate('/finance') : undefined}
-            />
-            {perms.menu('lab') && (
-              <DeskLabCard
-                summary={lab}
-                patients={patients}
+          {/* Kutilayotgan to'lovlar — alohida blok, butun kenglikda */}
+          <DeskMoneyCard
+            awaiting={awaitingRows}
+            debts={debtRows}
+            installments={dueInstallments}
+            today={localToday}
+            showAmounts={showFinance}
+            renderRow={renderUnpaidRow}
+            onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+            onSeeAll={perms.menu('finance') ? () => navigate('/finance') : undefined}
+          />
+          <div className={`grid grid-cols-1 gap-6 items-start ${perms.menu('lab') ? 'lg:grid-cols-5' : ''}`}>
+            <div className={`min-w-0 ${perms.menu('lab') ? 'lg:col-span-3' : ''}`}>
+              <DeskCallsCard
+                items={calls}
+                today={localToday}
                 showPhone={showPatientPhone}
+                actions={callActions}
+                progress={callProgress}
+                summary={callStats}
                 onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
-                onOpenLab={() => navigate('/lab')}
+                onOpenLeads={perms.menu('leads') ? () => navigate('/leads') : undefined}
               />
+            </div>
+            {perms.menu('lab') && (
+              <div className="min-w-0 lg:col-span-2">
+                <DeskLabCard
+                  summary={lab}
+                  patients={patients}
+                  showPhone={showPatientPhone}
+                  onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+                  onOpenLab={() => navigate('/lab')}
+                />
+              </div>
             )}
-            <DeskCallsCard
-              items={calls}
-              showPhone={showPatientPhone}
-              onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
-              onOpenLeads={perms.menu('leads') ? () => navigate('/leads') : undefined}
-              onDismissRecall={dismissRecall}
-            />
           </div>
         </>
       )}
@@ -585,40 +726,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       {/* UMUMIY */}
         <div className="space-y-6">
-          {/* Olib tashlangan takrorlar: "Jami bemorlar" Bemorlar sahifasida,
-              "O'rtacha chek" Hisobotda bor. Shifokorda ular qoladi. */}
-          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${STAT_GRID_COLS[(isDoctor ? 3 : 2) + (showFinance ? (isDoctor ? 3 : 2) : 0)]}`}>
-        {isDoctor && (
-        <StatCard
-          label={t('dashboard.totalPatients')} value={totalPatients.toLocaleString()} icon={Users} color="primary"
-          subtitle={<span className="flex items-center"><span className="font-bold text-success-600 bg-success-50 dark:bg-success-900/30 px-1.5 py-0.5 rounded-full">+{activePatients}</span><span className="ml-1.5">{t('dashboard.active')}</span></span>}
-        />
-        )}
-        <StatCard
-          label={t('dashboard.todayAppointments')} value={periodAppointmentsCount} icon={Calendar} color="info"
-          subtitle={pendingAppointments > 0 ? `${pendingAppointments} ${t('dashboard.pending')}` : t('dashboard.allOk')}
-        />
-        <StatCard
-          label={t('dashboard.newLeads')} value={newLeadsCount} icon={Star} color="warning"
-          subtitle={t('dashboard.fromAds')}
-        />
-        {showFinance && (<>
-          {isDoctor && (
-          <StatCard
-            label={t('dashboard.avgCheck')} value={avgCheck.toLocaleString()} unit="UZS" icon={TrendingUp} color="success"
-            subtitle={t('dashboard.perPatient')}
-          />
-          )}
-          <StatCard
-            label={t('dashboard.pending')} value={pendingRevenue.toLocaleString()} unit="UZS" icon={Clock} color="warning"
-            subtitle={t('dashboard.unpaid')}
-          />
-          <StatCard
-            label={t('dashboard.todayRevenue')} value={totalRevenue.toLocaleString()} unit="UZS" icon={DollarSign} color="success" variant="gradient"
-            subtitle={periodLabel}
-          />
-        </>)}
-      </div>
+          {/* Ko'rsatkich kartalari (qabullar, daromad va h.k.) endi tepada emas —
+              sahifa oxiridagi "Hisobotlar" blokida (DashReports). */}
 
       {/* Kunning ikki savoli yonma-yon: bugun kim keladi va qancha pul
           yig'ilmagan. Nisbat 8/4 — jadvalda yettita ustun bor, u tor joyda
@@ -935,6 +1044,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       </div>
 
+      {/* Hisobotlar — sahifa oxirida: bir nechta asosiy raqam va (shifokorda) grafiklar.
+          Batafsil hisobot — Moliya → Hisobot. */}
+      <DashReports
+        periodLabel={periodLabel}
+        items={reportItems}
+        onOpenFull={canOpenFullReport ? () => navigate('/finance?tab=hisobot') : undefined}
+      >
       {/* Grafiklar — faqat shifokorda (sababi yuqorida, isDoctor yonida) */}
       {isDoctor && (<>
         <TrendCharts appointments={filteredAppointments} transactions={filteredTransactions} showFinance={showFinance} />
@@ -1087,6 +1203,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
         <IntensityChart appointments={appointments} />
       </>)}
+      </DashReports>
 
       {/* Qarz to'lash modali — qisman yoki to'liq */}
       {payingDebt && (() => {

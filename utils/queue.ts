@@ -42,6 +42,16 @@ export function doctorLater(appointments: Appointment[], doctorId: string, today
         .sort(byTime);
 }
 
+/**
+ * Bugun qabul qilinganlar ("Completed"). Navbatdan chiqqan bemor ko'zdan g'oyib
+ * bo'lmasin — resepshn uni shifokor qatorida "qabul qilindi" holatida ko'radi.
+ */
+export function doctorDone(appointments: Appointment[], doctorId: string, today: string): Appointment[] {
+    return appointments
+        .filter(a => a.date === today && a.doctorId === doctorId && a.status === 'Completed')
+        .sort(byTime);
+}
+
 /** Qancha vaqtdan beri kutmoqda (daqiqa) */
 export const waitMinutes = (a: Pick<Appointment, 'time'>, nowMin: number): number => Math.max(0, nowMin - minutesOf(a.time));
 

@@ -4,7 +4,7 @@ import { Appointment, Patient } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDateToISO, calcAge } from '../utils/dateUtils';
 import { maskPhone } from '../utils/accessControl';
-import { doctorLater, doctorQueue, healthAlert, minutesOf, nowHHMM, waitMinutes, waitTone } from '../utils/queue';
+import { doctorDone, doctorLater, doctorQueue, healthAlert, minutesOf, nowHHMM, waitMinutes, waitTone } from '../utils/queue';
 
 interface DoctorQueueCardProps {
     doctorId: string;
@@ -40,9 +40,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
 
     const queue = doctorQueue(appointments, doctorId, today, nowMin);
     const later = doctorLater(appointments, doctorId, today, nowMin);
-    const done = appointments
-        .filter(a => a.date === today && a.doctorId === doctorId && a.status === 'Completed')
-        .sort((a, b) => minutesOf(a.time) - minutesOf(b.time));
+    const done = doctorDone(appointments, doctorId, today);
 
     const waitText = (a: Appointment) => {
         const m = waitMinutes(a, nowMin);
