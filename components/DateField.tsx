@@ -67,10 +67,13 @@ interface MonthGridProps {
     counts?: Record<string, number>;
     min?: string;
     max?: string;
+    /** Oraliq tanlashda: chetlari to'q, orasidagi kunlar och rangda */
+    rangeFrom?: string;
+    rangeTo?: string;
 }
 
 /** Oylik kalendar: dushanbadan boshlanadigan 7 ustunli jadval */
-export const MonthGrid: React.FC<MonthGridProps> = ({ value, onPick, counts, min, max }) => {
+export const MonthGrid: React.FC<MonthGridProps> = ({ value, onPick, counts, min, max, rangeFrom, rangeTo }) => {
     const { t, language } = useLanguage();
     const lang = langOf(language);
     const [month, setMonth] = useState(() => firstOfMonth(value));
@@ -101,7 +104,8 @@ export const MonthGrid: React.FC<MonthGridProps> = ({ value, onPick, counts, min
                 {cells.map((key, i) => {
                     if (!key) return <div key={`e${i}`} />;
                     const count = counts?.[key] || 0;
-                    const selected = key === value;
+                    const selected = key === value || key === rangeFrom || key === rangeTo;
+                    const inRange = !!rangeFrom && !!rangeTo && key > rangeFrom && key < rangeTo;
                     const isToday = key === todayKey;
                     const disabled = (!!min && key < min) || (!!max && key > max);
                     return (
@@ -110,8 +114,11 @@ export const MonthGrid: React.FC<MonthGridProps> = ({ value, onPick, counts, min
                             key={key}
                             disabled={disabled}
                             onClick={() => onPick(key)}
+                            aria-pressed={selected || inRange}
                             className={`h-9 rounded-lg text-sm flex flex-col items-center justify-center leading-none transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${selected
                                 ? 'bg-primary-600 text-white'
+                                : inRange
+                                    ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200'
                                 : isToday
                                     ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 font-bold'
                                     : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}`}

@@ -10,13 +10,14 @@ import {
 import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
 import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall, InstallmentPlan } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
-import { getCurrentMonthRange, formatDateToISO } from '../utils/dateUtils';
+import { formatDateToISO, formatHeaderDate } from '../utils/dateUtils';
 import { transactionBelongsToDoctor, calculateAppointmentTotal } from '../utils/financialCalculations';
 import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from '../utils/unpaid';
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
 import { DoctorQueueCard } from '../components/DoctorQueueCard';
 import { DeskToday } from '../components/DeskToday';
+import { PeriodPicker, Period, PeriodKey, periodOf, formatPeriodRange } from '../components/PeriodPicker';
 import { DeskMoneyCard, DeskLabCard, DeskCallsCard } from '../components/DeskCards';
 import { buildCallList, installmentDues, labSummary } from '../utils/desk';
 import { nowHHMM } from '../utils/queue';
@@ -101,9 +102,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // ochilgan bo'lsa cheklov yo'q — bosh sahifa butun klinikani ko'rsatadi.
   const scopeToMyPatients = isDoctor && !!doctorId && !seeAllPatients;
   const today = new Date().toISOString().split('T')[0];
-  const { startDate: defaultStart, endDate: defaultEnd } = getCurrentMonthRange();
-  const [startDate, setStartDate] = useState(isReceptionist ? today : defaultStart);
-  const [endDate, setEndDate] = useState(isReceptionist ? today : defaultEnd);
+  // Davr: resepshn va adminda — bugun (bosh sahifa bugungi ish haqida), shifokorda —
+  // shu oy (grafiklar oy bo'yicha ma'noli). Tayyor tanlov har safar qayta hisoblanadi:
+  // sahifa yarim tundan keyin ham ochiq tursa, "Bugun" yangi kunni ko'rsatadi.
+  const [periodKey, setPeriodKey] = useState<PeriodKey>(isDoctor ? 'month' : 'today');
+  const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
+  const period: Period = periodKey === 'custom' && customRange
+    ? { key: 'custom', ...customRange }
+    : periodOf(periodKey === 'custom' ? 'today' : periodKey);
+  const changePeriod = (p: Period) => {
+    setPeriodKey(p.key);
+    if (p.key === 'custom') setCustomRange({ from: p.from, to: p.to });
+  };
+  const { from: startDate, to: endDate } = period;
 
   // Filter data for doctors - only show their appointments and transactions
   const filteredAppointmentsByDoctor = useMemo(() => {
@@ -126,15 +137,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   }, [transactions, doctors, scopeToMyPatients, doctorId]);
 
   // --- Filter Logic ---
+  // Matn sifatida solishtiriladi: "2026-09-25T10:00" kabi vaqtli sana ham oxirgi kunga kiradi
   const isDateInRange = (dateStr: string) => {
-    if (!startDate && !endDate) return true;
-    const itemDate = new Date(dateStr);
-    const start = startDate ? new Date(startDate) : null;
-    const end = endDate ? new Date(endDate) : null;
-
-    if (start && itemDate < start) return false;
-    if (end && itemDate > end) return false;
-    return true;
+    const day = String(dateStr || '').slice(0, 10);
+    return day >= startDate && day <= endDate;
   };
 
   // Filter Data by date range
@@ -175,6 +181,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [appointments, today, scopeToMyPatients, doctorId]);
 
+  // Tanlangan davrdagi qabullar — jadval shu bo'yicha. Masalan, adashib kechagi
+  // kunga yozilgan qabulni "Kecha" tanlab topish mumkin.
+  const periodAppointments = useMemo(
+    () => [...filteredAppointments].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)),
+    [filteredAppointments]);
+  const [showAllPeriodAppts, setShowAllPeriodAppts] = useState(false);
+  useEffect(() => { setShowAllPeriodAppts(false); }, [startDate, endDate]);
+  const periodIsOneDay = startDate === endDate;
+  // Kalendardagi kataklar ostida — o'sha kungi qabullar soni (bekor qilinganlarsiz)
+  const apptCountsByDay = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const a of filteredAppointmentsByDoctor) {
+      if (a.status !== 'Cancelled') m[a.date] = (m[a.date] || 0) + 1;
+    }
+    return m;
+  }, [filteredAppointmentsByDoctor]);
+  const periodLabel = period.key === 'custom' ? formatPeriodRange(period.from, period.to) : t(`dashboard.period.${period.key}` as any);
+  const periodDateLine = (() => {
+    const [y, m, d] = startDate.split('-').map(Number);
+    if (periodIsOneDay) {
+      // toLocaleDateString('uz-UZ') brauzerda "2026 M09 25, Fri" beradi — o'zimizniki
+      const line = formatHeaderDate(language, new Date(y, m - 1, d));
+      return y === new Date().getFullYear() ? line : `${line} ${y}`;
+    }
+    return formatPeriodRange(startDate, endDate);
+  })();
+
   // Overdue lab orders (by patient name)
   const overdueLabPatients = useMemo(() => {
     return new Set(
@@ -190,9 +223,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
    * bildiradi va to'liq qarzga yozilgan qabul ikkalasiga ham tushib ketardi.
    * Endi manba faqat qatorning belgisi — amal bitta joydan bajariladi.
    */
+  // Olinmagan pul — "qilish kerak" ro'yxati, hisobot emas: yuqoridagi davr tanlovi unga
+  // ta'sir qilmaydi, aks holda "Bugun" tanlanganda oy boshidagi olinmagan pul ko'rinmay
+  // qolardi. Oyna har rolda avvalgidek: resepshn — bugun, admin va shifokor — oy
+  // boshidan bugungacha (davr tanlagichidan oldingi sukut shunday edi).
+  const unpaidWindow = periodOf(isReceptionist ? 'today' : 'month');
+  const unpaidAppointments = useMemo(
+    () => filteredAppointmentsByDoctor.filter(a => a.date >= unpaidWindow.from && a.date <= unpaidWindow.to),
+    [filteredAppointmentsByDoctor, unpaidWindow.from, unpaidWindow.to]);
   const unpaidRows = useMemo(
-    () => buildUnpaidRows(filteredAppointments, filteredTransactionsByDoctor, services),
-    [filteredAppointments, filteredTransactionsByDoctor, services]);
+    () => buildUnpaidRows(unpaidAppointments, filteredTransactionsByDoctor, services),
+    [unpaidAppointments, filteredTransactionsByDoctor, services]);
 
   /**
    * Shifokor faqat hali hal qilmagan qabullarini ko'radi: "To'lovni olish" yoki
@@ -447,28 +488,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </h1>
 
         <div className="flex flex-wrap items-center gap-3">
-        {!isReceptionist && (
-          <div className="flex items-center gap-1 p-1.5 pl-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-1.5">{t('dashboard.period')}</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 px-1 cursor-pointer w-[118px]"
-            />
-            <span className="text-gray-300 dark:text-gray-600 select-none">—</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="bg-transparent border-none text-sm font-semibold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 px-1 cursor-pointer w-[118px]"
-            />
-          </div>
-        )}
+        {/* Davr hamma rolga: resepshn ham kechagi yoki boshqa kungi qabullarni topa olsin */}
+        <PeriodPicker value={period} onChange={changePeriod} counts={apptCountsByDay} />
 
-          {/* Quick Actions — dashboarddan turib bajariladi */}
-          <div className="flex items-center gap-2">
+          {/* Quick Actions — dashboarddan turib bajariladi. Tor ekranda keyingi qatorga o'tadi */}
+          <div className="flex flex-wrap items-center gap-2">
             {perms.menu('patients') && (
               <PatientQuickSearch
                 patients={patients}
@@ -591,7 +615,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           />
           <StatCard
             label={t('dashboard.todayRevenue')} value={totalRevenue.toLocaleString()} unit="UZS" icon={DollarSign} color="success" variant="gradient"
-            subtitle={isReceptionist ? t('dashboard.todayLabel') : t('dashboard.selectedPeriod')}
+            subtitle={periodLabel}
           />
         </>)}
       </div>
@@ -602,20 +626,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           oddiy va tor kenglikda ham bemalol o'qiladi. */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
 
-      {/* Bugungi Qabullar */}
+      {/* Tanlangan davrdagi qabullar (odatda — bugungi) */}
       <Card className={`p-6 rounded-[2rem] ${hasSideCards ? 'xl:col-span-8' : 'xl:col-span-12'}`}>
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-xl font-black text-gray-900 dark:text-white">
-              {t('dashboard.todayTitleA')} <span className="text-primary">{t('dashboard.todayTitleB')}</span>
+              {t(`dashboard.apptsTitleA.${period.key}` as any)} <span className="text-primary">{t(`dashboard.apptsTitleB.${period.key}` as any)}</span>
             </h3>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
-              {new Date().toLocaleDateString(language === 'ru' ? 'ru-RU' : 'uz-UZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {periodDateLine}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <span className="px-3 py-1.5 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 text-xs font-black rounded-full">
-              {todayAppointments.length} {t('dashboard.count')}
+              {periodAppointments.length} {t('dashboard.count')}
             </span>
             <button
               onClick={() => navigate('/calendar')}
@@ -626,13 +650,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           </div>
         </div>
 
-        {todayAppointments.length === 0 ? (
+        {periodAppointments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">
             <Calendar className="w-10 h-10 mb-3 opacity-30" />
-            <p className="text-sm font-medium">{t('dashboard.noAppointmentsToday')}</p>
+            <p className="text-sm font-medium">{period.key === 'today' ? t('dashboard.noAppointmentsToday') : t('dashboard.noAppointmentsPeriod')}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div>
+            {/* Ko'p kunlik davrda ro'yxat uzun bo'lishi mumkin — ochilganda o'z ichida siljiydi */}
+            <div className={`overflow-x-auto ${showAllPeriodAppts ? 'max-h-[560px] overflow-y-auto' : ''}`}>
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-800">
@@ -646,7 +672,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 </tr>
               </thead>
               <tbody>
-                {todayAppointments.slice(0, DASH_ROW_LIMIT).map(app => {
+                {(showAllPeriodAppts ? periodAppointments : periodAppointments.slice(0, DASH_ROW_LIMIT)).map(app => {
                   const patient = patients.find(p => p.id === app.patientId);
                   const hasDebt = patient?.balance !== undefined && patient.balance < 0;
                   const hasLabWarning = overdueLabPatients.has(app.patientName);
@@ -657,6 +683,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       className="border-b border-gray-50 dark:border-gray-800/60 last:border-0 hover:bg-gray-50/70 dark:hover:bg-gray-800/30 transition-colors group"
                     >
                       <td className="py-3.5 pr-4">
+                        {!periodIsOneDay && (
+                          <span className="block text-[10px] font-bold text-gray-400 tabular-nums">{app.date.slice(8, 10)}.{app.date.slice(5, 7)}</span>
+                        )}
                         <span className="text-sm font-black text-gray-900 dark:text-white tabular-nums">{app.time}</span>
                       </td>
                       <td className="py-3.5 pr-4">
@@ -699,7 +728,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <td className="py-3.5">
                         {app.status !== 'Completed' && app.status !== 'Cancelled' && onUpdateAppointment && (
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {app.status !== 'Checked-In' && (
+                            {/* "Keldi" — faqat bugungi qabulga; o'tgan kunni "keldi" deb bo'lmaydi */}
+                            {app.status !== 'Checked-In' && app.date === localToday && (
                               <button
                                 onClick={() => onUpdateAppointment(app.id, { status: 'Checked-In' })}
                                 title="Keldi — tasdiqlash"
@@ -730,13 +760,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 })}
               </tbody>
             </table>
+            </div>
 
-            {todayAppointments.length > DASH_ROW_LIMIT && (
+            {/* Shu yerning o'zida ochiladi: kechagi yoki boshqa kungi qabulni qidirganda
+                Kalendarga o'tib, davrni qaytadan tanlash shart emas */}
+            {periodAppointments.length > DASH_ROW_LIMIT && (
               <button
-                onClick={() => navigate('/calendar')}
+                onClick={() => setShowAllPeriodAppts(v => !v)}
                 className="w-full mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 text-xs font-bold text-gray-500 hover:text-primary-600 transition-colors"
               >
-                {t('dashboard.moreAll')} {todayAppointments.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
+                {showAllPeriodAppts
+                  ? t('desk.showLess')
+                  : <>{t('dashboard.moreAll')} {periodAppointments.length - DASH_ROW_LIMIT} {t('dashboard.count')} <ChevronRight className="w-3.5 h-3.5" /></>}
               </button>
             )}
           </div>
