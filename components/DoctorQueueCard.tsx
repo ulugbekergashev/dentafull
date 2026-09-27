@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { Armchair, ArrowRight } from 'lucide-react';
 import { Appointment, FlowLog, Patient } from '../types';
 import { LiveTimer } from './LiveTimer';
 import { useLanguage } from '../context/LanguageContext';
@@ -55,8 +55,9 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
     const later = doctorLater(appointments, doctorId, today, nowMin).filter(a => !log[a.id]);
     const done = doctorDone(appointments, doctorId, today);
     const sinceOf = (a: Appointment) => (log[a.id] ? Date.parse(log[a.id].in) : null);
+    // Kabinetdagi bemorda "Kirish" qayta belgilamaydi — faqat kartasini ochadi
     const enter = (a: Appointment) => {
-        onEnter?.(a);
+        if (!sinceOf(a)) onEnter?.(a);
         onPatientClick!(a.patientId);
     };
 
@@ -69,6 +70,12 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
     const canOpen = (a: Appointment) => !!onPatientClick && !!a.patientId;
 
     const [first, ...rest] = queue;
+    const firstSeated = !!(first && sinceOf(first));
+    // Tartib raqami faqat kutayotganlarga: kabinetdagi bemor navbatda emas
+    const restNo = (() => {
+        let n = firstSeated ? 0 : 1;
+        return rest.map(a => (sinceOf(a) ? null : ++n));
+    })();
     const firstPatient = first ? byId.get(first.patientId) : undefined;
     const firstAlert = healthAlert(firstPatient?.medicalHistory);
     const firstAge = calcAge(firstPatient?.dob);
@@ -96,9 +103,9 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
 
                 {first ? (
                     <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5 p-5 rounded-3xl bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-600">
-                        <span className="hidden sm:flex shrink-0 flex-col items-center justify-center w-[72px] h-[72px] rounded-[20px] bg-primary text-white">
-                            <span className="text-[10px] font-bold tracking-widest opacity-80">{t('myQueue.badge')}</span>
-                            <span className="text-3xl font-black leading-none">1</span>
+                        <span className="hidden sm:flex shrink-0 flex-col items-center justify-center gap-1 w-[72px] h-[72px] rounded-[20px] bg-primary text-white">
+                            <span className="text-[9px] font-bold tracking-widest opacity-80">{firstSeated ? t('myQueue.inChairBadge') : t('myQueue.badge')}</span>
+                            {firstSeated ? <Armchair className="w-7 h-7" /> : <span className="text-3xl font-black leading-none">1</span>}
                         </span>
                         <span className="flex-1 min-w-0 flex flex-col gap-1.5">
                             <span className="text-2xl font-extrabold text-gray-900 dark:text-white truncate">{first.patientName}</span>
@@ -123,7 +130,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                                 onClick={() => enter(first)}
                                 className="shrink-0 flex items-center justify-center gap-2 h-14 px-7 rounded-2xl bg-primary hover:bg-primary-700 text-white text-[17px] font-extrabold shadow-lg shadow-primary-500/30 active:scale-95 transition-all"
                             >
-                                {t('myQueue.enter')}
+                                {firstSeated ? t('myQueue.openCard') : t('myQueue.enter')}
                                 <ArrowRight className="w-5 h-5" />
                             </button>
                         )}
@@ -136,7 +143,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
 
                 {rest.map((a, i) => (
                     <div key={a.id} className="flex items-center gap-3.5 px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700">
-                        <span className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-700 text-[15px] font-black text-gray-700 dark:text-gray-200">{i + 2}</span>
+                        <span className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-700 text-[15px] font-black text-gray-700 dark:text-gray-200">{restNo[i] ?? <Armchair className="w-4 h-4 text-primary-600 dark:text-primary-400" />}</span>
                         <span className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
                             <span className="text-[15px] font-bold text-gray-900 dark:text-white">{a.patientName}</span>
                             <span className="text-[13px] text-gray-500 dark:text-gray-400">{serviceOf(a)}</span>
@@ -156,10 +163,10 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                             <button
                                 type="button"
                                 onClick={() => enter(a)}
-                                aria-label={`${t('myQueue.enter')}: ${a.patientName}`}
+                                aria-label={`${sinceOf(a) ? t('myQueue.openCard') : t('myQueue.enter')}: ${a.patientName}`}
                                 className="shrink-0 h-[38px] px-4 rounded-xl border border-primary-200 dark:border-primary-800 bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 text-[13px] font-bold hover:bg-primary-50 dark:hover:bg-primary-900/20"
                             >
-                                {t('myQueue.enter')}
+                                {sinceOf(a) ? t('myQueue.openCard') : t('myQueue.enter')}
                             </button>
                         )}
                     </div>

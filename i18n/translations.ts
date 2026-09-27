@@ -2215,6 +2215,8 @@ export const translations = {
     'myQueue.completed': 'Yakunlangan',
     'myQueue.waitingPeople': 'kishi kutmoqda',
     'myQueue.inChair': 'Kabinetda',
+    'myQueue.inChairBadge': 'KABINETDA',
+    'myQueue.openCard': 'Kartani ochish',
     // "Qabul" yon paneli
     'booking.newHint': "Qolgan ma'lumotlarni keyin bemor kartasida to'ldirasiz",
     'booking.title': 'Yangi qabul',
@@ -4333,6 +4335,8 @@ export const translations = {
     'myQueue.completed': 'Завершён',
     'myQueue.waitingPeople': 'чел. ждут',
     'myQueue.inChair': 'В кабинете',
+    'myQueue.inChairBadge': 'В КАБИНЕТЕ',
+    'myQueue.openCard': 'Открыть карту',
     // Панель «Запись»
     'booking.newHint': 'Остальные данные можно заполнить позже в карте пациента',
     'booking.title': 'Новая запись',
