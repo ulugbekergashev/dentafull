@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlowLog } from '../types';
+import { FlowLog, TicketLog } from '../types';
 import { api } from '../services/api';
 
 // Shifokor "Kirish" ni bosganda resepshn ekranida tez ko'rinsin
@@ -37,8 +37,20 @@ function applyFlow(log: FlowLog, appointmentId: string, inChair: boolean, at: st
  * Server bu belgilarni umuman bermasa (backend hali yangilanmagan) — ular shu
  * brauzerda yuritiladi. Bir martalik tarmoq xatosi ekrandagi belgilarni o'chirmaydi.
  */
-export function useDeskFlow(clinicId: string, date: string, active: boolean) {
+export interface DeskFlowOptions {
+    /** Onlayn navbat va TV: navbat raqamlari (talon) ham olinadi */
+    tickets?: boolean;
+    /** So'rov oralig'i (TV tezroq so'raydi) */
+    pollMs?: number;
+}
+
+export function useDeskFlow(clinicId: string, date: string, active: boolean, options: DeskFlowOptions = {}) {
+    const withTickets = !!options.tickets;
+    const pollMs = options.pollMs || POLL_MS;
     const [entries, setEntries] = useState<FlowLog>({});
+    const [tickets, setTickets] = useState<TicketLog>({});
+    /** Shu kun uchun birinchi javob keldi (yoki server yo'q — brauzerdagisi olindi) */
+    const [ready, setReady] = useState(false);
     const entriesRef = useRef<FlowLog>({});
     /** Server bu kun uchun kamida bir marta javob berdimi */
     const serverOk = useRef(false);
@@ -48,30 +60,33 @@ export function useDeskFlow(clinicId: string, date: string, active: boolean) {
     const lastWriteAt = useRef(0);
     const lk = localKey(clinicId, date);
 
-    const publish = useCallback((next: FlowLog) => {
+    const publish = useCallback((next: FlowLog, nextTickets?: TicketLog) => {
         entriesRef.current = next;
         setEntries(next);
+        if (nextTickets) setTickets(prev => (JSON.stringify(prev) === JSON.stringify(nextTickets) ? prev : nextTickets));
     }, []);
 
     useEffect(() => {
         if (!active || !clinicId) return;
         let alive = true;
         serverOk.current = false;
-        publish({});
+        publish({}, {});
+        setReady(false);
         const load = async () => {
             if (document.visibilityState === 'hidden' || writing.current > 0) return;
             const startedAt = Date.now();
             try {
-                const res = await api.desk.getFlow(clinicId, date);
+                const res = await api.desk.getFlow(clinicId, date, withTickets);
                 if (!alive || writing.current > 0 || startedAt < lastWriteAt.current) return;
                 serverOk.current = true;
-                publish(res.entries || {});
+                publish(res.entries || {}, res.tickets || {});
+                setReady(true);
             } catch {
-                if (alive && !serverOk.current) publish(readLocal(lk));
+                if (alive && !serverOk.current) { publish(readLocal(lk)); setReady(true); }
             }
         };
         load();
-        const id = setInterval(load, POLL_MS);
+        const id = setInterval(load, pollMs);
         const onVisible = () => { if (document.visibilityState === 'visible') load(); };
         document.addEventListener('visibilitychange', onVisible);
         return () => {
@@ -79,23 +94,29 @@ export function useDeskFlow(clinicId: string, date: string, active: boolean) {
             clearInterval(id);
             document.removeEventListener('visibilitychange', onVisible);
         };
-    }, [clinicId, date, active, lk, publish]);
+    }, [clinicId, date, active, lk, publish, withTickets, pollMs]);
 
-    /** Bemor kabinetga kirdi (true) yoki navbatga qaytdi (false). Xato otmaydi — ekranda darhol ko'rinadi. */
-    const set = useCallback(async (appointmentId: string, inChair: boolean): Promise<void> => {
+    /**
+     * Bemor kabinetga kirdi (true) yoki navbatga qaytdi (false). recall — kabinetga
+     * chaqirilgan bemorni qayta chaqirish. Xato otmaydi — ekranda darhol ko'rinadi.
+     */
+    const set = useCallback(async (appointmentId: string, inChair: boolean, recall = false): Promise<void> => {
         const seq = ++writeSeq.current;
         lastWriteAt.current = Date.now();
-        publish(applyFlow(entriesRef.current, appointmentId, inChair, new Date().toISOString()));
+        const now = new Date().toISOString();
+        const optimistic = applyFlow(entriesRef.current, appointmentId, inChair, now);
+        if (inChair && recall && optimistic[appointmentId]) optimistic[appointmentId] = { ...optimistic[appointmentId], call: now };
+        publish(optimistic);
         if (!serverOk.current) {
             writeLocal(lk, entriesRef.current);
             return;
         }
         writing.current++;
         try {
-            const res = await api.desk.setFlow({ clinicId, date, appointmentId, inChair });
+            const res = await api.desk.setFlow({ clinicId, date, appointmentId, inChair, ...(recall ? { recall: true } : {}) });
             lastWriteAt.current = Date.now();
             // Orada yana bosilgan bo'lsa, oxirgi javobni kutamiz
-            if (seq === writeSeq.current) publish(res.entries || {});
+            if (seq === writeSeq.current) publish(res.entries || {}, res.tickets);
         } catch (e) {
             console.warn('Kabinet belgisi serverga yozilmadi:', e);
         } finally {
@@ -103,5 +124,17 @@ export function useDeskFlow(clinicId: string, date: string, active: boolean) {
         }
     }, [clinicId, date, lk, publish]);
 
-    return { entries, set };
+    /** Navbat raqami (talon chop etish uchun). Server javob bermasa — null */
+    const issueTicket = useCallback(async (appointmentId: string): Promise<number | null> => {
+        try {
+            const res = await api.desk.issueTicket({ clinicId, date, appointmentId });
+            if (res.tickets) setTickets(res.tickets);
+            return res.number ?? null;
+        } catch (e) {
+            console.warn('Navbat raqamini olib bo\'lmadi:', e);
+            return null;
+        }
+    }, [clinicId, date]);
+
+    return { entries, tickets, ready, set, issueTicket };
 }

@@ -789,13 +789,17 @@ export interface CallLogChange {
 // Kalit — qabul id. Qabulning holati o'zgarmaydi: bu faqat "hozir kabinetda" belgisi,
 // qabul yakunlanganda (Completed) o'z-o'zidan ahamiyatini yo'qotadi.
 export interface FlowEntry {
-  /** Kabinetga kirgan payt (ISO) */
+  /** Kabinetga kirgan payt (ISO) — Onlayn navbat va TV uchun bu chaqiruv payti */
   in: string;
   /** Kim belgilagan */
   by?: string | null;
+  /** Oxirgi "qayta chaqirish" payti (ISO) — TV yana e'lon qiladi */
+  call?: string;
 }
 
 export type FlowLog = Record<string, FlowEntry>;
+/** Bugungi navbat raqamlari (talon): qabul id → raqam. Serverda beriladi, kun bo'yi o'zgarmaydi */
+export type TicketLog = Record<string, number>;
 
 // Sarlavhadagi qo'ng'iroqdagi bitta yozuv. Lenta har xodimniki alohida —
 // serverda kim nimani oladi backend/notifications.ts da hal qilinadi.

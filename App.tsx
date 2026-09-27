@@ -401,10 +401,13 @@ const AppContent: React.FC = () => {
     loadData();
   }, [isAuthenticated, clinicId, userRole]);
 
-  // Bosh sahifadagi navbat: bugungi qabullar sahifani yangilamasdan yangilanib turadi
+  // Bosh sahifadagi navbat va Onlayn navbat (TV ham): bugungi qabullar sahifani
+  // yangilamasdan yangilanib turadi. Onlayn navbatda tezroq — TV kutish zalida turadi.
+  const onQueuePage = location.pathname === '/queue';
   const todaySync = useTodaySync({
-    active: isAuthenticated && !isLoading && !error && location.pathname === '/'
+    active: isAuthenticated && !isLoading && !error && (location.pathname === '/' || onQueuePage)
       && (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST || userRole === UserRole.DOCTOR),
+    intervalMs: onQueuePage ? 10000 : undefined,
     clinicId,
     doctorId,
     isDoctor: userRole === UserRole.DOCTOR,
@@ -1937,6 +1940,9 @@ const AppContent: React.FC = () => {
                     clinicId={clinicId}
                     userRole={userRole}
                     currentClinic={currentClinic}
+                    onOpenBooking={canBook ? openBooking : undefined}
+                    onUpdateAppointment={updateAppointment}
+                    onPatientClick={openPatientEnsured}
                   />
                 } />
               )}

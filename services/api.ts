@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, ServiceRequirement, VisitRequirements } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
 import { applyCallChange } from '../utils/desk';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
@@ -7,7 +7,19 @@ const DEMO_CASH_MOVEMENTS: CashMovement[] = [];
 // Demo: bugungi qo'ng'iroq natijalari ham faqat sessiya davomida
 let DEMO_CALLS: { date: string; entries: CallLog } = { date: '', entries: {} };
 // Demo: bosh sahifa xaritasidagi "kabinetda" belgilari ham faqat sessiya davomida
-let DEMO_FLOW: { date: string; entries: FlowLog } = { date: '', entries: {} };
+let DEMO_FLOW: { date: string; entries: FlowLog; tickets: TicketLog; seq: number } = { date: '', entries: {}, tickets: {}, seq: 0 };
+const demoFlowDay = (date: string) => {
+    if (DEMO_FLOW.date !== date) DEMO_FLOW = { date, entries: {}, tickets: {}, seq: 0 };
+    return DEMO_FLOW;
+};
+const demoAssignTickets = (date: string, ids: string[]) => {
+    const day = demoFlowDay(date);
+    for (const id of ids) if (!day.tickets[id]) day.tickets[id] = ++day.seq;
+};
+const demoFlowBody = (date: string) => {
+    const day = demoFlowDay(date);
+    return { date, entries: { ...day.entries }, tickets: { ...day.tickets } };
+};
 // Demo: qabulni yakunlash talablari (xizmat → rasm/material) ham sessiya davomida
 let DEMO_VISIT_REQ: VisitRequirements = {};
 
@@ -1221,21 +1233,54 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
-        /** Bosh sahifa xaritasi: bugun kim kabinetga kirgan (qabul id → kirgan payt) */
-        getFlow: (clinicId: string, date: string) => {
-            if (isDemoMode()) return Promise.resolve({ date, entries: DEMO_FLOW.date === date ? DEMO_FLOW.entries : {} });
-            return fetchJson<{ date: string; entries: FlowLog }>(`/desk/flow?clinicId=${encodeURIComponent(clinicId)}&date=${date}`);
-        },
-        /** inChair: true — bemor kabinetga kirdi, false — navbatga qaytarildi */
-        setFlow: (data: { clinicId: string; date: string; appointmentId: string; inChair: boolean }) => {
+        /**
+         * Bosh sahifa xaritasi: bugun kim kabinetga kirgan (qabul id → kirgan payt).
+         * withTickets — Onlayn navbat va TV: kutish zalidagilarga server navbat raqamini beradi.
+         */
+        getFlow: (clinicId: string, date: string, withTickets = false) => {
             if (isDemoMode()) {
-                const entries: FlowLog = { ...(DEMO_FLOW.date === data.date ? DEMO_FLOW.entries : {}) };
-                if (data.inChair) entries[data.appointmentId] = entries[data.appointmentId] || { in: new Date().toISOString(), by: 'Demo' };
-                else delete entries[data.appointmentId];
-                DEMO_FLOW = { date: data.date, entries };
-                return Promise.resolve(DEMO_FLOW);
+                if (withTickets) {
+                    const d = new Date();
+                    const nowMin = d.getHours() * 60 + d.getMinutes();
+                    const mins = (t: string) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : 24 * 60; };
+                    const due = DEMO_APPOINTMENTS
+                        .filter(a => a.date === date && ['Pending', 'Confirmed', 'Checked-In'].includes(a.status) && mins(a.time) <= nowMin)
+                        .sort((a, b) => mins(a.time) - mins(b.time) || a.id.localeCompare(b.id))
+                        .map(a => a.id);
+                    demoAssignTickets(date, due);
+                }
+                return Promise.resolve(demoFlowBody(date));
             }
-            return fetchJson<{ date: string; entries: FlowLog }>('/desk/flow', {
+            return fetchJson<{ date: string; entries: FlowLog; tickets?: TicketLog }>(`/desk/flow?clinicId=${encodeURIComponent(clinicId)}&date=${date}${withTickets ? '&tickets=1' : ''}`);
+        },
+        /** inChair: true — bemor kabinetga kirdi (chaqirildi), false — navbatga qaytarildi. recall — qayta chaqirish */
+        setFlow: (data: { clinicId: string; date: string; appointmentId: string; inChair: boolean; recall?: boolean }) => {
+            if (isDemoMode()) {
+                const day = demoFlowDay(data.date);
+                const now = new Date().toISOString();
+                if (data.inChair) {
+                    const prev = day.entries[data.appointmentId];
+                    day.entries = { ...day.entries, [data.appointmentId]: { in: prev?.in || now, by: prev?.by || 'Demo', ...(data.recall && prev ? { call: now } : prev?.call ? { call: prev.call } : {}) } };
+                    demoAssignTickets(data.date, [data.appointmentId]);
+                } else {
+                    const { [data.appointmentId]: _removed, ...rest } = day.entries;
+                    day.entries = rest;
+                }
+                return Promise.resolve(demoFlowBody(data.date));
+            }
+            return fetchJson<{ date: string; entries: FlowLog; tickets?: TicketLog }>('/desk/flow', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
+        /** Navbat raqami (talon): bor bo'lsa o'sha, yo'q bo'lsa navbatdagisi */
+        issueTicket: (data: { clinicId: string; date: string; appointmentId: string }) => {
+            if (isDemoMode()) {
+                demoAssignTickets(data.date, [data.appointmentId]);
+                return Promise.resolve({ ...demoFlowBody(data.date), number: DEMO_FLOW.tickets[data.appointmentId] || null });
+            }
+            return fetchJson<{ date: string; entries: FlowLog; tickets?: TicketLog; number: number | null }>('/desk/ticket', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),

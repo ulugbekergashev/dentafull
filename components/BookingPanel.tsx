@@ -29,8 +29,17 @@ export interface BookingRequest {
      * (odatda ertaga) bo'lsa, darhol tasdiqlangan — ertangi tasdiqlash ro'yxatiga tushmaydi.
      */
     confirmedUpTo?: string;
-    /** Qabul saqlangandan keyin */
-    onDone?: () => void;
+    /** Qabul saqlangandan keyin. Onlayn navbat shu qabulga talon chop etadi */
+    onDone?: (saved?: BookingDone) => void;
+}
+
+/** Saqlangan qabul: yangisi yoki hozirga/boshqa vaqtga ko'chirilgani */
+export interface BookingDone {
+    appointmentId: string;
+    patientName: string;
+    doctorName: string;
+    phone?: string;
+    service?: string;
 }
 
 export interface BookingPanelProps {
@@ -386,12 +395,14 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
 
             // Ro'yxat eskirgan bo'lishi mumkin — yangi bemorda ham mavjud qabulni qayta tekshiramiz
             const current = appointments.find(a => a.patientId === patient!.id && a.date === targetDate && a.status !== 'Cancelled');
+            let savedId: string | undefined;
             if (current) {
                 if (mode === 'now' && current.status !== 'Completed' && minutesOf(current.time) <= nowMin && current.status !== 'No-Show') {
                     setError(t('booking.alreadyWaiting').replace('{doctor}', current.doctorName));
                     return;
                 }
                 if (!(await moveTo(current))) return;
+                savedId = current.id;
             } else {
                 const saved: Appointment | undefined = await onAddAppointment({
                     patientId: patient.id, patientName: name, doctorId: doctor.id, doctorName,
@@ -404,8 +415,9 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                 if (saved && saved.id && (saved.time !== apptTime || saved.doctorId !== doctor.id)) {
                     if (!(await moveTo(saved))) return;
                 }
+                savedId = saved?.id;
             }
-            request?.onDone?.();
+            request?.onDone?.(savedId ? { appointmentId: savedId, patientName: name, doctorName, phone: patient.phone, service: type || undefined } : undefined);
             onClose();
         } catch {
             // Xatolik ilova toasti orqali ko'rsatiladi, panel ochiq qoladi

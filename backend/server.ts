@@ -2061,6 +2061,31 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
         // 2. If no existing appointment, create a new one
         const { patientName, doctorId, doctorName, type, duration, status, reminderSent } = req.body;
         const branchId = await resolveBranchId(req, clinicId);
+
+        // Bazada "bir bemorga bir kunda bitta qabul" cheklovi bor: o'sha kungi qabul
+        // bekor qilingan bo'lsa, yangisi yaratilmaydi (ilgari 500 qaytardi) — bekor
+        // qilingani yangi ma'lumot bilan qayta tiklanadi. Kechagi navbat raqami va
+        // kabinet belgisi o'chiriladi: bemor navbatga yangidan, yangi raqam bilan tushadi.
+        const cancelled = await prisma.appointment.findFirst({
+            where: { patientId, date, status: 'Cancelled', ...(clinicId ? { clinicId } : {}) },
+        });
+        if (cancelled) {
+            const revived = await prisma.appointment.update({
+                where: { id: cancelled.id },
+                data: { patientName, doctorId, doctorName, type, time, duration, status, reminderSent: reminderSent ?? false, notes: notes ?? null, sentToCashierAt: null },
+            });
+            if (revived.clinicId) {
+                await mutateDeskFlow(revived.clinicId, date, day => {
+                    let changed = false;
+                    if (day.tickets?.[revived.id]) { delete day.tickets[revived.id]; changed = true; }
+                    if (day.entries[revived.id]) { delete day.entries[revived.id]; changed = true; }
+                    return changed;
+                }).catch((err: any) => console.error('Navbat belgisini tozalab bo\'lmadi:', err?.message || err));
+            }
+            await linkRecallToAppointment(revived);
+            return res.json(revived);
+        }
+
         const appointment = await prisma.appointment.create({
             data: {
                 patientId: patientId,
@@ -4173,10 +4198,80 @@ app.post('/api/desk/calls', authenticateToken, async (req: any, res: any) => {
 //
 // Migratsiyasiz, qo'ng'iroqlar jurnali kabi: PlatformSetting'da har klinikaga
 // BITTA qator va faqat bugungi kun.
+//
+// Onlayn navbat va TV ekrani ham shu qatordan ishlaydi: kabinetga kirish = chaqiruv
+// (TV ovoz bilan e'lon qiladi), `call` — "qayta chaqirish" payti, `tickets` — kun
+// bo'yi o'zgarmaydigan navbat raqami (talon). Raqamni faqat server beradi: resepshn,
+// TV va shifokor bir xil raqamni ko'radi.
 const DESK_FLOW_MAX = 1000;
 const DESK_APPT_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
-type DeskFlowEntry = { in: string; by?: string | null };
-type DeskFlowDay = { date: string; entries: Record<string, DeskFlowEntry> };
+type DeskFlowEntry = { in: string; by?: string | null; call?: string };
+type DeskFlowDay = { date: string; entries: Record<string, DeskFlowEntry>; tickets?: Record<string, number>; seq?: number };
+const DESK_OPEN_STATUSES = ['Pending', 'Confirmed', 'Checked-In'];
+
+/** Hozirgi vaqt Toshkent bo'yicha, "HH:MM" */
+const nowTashkentHHMM = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Tashkent', hour12: false, hour: '2-digit', minute: '2-digit' });
+const hhmmMinutes = (v: string): number => {
+    const m = String(v || '').match(/^(\d{1,2}):(\d{2})/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : 24 * 60;
+};
+
+/** Raqam hali yo'q qabullarga navbatdagi raqamni beradi (berilgani o'zgarmaydi) */
+const assignTickets = (day: DeskFlowDay, appointmentIds: string[]): boolean => {
+    const tickets = day.tickets || {};
+    let seq = day.seq || Object.values(tickets).reduce((m, n) => Math.max(m, n), 0);
+    let changed = false;
+    for (const id of appointmentIds) {
+        if (tickets[id]) continue;
+        tickets[id] = ++seq;
+        changed = true;
+    }
+    day.tickets = tickets;
+    day.seq = seq;
+    return changed;
+};
+
+/**
+ * Bugungi qatorni o'zgartirish. Resepshn, shifokor va TV bir vaqtda yozishi
+ * mumkin: qiymat o'qilganidan beri o'zgarmagan bo'lsagina yoziladi, aks holda
+ * qaytadan o'qib urinadi. mutate false qaytarsa — o'zgarish yo'q, yozilmaydi.
+ */
+async function mutateDeskFlow(
+    clinicId: string,
+    date: string,
+    mutate: (day: DeskFlowDay) => boolean | { error: string; status: number },
+): Promise<{ day: DeskFlowDay } | { error: string; status: number }> {
+    const storageKey = deskFlowKey(clinicId);
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "value" FROM "PlatformSetting" WHERE "key"=$1`, storageKey);
+        const raw: string | null = rows.length ? rows[0].value : null;
+        const current = parseDeskFlow(raw);
+        // Kechadan ochiq qolgan sahifa bugungi belgilarni o'chirib yubormasin
+        if (current && current.date > date) return { error: 'Sahifa eskirgan — yangilang', status: 409 };
+        const day: DeskFlowDay = current && current.date === date ? current : { date, entries: {} };
+        const result = mutate(day);
+        if (typeof result === 'object') return result;
+        if (!result) return { day };
+        if (Object.keys(day.entries).length > DESK_FLOW_MAX || Object.keys(day.tickets || {}).length > DESK_FLOW_MAX) {
+            return { error: "Bugungi belgilar to'lib qoldi", status: 413 };
+        }
+        const next = JSON.stringify(day);
+        const written: number = rows.length
+            ? await prisma.$executeRawUnsafe(
+                `UPDATE "PlatformSetting" SET "value"=$2,"updatedAt"=CURRENT_TIMESTAMP WHERE "key"=$1 AND "value" IS NOT DISTINCT FROM $3`,
+                storageKey, next, raw)
+            : await prisma.$executeRawUnsafe(
+                `INSERT INTO "PlatformSetting" ("key","value","updatedAt") VALUES ($1,$2,CURRENT_TIMESTAMP) ON CONFLICT ("key") DO NOTHING`,
+                storageKey, next);
+        if (written === 1) return { day };
+    }
+    return { error: "Band — qayta urinib ko'ring", status: 409 };
+}
+
+const deskFlowBody = (date: string, day: DeskFlowDay | null) => {
+    const today = day && day.date === date ? day : null;
+    return { date, entries: today ? today.entries : {}, tickets: today?.tickets || {} };
+};
 
 const deskFlowKey = (clinicId: string) => `desk:flow:${clinicId}`;
 
@@ -4211,69 +4306,99 @@ app.get('/api/desk/flow', authenticateToken, async (req: any, res: any) => {
         if (!DESK_DATE_RE.test(date)) return res.status(400).json({ error: "date YYYY-MM-DD bo'lishi kerak" });
         const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "value" FROM "PlatformSetting" WHERE "key"=$1`, deskFlowKey(clinicId));
         const day = parseDeskFlow(rows.length ? rows[0].value : null);
-        res.json({ date, entries: day && day.date === date ? day.entries : {} });
+
+        // Onlayn navbat / TV (tickets=1): kutish zaliga tushgan (vaqti kelgan, ochiq)
+        // har bir bugungi qabulga raqam beriladi — qaysi sahifadan qo'shilganidan qat'i nazar
+        if (req.query.tickets === '1' && date === todayTashkent()) {
+            const nowMin = hhmmMinutes(nowTashkentHHMM());
+            const open = await prisma.appointment.findMany({
+                where: { clinicId, date, status: { in: DESK_OPEN_STATUSES } },
+                select: { id: true, time: true },
+            });
+            const due: string[] = open
+                .filter((a: { time: string }) => hhmmMinutes(a.time) <= nowMin)
+                .sort((a: { id: string; time: string }, b: { id: string; time: string }) => hhmmMinutes(a.time) - hhmmMinutes(b.time) || a.id.localeCompare(b.id))
+                .map((a: { id: string }) => a.id);
+            const known: Record<string, number> = day && day.date === date ? day.tickets || {} : {};
+            if (due.some((id: string) => !known[id])) {
+                const result = await mutateDeskFlow(clinicId, date, d => assignTickets(d, due));
+                if ('day' in result) return res.json(deskFlowBody(date, result.day));
+            }
+        }
+        res.json(deskFlowBody(date, day));
     } catch (error: any) {
         console.error("Bemorlar oqimini o'qishda xatolik:", error?.message || error);
         res.status(500).json({ error: "Bemorlar oqimini o'qib bo'lmadi" });
     }
 });
 
-// Bitta qabulga belgi: inChair true — kabinetga kirdi, false — navbatga qaytarildi.
+/** Qabul shu klinikaniki, bugungi va (shifokor bo'lsa) o'zining — aks holda javob yuboriladi */
+async function deskFlowAppointment(req: any, res: any, clinicId: string, date: string, appointmentId: string): Promise<boolean> {
+    if (!DESK_DATE_RE.test(String(date || ''))) { res.status(400).json({ error: "date YYYY-MM-DD bo'lishi kerak" }); return false; }
+    if (!DESK_APPT_ID_RE.test(String(appointmentId || ''))) { res.status(400).json({ error: "Noto'g'ri qabul" }); return false; }
+    const appt = await prisma.appointment.findFirst({
+        where: { id: appointmentId, clinicId },
+        select: { doctorId: true, date: true },
+    });
+    if (!appt) { res.status(404).json({ error: 'Qabul topilmadi' }); return false; }
+    // Shifokor faqat o'z bemorini belgilaydi
+    if (req.user?.role === 'DOCTOR' && (!req.user?.doctorId || appt.doctorId !== req.user.doctorId)) {
+        res.status(403).json({ error: "Ruxsat yo'q: boshqa shifokorning bemori" });
+        return false;
+    }
+    if (appt.date !== date) { res.status(400).json({ error: 'Qabul bugungi emas' }); return false; }
+    return true;
+}
+
+// Bitta qabulga belgi: inChair true — kabinetga kirdi (chaqirildi), false — navbatga
+// qaytarildi. recall: true — kabinetga chaqirilgan bemorni qayta chaqirish (TV yana e'lon qiladi).
 app.post('/api/desk/flow', authenticateToken, async (req: any, res: any) => {
     try {
         const clinicId = deskFlowClinic(req, res);
         if (!clinicId) return;
-        const { date, appointmentId, inChair } = req.body || {};
-        if (!DESK_DATE_RE.test(String(date || ''))) return res.status(400).json({ error: "date YYYY-MM-DD bo'lishi kerak" });
-        if (!DESK_APPT_ID_RE.test(String(appointmentId || ''))) return res.status(400).json({ error: "Noto'g'ri qabul" });
+        const { date, appointmentId, inChair, recall } = req.body || {};
         if (typeof inChair !== 'boolean') return res.status(400).json({ error: "Noto'g'ri inChair" });
+        if (!(await deskFlowAppointment(req, res, clinicId, date, appointmentId))) return;
 
-        const appt = await prisma.appointment.findFirst({
-            where: { id: appointmentId, clinicId },
-            select: { doctorId: true, date: true },
-        });
-        if (!appt) return res.status(404).json({ error: 'Qabul topilmadi' });
-        // Shifokor faqat o'z bemorini belgilaydi
-        if (req.user?.role === 'DOCTOR' && (!req.user?.doctorId || appt.doctorId !== req.user.doctorId)) {
-            return res.status(403).json({ error: "Ruxsat yo'q: boshqa shifokorning bemori" });
-        }
-        if (appt.date !== date) return res.status(400).json({ error: 'Qabul bugungi emas' });
-
-        const storageKey = deskFlowKey(clinicId);
         const by = req.user?.name || null;
-        // Resepshn va shifokor bir vaqtda bosishi mumkin: qiymat o'qilganidan beri
-        // o'zgarmagan bo'lsagina yoziladi, aks holda qaytadan o'qib urinadi.
-        for (let attempt = 0; attempt < 5; attempt++) {
-            const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "value" FROM "PlatformSetting" WHERE "key"=$1`, storageKey);
-            const raw: string | null = rows.length ? rows[0].value : null;
-            const current = parseDeskFlow(raw);
-            // Kechadan ochiq qolgan sahifa bugungi belgilarni o'chirib yubormasin
-            if (current && current.date > date) return res.status(409).json({ error: 'Sahifa eskirgan — yangilang' });
-            const day: DeskFlowDay = current && current.date === date ? current : { date, entries: {} };
-
+        const nowIso = new Date().toISOString();
+        const result = await mutateDeskFlow(clinicId, date, day => {
             if (inChair) {
                 // Qayta bosilsa kirgan vaqti saqlanadi — taymer boshidan boshlanmaydi
                 const prev = day.entries[appointmentId];
-                day.entries[appointmentId] = { in: prev?.in || new Date().toISOString(), by: prev?.by ?? by };
+                day.entries[appointmentId] = {
+                    in: prev?.in || nowIso,
+                    by: prev?.by ?? by,
+                    ...(recall === true && prev ? { call: nowIso } : prev?.call ? { call: prev.call } : {}),
+                };
+                // Kabinetga kirgan bemorning ham raqami bo'lsin — TV "№" bilan chaqiradi
+                assignTickets(day, [appointmentId]);
             } else {
                 delete day.entries[appointmentId];
             }
-            if (Object.keys(day.entries).length > DESK_FLOW_MAX) return res.status(413).json({ error: "Bugungi belgilar to'lib qoldi" });
-
-            const next = JSON.stringify(day);
-            const written: number = rows.length
-                ? await prisma.$executeRawUnsafe(
-                    `UPDATE "PlatformSetting" SET "value"=$2,"updatedAt"=CURRENT_TIMESTAMP WHERE "key"=$1 AND "value" IS NOT DISTINCT FROM $3`,
-                    storageKey, next, raw)
-                : await prisma.$executeRawUnsafe(
-                    `INSERT INTO "PlatformSetting" ("key","value","updatedAt") VALUES ($1,$2,CURRENT_TIMESTAMP) ON CONFLICT ("key") DO NOTHING`,
-                    storageKey, next);
-            if (written === 1) return res.json({ date, entries: day.entries });
-        }
-        res.status(409).json({ error: "Band — qayta urinib ko'ring" });
+            return true;
+        });
+        if ('error' in result) return res.status(result.status).json({ error: result.error });
+        res.json(deskFlowBody(date, result.day));
     } catch (error: any) {
         console.error('Bemorlar oqimini yozishda xatolik:', error?.message || error);
         res.status(500).json({ error: "Belgini saqlab bo'lmadi" });
+    }
+});
+
+// Navbat raqami (talon): bor bo'lsa o'shani, yo'q bo'lsa navbatdagisini beradi
+app.post('/api/desk/ticket', authenticateToken, async (req: any, res: any) => {
+    try {
+        const clinicId = deskFlowClinic(req, res);
+        if (!clinicId) return;
+        const { date, appointmentId } = req.body || {};
+        if (!(await deskFlowAppointment(req, res, clinicId, date, appointmentId))) return;
+        const result = await mutateDeskFlow(clinicId, date, day => assignTickets(day, [appointmentId]));
+        if ('error' in result) return res.status(result.status).json({ error: result.error });
+        res.json({ ...deskFlowBody(date, result.day), number: result.day.tickets?.[appointmentId] || null });
+    } catch (error: any) {
+        console.error('Navbat raqamini berishda xatolik:', error?.message || error);
+        res.status(500).json({ error: "Raqamni berib bo'lmadi" });
     }
 });
 
