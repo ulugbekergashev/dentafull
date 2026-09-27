@@ -27,6 +27,9 @@ const langOf = (language: string): 'uz' | 'ru' => (language === 'ru' ? 'ru' : 'u
 
 export const weekdayName = (date: Date, language: string): string => WEEKDAYS_FULL[langOf(language)][date.getDay()];
 
+/** Oy nomi ("Sentabr", "Сентябрь") — oylik ko'rinish sarlavhasi uchun */
+export const monthName = (date: Date, language: string): string => MONTHS[langOf(language)][date.getMonth()];
+
 /** Qisqa hafta kuni ("Pa", "Чт") — kunlar qatori uchun */
 export const weekdayShort = (date: Date, language: string): string => WEEKDAYS_SHORT[langOf(language)][(date.getDay() + 6) % 7];
 

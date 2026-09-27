@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Trash2 } from 'lucide-react';
+import { Activity, Camera, CheckCircle2, Package, Trash2 } from 'lucide-react';
 import { Button, Card, Badge } from '../components/Common';
-import { Transaction, Service, ServiceCategory } from '../types';
+import { Transaction, Service, ServiceCategory, VisitRequirements } from '../types';
 import { AddProcedureModal } from './AddProcedureModal';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -21,9 +21,25 @@ interface VisitWorkflowProps {
     services: Service[];
     categories: ServiceCategory[];
     doctors: any[];
-    onCompleteVisit: (procedures: ProcedureItem[], total: number, nextVisit: NextVisitChoice | null) => Promise<void>;
+    /**
+     * nextVisits — tanlangan keyingi tashriflar (davolash davomi va/yoki nazorat), bo'sh bo'lishi mumkin.
+     * skip — majburiy talab bajarilmay yakunlangan bo'lsa: nima yetishmadi va sababi (qabul izohiga yoziladi).
+     */
+    onCompleteVisit: (procedures: ProcedureItem[], total: number, nextVisits: NextVisitChoice[], skip?: { missing: ('photo' | 'materials')[]; reason: string }) => Promise<void>;
     onProceduresChange?: (procedures: ProcedureItem[]) => void;
     initialProcedures?: ProcedureItem[];
+    /** Qabulni yakunlash talablari (Sozlamalar → Xizmatlar). Bo'sh — hech narsa tekshirilmaydi */
+    visitRequirements?: VisitRequirements;
+    /** Bugun shu bemorga surat yuklanganmi / ombordan material yozilganmi */
+    photoDone?: boolean;
+    materialsDone?: boolean;
+    /** Talab qilinganini shu yerdan bajarish. Berilmasa — ruxsat yo'q */
+    onUploadPhoto?: () => void;
+    onAddMaterial?: () => void;
+    /** Omborda birorta mahsulot yo'q — materialni yozib bo'lmaydi */
+    materialsUnavailable?: boolean;
+    /** Talab bajarilmasa ham sabab yozib yakunlash (klinika egasi) */
+    canSkipRequirements?: boolean;
 }
 
 export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
@@ -32,7 +48,14 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     doctors,
     onCompleteVisit,
     onProceduresChange,
-    initialProcedures = []
+    initialProcedures = [],
+    visitRequirements = {},
+    photoDone = false,
+    materialsDone = false,
+    onUploadPhoto,
+    onAddMaterial,
+    materialsUnavailable = false,
+    canSkipRequirements = false,
 }) => {
     const { t } = useLanguage();
     const [procedures, setProcedures] = useState<ProcedureItem[]>(initialProcedures);
@@ -46,21 +69,31 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     }, [initialProcedures]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Keyingi tashrif: "davolash davom etadi" (kunlar) yoki "nazorat ko'rigi" (oylar).
+    // Keyingi tashrif — ikki mustaqil tanlov: "davolash davom etadi" (kunlar) va
+    // "nazorat ko'rigi" (oylar). Masalan kanal davolash: 1 haftadan keyin davomi
+    // va 6 oydan keyin nazorat — ikkalasi ham saqlanadi.
     // Xizmatda ko'rsatilgan nazorat muddati (Sozlamalar → Xizmatlar) avtomatik
     // taklif qilinadi — shifokor faqat tasdiqlaydi yoki o'zgartiradi.
     // Bir marta qo'lda o'zgartirilgach, ro'yxat yangilanganda qayta yozilmaydi.
-    const [nextVisit, setNextVisit] = useState<NextVisitChoice | null>(null);
-    const [recallTouched, setRecallTouched] = useState(false);
+    const [treatmentDays, setTreatmentDays] = useState<number | null>(null);
+    const [checkupDays, setCheckupDays] = useState<number | null>(null);
+    const [checkupTouched, setCheckupTouched] = useState(false);
     useEffect(() => {
-        if (recallTouched) return;
+        if (checkupTouched) return;
         const suggested = procedures
             .map(p => services.find(s => s.id === p.serviceId)?.recallMonths || 0)
             .reduce((max, m) => Math.max(max, m), 0);
-        setNextVisit(suggested > 0 ? { kind: 'checkup', days: suggested * 30 } : null);
-    }, [procedures, services, recallTouched]);
-    const chooseNext = (choice: NextVisitChoice | null) => { setRecallTouched(true); setNextVisit(choice); };
-    const isChosen = (kind: NextVisitChoice['kind'], days: number) => nextVisit?.kind === kind && nextVisit.days === days;
+        setCheckupDays(suggested > 0 ? suggested * 30 : null);
+    }, [procedures, services, checkupTouched]);
+    // Davolash davomi: tanlangan tugmani qayta bosish — bekor qiladi
+    const toggleTreatment = (days: number) => setTreatmentDays(cur => (cur === days ? null : days));
+    const chooseCheckup = (days: number | null) => { setCheckupTouched(true); setCheckupDays(days); };
+    // Xizmat 1 oyni taklif qilgan bo'lsa, u ham tugma bo'lib ko'rinsin
+    const checkupMonths = Array.from(new Set([3, 6, 12, ...(checkupDays ? [Math.round(checkupDays / 30)] : [])])).sort((a, b) => a - b);
+    const nextVisits: NextVisitChoice[] = [
+        ...(treatmentDays ? [{ kind: 'treatment' as const, days: treatmentDays }] : []),
+        ...(checkupDays ? [{ kind: 'checkup' as const, days: checkupDays }] : []),
+    ];
     const chipCls = (active: boolean) => `px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${active
         ? 'bg-primary-600 text-white'
         : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`;
@@ -93,15 +126,32 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
 
     const total = procedures.reduce((sum, p) => sum + p.price, 0);
 
+    // Majburiy talablar: qo'shilgan xizmatlardan birortasi rasm yoki material
+    // talab qilsa — bajarilmaguncha "Qabulni yakunlash" yopiq turadi.
+    const requiredBy = (key: 'photo' | 'materials') => Array.from(new Set(
+        procedures.filter(p => visitRequirements[String(p.serviceId)]?.[key]).map(p => p.serviceName)
+    ));
+    const reqRows = ([
+        { key: 'photo' as const, icon: Camera, label: t('patients.details.visitReq.photo'), services: requiredBy('photo'), done: photoDone, action: onUploadPhoto, actionLabel: t('patients.details.visitReq.uploadPhoto'), unavailable: false },
+        { key: 'materials' as const, icon: Package, label: t('patients.details.visitReq.materials'), services: requiredBy('materials'), done: materialsDone, action: onAddMaterial, actionLabel: t('patients.details.visitReq.addMaterial'), unavailable: materialsUnavailable },
+    ]).filter(r => r.services.length > 0);
+    const missing = reqRows.filter(r => !r.done).map(r => r.key);
+    const blocked = missing.length > 0;
+    const [skipOpen, setSkipOpen] = useState(false);
+    const [skipReason, setSkipReason] = useState('');
+    useEffect(() => { if (!blocked) { setSkipOpen(false); setSkipReason(''); } }, [blocked]);
+
     const handleCompleteVisit = async () => {
         if (procedures.length === 0) {
             alert(t('patients.details.procedures.addProcedureReq'));
             return;
         }
+        const skip = blocked ? { missing, reason: skipReason.trim() } : undefined;
+        if (skip && (!canSkipRequirements || skip.reason.length < 3)) return;
 
         setIsSubmitting(true);
         try {
-            await onCompleteVisit(procedures, total, nextVisit);
+            await onCompleteVisit(procedures, total, nextVisits, skip);
         } catch (error) {
             console.error("Error completing visit:", error);
         } finally {
@@ -177,22 +227,23 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className="w-40 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.treatment')}</span>
                                 {[{ days: 3, label: `3 ${t('patients.details.recall.days')}` }, { days: 7, label: `1 ${t('patients.details.recall.week')}` }, { days: 14, label: `2 ${t('patients.details.recall.week')}` }].map(o => (
-                                    <button key={o.days} type="button" onClick={() => chooseNext({ kind: 'treatment', days: o.days })} className={chipCls(isChosen('treatment', o.days))}>
+                                    <button key={o.days} type="button" onClick={() => toggleTreatment(o.days)} aria-pressed={treatmentDays === o.days} className={chipCls(treatmentDays === o.days)}>
                                         {o.label}
                                     </button>
                                 ))}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className="w-40 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.checkup')}</span>
-                                {[3, 6, 12].map(m => (
-                                    <button key={m} type="button" onClick={() => chooseNext({ kind: 'checkup', days: m * 30 })} className={chipCls(isChosen('checkup', m * 30))}>
+                                {checkupMonths.map(m => (
+                                    <button key={m} type="button" onClick={() => chooseCheckup(m * 30)} aria-pressed={checkupDays === m * 30} className={chipCls(checkupDays === m * 30)}>
                                         {m} {t('patients.details.recall.months')}
                                     </button>
                                 ))}
                                 <button
                                     type="button"
-                                    onClick={() => chooseNext(null)}
-                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${nextVisit === null
+                                    onClick={() => chooseCheckup(null)}
+                                    aria-pressed={checkupDays === null}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${checkupDays === null
                                         ? 'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900'
                                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
                                 >
@@ -200,13 +251,70 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                 </button>
                             </div>
                         </div>
-                        <Button
-                            onClick={handleCompleteVisit}
-                            className="w-full"
-                            disabled={isSubmitting}
-                        >
-                            {isSubmitting ? t('patients.details.procedures.saving') : t('patients.details.procedures.completeVisit')}
-                        </Button>
+                        {reqRows.length > 0 && (
+                            <div className={`rounded-lg border p-3 space-y-2 ${blocked ? 'border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-900/10' : 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-800/60 dark:bg-emerald-900/10'}`}>
+                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t('patients.details.visitReq.title')}</p>
+                                {reqRows.map(r => (
+                                    <div key={r.key} className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="min-w-0 flex items-start gap-2">
+                                            <r.icon className={`w-4 h-4 mt-0.5 shrink-0 ${r.done ? 'text-emerald-600' : 'text-amber-600'}`} />
+                                            <div className="min-w-0">
+                                                <p className="text-sm text-gray-800 dark:text-gray-100">{r.label}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{r.services.join(', ')}</p>
+                                            </div>
+                                        </div>
+                                        {r.done ? (
+                                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                                                <CheckCircle2 className="w-4 h-4" /> {t('patients.details.visitReq.done')}
+                                            </span>
+                                        ) : r.unavailable ? (
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">{t('patients.details.visitReq.noInventory')}</span>
+                                        ) : r.action ? (
+                                            <Button size="sm" variant="secondary" onClick={r.action} disabled={isSubmitting}>{r.actionLabel}</Button>
+                                        ) : (
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">{t('patients.details.visitReq.noPermission')}</span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {blocked && skipOpen ? (
+                            <div className="space-y-2">
+                                <textarea
+                                    value={skipReason}
+                                    onChange={e => setSkipReason(e.target.value)}
+                                    rows={2}
+                                    maxLength={300}
+                                    autoFocus
+                                    placeholder={t('patients.details.visitReq.skipReason')}
+                                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                                <div className="flex gap-2">
+                                    <Button variant="secondary" onClick={() => { setSkipOpen(false); setSkipReason(''); }} disabled={isSubmitting}>{t('common.cancel')}</Button>
+                                    <Button onClick={handleCompleteVisit} className="flex-1" disabled={isSubmitting || skipReason.trim().length < 3}>
+                                        {isSubmitting ? t('patients.details.procedures.saving') : t('patients.details.visitReq.skipConfirm')}
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <Button
+                                    onClick={handleCompleteVisit}
+                                    className="w-full"
+                                    disabled={isSubmitting || blocked}
+                                >
+                                    {isSubmitting ? t('patients.details.procedures.saving') : t('patients.details.procedures.completeVisit')}
+                                </Button>
+                                {blocked && (
+                                    <p className="text-xs text-center text-gray-500 dark:text-gray-400">
+                                        {t('patients.details.visitReq.blockedHint')}
+                                        {canSkipRequirements && (
+                                            <> · <button type="button" onClick={() => setSkipOpen(true)} className="font-semibold text-gray-600 underline hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">{t('patients.details.visitReq.skip')}</button></>
+                                        )}
+                                    </p>
+                                )}
+                            </>
+                        )}
                     </div>
                 )}
             </Card>

@@ -915,6 +915,7 @@ const AppContent: React.FC = () => {
         return [...prev, newService];
       });
       addToast('success', 'Yangi xizmat qo\'shildi.');
+      return newService;
     } catch (e: any) { addToast('error', e.message || 'Xatolik yuz berdi'); }
   };
 

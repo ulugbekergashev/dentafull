@@ -3911,6 +3911,29 @@ app.post('/api/recalls', authenticateToken, async (req, res) => {
         });
         if (duplicate) return res.json(duplicate);
 
+        // Qabul yakunlanganda (mergeCheckup): ko'p tashrifli davolashda har tashrif
+        // yangi nazorat qo'shmasin — bemorning ochiq nazorati bo'lsa, uning sanasi
+        // oxirgi qarorga ko'chadi va eslatma qaytadan yuboriladi.
+        if (req.body?.mergeCheckup === true && visitKind === 'checkup') {
+            const open = await prisma.recall.findFirst({
+                where: { patientId, kind: 'checkup', status: { in: ['planned', 'reminded'] } },
+                orderBy: { dueDate: 'asc' },
+            });
+            if (open) {
+                const moved = await prisma.recall.update({
+                    where: { id: open.id },
+                    data: {
+                        dueDate: String(dueDate),
+                        reason: reason ? String(reason).slice(0, 200) : open.reason,
+                        doctorId: doctorId || open.doctorId,
+                        status: 'planned',
+                        remindedAt: null,
+                    },
+                });
+                return res.json(moved);
+            }
+        }
+
         const recall = await prisma.recall.create({
             data: {
                 clinicId,
@@ -3953,6 +3976,79 @@ app.put('/api/recalls/:id', authenticateToken, async (req, res) => {
     } catch (error: any) {
         console.error('Nazorat yangilash xatosi:', error);
         res.status(500).json({ error: 'Failed to update recall' });
+    }
+});
+
+// ─── Qabulni yakunlash talablari ─────────────────────────────────────────────
+//
+// Klinika xizmatga "rasm majburiy" / "material majburiy" belgisini qo'yadi:
+// shu xizmat bajarilgan qabulni shifokor rasm yuklamaguncha yoki ombordan
+// material yozmaguncha yakunlay olmaydi (tekshiruv bemor kartasida).
+// Migratsiyasiz: PlatformSetting'da har klinikaga bitta qator — xizmat id → talab.
+// Qator yo'q klinikada hech narsa talab qilinmaydi.
+type ServiceRequirementRow = { photo?: true; materials?: true };
+const visitReqKey = (clinicId: string) => `visitreq:${clinicId}`;
+
+const parseVisitReq = (raw: string | null | undefined): Record<string, ServiceRequirementRow> => {
+    if (!raw) return {};
+    try {
+        const v = JSON.parse(raw);
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+        const out: Record<string, ServiceRequirementRow> = {};
+        for (const [id, r] of Object.entries<any>(v)) {
+            if (!/^\d{1,10}$/.test(id) || !r || typeof r !== 'object') continue;
+            const row: ServiceRequirementRow = {};
+            if (r.photo === true) row.photo = true;
+            if (r.materials === true) row.materials = true;
+            if (row.photo || row.materials) out[id] = row;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+};
+
+app.get('/api/visit-requirements', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const row = await prisma.platformSetting.findUnique({ where: { key: visitReqKey(clinicId) } });
+        res.json({ services: parseVisitReq(row?.value) });
+    } catch (error: any) {
+        console.error("Yakunlash talablarini o'qishda xatolik:", error?.message || error);
+        res.status(500).json({ error: "Talablarni o'qib bo'lmadi" });
+    }
+});
+
+app.put('/api/visit-requirements/:serviceId', authenticateToken, async (req, res) => {
+    try {
+        if (!(await allow(req, res, p => p.can('settings', 'services', 'edit'), 'xizmatni tahrirlash'))) return;
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const serviceId = parseInt(req.params.serviceId);
+        if (!Number.isFinite(serviceId)) return res.status(400).json({ error: "Noto'g'ri xizmat" });
+        const service = await prisma.service.findUnique({ where: { id: serviceId }, select: { clinicId: true } });
+        if (!service || service.clinicId !== clinicId) return res.status(404).json({ error: 'Xizmat topilmadi' });
+
+        const key = visitReqKey(clinicId);
+        const row = await prisma.platformSetting.findUnique({ where: { key } });
+        const map = parseVisitReq(row?.value);
+        const next: ServiceRequirementRow = {};
+        if (req.body?.photo === true) next.photo = true;
+        if (req.body?.materials === true) next.materials = true;
+        if (next.photo || next.materials) map[String(serviceId)] = next;
+        else delete map[String(serviceId)];
+
+        const value = JSON.stringify(map);
+        await prisma.platformSetting.upsert({
+            where: { key },
+            update: { value, updatedAt: new Date() },
+            create: { key, value },
+        });
+        res.json({ services: map });
+    } catch (error: any) {
+        console.error('Yakunlash talablarini saqlashda xatolik:', error?.message || error);
+        res.status(500).json({ error: "Talablarni saqlab bo'lmadi" });
     }
 });
 

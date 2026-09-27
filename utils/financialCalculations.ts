@@ -183,6 +183,11 @@ export function calculateAppointmentTotal(
             if (!trimmedLine || trimmedLine.includes('Bajarilgan ishlar:') || trimmedLine.includes("Qo'shimcha")) {
                 return;
             }
+            // Xizmat emas, izoh ("⚠️ Majburiy talablarsiz yakunlandi ... Sabab: ...") —
+            // sababda xizmat nomi uchrasa ham narxi qo'shilmasin
+            if (trimmedLine.startsWith('⚠️')) {
+                return;
+            }
 
             // 1. Try to parse price from brackets [100 000 UZS]
             const priceMatch = trimmedLine.match(/\[([\d\s]+)\s*UZS\]/i);

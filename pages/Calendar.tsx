@@ -8,7 +8,8 @@ import {
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { DateField, DateJumpInput, DatePopover, MonthGrid, formatDayMonth, weekdayName } from '../components/DateField';
+import { DateField, DateJumpInput, DatePopover, MonthGrid, formatDayMonth, monthName, weekdayName } from '../components/DateField';
+import { CalendarMonthView } from '../components/CalendarMonthView';
 import { formatDateToISO } from '../utils/dateUtils';
 import { usePerms } from '../context/PermissionsContext';
 
@@ -53,7 +54,7 @@ export const Calendar: React.FC<CalendarProps> = ({
     : appointments;
   // State
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState<'day' | 'week'>('week');
+  const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [editingApptId, setEditingApptId] = useState<string | null>(null);
@@ -93,12 +94,9 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   // Handle Resize for Responsive View
   React.useEffect(() => {
+    // "Oy" qo'lda tanlangan bo'lsa, oyna o'lchami o'zgarganda saqlanib qoladi
     const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setView('day');
-      } else {
-        setView('week');
-      }
+      setView(v => v === 'month' ? v : window.innerWidth < 768 ? 'day' : 'week');
     };
 
     // Initial check
@@ -157,7 +155,7 @@ export const Calendar: React.FC<CalendarProps> = ({
   };
 
   // Helper: Get days to display
-  const getDisplayDays = (date: Date, currentView: 'day' | 'week') => {
+  const getDisplayDays = (date: Date, currentView: 'day' | 'week' | 'month') => {
     if (currentView === 'day') {
       return [new Date(date)];
     }
@@ -179,7 +177,9 @@ export const Calendar: React.FC<CalendarProps> = ({
   const [jumpOpen, setJumpOpen] = useState(false);
   const todayKey = formatDateToISO(new Date());
   const currentKey = formatDateToISO(currentDate);
-  const showsToday = displayDays.some(d => formatDateToISO(d) === todayKey);
+  const showsToday = view === 'month'
+    ? todayKey.slice(0, 7) === currentKey.slice(0, 7)
+    : displayDays.some(d => formatDateToISO(d) === todayKey);
   // Oylik kalendarda har kun ostida qabullar soni — bo'sh kunni tez topish uchun
   const appointmentCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -190,7 +190,10 @@ export const Calendar: React.FC<CalendarProps> = ({
   }, [filteredAppointments]);
   // Tushda: kun o'zgarmaydi, qaysi soat mintaqasida bo'lmasin
   const goToDate = (key: string) => { setCurrentDate(new Date(`${key}T12:00`)); setJumpOpen(false); };
+  // Oylik ko'rinishdan kunga: shu kunning soatli jadvali ochiladi
+  const openDay = (key: string) => { goToDate(key); setView('day'); };
   const headerLabel = (() => {
+    if (view === 'month') return `${monthName(currentDate, language)} ${currentDate.getFullYear()}`;
     if (view === 'day') return `${formatDayMonth(displayDays[0])}, ${weekdayName(displayDays[0], language)}`;
     const [first, last] = [displayDays[0], displayDays[6]];
     return first.getFullYear() === last.getFullYear()
@@ -207,6 +210,10 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   // Handlers
   const handlePrev = () => {
+    if (view === 'month') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1, 12));
+      return;
+    }
     const newDate = new Date(currentDate);
     if (view === 'week') {
       newDate.setDate(newDate.getDate() - 7);
@@ -217,6 +224,10 @@ export const Calendar: React.FC<CalendarProps> = ({
   };
 
   const handleNext = () => {
+    if (view === 'month') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1, 12));
+      return;
+    }
     const newDate = new Date(currentDate);
     if (view === 'week') {
       newDate.setDate(newDate.getDate() + 7);
@@ -547,6 +558,12 @@ export const Calendar: React.FC<CalendarProps> = ({
             >
               {t('calendar.week')}
             </button>
+            <button
+              onClick={() => setView('month')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'month' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+            >
+              {t('calendar.month')}
+            </button>
           </div>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
@@ -567,6 +584,16 @@ export const Calendar: React.FC<CalendarProps> = ({
       {/* Calendar Grid */}
       <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col relative">
         <div className="flex-1 overflow-auto">
+          {view === 'month' ? (
+            <CalendarMonthView
+              month={currentDate}
+              appointments={filteredAppointments}
+              doctors={doctors}
+              onOpenDay={openDay}
+              onOpenAppointment={setSelectedAppointment}
+              onCreate={canCreate ? key => openAddModal(key) : undefined}
+            />
+          ) : (
           <div className={`h-full relative ${view === 'week' ? 'min-w-[1000px]' : activeDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
             {/* Header Row */}
             <div className={`grid ${gridColsClass} border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 bg-white dark:bg-gray-800`}>
@@ -825,6 +852,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
             </div>
           </div>
+          )}
         </div>
       </div>
 

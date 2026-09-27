@@ -724,6 +724,15 @@ export interface Lead {
   branchId?: string | null;
 }
 
+// Qabulni yakunlash talablari (Sozlamalar → Xizmatlar): shu xizmat bajarilgan
+// qabulni yakunlashdan oldin shifokor rasm yuklashi va/yoki material yozishi shart.
+export interface ServiceRequirement {
+  photo?: boolean;
+  materials?: boolean;
+}
+/** xizmat id → talab. Bo'sh — hech qanday talab yo'q (sukut bo'yicha) */
+export type VisitRequirements = Record<string, ServiceRequirement>;
+
 // Nazorat (qayta tashrif): protseduradan keyin N oydan so'ng bemorni chaqirish
 export interface Recall {
   id: string;

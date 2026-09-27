@@ -10,7 +10,7 @@ import { tPlanFeature } from '../i18n/labels';
  */
 
 
-import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus } from '../types';
+import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus, VisitRequirements } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal } from 'lucide-react';
 import { api, API_URL } from '../services/api';
 import { usePerms } from '../context/PermissionsContext';
@@ -33,7 +33,8 @@ interface SettingsProps {
    /** Tarif cheklovi (nechta shifokor bor) va filial kartalaridagi hisob uchun */
    doctors: Doctor[];
    categories: ServiceCategory[];
-   onAddService: (service: Omit<Service, 'id' | 'clinicId'>) => void;
+   /** Yaratilgan xizmatni qaytaradi — majburiy talablar uning id si bilan saqlanadi */
+   onAddService: (service: Omit<Service, 'id' | 'clinicId'>) => Promise<Service | void> | void;
    onUpdateService: (index: number, service: Partial<Service>) => void;
    onDeleteService?: (id: number) => Promise<void>;
    onAddCategory: (category: Omit<ServiceCategory, 'id' | 'clinicId'>) => void;
@@ -226,7 +227,13 @@ export const Settings: React.FC<SettingsProps> = ({
    // Service Modal State
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
    const [editingServiceId, setEditingServiceId] = useState<number | null>(null);
-   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '', recallMonths: '' });
+   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '', recallMonths: '', reqPhoto: false, reqMaterials: false });
+   // Qabulni yakunlash talablari: xizmat id → rasm/material majburiy
+   const [visitReqs, setVisitReqs] = useState<VisitRequirements>({});
+   React.useEffect(() => {
+      if (activeTab !== 'services' || !currentClinic?.id) return;
+      api.visitRequirements.get(currentClinic.id).then(r => setVisitReqs(r.services || {})).catch(() => setVisitReqs({}));
+   }, [activeTab, currentClinic?.id]);
 
    // Filial modali
    const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -487,16 +494,18 @@ export const Settings: React.FC<SettingsProps> = ({
             price: service.price.toString(),
             cost: (service.cost || 0).toString(),
             categoryId: service.categoryId || '',
-            recallMonths: service.recallMonths ? String(service.recallMonths) : ''
+            recallMonths: service.recallMonths ? String(service.recallMonths) : '',
+            reqPhoto: !!visitReqs[String(service.id)]?.photo,
+            reqMaterials: !!visitReqs[String(service.id)]?.materials,
          });
       } else {
          setEditingServiceId(null);
-         setServiceForm({ name: '', price: '', cost: '', categoryId: selectedCategory || '', recallMonths: '' });
+         setServiceForm({ name: '', price: '', cost: '', categoryId: selectedCategory || '', recallMonths: '', reqPhoto: false, reqMaterials: false });
       }
       setIsServiceModalOpen(true);
    };
 
-   const handleServiceSubmit = (e: React.FormEvent) => {
+   const handleServiceSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       const data = {
          name: serviceForm.name,
@@ -508,13 +517,29 @@ export const Settings: React.FC<SettingsProps> = ({
          recallMonths: serviceForm.recallMonths === '' ? null : Number(serviceForm.recallMonths)
       };
 
+      const { reqPhoto, reqMaterials } = serviceForm;
+      let serviceId: number | undefined;
       if (editingServiceId !== null) {
          const realIndex = services.findIndex(s => s.id === editingServiceId);
          if (realIndex !== -1) onUpdateService(realIndex, data);
+         serviceId = editingServiceId;
       } else {
-         onAddService(data);
+         const created = await onAddService(data);
+         serviceId = created ? created.id : undefined;
       }
       setIsServiceModalOpen(false);
+
+      // Majburiy talablar alohida saqlanadi — faqat o'zgargan bo'lsa
+      const prev = serviceId !== undefined ? visitReqs[String(serviceId)] : undefined;
+      if (serviceId !== undefined && currentClinic?.id && (!!prev?.photo !== reqPhoto || !!prev?.materials !== reqMaterials)) {
+         try {
+            const r = await api.visitRequirements.setForService(currentClinic.id, serviceId, { photo: reqPhoto, materials: reqMaterials });
+            setVisitReqs(r.services || {});
+         } catch (err) {
+            console.error('Majburiy talablarni saqlab bo\'lmadi', err);
+            alert(t('settings.services.reqSaveError'));
+         }
+      }
    };
 
    const handleCategorySubmit = async (e: React.FormEvent) => {
@@ -1116,7 +1141,15 @@ export const Settings: React.FC<SettingsProps> = ({
                                           <tr key={s.id ?? s.name} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
                                              <td className="px-4 py-3 text-gray-900 dark:text-gray-200 font-medium">{s.name}</td>
                                              <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
-                                             <td className="px-4 py-3 text-gray-500">{s.recallMonths ? `${s.recallMonths} ${t('patients.details.recall.months')}` : '—'}</td>
+                                             <td className="px-4 py-3 text-gray-500">
+                                                {s.recallMonths ? `${s.recallMonths} ${t('patients.details.recall.months')}` : '—'}
+                                                {(visitReqs[String(s.id)]?.photo || visitReqs[String(s.id)]?.materials) && (
+                                                   <span className="ml-2 inline-flex flex-wrap gap-1 align-middle" title={t('settings.services.requirements')}>
+                                                      {visitReqs[String(s.id)]?.photo && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{t('settings.services.reqPhotoShort')}</span>}
+                                                      {visitReqs[String(s.id)]?.materials && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{t('settings.services.reqMaterialsShort')}</span>}
+                                                   </span>
+                                                )}
+                                             </td>
                                              <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-1">
                                                    {canEditService && <button
@@ -1858,6 +1891,20 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                      {[1, 3, 6, 12].map(m => <option key={m} value={m}>{m} {t('patients.details.recall.months')}</option>)}
                   </select>
                </div>
+               {/* Qabulni yakunlash talablari: belgilansa shifokor shu xizmat bilan
+                   qabulni rasm/material kiritmaguncha yakunlay olmaydi */}
+               <fieldset className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                  <legend className="px-1 text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.services.requirements')}</legend>
+                  <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+                     <input type="checkbox" checked={serviceForm.reqPhoto} onChange={e => setServiceForm({ ...serviceForm, reqPhoto: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                     {t('settings.services.reqPhoto')}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+                     <input type="checkbox" checked={serviceForm.reqMaterials} onChange={e => setServiceForm({ ...serviceForm, reqMaterials: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                     {t('settings.services.reqMaterials')}
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.services.reqHint')}</p>
+               </fieldset>
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsServiceModalOpen(false)}>{t('common.cancel')}</Button>
                   <Button type="submit">{t('common.save')}</Button>

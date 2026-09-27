@@ -3,11 +3,11 @@ import { useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, Calendar, CalendarClock, CalendarPlus, ChevronDown, ChevronRight, X, CreditCard, FileText, User, Activity, Phone, MapPin, Clock, Edit, Printer, Send, Package, UserPlus, UserCheck, Plus, Trash2, Gift } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
-import { PatientPhotos } from '../components/PatientPhotos';
-import { VisitWorkflow, ProceduresSection } from '../components/ProceduresSection';
+import { PatientPhotos, PhotoUploadModal, fetchPatientPhotos } from '../components/PatientPhotos';
+import { VisitWorkflow, ProceduresSection, NextVisitChoice } from '../components/ProceduresSection';
 import { InstallmentsTab } from '../components/InstallmentsTab';
 import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall, PaymentMethod } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall, PaymentMethod, PatientPhoto, VisitRequirements } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
@@ -315,6 +315,29 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       }
    }, [patientId, pendingProcedures, isLoaded]);
 
+   // Qabulni yakunlash talablari (Sozlamalar → Xizmatlar): xizmat rasm yoki
+   // material talab qilsa, "Qabulni yakunlash" bajarilmaguncha yopiq turadi.
+   // Talab yo'q klinikada suratlar bu yerda umuman so'ralmaydi.
+   const [visitReqs, setVisitReqs] = useState<VisitRequirements>({});
+   const [patientPhotos, setPatientPhotos] = useState<PatientPhoto[]>([]);
+   const [isVisitPhotoOpen, setIsVisitPhotoOpen] = useState(false);
+   useEffect(() => {
+      if (!currentClinic?.id) return;
+      api.visitRequirements.get(currentClinic.id).then(r => setVisitReqs(r.services || {})).catch(() => setVisitReqs({}));
+   }, [currentClinic?.id]);
+   const photoRequiredAnywhere = Object.keys(visitReqs).some(id => !!visitReqs[id]?.photo);
+   const refreshPatientPhotos = async () => {
+      if (!patientId || !token) return;
+      try { setPatientPhotos(await fetchPatientPhotos(patientId, token)); } catch { /* ro'yxat bo'lmasa tekshiruv "yuklanmagan" deb turadi */ }
+   };
+   useEffect(() => {
+      if (photoRequiredAnywhere) refreshPatientPhotos();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [photoRequiredAnywhere, patientId, token]);
+   const todayLocal = formatDateToISO(new Date());
+   const photoDoneToday = patientPhotos.some(p => formatDateToISO(new Date(p.date)) === todayLocal);
+   const materialsDoneToday = materialLogs.some(l => l.type !== 'IN' && formatDateToISO(new Date(l.date)) === todayLocal);
+
    useEffect(() => {
       if (patientId) {
          api.diagnoses.getByPatient(patientId).then(setDiagnoses).catch(console.error);
@@ -600,10 +623,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       ? formatDobDDMMYYYY(patient.lastVisit)
       : t('patients.details.noVisits');
 
-   // Ochiq nazorat: eng yaqin sanali rejalashtirilgan / eslatilgan / yozilgan
-   const activeRecall = recalls
+   // Ochiq tashriflar (rejalashtirilgan / eslatilgan / yozilgan), eng yaqini birinchi.
+   // Bir vaqtda davolash davomi ham, nazorat ham bo'lishi mumkin.
+   const activeRecalls = recalls
       .filter(r => r.status === 'planned' || r.status === 'reminded' || r.status === 'booked')
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
    const recallStatusLabel: Record<string, string> = {
       planned: t('patients.details.recall.status.planned'),
       reminded: t('patients.details.recall.status.reminded'),
@@ -923,7 +947,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setIsApptModalOpen(true);
    };
 
-   const handleCompleteVisit = async (procedures: any[], total: number, nextVisit: { kind: 'checkup' | 'treatment'; days: number } | null = null) => {
+   const handleCompleteVisit = async (procedures: any[], total: number, nextVisits: NextVisitChoice[] = [], skip?: { missing: ('photo' | 'materials')[]; reason: string }) => {
       // 1. Double-check if we are already processing or have processed this exact content recently
       const today = new Date().toISOString().split('T')[0];
 
@@ -951,6 +975,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       // Create a text summary of procedures for the appointment notes with explicit prices
       const proceduresText = procedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'}) [${p.price.toLocaleString().replace(/,/g, ' ')} UZS]`).join('\n');
+      // Majburiy talab bajarilmay yakunlandi — izohda qoladi. "⚠️" bilan boshlanadi:
+      // summa hisobi (calculateAppointmentTotal) bu qatorni o'tkazib yuboradi.
+      const skipText = skip
+         ? `\n⚠️ Majburiy talablarsiz yakunlandi (${skip.missing.map(m => m === 'photo' ? 'rasm' : 'material').join(', ')}). Sabab: ${skip.reason.replace(/\s+/g, ' ').slice(0, 300)}`
+         : '';
 
       try {
          // ENSURE DOCTOR EXISTS (especially for new clinics or individual plans)
@@ -999,7 +1028,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
                duration: 60,
                status: 'Completed',
-               notes: `Bajarilgan ishlar:\n` + proceduresText,
+               notes: `Bajarilgan ishlar:\n` + proceduresText + skipText,
                clinicId: patient.clinicId
             });
             alert(t('patients.details.alerts.visitSaved'));
@@ -1016,7 +1045,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                return;
             }
 
-            const newNotes = currentNotes ? currentNotes + '\n\n' + `Qo'shimcha (${new Date().toLocaleTimeString()}):\n` + proceduresText : `Bajarilgan ishlar:\n` + proceduresText;
+            const newNotes = (currentNotes ? currentNotes + '\n\n' + `Qo'shimcha (${new Date().toLocaleTimeString()}):\n` + proceduresText : `Bajarilgan ishlar:\n` + proceduresText) + skipText;
 
             await onUpdateAppointment(existingAppt.id, {
                notes: newNotes,
@@ -1025,24 +1054,30 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             alert(t('patients.details.alerts.visitUpdated'));
          }
 
-         // Keyingi nazorat: shifokor tanlagan (yoki xizmat taklif qilgan) bo'lsa
-         if (nextVisit) {
-            try {
-               const reason = procedures
-                  .map(p => p.toothNumber ? `${p.serviceName} #${p.toothNumber}` : p.serviceName)
-                  .join(', ')
-                  .slice(0, 200);
-               const created = await api.recalls.create({
-                  patientId: patient.id,
-                  clinicId: patient.clinicId,
-                  doctorId: finalDoctorId || null,
-                  dueDate: addDaysStr(nextVisit.days),
-                  reason,
-                  kind: nextVisit.kind,
-               });
-               setRecalls(prev => [created, ...prev.filter(r => r.id !== created.id)]);
-            } catch (err) {
-               console.error('Nazoratni saqlab bo\'lmadi:', err);
+         // Keyingi tashriflar: davolash davomi va/yoki nazorat — shifokor tanlagan
+         // (yoki xizmat taklif qilgan). Har biri alohida eslatma bo'lib saqlanadi.
+         if (nextVisits.length > 0) {
+            const reason = procedures
+               .map(p => p.toothNumber ? `${p.serviceName} #${p.toothNumber}` : p.serviceName)
+               .join(', ')
+               .slice(0, 200);
+            for (const next of nextVisits) {
+               try {
+                  const created = await api.recalls.create({
+                     patientId: patient.id,
+                     clinicId: patient.clinicId,
+                     doctorId: finalDoctorId || null,
+                     dueDate: addDaysStr(next.days),
+                     reason,
+                     kind: next.kind,
+                     // Ko'p tashrifli davolashda har safar yangi nazorat qo'shilmasin —
+                     // ochiq nazorat bo'lsa, uning sanasi yangilanadi
+                     mergeCheckup: next.kind === 'checkup',
+                  });
+                  setRecalls(prev => [created, ...prev.filter(r => r.id !== created.id)]);
+               } catch (err) {
+                  console.error('Nazoratni saqlab bo\'lmadi:', err);
+               }
             }
          }
 
@@ -1172,10 +1207,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            </dd>
                         </div>
                      )}
-                     {activeRecall && (
-                        <div className="flex items-start justify-between gap-3">
+                     {activeRecalls.map((activeRecall, i) => (
+                        <div key={activeRecall.id} className="flex items-start justify-between gap-3">
                            <dt className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                              <CalendarClock className="w-3.5 h-3.5" /> {t('patients.details.recall.title')}
+                              {i === 0 && <><CalendarClock className="w-3.5 h-3.5" /> {t('patients.details.recall.title')}</>}
                            </dt>
                            <dd className="text-right">
                               <span className="font-semibold tabular-nums text-sky-700 dark:text-sky-300" title={activeRecall.reason || undefined}>
@@ -1191,7 +1226,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               )}
                            </dd>
                         </div>
-                     )}
+                     ))}
                   </dl>
 
                   {/* Kontaktlar */}
@@ -1302,6 +1337,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         initialProcedures={pendingProcedures}
                         onProceduresChange={setPendingProcedures}
                         onCompleteVisit={handleCompleteVisit}
+                        visitRequirements={visitReqs}
+                        photoDone={photoDoneToday}
+                        materialsDone={materialsDoneToday}
+                        onUploadPhoto={perms.can('patients', 'photos', 'create') ? () => setIsVisitPhotoOpen(true) : undefined}
+                        onAddMaterial={() => setIsMaterialModalOpen(true)}
+                        materialsUnavailable={inventoryItems.length === 0}
+                        canSkipRequirements={perms.owner}
                      />
 
                      {/* Kasallik tarixi: oddiy matn maydoni. Tayyor ro'yxat (14 ta chip)
@@ -1409,6 +1451,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      token={token}
                      canUpload={perms.can('patients', 'photos', 'create')}
                      canDelete={perms.can('patients', 'photos', 'delete')}
+                     onPhotosChange={setPatientPhotos}
                   />
                )}
 
@@ -1868,6 +1911,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                </form>
             </Modal>
 
+
+            {/* Qabul panelidan surat yuklash (xizmat surat talab qilganda) */}
+            <PhotoUploadModal
+               isOpen={isVisitPhotoOpen}
+               onClose={() => setIsVisitPhotoOpen(false)}
+               patientId={patient.id}
+               token={token}
+               onUploaded={refreshPatientPhotos}
+               defaultCategory="After"
+            />
 
             {/* Material Usage Modal */}
             <Modal isOpen={isMaterialModalOpen} onClose={() => setIsMaterialModalOpen(false)} title={t('patients.details.modals.useMaterialTitle')}>

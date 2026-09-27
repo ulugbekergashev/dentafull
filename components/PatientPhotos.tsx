@@ -14,18 +14,25 @@ interface PatientPhotosProps {
     /** Ruxsatlar: surat yuklash va o'chirish (ko'rish ruxsati sahifa darajasida tekshiriladi) */
     canUpload?: boolean;
     canDelete?: boolean;
+    /** Ro'yxat yangilanganda (yuklash/o'chirish) — bemor kartasidagi yakunlash tekshiruvi uchun */
+    onPhotosChange?: (photos: PatientPhoto[]) => void;
 }
 
-export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicId, token, canUpload = true, canDelete = true }) => {
+/** Bemorning suratlari ro'yxati (serverdan) */
+export const fetchPatientPhotos = async (patientId: string, token: string): Promise<PatientPhoto[]> => {
+    const response = await fetch(`${API_URL}/patients/${patientId}/photos`, {
+        headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+};
+
+export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicId, token, canUpload = true, canDelete = true, onPhotosChange }) => {
     const { t } = useLanguage();
-    const [photos, setPhotos] = useState<PatientPhoto[]>([]);
+    const [photos, setPhotosState] = useState<PatientPhoto[]>([]);
+    const setPhotos = (list: PatientPhoto[]) => { setPhotosState(list); onPhotosChange?.(list); };
     const [loading, setLoading] = useState(true);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [description, setDescription] = useState('');
-    const [category, setCategory] = useState('Before');
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [uploading, setUploading] = useState(false);
     const [viewPhoto, setViewPhoto] = useState<PatientPhoto | null>(null);
 
     useEffect(() => {
@@ -56,52 +63,6 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
         }
     };
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setSelectedFile(file);
-            setPreviewUrl(URL.createObjectURL(file));
-        }
-    };
-
-    const handleUpload = async () => {
-        if (!selectedFile) return;
-
-        setUploading(true);
-        const formData = new FormData();
-        formData.append('photo', selectedFile);
-        formData.append('description', description);
-        formData.append('category', category);
-
-        try {
-            const response = await fetch(`${API_URL}/patients/${patientId}/photos`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-                body: formData
-            });
-
-            if (response.ok) {
-                await fetchPhotos();
-                handleCloseModal();
-            } else {
-                const text = await response.text();
-                try {
-                    const errorData = JSON.parse(text);
-                    console.error('Server error details:', errorData);
-                    alert(`Failed to upload photo: ${errorData.details || errorData.error || 'Unknown error'}`);
-                } catch (e) {
-                    console.error('Server non-JSON error:', text);
-                    alert(`Failed to upload photo: Server returned non-JSON response. Check console for details.`);
-                }
-            }
-        } catch (error) {
-            console.error('Upload error:', error);
-            alert('Error uploading photo');
-        } finally {
-            setUploading(false);
-        }
-    };
-
     const handleDelete = async (photoId: string) => {
         if (!confirm(t('patients.details.photos.deleteConfirm'))) return;
 
@@ -122,20 +83,7 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
         }
     };
 
-    const handleCloseModal = () => {
-        setIsUploadModalOpen(false);
-        setSelectedFile(null);
-        setPreviewUrl(null);
-        setDescription('');
-        setCategory('Before');
-    };
-
-    const categories = [
-        { value: 'Before', label: t('patients.details.photos.catBefore') },
-        { value: 'After', label: t('patients.details.photos.catAfter') },
-        { value: 'X-Ray', label: t('patients.details.photos.catXRay') },
-        { value: 'Other', label: t('patients.details.photos.catOther') }
-    ];
+    const categories = photoCategories(t);
 
     return (
         <div className="space-y-6">
@@ -199,65 +147,13 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                 </div>
             )}
 
-            {/* Upload Modal */}
-            <Modal
+            <PhotoUploadModal
                 isOpen={isUploadModalOpen}
-                onClose={handleCloseModal}
-                title={t('patients.details.photos.uploadModalTitle')}
-            >
-                <div className="space-y-4">
-                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer relative">
-                        <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFileSelect}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        {previewUrl ? (
-                            <div className="relative h-48 mx-auto">
-                                <img src={previewUrl} alt="Preview" className="h-full mx-auto object-contain rounded" />
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setPreviewUrl(null);
-                                        setSelectedFile(null);
-                                    }}
-                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="py-4">
-                                <Upload className="w-12 h-12 mx-auto text-gray-400 mb-2" />
-                                <p className="text-sm text-gray-500">{t('patients.details.photos.clickToSelect')}</p>
-                                <p className="text-xs text-gray-400 mt-1">PNG, JPG, JPEG</p>
-                            </div>
-                        )}
-                    </div>
-
-                    <Select
-                        label={t('patients.details.photos.category')}
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                        options={categories}
-                    />
-
-                    <Input
-                        label={t('patients.details.photos.description')}
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder={t('patients.details.photos.descPlaceholder')}
-                    />
-
-                    <div className="flex justify-end gap-3 pt-4">
-                        <Button variant="secondary" onClick={handleCloseModal}>{t('common.cancel')}</Button>
-                        <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
-                            {uploading ? t('common.loading') : t('patients.details.photos.uploadBtn')}
-                        </Button>
-                    </div>
-                </div>
-            </Modal>
+                onClose={() => setIsUploadModalOpen(false)}
+                patientId={patientId}
+                token={token}
+                onUploaded={fetchPhotos}
+            />
 
             {/* View Photo Modal */}
             {viewPhoto && (
@@ -304,5 +200,154 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                 </div>
             )}
         </div>
+    );
+};
+
+const photoCategories = (t: (key: any) => string) => [
+    { value: 'Before', label: t('patients.details.photos.catBefore') },
+    { value: 'After', label: t('patients.details.photos.catAfter') },
+    { value: 'X-Ray', label: t('patients.details.photos.catXRay') },
+    { value: 'Other', label: t('patients.details.photos.catOther') }
+];
+
+interface PhotoUploadModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    patientId: string;
+    token: string;
+    /** Surat saqlangandan keyin (oyna o'zi yopiladi) */
+    onUploaded: () => void | Promise<void>;
+    defaultCategory?: string;
+}
+
+/**
+ * Surat yuklash oynasi. "Suratlar" tabida ham, qabulni yakunlash panelida ham
+ * (xizmat surat talab qilganda) shu oyna ochiladi.
+ */
+export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({ isOpen, onClose, patientId, token, onUploaded, defaultCategory = 'Before' }) => {
+    const { t } = useLanguage();
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [description, setDescription] = useState('');
+    const [category, setCategory] = useState(defaultCategory);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [uploading, setUploading] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) setCategory(defaultCategory);
+    }, [isOpen, defaultCategory]);
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setSelectedFile(file);
+            setPreviewUrl(URL.createObjectURL(file));
+        }
+    };
+
+    const handleCloseModal = () => {
+        onClose();
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setDescription('');
+        setCategory(defaultCategory);
+    };
+
+    const handleUpload = async () => {
+        if (!selectedFile) return;
+
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('photo', selectedFile);
+        formData.append('description', description);
+        formData.append('category', category);
+
+        try {
+            const response = await fetch(`${API_URL}/patients/${patientId}/photos`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData
+            });
+
+            if (response.ok) {
+                await onUploaded();
+                handleCloseModal();
+            } else {
+                const text = await response.text();
+                try {
+                    const errorData = JSON.parse(text);
+                    console.error('Server error details:', errorData);
+                    alert(`Failed to upload photo: ${errorData.details || errorData.error || 'Unknown error'}`);
+                } catch (e) {
+                    console.error('Server non-JSON error:', text);
+                    alert(`Failed to upload photo: Server returned non-JSON response. Check console for details.`);
+                }
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Error uploading photo');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <Modal
+            isOpen={isOpen}
+            onClose={handleCloseModal}
+            title={t('patients.details.photos.uploadModalTitle')}
+        >
+            <div className="space-y-4">
+                <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer relative">
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileSelect}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    {previewUrl ? (
+                        <div className="relative h-48 mx-auto">
+                            <img src={previewUrl} alt="Preview" className="h-full mx-auto object-contain rounded" />
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewUrl(null);
+                                    setSelectedFile(null);
+                                }}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="py-4">
+                            <Upload className="w-12 h-12 mx-auto text-gray-400 mb-2" />
+                            <p className="text-sm text-gray-500">{t('patients.details.photos.clickToSelect')}</p>
+                            <p className="text-xs text-gray-400 mt-1">PNG, JPG, JPEG</p>
+                        </div>
+                    )}
+                </div>
+
+                <Select
+                    label={t('patients.details.photos.category')}
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    options={photoCategories(t)}
+                />
+
+                <Input
+                    label={t('patients.details.photos.description')}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder={t('patients.details.photos.descPlaceholder')}
+                />
+
+                <div className="flex justify-end gap-3 pt-4">
+                    <Button variant="secondary" onClick={handleCloseModal}>{t('common.cancel')}</Button>
+                    <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
+                        {uploading ? t('common.loading') : t('patients.details.photos.uploadBtn')}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
     );
 };

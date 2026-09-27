@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, ServiceRequirement, VisitRequirements } from '../types';
 import { applyCallChange } from '../utils/desk';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
@@ -8,6 +8,8 @@ const DEMO_CASH_MOVEMENTS: CashMovement[] = [];
 let DEMO_CALLS: { date: string; entries: CallLog } = { date: '', entries: {} };
 // Demo: bosh sahifa xaritasidagi "kabinetda" belgilari ham faqat sessiya davomida
 let DEMO_FLOW: { date: string; entries: FlowLog } = { date: '', entries: {} };
+// Demo: qabulni yakunlash talablari (xizmat → rasm/material) ham sessiya davomida
+let DEMO_VISIT_REQ: VisitRequirements = {};
 
 export interface CashCloseInput {
     clinicId: string;
@@ -1179,10 +1181,12 @@ export const api = {
             if (isDemoMode()) return Promise.resolve([] as Recall[]);
             return fetchJson<Recall[]>(`/recalls?clinicId=${clinicId}&status=planned,reminded,booked,done,cancelled`);
         },
-        create: (data: { patientId: string; clinicId: string; doctorId?: string | null; dueDate: string; reason?: string; kind?: 'checkup' | 'treatment' }) => {
+        /** mergeCheckup — ochiq nazorat bo'lsa yangisi yaratilmaydi, uning sanasi yangilanadi */
+        create: (data: { patientId: string; clinicId: string; doctorId?: string | null; dueDate: string; reason?: string; kind?: 'checkup' | 'treatment'; mergeCheckup?: boolean }) => {
             if (isDemoMode()) {
                 const now = new Date().toISOString();
-                return Promise.resolve({ id: `demo-recall-${Date.now()}`, status: 'planned', createdAt: now, updatedAt: now, ...data } as Recall);
+                const { mergeCheckup, ...rest } = data;
+                return Promise.resolve({ id: `demo-recall-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, status: 'planned', createdAt: now, updatedAt: now, ...rest } as Recall);
             }
             return fetchJson<Recall>('/recalls', {
                 method: 'POST',
@@ -1235,6 +1239,30 @@ export const api = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
+            });
+        },
+    },
+    /**
+     * Qabulni yakunlash talablari: qaysi xizmatda rasm yoki material majburiy.
+     * Sozlamaga tegmagan klinikada bo'sh obyekt — hech narsa talab qilinmaydi.
+     */
+    visitRequirements: {
+        get: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve({ services: DEMO_VISIT_REQ });
+            return fetchJson<{ services: VisitRequirements }>(`/visit-requirements?clinicId=${encodeURIComponent(clinicId)}`);
+        },
+        setForService: (clinicId: string, serviceId: number, req: ServiceRequirement) => {
+            if (isDemoMode()) {
+                const next = { ...DEMO_VISIT_REQ };
+                if (req.photo || req.materials) next[String(serviceId)] = { ...(req.photo ? { photo: true } : {}), ...(req.materials ? { materials: true } : {}) };
+                else delete next[String(serviceId)];
+                DEMO_VISIT_REQ = next;
+                return Promise.resolve({ services: DEMO_VISIT_REQ });
+            }
+            return fetchJson<{ services: VisitRequirements }>(`/visit-requirements/${serviceId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId, photo: !!req.photo, materials: !!req.materials }),
             });
         },
     },
