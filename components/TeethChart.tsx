@@ -570,7 +570,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
   const renderRow = (nums: number[], isUpper: boolean) => {
     const n = nums.length;
     return (
-      <div className={`flex justify-center ${isUpper ? 'items-start' : 'items-end'} gap-0.5 sm:gap-1 min-w-max px-2`}>
+      <div data-chart-row className={`flex justify-center ${isUpper ? 'items-start' : 'items-end'} gap-0.5 sm:gap-1 min-w-max px-2`}>
         {nums.map((num, i) => {
           const d = Math.abs(i + 0.5 - n / 2) / (n / 2); // 0 — o'rta, 1 — chekka
           const lift = Math.round((1 - d * d) * ARCH_LIFT);
@@ -665,7 +665,7 @@ export const TeethChart: React.FC<TeethChartProps> = ({
           {t('patients.details.teethChart.upperJaw')}
         </div>
 
-        <div className="overflow-x-auto px-2 sm:px-6">
+        <div data-chart-scroll className="overflow-x-auto px-2 sm:px-6">
           <div className="min-w-max mx-auto">
             {renderRow(currentNumbers.upper, true)}
 

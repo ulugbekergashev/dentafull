@@ -4,10 +4,10 @@ import { AlertTriangle, ArrowLeft, Calendar, CalendarClock, CalendarPlus, Chevro
 import { Button, Card, Badge, Modal, Input, Select } from '../components/Common';
 import { TeethChart } from '../components/TeethChart';
 import { PatientPhotos, PhotoUploadModal, fetchPatientPhotos } from '../components/PatientPhotos';
-import { VisitWorkflow, ProceduresSection, NextVisitChoice } from '../components/ProceduresSection';
+import { VisitWorkflow, ProceduresSection, VisitCompletion } from '../components/ProceduresSection';
 import { InstallmentsTab } from '../components/InstallmentsTab';
 import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall, PaymentMethod, PatientPhoto, VisitRequirements } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall, PaymentMethod, PatientPhoto, VisitRequirements, PendingMaterial } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
@@ -134,6 +134,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          : Math.max(0, baseAmount - discountVal);
    };
    const [pendingProcedures, setPendingProcedures] = useState<any[]>([]);
+   // Qabulda tanlangan, hali ombordan ayirilmagan materiallar (yakunlashda ayiriladi)
+   const [pendingMaterials, setPendingMaterials] = useState<PendingMaterial[]>([]);
 
    // Installment quick-open state (from appointment row)
    const [installmentQuickOpen, setInstallmentQuickOpen] = useState<{ service: string; amount: number; doctorId: string } | null>(null);
@@ -286,6 +288,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    useEffect(() => {
       setIsLoaded(false);
       if (patientId) {
+         try {
+            const savedMaterials = JSON.parse(localStorage.getItem(`pending_materials_${patientId}`) || '[]');
+            setPendingMaterials(Array.isArray(savedMaterials) ? savedMaterials : []);
+         } catch {
+            setPendingMaterials([]);
+         }
          const key = `pending_procedures_${patientId}`;
          const saved = localStorage.getItem(key);
 
@@ -314,6 +322,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          }
       }
    }, [patientId, pendingProcedures, isLoaded]);
+
+   useEffect(() => {
+      if (patientId && isLoaded) {
+         const key = `pending_materials_${patientId}`;
+         try {
+            if (pendingMaterials.length > 0) localStorage.setItem(key, JSON.stringify(pendingMaterials));
+            else localStorage.removeItem(key);
+         } catch { /* brauzer xotirasi yopiq — ro'yxat faqat shu sahifada qoladi */ }
+      }
+   }, [patientId, pendingMaterials, isLoaded]);
 
    // Qabulni yakunlash talablari (Sozlamalar → Xizmatlar): xizmat rasm yoki
    // material talab qilsa, "Qabulni yakunlash" bajarilmaguncha yopiq turadi.
@@ -947,7 +965,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setIsApptModalOpen(true);
    };
 
-   const handleCompleteVisit = async (procedures: any[], total: number, nextVisits: NextVisitChoice[] = [], skip?: { missing: ('photo' | 'materials')[]; reason: string }) => {
+   const handleCompleteVisit = async (procedures: any[], total: number, { nextVisits, materials, skip }: VisitCompletion) => {
       // 1. Double-check if we are already processing or have processed this exact content recently
       const today = new Date().toISOString().split('T')[0];
 
@@ -980,6 +998,27 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       const skipText = skip
          ? `\n⚠️ Majburiy talablarsiz yakunlandi (${skip.missing.map(m => m === 'photo' ? 'rasm' : 'material').join(', ')}). Sabab: ${skip.reason.replace(/\s+/g, ' ').slice(0, 300)}`
          : '';
+      // Tanlangan materiallar ombordan shu yerda ayiriladi (qabul saqlangandan keyin).
+      // Bittasi o'tmasa (masalan omborda qolmagan) — qolganlari baribir yoziladi.
+      const writeMaterials = async (doctorName: string) => {
+         if (materials.length === 0 || !currentClinic) return;
+         const failed: string[] = [];
+         const note = `Bemor: ${patient.firstName} ${patient.lastName} · ${procedures.map(p => p.serviceName).join(', ')}`.slice(0, 200);
+         for (const m of materials) {
+            try {
+               await api.inventory.updateStock(m.itemId, { change: m.quantity, type: 'OUT', note, userName: doctorName, patientId: patient.id });
+            } catch (err) {
+               console.error('Materialni ombordan ayirib bo\'lmadi:', err);
+               failed.push(`${m.name} — ${m.quantity} ${m.unit}`);
+            }
+         }
+         setPendingMaterials([]);
+         try {
+            setMaterialLogs(await api.inventory.getLogs(currentClinic.id, patient.id));
+            setInventoryItems(await api.inventory.getAll(currentClinic.id));
+         } catch { /* ro'yxat keyingi ochilishda yangilanadi */ }
+         if (failed.length > 0) alert(`${t('patients.details.visitMaterials.failed')}\n${failed.join('\n')}`);
+      };
 
       try {
          // ENSURE DOCTOR EXISTS (especially for new clinics or individual plans)
@@ -1039,6 +1078,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             // Deduplication check: if notes already contain this text, skip appending
             if (currentNotes.includes(proceduresText)) {
                console.log("Duplicate prevention: Procedures already in notes");
+               await writeMaterials(finalDoctorName);
                alert("Qabul tarixi yangilandi!");
                setPendingProcedures([]);
                setVisitKey(prev => prev + 1);
@@ -1053,6 +1093,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             });
             alert(t('patients.details.alerts.visitUpdated'));
          }
+
+         await writeMaterials(finalDoctorName);
 
          // Keyingi tashriflar: davolash davomi va/yoki nazorat — shifokor tanlagan
          // (yoki xizmat taklif qilgan). Har biri alohida eslatma bo'lib saqlanadi.
@@ -1336,13 +1378,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         doctors={doctors}
                         initialProcedures={pendingProcedures}
                         onProceduresChange={setPendingProcedures}
+                        inventoryItems={inventoryItems}
+                        initialMaterials={pendingMaterials}
+                        onMaterialsChange={setPendingMaterials}
                         onCompleteVisit={handleCompleteVisit}
                         visitRequirements={visitReqs}
                         photoDone={photoDoneToday}
                         materialsDone={materialsDoneToday}
                         onUploadPhoto={perms.can('patients', 'photos', 'create') ? () => setIsVisitPhotoOpen(true) : undefined}
-                        onAddMaterial={() => setIsMaterialModalOpen(true)}
-                        materialsUnavailable={inventoryItems.length === 0}
                         canSkipRequirements={perms.owner}
                      />
 

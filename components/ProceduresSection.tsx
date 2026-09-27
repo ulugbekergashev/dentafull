@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Camera, CheckCircle2, Package, Trash2 } from 'lucide-react';
 import { Button, Card, Badge } from '../components/Common';
-import { Transaction, Service, ServiceCategory, VisitRequirements } from '../types';
+import { Transaction, Service, ServiceCategory, VisitRequirements, InventoryItem, PendingMaterial } from '../types';
 import { AddProcedureModal } from './AddProcedureModal';
+import { MaterialList, MaterialPicker, mergeMaterials } from './MaterialPicker';
 import { useLanguage } from '../context/LanguageContext';
 
 interface ProcedureItem {
@@ -17,27 +18,35 @@ interface ProcedureItem {
 /** Keyingi tashrif: davolash davomi (kunlar) yoki nazorat ko'rigi (oylar, kunlarda) */
 export type NextVisitChoice = { kind: 'checkup' | 'treatment'; days: number };
 
+/** Qabulni yakunlashda protseduralardan tashqari uzatiladiganlar */
+export interface VisitCompletion {
+    /** Tanlangan keyingi tashriflar (davolash davomi va/yoki nazorat), bo'sh bo'lishi mumkin */
+    nextVisits: NextVisitChoice[];
+    /** Ishlatilgan materiallar — ombordan shu paytda ayiriladi */
+    materials: PendingMaterial[];
+    /** Majburiy talab bajarilmay yakunlangan bo'lsa: nima yetishmadi va sababi (qabul izohiga yoziladi) */
+    skip?: { missing: ('photo' | 'materials')[]; reason: string };
+}
+
 interface VisitWorkflowProps {
     services: Service[];
     categories: ServiceCategory[];
     doctors: any[];
-    /**
-     * nextVisits — tanlangan keyingi tashriflar (davolash davomi va/yoki nazorat), bo'sh bo'lishi mumkin.
-     * skip — majburiy talab bajarilmay yakunlangan bo'lsa: nima yetishmadi va sababi (qabul izohiga yoziladi).
-     */
-    onCompleteVisit: (procedures: ProcedureItem[], total: number, nextVisits: NextVisitChoice[], skip?: { missing: ('photo' | 'materials')[]; reason: string }) => Promise<void>;
+    onCompleteVisit: (procedures: ProcedureItem[], total: number, extra: VisitCompletion) => Promise<void>;
     onProceduresChange?: (procedures: ProcedureItem[]) => void;
     initialProcedures?: ProcedureItem[];
+    /** Ombor mahsulotlari — bo'sh bo'lsa material tanlash ko'rinmaydi */
+    inventoryItems?: InventoryItem[];
+    /** Qabulda tanlangan, hali ayirilmagan materiallar (sahifa yangilansa ham saqlanadi) */
+    initialMaterials?: PendingMaterial[];
+    onMaterialsChange?: (materials: PendingMaterial[]) => void;
     /** Qabulni yakunlash talablari (Sozlamalar → Xizmatlar). Bo'sh — hech narsa tekshirilmaydi */
     visitRequirements?: VisitRequirements;
     /** Bugun shu bemorga surat yuklanganmi / ombordan material yozilganmi */
     photoDone?: boolean;
     materialsDone?: boolean;
-    /** Talab qilinganini shu yerdan bajarish. Berilmasa — ruxsat yo'q */
+    /** Talab qilingan suratni shu yerdan yuklash. Berilmasa — ruxsat yo'q */
     onUploadPhoto?: () => void;
-    onAddMaterial?: () => void;
-    /** Omborda birorta mahsulot yo'q — materialni yozib bo'lmaydi */
-    materialsUnavailable?: boolean;
     /** Talab bajarilmasa ham sabab yozib yakunlash (klinika egasi) */
     canSkipRequirements?: boolean;
 }
@@ -49,12 +58,13 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     onCompleteVisit,
     onProceduresChange,
     initialProcedures = [],
+    inventoryItems = [],
+    initialMaterials = [],
+    onMaterialsChange,
     visitRequirements = {},
     photoDone = false,
     materialsDone = false,
     onUploadPhoto,
-    onAddMaterial,
-    materialsUnavailable = false,
     canSkipRequirements = false,
 }) => {
     const { t } = useLanguage();
@@ -68,6 +78,16 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
         }
     }, [initialProcedures]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Ishlatilgan materiallar: protsedura oynasida yoki shu yerda tanlanadi,
+    // ombordan faqat qabul yakunlanganda ayiriladi
+    const [materials, setMaterials] = useState<PendingMaterial[]>(initialMaterials);
+    useEffect(() => {
+        if (initialMaterials.length > 0 && materials.length === 0) setMaterials(initialMaterials);
+    }, [initialMaterials]);
+    const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
+    const updateMaterials = (next: PendingMaterial[]) => { setMaterials(next); onMaterialsChange?.(next); };
+    const canPickMaterials = inventoryItems.length > 0;
 
     // Keyingi tashrif — ikki mustaqil tanlov: "davolash davom etadi" (kunlar) va
     // "nazorat ko'rigi" (oylar). Masalan kanal davolash: 1 haftadan keyin davomi
@@ -133,7 +153,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     ));
     const reqRows = ([
         { key: 'photo' as const, icon: Camera, label: t('patients.details.visitReq.photo'), services: requiredBy('photo'), done: photoDone, action: onUploadPhoto, actionLabel: t('patients.details.visitReq.uploadPhoto'), unavailable: false },
-        { key: 'materials' as const, icon: Package, label: t('patients.details.visitReq.materials'), services: requiredBy('materials'), done: materialsDone, action: onAddMaterial, actionLabel: t('patients.details.visitReq.addMaterial'), unavailable: materialsUnavailable },
+        { key: 'materials' as const, icon: Package, label: t('patients.details.visitReq.materials'), services: requiredBy('materials'), done: materialsDone || materials.length > 0, action: () => setMaterialPickerOpen(true), actionLabel: t('patients.details.visitReq.addMaterial'), unavailable: !canPickMaterials },
     ]).filter(r => r.services.length > 0);
     const missing = reqRows.filter(r => !r.done).map(r => r.key);
     const blocked = missing.length > 0;
@@ -151,7 +171,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
 
         setIsSubmitting(true);
         try {
-            await onCompleteVisit(procedures, total, nextVisits, skip);
+            await onCompleteVisit(procedures, total, { nextVisits, materials, skip });
         } catch (error) {
             console.error("Error completing visit:", error);
         } finally {
@@ -210,6 +230,33 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                         </div>
                     ))}
                 </div>
+
+                {/* Ishlatilgan materiallar — ombordan yakunlashda ayiriladi */}
+                {canPickMaterials && (materials.length > 0 || materialPickerOpen || procedures.length > 0) && (
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                {t('patients.details.visitMaterials.title')}
+                                {materials.length > 0 && <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">{t('patients.details.visitMaterials.hint')}</span>}
+                            </p>
+                            {!materialPickerOpen && (
+                                <button type="button" onClick={() => setMaterialPickerOpen(true)} disabled={isSubmitting} className="text-sm font-semibold text-primary-600 hover:underline dark:text-primary-400 shrink-0">
+                                    {t('patients.details.visitMaterials.add')}
+                                </button>
+                            )}
+                        </div>
+                        {materials.length > 0 && (
+                            <MaterialList materials={materials} disabled={isSubmitting} onRemove={id => updateMaterials(materials.filter(m => m.itemId !== id))} />
+                        )}
+                        {materialPickerOpen && (
+                            <MaterialPicker
+                                items={inventoryItems}
+                                reserved={materials}
+                                onAdd={m => { updateMaterials(mergeMaterials(materials, [m])); setMaterialPickerOpen(false); }}
+                            />
+                        )}
+                    </div>
+                )}
 
                 {/* Total and Complete Button */}
                 {procedures.length > 0 && (
@@ -326,6 +373,9 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                 categories={categories}
                 onAddProcedures={handleAddProcedures}
                 onAddProcedure={handleAddProcedure}
+                inventoryItems={inventoryItems}
+                reservedMaterials={materials}
+                onAddMaterials={added => updateMaterials(mergeMaterials(materials, added))}
             />
         </>
     );

@@ -733,6 +733,18 @@ export interface ServiceRequirement {
 /** xizmat id → talab. Bo'sh — hech qanday talab yo'q (sukut bo'yicha) */
 export type VisitRequirements = Record<string, ServiceRequirement>;
 
+/**
+ * Qabulda ishlatilgan material — hali ombordan ayirilmagan. Protsedura bilan
+ * birga tanlanadi, ombordan esa faqat "Qabulni yakunlash" bosilganda ayiriladi
+ * (yakunlashdan oldin protsedura ro'yxatdan o'chirilishi mumkin).
+ */
+export interface PendingMaterial {
+  itemId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+}
+
 // Nazorat (qayta tashrif): protseduradan keyin N oydan so'ng bemorni chaqirish
 export interface Recall {
   id: string;

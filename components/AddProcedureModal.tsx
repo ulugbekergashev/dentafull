@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Plus, Trash2, ArrowRight, ChevronDown, X } from 'lucide-react';
 import { Modal, Button, Select, Input } from './Common';
 import { TeethChart } from './TeethChart';
-import { Service, ServiceCategory } from '../types';
+import { InventoryItem, PendingMaterial, Service, ServiceCategory } from '../types';
+import { MaterialList, MaterialPicker, mergeMaterials } from './MaterialPicker';
 import { useLanguage } from '../context/LanguageContext';
 
 interface ProcedureItem {
@@ -14,6 +15,58 @@ interface ProcedureItem {
     notes?: string;
 }
 
+/**
+ * Tish kartasi o'z o'lchamida chiziladi (tish kattaligi ekran kengligiga bog'liq).
+ * Bu oynada unga ajratilgan joy torroq — kartani shu joyga to'liq sig'adigan
+ * qilib kichraytiramiz. Ilgari qat'iy 52% edi va keng ekranda ham tishlar mayda
+ * ko'rinardi. Kattalashtirilmaydi (1 dan oshmaydi) — tishlar xiralashmasin.
+ */
+const FitChart: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const outerRef = useRef<HTMLDivElement>(null);
+    const innerRef = useRef<HTMLDivElement>(null);
+    const [fit, setFit] = useState<{ width: number; scale: number; height: number } | null>(null);
+
+    useLayoutEffect(() => {
+        const outer = outerRef.current;
+        const inner = innerRef.current;
+        if (!outer || !inner) return;
+        const padX = (el: HTMLElement) => { const st = getComputedStyle(el); return parseFloat(st.paddingLeft) + parseFloat(st.paddingRight); };
+        const measure = () => {
+            const scroller = inner.querySelector<HTMLElement>('[data-chart-scroll]');
+            const row = inner.querySelector<HTMLElement>('[data-chart-row]');
+            const first = row?.firstElementChild as HTMLElement | null;
+            const last = row?.lastElementChild as HTMLElement | null;
+            if (!scroller || !row || !first || !last) return;
+            // offset* o'lchamlari transform'dan qat'i nazar asl (masshtabsiz) qiymat
+            const teeth = last.offsetLeft + last.offsetWidth - first.offsetLeft;
+            const chrome = inner.offsetWidth - scroller.clientWidth + padX(scroller) + padX(row);
+            const natural = Math.ceil(teeth + chrome) + 2;
+            const available = outer.clientWidth;
+            const scale = Math.min(1, available / natural);
+            const width = scale < 1 ? natural : available;
+            const height = Math.ceil(inner.offsetHeight * scale);
+            setFit(prev => (prev && prev.width === width && Math.abs(prev.scale - scale) < 0.001 && prev.height === height ? prev : { width, scale, height }));
+        };
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(outer);
+        ro.observe(inner);
+        return () => ro.disconnect();
+    }, []);
+
+    return (
+        <div ref={outerRef} style={fit ? { height: fit.height } : undefined}>
+            <div
+                ref={innerRef}
+                className="origin-top-left"
+                style={fit ? { width: fit.width, transform: `scale(${fit.scale})` } : { visibility: 'hidden' }}
+            >
+                {children}
+            </div>
+        </div>
+    );
+};
+
 interface AddProcedureModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -21,6 +74,12 @@ interface AddProcedureModalProps {
     categories?: ServiceCategory[];
     onAddProcedure: (procedure: Omit<ProcedureItem, 'id'>) => void; // Legacy support
     onAddProcedures?: (procedures: Omit<ProcedureItem, 'id'>[]) => void; // New batch support
+    /** Ombordagi mahsulotlar. Bo'sh bo'lsa (klinika Ombor yuritmaydi) material bo'limi ko'rinmaydi */
+    inventoryItems?: InventoryItem[];
+    /** Tanlangan materiallar — qabulga qo'shiladi, ombordan yakunlashda ayiriladi */
+    onAddMaterials?: (materials: PendingMaterial[]) => void;
+    /** Qabulda allaqachon tanlangan materiallar — omborda qolgan miqdor hisobi uchun */
+    reservedMaterials?: PendingMaterial[];
 }
 
 export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
@@ -29,7 +88,10 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     services = [],
     categories = [],
     onAddProcedure,
-    onAddProcedures
+    onAddProcedures,
+    inventoryItems = [],
+    onAddMaterials,
+    reservedMaterials = [],
 }) => {
     const { t } = useLanguage();
 
@@ -48,6 +110,9 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     const [notes, setNotes] = useState<string>('');
     /** Xizmatlar ro'yxati ochiqmi. Yopiq holatda faqat tanlanganlar ko'rinadi. */
     const [servicesOpen, setServicesOpen] = useState(false);
+    // Ishlatilgan materiallar: protsedura bilan birga tanlanadi (ombordan hali ayirilmaydi)
+    const [matQueue, setMatQueue] = useState<PendingMaterial[]>([]);
+    const showMaterials = !!onAddMaterials && inventoryItems.length > 0;
 
     const toggleTooth = (tooth: number) => {
         setSelectedTeeth(prev => (prev.includes(tooth) ? prev.filter(n => n !== tooth) : [...prev, tooth].sort((a, b) => a - b)));
@@ -109,17 +174,20 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     };
 
     const handleSaveAll = () => {
-        if (queue.length === 0) {
+        if (queue.length === 0 && matQueue.length === 0) {
             alert(t('patients.details.alerts.listEmpty'));
             return;
         }
 
-        if (onAddProcedures) {
-            onAddProcedures(queue);
-        } else {
-            // Fallback for legacy
-            queue.forEach(p => onAddProcedure(p));
+        if (queue.length > 0) {
+            if (onAddProcedures) {
+                onAddProcedures(queue);
+            } else {
+                // Fallback for legacy
+                queue.forEach(p => onAddProcedure(p));
+            }
         }
+        if (matQueue.length > 0) onAddMaterials?.(matQueue);
 
         handleClose();
     };
@@ -131,6 +199,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
         setSelectedServiceIds([]);
         setPrices({});
         setNotes('');
+        setMatQueue([]);
         onClose();
     };
 
@@ -142,21 +211,21 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
         : t('patients.details.modals.common');
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title={t('patients.details.modals.addProcedureTitle')} className="max-w-6xl">
+        <Modal isOpen={isOpen} onClose={handleClose} title={t('patients.details.modals.addProcedureTitle')} className="max-w-6xl lg:max-w-[1400px] 2xl:max-w-[1680px]">
             <div className="flex flex-col lg:flex-row gap-6 min-h-[60vh] lg:h-[80vh]">
 
                 {/* Left Side: Teeth Chart */}
-                <div className="lg:w-1/2 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-hidden min-h-[400px]">
+                <div className="lg:w-3/5 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-hidden lg:min-h-[400px]">
                     <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2">
                         1. {t('patients.details.modals.stepSelectTooth')}
                     </h4>
-                    <div className="origin-top-left" style={{ transform: 'scale(0.52)', width: '192%' }}>
+                    <FitChart>
                         <TeethChart
                             initialData={[]}
                             onToothClick={toggleTooth}
                             selectedTeeth={selectedTeeth}
                         />
-                    </div>
+                    </FitChart>
                     <div className="mt-2 text-center">
                         <p className="text-sm text-gray-500 flex flex-wrap items-center justify-center gap-1.5">
                             <span>{t('patients.details.modals.selectedTooth')}</span>
@@ -178,7 +247,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                 </div>
 
                 {/* Right Side: Actions & Queue */}
-                <div className="lg:w-1/2 flex flex-col h-auto lg:h-full min-h-0">
+                <div className="lg:w-2/5 flex flex-col h-auto lg:h-full min-h-0">
 
                     {/* Input Area */}
                     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm mb-4 shrink-0 max-h-[46vh] overflow-y-auto">
@@ -288,6 +357,19 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                 <Plus className="w-4 h-4 mr-2" /> {t('patients.details.modals.addToList')}{itemsToAdd > 1 ? ` (${itemsToAdd})` : ''}
                             </Button>
                         </div>
+
+                        {showMaterials && (
+                            <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-3">
+                                    3. {t('patients.details.modals.stepMaterials')}
+                                </h4>
+                                <MaterialPicker
+                                    items={inventoryItems}
+                                    reserved={[...reservedMaterials, ...matQueue]}
+                                    onAdd={m => setMatQueue(prev => mergeMaterials(prev, [m]))}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* Queue List */}
@@ -300,7 +382,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                         </h4>
 
                         <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                            {queue.length === 0 ? (
+                            {queue.length === 0 && matQueue.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-gray-400 text-sm dashed border-2 border-gray-200 rounded-lg">
                                     <Plus className="w-8 h-8 mb-2 opacity-20" />
                                     <p>{t('patients.details.modals.nothingAdded')}</p>
@@ -332,6 +414,12 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                     </div>
                                 ))
                             )}
+                            {matQueue.length > 0 && (
+                                <div className="pt-2">
+                                    <p className="text-xs font-bold text-gray-500 uppercase mb-1.5">{t('patients.details.visitMaterials.title')}</p>
+                                    <MaterialList materials={matQueue} onRemove={id => setMatQueue(prev => prev.filter(m => m.itemId !== id))} />
+                                </div>
+                            )}
                         </div>
 
                         {/* Footer Actions */}
@@ -339,7 +427,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                             <Button variant="secondary" onClick={handleClose} className="flex-1">
                                 {t('common.cancel')}
                             </Button>
-                            <Button onClick={handleSaveAll} className="flex-[2]" disabled={queue.length === 0}>
+                            <Button onClick={handleSaveAll} className="flex-[2]" disabled={queue.length === 0 && matQueue.length === 0}>
                                 <ArrowRight className="w-4 h-4 mr-2" /> {t('patients.details.modals.saveAndFinish')}
                             </Button>
                         </div>
