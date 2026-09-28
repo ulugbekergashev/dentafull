@@ -680,6 +680,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                 {TABS.map(tab => (
                     <button
                         key={tab.id}
+                        data-tour={`msg-tab-${tab.id}`}
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id
                             ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
@@ -713,7 +714,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     </div>
 
                     {isTemplateFormOpen && (
-                        <Card className="p-6 space-y-4">
+                        <Card className="p-6 space-y-4" data-tour="msg-form">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">
                                     {editingTemplate ? 'Shablonni tahrirlash' : 'Yangi shablon'}
@@ -724,22 +725,25 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             </div>
                             <input
                                 type="text"
+                                data-tour="msg-form-name"
                                 placeholder={t('auto.Shablon nomi')}
                                 value={templateForm.name}
                                 onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))}
                                 className={inputCls}
                             />
-                            <textarea
-                                placeholder="Xabar matni. Masalan: Hurmatli {bemor_ismi}, qabulingiz {sana} kuni {vaqt} da."
-                                value={templateForm.text}
-                                onChange={e => setTemplateForm(f => ({ ...f, text: e.target.value }))}
-                                rows={4}
-                                className={inputCls}
-                            />
-                            <VarButtons onInsert={token => setTemplateForm(f => ({ ...f, text: f.text + token }))} />
+                            <div className="space-y-4" data-tour="msg-form-text">
+                                <textarea
+                                    placeholder="Xabar matni. Masalan: Hurmatli {bemor_ismi}, qabulingiz {sana} kuni {vaqt} da."
+                                    value={templateForm.text}
+                                    onChange={e => setTemplateForm(f => ({ ...f, text: e.target.value }))}
+                                    rows={4}
+                                    className={inputCls}
+                                />
+                                <VarButtons onInsert={token => setTemplateForm(f => ({ ...f, text: f.text + token }))} />
+                            </div>
                             <div className="flex justify-end gap-2 pt-2">
                                 <Button variant="secondary" onClick={() => { setIsTemplateFormOpen(false); setEditingTemplate(null); }}>{t('auto.Bekor')}</Button>
-                                <Button onClick={handleSaveTemplate} disabled={templateSaving || !templateForm.name.trim() || !templateForm.text.trim()}>
+                                <Button onClick={handleSaveTemplate} disabled={templateSaving || !templateForm.name.trim() || !templateForm.text.trim()} data-tour="msg-form-save">
                                     {templateSaving ? 'Saqlanmoqda...' : 'Saqlash'}
                                 </Button>
                             </div>

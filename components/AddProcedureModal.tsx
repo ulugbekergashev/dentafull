@@ -212,10 +212,10 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
 
     return (
         <Modal isOpen={isOpen} onClose={handleClose} title={t('patients.details.modals.addProcedureTitle')} className="max-w-6xl lg:max-w-[1400px] 2xl:max-w-[1680px]">
-            <div className="flex flex-col lg:flex-row gap-6 min-h-[60vh] lg:h-[80vh]">
+            <div className="flex flex-col lg:flex-row gap-6 min-h-[60vh] lg:h-[80vh]" data-tour="proc-modal">
 
                 {/* Left Side: Teeth Chart */}
-                <div className="lg:w-3/5 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-hidden lg:min-h-[400px]">
+                <div className="lg:w-3/5 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-hidden lg:min-h-[400px]" data-tour="proc-teeth">
                     <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2">
                         1. {t('patients.details.modals.stepSelectTooth')}
                     </h4>
@@ -270,7 +270,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                 </Select>
                             )}
 
-                            <div>
+                            <div data-tour="proc-service">
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     {t('patients.details.modals.service')}
                                     {selectedServiceIds.length > 0 && <span className="ml-1 text-primary-600">({selectedServiceIds.length})</span>}
@@ -353,7 +353,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                 />
                             </div>
 
-                            <Button onClick={addToQueue} className="w-full" disabled={selectedServiceIds.length === 0}>
+                            <Button onClick={addToQueue} className="w-full" disabled={selectedServiceIds.length === 0} data-tour="proc-add-list">
                                 <Plus className="w-4 h-4 mr-2" /> {t('patients.details.modals.addToList')}{itemsToAdd > 1 ? ` (${itemsToAdd})` : ''}
                             </Button>
                         </div>
@@ -389,7 +389,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                                 </div>
                             ) : (
                                 queue.map((item, idx) => (
-                                    <div key={idx} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3 rounded-lg flex justify-between items-center shadow-sm group">
+                                    <div key={idx} data-tour="proc-queue-item" className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3 rounded-lg flex justify-between items-center shadow-sm group">
                                         <div className="flex items-center gap-3">
                                             {item.toothNumber ? (
                                                 <span className="w-8 h-8 flex items-center justify-center bg-primary-100 text-primary-700 text-xs font-bold rounded-lg shrink-0">
@@ -427,7 +427,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                             <Button variant="secondary" onClick={handleClose} className="flex-1">
                                 {t('common.cancel')}
                             </Button>
-                            <Button onClick={handleSaveAll} className="flex-[2]" disabled={queue.length === 0 && matQueue.length === 0}>
+                            <Button onClick={handleSaveAll} className="flex-[2]" disabled={queue.length === 0 && matQueue.length === 0} data-tour="proc-save">
                                 <ArrowRight className="w-4 h-4 mr-2" /> {t('patients.details.modals.saveAndFinish')}
                             </Button>
                         </div>

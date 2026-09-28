@@ -739,8 +739,8 @@ export const Patients: React.FC<PatientsProps> = ({
 
       {/* Add Patient Modal */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title={t('auto.Yangi Bemor Qo\'shish')}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="space-y-4" data-tour="pat-form">
+          <div className="grid grid-cols-2 gap-4" data-tour="pat-form-name">
             <Input label={t('auto.Familiya')} name="lastName" value={formData.lastName} onChange={handleInputChange} required />
             <Input label={t('auto.Ism')} name="firstName" value={formData.firstName} onChange={handleInputChange} required />
           </div>
@@ -772,11 +772,11 @@ export const Patients: React.FC<PatientsProps> = ({
             <p className="text-[10px] text-gray-500">{t('auto.Bemorning pasportidagi 14 raqamli shaxsiy identifikatsiya raqami.')}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4" data-tour="pat-form-phone">
             <Input label={t('auto.Asosiy Telefon')} name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
             <Input label={t('auto.Qo\'shimcha Telefon')} name="secondaryPhone" value={formData.secondaryPhone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4" data-tour="pat-form-dob">
             <Input label={t('auto.Tug\'ilgan sana')} type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText={t("auto.Sanani qo'lda kiritish uchun maydonga bosing")} />
             <Input label={t('patients.modal.passport')} name="passport" value={formData.passport} onChange={handleInputChange} placeholder={t('auto.AA1234567')} />
           </div>
@@ -819,7 +819,7 @@ export const Patients: React.FC<PatientsProps> = ({
           </div>
 
           {userRole !== 'DOCTOR' && (
-            <div>
+            <div data-tour="pat-form-doctor">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.doctor')}</label>
               <select
                 name="doctorId"
@@ -876,7 +876,7 @@ export const Patients: React.FC<PatientsProps> = ({
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)} disabled={isSubmitting}>{t('auto.Bekor qilish')}</Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting} data-tour="pat-form-save">
               {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('auto.Saqlanmoqda...')}</> : t('auto.Saqlash')}
             </Button>
           </div>

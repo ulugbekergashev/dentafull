@@ -41,6 +41,8 @@ import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } fr
 import type { CashCloseInput } from './services/api';
 import { makePermChecker } from './utils/permissions';
 import { PermissionsProvider } from './context/PermissionsContext';
+import type { GuideContext } from './components/guide/guides';
+import type { GuideCenterProps } from './components/guide/GuideCenter';
 import { formatHeaderDate } from './utils/dateUtils';
 import { useTodaySync } from './hooks/useTodaySync';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
@@ -1223,12 +1225,33 @@ const AppContent: React.FC = () => {
   // Bemorlar ro'yxatini backend o'zi filtrlaydi, kalendar va bosh sahifa esa
   // to'liq ro'yxatni oladi — shuning uchun ularga bu bayroq uzatiladi.
   const seeAllPatientsForRole = perms.scopeAll();
-  // Qo'llanma — joriy sahifa bo'yicha. driver.js va uning uslubi faqat tugma bosilganda yuklanadi
+  // O'quv markazi (Qo'llanma): kod faqat tugma birinchi bosilganda yuklanadi
+  const [GuideCenter, setGuideCenter] = useState<React.ComponentType<GuideCenterProps> | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  // Tugmadagi "yangi" nuqtasi — O'quv markazi bir marta ochilguncha
+  const [guideSeen, setGuideSeen] = useState(() => {
+    try { return localStorage.getItem('denta_guide_seen_v1') === '1'; } catch { return true; }
+  });
+  const navKey = allowedModuleIds.join(',');
+  const canPayForRole = canTakePaymentForRole && (userRole !== UserRole.RECEPTIONIST || showFinanceForRole);
+  const guideCtx = useMemo<GuideContext>(() => ({
+    role: userRole === UserRole.DOCTOR ? 'doctor' : userRole === UserRole.RECEPTIONIST ? 'receptionist' : 'admin',
+    perms,
+    nav: navKey ? navKey.split(',') : [],
+    canBook,
+    canPay: canPayForRole,
+    userKey: `${clinicId}:${userRole}:${doctorId || userName}`,
+  }), [userRole, perms, navKey, canBook, canPayForRole, clinicId, doctorId, userName]);
   const openTour = () => {
     setIsSidebarOpen(false);
+    if (!guideSeen) {
+      setGuideSeen(true);
+      try { localStorage.setItem('denta_guide_seen_v1', '1'); } catch { /* shaxsiy rejim */ }
+    }
+    if (GuideCenter) { setGuideOpen(true); return; }
     // Yangi versiya chiqqach eski bo'lak topilmasa — sahifa yangilanadi, keyingi bosishda ochiladi
-    import('./components/tour').then(
-      m => m.startTour(location.pathname, t),
+    import('./components/guide/GuideCenter').then(
+      m => { setGuideCenter(() => m.default); setGuideOpen(true); },
       () => window.location.reload(),
     );
   };
@@ -1367,9 +1390,10 @@ const AppContent: React.FC = () => {
               data-tour="tour"
               title={t('tour.buttonHint')}
               aria-label={t('tour.button')}
-              className="p-2 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
+              className="relative p-2 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
             >
               <GraduationCap className="w-4 h-4" />
+              {!guideSeen && <GuideDot />}
             </button>
           )}
           <button
@@ -1624,10 +1648,11 @@ const AppContent: React.FC = () => {
                   data-tour="tour"
                   title={t('tour.buttonHint')}
                   aria-label={t('tour.button')}
-                  className="flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[13px] font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.97] transition-all"
+                  className="relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[13px] font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.97] transition-all"
                 >
                   <GraduationCap className="w-4 h-4" />
                   <span className="hidden xl:inline">{t('tour.button')}</span>
+                  {!guideSeen && <GuideDot />}
                 </button>
               )}
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
@@ -2132,10 +2157,20 @@ const AppContent: React.FC = () => {
 
       {/* Subscription Block Modal */}
       <SubscriptionBlockModal isOpen={isSubscriptionBlocked} />
+
+      {GuideCenter && guideOpen && <GuideCenter ctx={guideCtx} onClose={() => setGuideOpen(false)} />}
     </div>
     </PermissionsProvider>
   );
 };
+
+/** "Qo'llanma" tugmasidagi miltillovchi nuqta: O'quv markazi hali ochilmagan */
+const GuideDot: React.FC = () => (
+  <span className="absolute -top-1 -right-1 flex h-3 w-3" aria-hidden="true">
+    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-75" />
+    <span className="relative inline-flex h-3 w-3 rounded-full bg-violet-500 ring-2 ring-white dark:ring-gray-800" />
+  </span>
+);
 
 const App: React.FC = () => {
   return (

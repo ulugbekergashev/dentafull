@@ -233,21 +233,23 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={t("auto.💰 To'lov qo'shish")} className="max-w-lg">
-            <div className="space-y-4">
-                <div>
-                    <label className={labelCls}>{t('auto.Bemor *')}</label>
-                    <select value={form.patientId} onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))} className={inputCls}>
-                        <option value="">{t('auto.Bemorni tanlang...')}</option>
-                        {patients.map(p => <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>)}
-                    </select>
-                </div>
+            <div className="space-y-4" data-tour="pay-modal">
+                <div className="space-y-4" data-tour="pay-patient">
+                    <div>
+                        <label className={labelCls}>{t('auto.Bemor *')}</label>
+                        <select value={form.patientId} onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))} className={inputCls}>
+                            <option value="">{t('auto.Bemorni tanlang...')}</option>
+                            {patients.map(p => <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>)}
+                        </select>
+                    </div>
 
-                <div>
-                    <label className={labelCls}>{t('auto.Shifokor')}</label>
-                    <select value={form.doctorId} onChange={e => setForm(f => ({ ...f, doctorId: e.target.value }))} className={inputCls}>
-                        <option value="">{t('auto.Tanlanmagan (ixtiyoriy)')}</option>
-                        {doctors.map(d => <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>)}
-                    </select>
+                    <div>
+                        <label className={labelCls}>{t('auto.Shifokor')}</label>
+                        <select value={form.doctorId} onChange={e => setForm(f => ({ ...f, doctorId: e.target.value }))} className={inputCls}>
+                            <option value="">{t('auto.Tanlanmagan (ixtiyoriy)')}</option>
+                            {doctors.map(d => <option key={d.id} value={d.id}>{d.lastName} {d.firstName} — {d.specialty}</option>)}
+                        </select>
+                    </div>
                 </div>
 
                 {presetBreakdown ? (
@@ -265,7 +267,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                         ))}
                     </div>
                 ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-3" data-tour="pay-services">
                         {categories.length > 0 && (
                             <div>
                                 <label className={labelCls}>{t('auto.Kategoriya')}</label>
@@ -407,7 +409,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                 </div>}
 
                 {/* ── To'langan va qolgan qarz ── */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3" data-tour="pay-split">
                     <div>
                         <label className={labelCls}>{t("auto.To'lanayotgan Summa")}</label>
                         <input
@@ -451,7 +453,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                     <span className="text-gray-900 dark:text-white font-bold text-lg">{grandTotal.toLocaleString()} UZS</span>
                 </div>
 
-                <div>
+                <div data-tour="pay-method">
                     <label className={labelCls}>{t("auto.To'lov usuli")}</label>
                     <div className="flex gap-2 flex-wrap">
                         {[...INCOMING_PAYMENT_METHODS, 'Balance' as PaymentMethod].map(type => (
@@ -495,6 +497,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                 <div className="flex gap-2 pt-2">
                     <Button variant="secondary" className="flex-1" onClick={onClose}>{t('auto.Bekor')}</Button>
                     <button
+                        data-tour="pay-save"
                         disabled={saving || grandTotal <= 0 || !form.patientId || !!splitProblem}
                         onClick={handleSave}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm text-white bg-success hover:bg-success-700 disabled:bg-success/50 disabled:cursor-not-allowed transition-all"

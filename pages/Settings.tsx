@@ -797,6 +797,7 @@ export const Settings: React.FC<SettingsProps> = ({
                {tabs.map((item) => (
                   <button
                      key={item.id}
+                     data-tour={`set-tab-${item.id}`}
                      onClick={() => setActiveTab(item.id)}
                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-colors ${activeTab === item.id
                         ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
@@ -1125,7 +1126,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">{t('settings.services.title')}</h3>
                                  <p className="text-sm text-gray-500">{t('settings.services.subtitle')}</p>
                               </div>
-                              {canAddService && <Button size="sm" onClick={() => handleOpenServiceModal()}>{t('auto.Xizmat Qo\'shish')}</Button>}
+                              {canAddService && <Button size="sm" onClick={() => handleOpenServiceModal()} data-tour="svc-add">{t('auto.Xizmat Qo\'shish')}</Button>}
                            </div>
 
                            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
@@ -1864,8 +1865,10 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
 
          {/* Add/Edit Service Modal */}
          <Modal isOpen={isServiceModalOpen} onClose={() => setIsServiceModalOpen(false)} title={editingServiceId !== null ? t('settings.services.edit') : t('settings.services.addModal')}>
-            <form onSubmit={handleServiceSubmit} className="space-y-4">
-               <Input label={t('settings.services.thName')} value={serviceForm.name} onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} required />
+            <form onSubmit={handleServiceSubmit} className="space-y-4" data-tour="svc-form">
+               <div data-tour="svc-name">
+                  <Input label={t('settings.services.thName')} value={serviceForm.name} onChange={e => setServiceForm({ ...serviceForm, name: e.target.value })} required />
+               </div>
 
                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Kategoriya')}</label>
@@ -1878,13 +1881,13 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                      ]}
                   />
                </div>
-               <div className="grid grid-cols-2 gap-4">
+               <div className="grid grid-cols-2 gap-4" data-tour="svc-price">
                   <Input label={t('settings.services.thPrice')} type="number" value={serviceForm.price} onChange={e => setServiceForm({ ...serviceForm, price: e.target.value })} required />
                   <Input label={t('auto.Texniklar xarajati')} type="number" value={serviceForm.cost} onChange={e => setServiceForm({ ...serviceForm, cost: e.target.value })} placeholder="0" />
                </div>
                {/* Nazorat: shu xizmatdan keyin bemor necha oydan so'ng qayta kelishi kerak.
                    Shifokor qabulni yakunlaganda shu muddat o'zi taklif qilinadi. */}
-               <div>
+               <div data-tour="svc-recall">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('settings.services.thRecall')}</label>
                   <select
                      value={serviceForm.recallMonths}
@@ -1897,7 +1900,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                </div>
                {/* Qabulni yakunlash talablari: belgilansa shifokor shu xizmat bilan
                    qabulni rasm/material kiritmaguncha yakunlay olmaydi */}
-               <fieldset className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+               <fieldset className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2" data-tour="svc-req">
                   <legend className="px-1 text-sm font-medium text-gray-700 dark:text-gray-300">{t('settings.services.requirements')}</legend>
                   <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
                      <input type="checkbox" checked={serviceForm.reqPhoto} onChange={e => setServiceForm({ ...serviceForm, reqPhoto: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
@@ -1911,7 +1914,7 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                </fieldset>
                <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="secondary" onClick={() => setIsServiceModalOpen(false)}>{t('common.cancel')}</Button>
-                  <Button type="submit">{t('common.save')}</Button>
+                  <Button type="submit" data-tour="svc-save">{t('common.save')}</Button>
                </div>
             </form>
          </Modal>

@@ -662,6 +662,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             )}
             {perms.menu('calendar') && (
               <button
+                data-tour="quick-book"
                 onClick={() => (canBookHere ? onOpenBooking!() : navigate('/calendar'))}
                 className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
@@ -671,6 +672,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             )}
             {canTakePayment && (!isReceptionist || showFinance) && (
               <button
+                data-tour="quick-pay"
                 onClick={() => {
                   if (!onAddTransaction) return navigate('/finance');
                   setPayingAppointment(null);
