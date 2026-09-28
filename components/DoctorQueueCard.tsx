@@ -93,7 +93,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
     ].filter(Boolean).join(' · ') : '';
 
     return (
-        <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 xl:gap-7 p-6 rounded-[2rem] bg-white dark:bg-gray-800 border border-primary-100 dark:border-primary-900/40 shadow-sm">
+        <section className="flex flex-col gap-6 p-6 rounded-[2rem] bg-white dark:bg-gray-800 border border-primary-100 dark:border-primary-900/40 shadow-sm">
             <div className="flex flex-col gap-4 min-w-0">
                 <div className="flex items-end justify-between gap-4">
                     <div>
@@ -180,30 +180,36 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                 ))}
             </div>
 
-            <div className="flex flex-col gap-2.5 xl:pl-7 xl:border-l border-gray-100 dark:border-gray-700 min-w-0">
+            {/* Navbatdan keyin shu ustunning o'zida, ketma-ket: avval bugun keyinroq
+                keladiganlar, keyin bugun qabul qilinganlar */}
+            <div className="flex flex-col gap-2 pt-5 border-t border-gray-100 dark:border-gray-700 min-w-0">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('myQueue.later')}</span>
                 {later.length === 0 ? (
                     <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('myQueue.noLater')}</p>
                 ) : later.map(a => (
-                    <div key={a.id} className="flex items-center gap-3 py-2 border-b border-gray-50 dark:border-gray-700/50">
-                        <span className="w-12 shrink-0 text-sm font-black text-gray-900 dark:text-white">{a.time}</span>
-                        <span className="min-w-0 flex flex-col">
-                            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{a.patientName}</span>
-                            <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{serviceOf(a)}</span>
+                    <div key={a.id} className="flex items-center gap-3.5 px-4 py-2.5 rounded-2xl bg-gray-50 dark:bg-gray-900/40">
+                        <span className="w-12 shrink-0 text-sm font-black tabular-nums text-gray-900 dark:text-white">{a.time}</span>
+                        <span className="flex-1 min-w-0 truncate">
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">{a.patientName}</span>
+                            <span className="ml-2 text-[13px] text-gray-500 dark:text-gray-400">{serviceOf(a)}</span>
                         </span>
                     </div>
                 ))}
-                <span className="mt-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('myQueue.done')}</span>
+                <span className="mt-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('myQueue.done')}</span>
                 {done.length === 0 ? (
                     <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('myQueue.noDone')}</p>
                 ) : done.map(a => (
-                    <div key={a.id} className="flex items-center gap-3 py-1.5">
-                        <span className="w-12 shrink-0 text-sm font-bold text-gray-500 dark:text-gray-400">{a.time}</span>
-                        <span className="flex-1 min-w-0 text-sm text-gray-700 dark:text-gray-300 truncate">{a.patientName}</span>
+                    // Telefonda holat belgisi ism ostiga tushadi — yonida tursa ism bir necha harfgacha qisqarardi
+                    <div key={a.id} className="grid grid-cols-[3rem_minmax(0,1fr)] sm:grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1 px-4 py-2.5 rounded-2xl bg-gray-50 dark:bg-gray-900/40">
+                        <span className="text-sm font-bold tabular-nums text-gray-500 dark:text-gray-400">{a.time}</span>
+                        <span className="min-w-0 truncate">
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{a.patientName}</span>
+                            <span className="ml-2 text-[13px] text-gray-400 dark:text-gray-500">{serviceOf(a)}</span>
+                        </span>
                         {statusOf ? (
-                            <VisitStatusBadge status={statusOf(a)} className="shrink-0" />
+                            <VisitStatusBadge status={statusOf(a)} className="col-start-2 sm:col-start-auto justify-self-start" />
                         ) : (
-                            <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">{t('myQueue.completed')}</span>
+                            <span className="col-start-2 sm:col-start-auto justify-self-start text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">{t('myQueue.completed')}</span>
                         )}
                     </div>
                 ))}

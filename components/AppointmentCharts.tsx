@@ -97,7 +97,7 @@ export const TrendCharts: React.FC<TrendChartsProps> = ({ appointments: filtered
             </div>
           </div>
         </div>
-        <div className="h-72 w-full">
+        <div className="relative h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={trendData}>
               <defs>
