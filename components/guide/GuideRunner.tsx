@@ -17,7 +17,7 @@ import { AnimatePresence, motion, useAnimate, useReducedMotion } from 'motion/re
 import { ArrowLeft, ArrowRight, Check, Loader2, MousePointerClick, X } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { stepsFor, type Guide, type GuideContext } from './guides';
-import { type Box, boxOf, bringIntoView, findTarget, isTyping, isVisible, sameBox } from './dom';
+import { type Box, boxOf, bringIntoView, findTarget, isTyping, isVisible, rawBoxOf, sameBox } from './dom';
 
 /** Majburiy qadam elementi shuncha kutiladi (oyna ochilishi, ma'lumot yuklanishi) */
 const WAIT_REQUIRED = 7000;
@@ -166,7 +166,8 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         clickedAt.current = 0;
         if (el) bringIntoView(el, !reduced);
         moveUntil.current = performance.now() + 700;
-        setBox(el ? boxOf(el) : null);
+        // Hali scroll ortida bo'lsa — to'liq o'lchamidan boshlaymiz, kuzatuv ko'rinadigan qismga toraytiradi
+        setBox(el ? boxOf(el) ?? rawBoxOf(el) : null);
         setSkipped(prev => {
             if (!prev.has(index)) return prev;
             const next = new Set(prev);
@@ -245,8 +246,9 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                 }
                 if (el) {
                     lostAt = 0;
+                    // Butunlay scroll ortiga o'tib ketgan bo'lsa — oxirgi ko'ringan joyida qoladi
                     const b = boxOf(el);
-                    setBox(prev => (sameBox(prev, b) ? prev : b));
+                    if (b) setBox(prev => (sameBox(prev, b) ? prev : b));
                 } else if (!lostAt) {
                     lostAt = now;
                 } else if (now - lostAt > LOST_AFTER) {
