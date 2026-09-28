@@ -13,7 +13,11 @@ import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDobDDMMYYYY, calcAge, formatDateToISO } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
-import { buildWaivedTransaction } from '../utils/unpaid';
+import { buildWaivedTransaction, isAppointmentRecorded } from '../utils/unpaid';
+import { isConfirmedBooking, visitStatus, VisitStatusContext } from '../utils/visitStatus';
+import { VisitStatusBadge } from '../components/VisitStatusBadge';
+import { useDeskFlow } from '../hooks/useDeskFlow';
+import { minutesOf, nowHHMM } from '../utils/queue';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { tLabel } from '../i18n/labels';
 import { PaymentPart, balanceUsed, buildPaymentRecords, splitError } from '../utils/paymentSplit';
@@ -67,6 +71,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const { patientId: patientIdParam } = useParams<{ patientId: string }>();
    const patientId = patientIdProp || patientIdParam || null;
    const { t } = useLanguage();
+   // Tashrif holati bosh sahifa va kalendardagi bilan bir xil (utils/visitStatus):
+   // bemor hozir kabinetda bo'lsa, kartada ham "Kabinetda" ko'rinadi
+   const visitToday = formatDateToISO(new Date());
+   const visitFlow = useDeskFlow(currentClinic?.id || '', visitToday, !!currentClinic?.id);
 
    const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'appointments' | 'payments' | 'materials' | 'installments'>('overview');
    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -613,6 +621,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       const fullNameReverse = `${patient.firstName} ${patient.lastName}`;
       return t.patientName === fullName || t.patientName === fullNameReverse;
    });
+   const visitCtx: VisitStatusContext = { today: visitToday, nowMin: minutesOf(nowHHMM()), flowLog: visitFlow.entries, transactions: patientTransactions };
+   /**
+    * To'lov kutayotgan qabul — bosh sahifadagi "Kutilayotgan to'lovlar" qoidasi bilan:
+    * yakunlangan (yoki o'tgan kunda "Keldi"), kassada umuman yozuvi yo'q. Kassada
+    * qarz yozuvi bo'lsa, u pastdagi to'lovlar tarixida "To'lash" bilan yopiladi.
+    */
+   const awaitsPayment = (app: Appointment) => !!app && !!app.date
+      && (app.status === 'Completed' || (app.status === 'Checked-In' && app.date < visitToday))
+      && !isAppointmentRecorded(app, patientTransactions);
 
    const todayKey = formatDateToISO(new Date());
    const paymentSplitProblem = paymentData.service === 'Avans'
@@ -1531,7 +1548,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           </p>
                                        </div>
                                     </div>
-                                    <Badge status={app.status} />
+                                    <VisitStatusBadge status={visitStatus(app, visitCtx)} confirmed={isConfirmedBooking(app)} />
                                  </div>
                               ))
                            }
@@ -1587,7 +1604,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                              )}
                                           </td>
                                           <td className="p-4 text-gray-600 dark:text-gray-300 whitespace-nowrap">{app.doctorName}</td>
-                                          <td className="p-4"><Badge status={app.status} /></td>
+                                          <td className="p-4"><VisitStatusBadge status={visitStatus(app, visitCtx)} confirmed={isConfirmedBooking(app)} /></td>
                                        </tr>
                                     ))}
                               </tbody>
@@ -1621,11 +1638,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                  </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                 {patientAppointments.filter(app => {
-                                    if (!app || !app.date) return false;
-                                    const isPaid = (patientTransactions || []).some(t => t && t.date === app.date && (t.status === 'Paid' || t.status === 'paid'));
-                                    return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid;
-                                 }).map(app => {
+                                 {patientAppointments.filter(awaitsPayment).map(app => {
                                     const doctor = (doctors || []).find(d => d && d.id === app.doctorId);
                                     return (
                                        <tr key={app.id} className="hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10 transition-colors">
@@ -1635,7 +1648,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           </td>
                                           <td className="p-4 text-gray-600 dark:text-gray-300">{app.type}</td>
                                           <td className="p-4 text-gray-600 dark:text-gray-300 min-w-[200px]"><div className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-100 dark:border-gray-700 whitespace-pre-line">{app.notes || '-'}</div></td>
-                                          <td className="p-4"><Badge status="Pending" /></td>
+                                          <td className="p-4"><VisitStatusBadge status="awaitingPayment" /></td>
                                           <td className="p-4 flex gap-2 flex-wrap">
                                              {canPayCreate && (<>
                                              <Button size="sm" onClick={() => {
@@ -1695,7 +1708,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               </tbody>
                            </table>
                         </div>
-                        {patientAppointments.filter(app => { const isPaid = (patientTransactions || []).some(trans => trans && trans.date === app.date && trans.status === 'Paid'); return (app.status === 'Completed' || app.status === 'Checked-In') && !isPaid; }).length === 0 && <div className="p-8 text-center text-gray-500">{t('patients.details.payments.pendingEmpty')}</div>}
+                        {patientAppointments.filter(awaitsPayment).length === 0 && <div className="p-8 text-center text-gray-500">{t('patients.details.payments.pendingEmpty')}</div>}
                      </Card>
                      {/* Transaction History Section */}
                      <Card className="overflow-hidden">

@@ -36,6 +36,25 @@ export function isAppointmentRecorded(
     return transactions.some(tx => txMatchesAppointment(tx, appointment));
 }
 
+/** Tashrifning puli: to'langan, hali to'lanmagan yoki qarzga yozilgan */
+export type PaymentState = 'paid' | 'awaiting' | 'debt';
+
+/**
+ * Tashrif to'landimi — "Kutilayotgan to'lovlar" bilan aynan bir xil qoida:
+ * kassada yozuvi yo'q — to'lov kutilmoqda; ochiq (Pending/Overdue) yozuv bor —
+ * qarz belgisi bo'lsa qarz, bo'lmasa to'lov kutilmoqda; hammasi yopilgan — to'langan.
+ */
+export function appointmentPaymentState(
+    appointment: { date: string; patientId?: string; patientName: string },
+    transactions: Transaction[]
+): PaymentState {
+    const recorded = transactions.filter(tx => txMatchesAppointment(tx, appointment));
+    if (recorded.length === 0) return 'awaiting';
+    const open = recorded.filter(tx => tx.status === 'Pending' || tx.status === 'Overdue');
+    if (open.length === 0) return 'paid';
+    return open.some(isDebtTransaction) ? 'debt' : 'awaiting';
+}
+
 /** Ro'yxatdagi bitta qator — manbasidan qat'i nazar bir xil shaklda */
 export interface UnpaidRow {
     key: string;
@@ -81,6 +100,12 @@ export interface BuildUnpaidOptions {
     includeDebts?: boolean;
     /** Faqat shu sanadagi qatorlar (kassa sahifasi uchun) */
     date?: string;
+    /**
+     * Bugungi sana. Berilsa, bugun "Keldi" (Checked-In) qilingan qabul hali davom
+     * etyapti deb olinadi — pul u yakunlangandan keyin kutiladi. O'tgan kungi
+     * Checked-In esa avvalgidek "kelgan, to'lanmagan" hisoblanadi.
+     */
+    today?: string;
 }
 
 /**
@@ -93,7 +118,7 @@ export function buildUnpaidRows(
     services: Service[],
     options: BuildUnpaidOptions = {}
 ): UnpaidRow[] {
-    const { includeDebts = true, date } = options;
+    const { includeDebts = true, date, today } = options;
     const rows: UnpaidRow[] = [];
 
     if (includeDebts) {
@@ -118,6 +143,7 @@ export function buildUnpaidRows(
 
     for (const app of appointments) {
         if (app.status !== 'Completed' && app.status !== 'Checked-In') continue;
+        if (app.status === 'Checked-In' && today && app.date >= today) continue;
         if (date && app.date !== date) continue;
         // Kassada yozuv bor — qarz qatori uni allaqachon ifodalaydi
         if (isAppointmentRecorded(app, transactions)) continue;

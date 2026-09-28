@@ -23,6 +23,8 @@ export interface BookingRequest {
     /** Yangi bemor formasi shu ma'lumot bilan (lid) */
     newPatient?: { firstName?: string; lastName?: string; phone?: string; dob?: string; address?: string };
     mode?: Mode;
+    /** Shu shifokor tanlangan holda (shifokor bemorni hamkasbiga yo'naltirganda) */
+    doctorId?: string;
     notes?: string;
     /**
      * Bemor bilan hozir telefonda kelishildi (qo'ng'iroq ro'yxatidan). Qabul shu sanagacha
@@ -176,8 +178,9 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
             setType(services.some(s => s.name === moving.type) ? moving.type : '');
         } else {
             setMode(req.mode || 'now');
-            setDoctorTouched(!!own);
-            setDoctorId(own || bestId || activeDoctors[0]?.id || doctors[0]?.id || '');
+            const asked = req.doctorId && doctors.some(d => d.id === req.doctorId) ? req.doctorId : '';
+            setDoctorTouched(!!(asked || own));
+            setDoctorId(asked || own || bestId || activeDoctors[0]?.id || doctors[0]?.id || '');
             setDate(addDaysISO(today, 1));
             setDuration(30);
             setType('');

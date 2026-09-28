@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGroup, MotionConfig, motion } from 'motion/react';
-import { Armchair, ArrowRight, Check, ChevronRight, CircleCheckBig, Clock, Footprints, Loader2, Plus, Undo2, Wallet } from 'lucide-react';
+import { Armchair, ArrowRight, Check, ChevronRight, Clock, Footprints, Loader2, Plus, Undo2 } from 'lucide-react';
 import { Appointment, Doctor, FlowLog } from '../types';
 import { Card } from './Common';
 import { LiveTimer } from './LiveTimer';
@@ -8,12 +8,6 @@ import { useLanguage } from '../context/LanguageContext';
 import { formatDateToISO } from '../utils/dateUtils';
 import { buildClinicFlow, FlowLane, initialsOf, shortName, spreadPositions, visitMinutes } from '../utils/flow';
 import { minutesOf, waitMinutes } from '../utils/queue';
-
-/** Yakunlangan qabulning puli: "To'lov" tugmasi faqat pulni qabul qila oladigan xodimga beriladi */
-export interface FlowPayment {
-    state: 'paid' | 'unpaid' | 'debt';
-    pay?: () => void;
-}
 
 interface ClinicMapProps {
     appointments: Appointment[];
@@ -29,7 +23,6 @@ interface ClinicMapProps {
     onUndoEnter?: (a: Appointment) => void | Promise<void>;
     /** "Yakunlash" — qabul yakunlandi. Ruxsat bo'lmasa berilmaydi */
     onFinish?: (a: Appointment) => Promise<void>;
-    payment?: (a: Appointment) => FlowPayment;
     onOpenBooking?: () => void;
     onSeeAll?: () => void;
 }
@@ -40,7 +33,6 @@ const ROAD_WINDOW_MIN = 180;
 const ROAD_SLOT = 92;
 /** Kechikish shu daqiqadan oshsa ogohlantiriladi */
 const DELAY_WARN_MIN = 10;
-const PAID_VISIBLE = 8;
 const SPRING = { type: 'spring' as const, stiffness: 420, damping: 38, mass: 0.9 };
 // Pol naqshi (xarita ko'rinishi) — ikkala mavzuda ham yumshoq ko'rinadigan shaffof nuqtalar
 const FLOOR_WARM: React.CSSProperties = { backgroundImage: 'radial-gradient(rgba(217,119,6,0.14) 1px, transparent 1.4px)', backgroundSize: '16px 16px' };
@@ -122,7 +114,7 @@ const Name: React.FC<{ a: Appointment; onOpen?: (id: string) => void; className?
 };
 
 export const ClinicMap: React.FC<ClinicMapProps> = ({
-    appointments, doctors, flowLog, onPatientClick, onArrived, onEnter, onUndoEnter, onFinish, payment, onOpenBooking, onSeeAll,
+    appointments, doctors, flowLog, onPatientClick, onArrived, onEnter, onUndoEnter, onFinish, onOpenBooking, onSeeAll,
 }) => {
     const { t } = useLanguage();
     const now = useNow(30000);
@@ -169,8 +161,6 @@ export const ClinicMap: React.FC<ClinicMapProps> = ({
 
     const soon = flow.coming.filter(a => minutesOf(a.time) - nowMin <= ROAD_WINDOW_MIN);
     const seatsPerBench = xxl ? 5 : xl ? 4 : 3;
-    const doneUnpaid = flow.done.filter(a => (payment?.(a).state ?? 'paid') !== 'paid');
-    const donePaid = flow.done.filter(a => (payment?.(a).state ?? 'paid') === 'paid');
 
     // ── Kichik bo'laklar ──────────────────────────────────────────────
 
@@ -630,58 +620,6 @@ export const ClinicMap: React.FC<ClinicMapProps> = ({
         </div>
     );
 
-    // ── Qabul yakunlandi · kassa ──────────────────────────────────────
-
-    const exitStrip = (
-        <div className="mt-3 flex flex-wrap items-center gap-2.5 px-4 py-3 rounded-[20px] border-[1.5px] border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-950/20">
-            <div className="shrink-0 flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                <CircleCheckBig className="w-5 h-5" />
-                <div className="leading-tight">
-                    <p className="text-[10.5px] font-extrabold uppercase tracking-wider">{t('flow.doneTitle')}</p>
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400">{t('flow.doneToday').replace('{n}', String(flow.done.length))}</p>
-                </div>
-            </div>
-            <span aria-hidden="true" className="hidden sm:block w-px h-7 mx-1 bg-emerald-200/80 dark:bg-emerald-900/50" />
-            {flow.done.length === 0 && <span className="text-xs text-gray-500 dark:text-gray-400">{t('flow.doneEmpty')}</span>}
-            {doneUnpaid.map(a => {
-                const p = payment?.(a);
-                const debt = p?.state === 'debt';
-                return (
-                    <span key={a.id} className="inline-flex items-center gap-2 h-10 pl-1 pr-1 rounded-full border border-amber-200 dark:border-amber-800/60 bg-white dark:bg-gray-800">
-                        <Token a={a} size={30} color={debt ? '#EF4444' : '#F59E0B'} title={[a.patientName, a.doctorName, a.type].filter(Boolean).join(' — ')} />
-                        <Name a={a} onOpen={onPatientClick} short className="text-[12.5px] font-bold text-gray-900 dark:text-white whitespace-nowrap" />
-                        {p?.pay ? (
-                            <button
-                                type="button"
-                                onClick={p.pay}
-                                className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11.5px] font-extrabold transition-colors ${debt ? 'bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'}`}
-                            >
-                                <Wallet className="w-3.5 h-3.5" /> {debt ? t('flow.debt') : t('flow.pay')}
-                            </button>
-                        ) : (
-                            <span className={`px-2 text-[11px] font-bold ${debt ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'}`}>{debt ? t('flow.debt') : t('flow.payPending')}</span>
-                        )}
-                    </span>
-                );
-            })}
-            {donePaid.slice(0, PAID_VISIBLE).map(a => (
-                <Token key={a.id} a={a} size={30} variant="done" color="#10B981" title={t('flow.paidHint').replace('{name}', a.patientName)}>
-                    <span aria-hidden="true" className="absolute -right-1 -bottom-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-emerald-50 dark:border-gray-900 flex items-center justify-center">
-                        <Check className="w-2 h-2 text-white" strokeWidth={4} />
-                    </span>
-                </Token>
-            ))}
-            {donePaid.length > PAID_VISIBLE && (
-                <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">+{donePaid.length - PAID_VISIBLE}</span>
-            )}
-            {flow.done.length > 0 && (
-                <span className={`ml-auto text-xs font-bold whitespace-nowrap ${doneUnpaid.length ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                    {doneUnpaid.length ? t('flow.payWaiting').replace('{n}', String(doneUnpaid.length)) : t('flow.allPaid')}
-                </span>
-            )}
-        </div>
-    );
-
     const legend = (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-gray-500 dark:text-gray-400">
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full border-[1.5px] border-dashed border-slate-400" /><b className="font-extrabold text-gray-900 dark:text-white tabular-nums">{flow.counts.coming}</b> {t('flow.legend.coming')}</span>
@@ -725,7 +663,6 @@ export const ClinicMap: React.FC<ClinicMapProps> = ({
                             <>
                                 {wide ? roadDesktop : roadMobile}
                                 {wide ? mapDesktop : mapMobile}
-                                {exitStrip}
                             </>
                         )}
 

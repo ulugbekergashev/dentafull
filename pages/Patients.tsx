@@ -149,7 +149,8 @@ export const Patients: React.FC<PatientsProps> = ({
         const patientTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
         const hasUnpaid = patientAppts.some(app => {
           const hasTransaction = patientTxs.some(t => t.date === app.date);
-          return (app.status === 'Completed' || app.status === 'Checked-In') && !hasTransaction;
+          // Bugun "Keldi" qilingan qabul hali davom etyapti — pul yakunlangandan keyin kutiladi
+          return (app.status === 'Completed' || (app.status === 'Checked-In' && app.date < formatDateToISO(new Date()))) && !hasTransaction;
         });
         matchesStat = hasUnpaid;
       }
@@ -184,7 +185,7 @@ export const Patients: React.FC<PatientsProps> = ({
       const pTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
       return pAppts.some(app => {
         const hasTransaction = pTxs.some(t => t.date === app.date);
-        return (app.status === 'Completed' || app.status === 'Checked-In') && !hasTransaction;
+        return (app.status === 'Completed' || (app.status === 'Checked-In' && app.date < formatDateToISO(new Date()))) && !hasTransaction;
       });
     }).length;
 

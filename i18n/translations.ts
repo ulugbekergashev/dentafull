@@ -2477,8 +2477,8 @@ export const translations = {
     // Bosh sahifa — klinika xaritasi (yo'l, kutish zali, kabinetlar, chiqish)
     'flow.title': 'Bugun klinikada',
     'flow.live': 'JONLI',
-    'flow.legend.coming': 'keladi',
-    'flow.legend.waiting': 'kutmoqda',
+    'flow.legend.coming': 'yozilgan',
+    'flow.legend.waiting': 'navbatda',
     'flow.legend.inChair': 'kabinetda',
     'flow.legend.done': 'yakunlandi',
     'flow.road': "Yo'lda",
@@ -2528,6 +2528,27 @@ export const translations = {
     'flow.idle': "Bugun qabuli yo'q",
     'flow.calendar': 'Barcha qabullar — Kalendar',
     'flow.empty': "Bugun hali qabul yo'q. Yozilgan bemorlar shu yerda — yo'lda, kutish zalida va kabinetda ko'rinadi.",
+    // Tashrif holati — hamma joyda bir xil (utils/visitStatus)
+    'visit.status.booked': 'Yozilgan',
+    'visit.status.waiting': 'Navbatda',
+    'visit.status.inChair': 'Kabinetda',
+    'visit.status.awaitingPayment': "To'lov kutilmoqda",
+    'visit.status.paid': "To'landi",
+    'visit.status.debt': 'Qarz',
+    'visit.status.noShow': 'Kelmadi',
+    'visit.status.cancelled': 'Bekor qilindi',
+    'visit.confirmed': 'tasdiqlangan',
+    // Shifokorning bosh sahifasi — hamkasblar hozir
+    'colleagues.title': 'Hamkasblar hozir',
+    'colleagues.subtitle': "Kim bo'sh, kim band — bemorni yo'naltirish uchun",
+    'colleagues.inChair': 'Kabinetda · {m} daq',
+    'colleagues.free': "Bo'sh",
+    'colleagues.off': "Bugun qabul yo'q",
+    'colleagues.waiting': 'Navbatda {n} kishi',
+    'colleagues.next': 'Keyingi qabul {time}',
+    'colleagues.noNext': "Bugun boshqa qabul yo'q",
+    'colleagues.refer': "Yo'naltirish",
+    'colleagues.referHint': '{doctor} qabuliga yozish',
   },
   ru: {
     // DentaAI
@@ -4702,8 +4723,8 @@ export const translations = {
     // Главная — карта клиники (в пути, зал ожидания, кабинеты, выход)
     'flow.title': 'Сегодня в клинике',
     'flow.live': 'ОНЛАЙН',
-    'flow.legend.coming': 'придут',
-    'flow.legend.waiting': 'ждут',
+    'flow.legend.coming': 'записаны',
+    'flow.legend.waiting': 'в очереди',
     'flow.legend.inChair': 'в кабинете',
     'flow.legend.done': 'приняты',
     'flow.road': 'В пути',
@@ -4753,6 +4774,27 @@ export const translations = {
     'flow.idle': 'Сегодня без записей',
     'flow.calendar': 'Все записи — Календарь',
     'flow.empty': 'На сегодня записей пока нет. Записанные пациенты появятся здесь — в пути, в зале ожидания и в кабинете.',
+    // Статус визита — везде одинаковый (utils/visitStatus)
+    'visit.status.booked': 'Записан',
+    'visit.status.waiting': 'В очереди',
+    'visit.status.inChair': 'В кабинете',
+    'visit.status.awaitingPayment': 'Ждёт оплаты',
+    'visit.status.paid': 'Оплачен',
+    'visit.status.debt': 'Долг',
+    'visit.status.noShow': 'Не пришёл',
+    'visit.status.cancelled': 'Отменён',
+    'visit.confirmed': 'подтверждён',
+    // Главная врача — коллеги сейчас
+    'colleagues.title': 'Коллеги сейчас',
+    'colleagues.subtitle': 'Кто свободен, кто занят — чтобы направить пациента',
+    'colleagues.inChair': 'В кабинете · {m} мин',
+    'colleagues.free': 'Свободен',
+    'colleagues.off': 'Сегодня без записей',
+    'colleagues.waiting': 'В очереди: {n}',
+    'colleagues.next': 'Следующий приём {time}',
+    'colleagues.noNext': 'Больше записей сегодня нет',
+    'colleagues.refer': 'Направить',
+    'colleagues.referHint': 'Записать к {doctor}',
   }
 };
 

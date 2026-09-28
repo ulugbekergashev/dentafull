@@ -1,20 +1,28 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Button, Modal, Input, Select, Badge, SearchableSelect } from '../components/Common';
 import {
   ChevronLeft, ChevronRight, Plus, Clock, User, FileText,
   XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
   Search, CalendarDays
 } from 'lucide-react';
-import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
+import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory, Transaction } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { DateField, DateJumpInput, DatePopover, MonthGrid, formatDayMonth, monthName, weekdayName } from '../components/DateField';
 import { CalendarMonthView } from '../components/CalendarMonthView';
 import { formatDateToISO } from '../utils/dateUtils';
 import { usePerms } from '../context/PermissionsContext';
+import { useDeskFlow } from '../hooks/useDeskFlow';
+import { minutesOf, nowHHMM } from '../utils/queue';
+import { visitStatus, VisitStatus, VisitStatusContext, VISIT_STATUS_COLOR } from '../utils/visitStatus';
+
+/** Kun/hafta ko'rinishidagi rang izohi — tashrif holatlari */
+const CALENDAR_LEGEND: VisitStatus[] = ['booked', 'waiting', 'inChair', 'awaitingPayment', 'paid', 'debt', 'noShow'];
 
 interface CalendarProps {
   appointments: Appointment[];
+  /** Kassa yozuvlari — blok rangi (to'landi / to'lov kutilmoqda) shundan hisoblanadi */
+  transactions?: Transaction[];
   patients: Patient[];
   doctors: Doctor[];
   services: { name: string; price: number; duration: number }[];
@@ -35,9 +43,22 @@ interface CalendarProps {
 
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick
+  appointments, transactions = [], patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick
 }) => {
   const { t, language } = useLanguage();
+
+  // Blok rangi = tashrif holati (bosh sahifadagi bilan bir xil qoida — utils/visitStatus):
+  // kabinetda — ko'k, to'lov kutilmoqda — binafsha, to'landi — yashil. Blok joyi o'zgarmaydi.
+  const visitToday = formatDateToISO(new Date());
+  const deskFlow = useDeskFlow(currentClinic?.id || '', visitToday, !!currentClinic?.id);
+  const [nowMin, setNowMin] = useState(() => minutesOf(nowHHMM()));
+  useEffect(() => {
+    const id = setInterval(() => setNowMin(minutesOf(nowHHMM())), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const visitCtx: VisitStatusContext = useMemo(
+    () => ({ today: visitToday, nowMin, flowLog: deskFlow.entries, transactions }),
+    [visitToday, nowMin, deskFlow.entries, transactions]);
   const perms = usePerms();
   const canCreate = perms.can('calendar', 'appts', 'create');
   const canEdit = perms.can('calendar', 'appts', 'edit');
@@ -571,9 +592,18 @@ export const Calendar: React.FC<CalendarProps> = ({
         </div>
       </div>
 
-      {/* Doctor Color Legend */}
-      <div className="flex flex-wrap gap-4 px-1 py-1">
-        {doctors.filter(d => d.status === 'Active').map(doc => (
+      {/* Rang izohi: kun/hafta ko'rinishida blok rangi — holat; oyda — shifokor */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 py-1">
+        {view !== 'month' && CALENDAR_LEGEND.map(k => (
+          <div key={k} className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm" style={k === 'booked'
+              ? { border: `1.5px dashed ${VISIT_STATUS_COLOR[k]}` }
+              : { backgroundColor: `${VISIT_STATUS_COLOR[k]}26`, borderLeft: `3px solid ${VISIT_STATUS_COLOR[k]}` }} />
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{t(`visit.status.${k}` as any)}</span>
+          </div>
+        ))}
+        {view === 'week' && <span aria-hidden="true" className="w-px h-4 bg-gray-200 dark:bg-gray-700" />}
+        {view !== 'day' && doctors.filter(d => d.status === 'Active').map(doc => (
           <div key={doc.id} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: doc.color || '#3B82F6' }} />
             <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Dr. {doc.lastName}</span>
@@ -797,6 +827,10 @@ export const Calendar: React.FC<CalendarProps> = ({
 
                   const doctor = doctors.find(d => d.id === app.doctorId);
                   const doctorColor = doctor?.color || '#3B82F6';
+                  const vs = visitStatus(app, visitCtx);
+                  const statusColor = VISIT_STATUS_COLOR[vs];
+                  // Tasdiqlanmagan yozuv — punktir chiziq
+                  const unconfirmed = vs === 'booked' && app.status === 'Pending';
 
                   const statusColors = {
                     'Confirmed': 'border-current',
@@ -813,15 +847,15 @@ export const Calendar: React.FC<CalendarProps> = ({
                     <div
                       key={app.id}
                       onClick={() => setSelectedAppointment(app)}
-                      className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all z-10 ${isSpecialStatus ? statusColors : ''}`}
+                      className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all z-10 ${isSpecialStatus ? statusColors : unconfirmed ? 'border-dashed' : ''}`}
                       style={!isSpecialStatus ? {
                         top: `${topOffset}px`,
                         left: left,
                         width: width,
                         height: `${height - 4}px`,
-                        backgroundColor: `${doctorColor}15`,
-                        borderLeftColor: doctorColor,
-                        color: doctorColor,
+                        backgroundColor: `${statusColor}15`,
+                        borderLeftColor: statusColor,
+                        color: statusColor,
                       } : {
                         top: `${topOffset}px`,
                         left: left,
@@ -830,7 +864,10 @@ export const Calendar: React.FC<CalendarProps> = ({
                       }}
                     >
                       <div className="font-bold truncate pr-4 flex items-center justify-between">
-                        <span className="truncate">{app.patientName}</span>
+                        <span className="truncate flex items-center gap-1">
+                          {view === 'week' && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: doctorColor }} title={app.doctorName} />}
+                          <span className="truncate">{app.patientName}</span>
+                        </span>
                         {app.status === 'Completed' && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
                       </div>
                       {app.reminderSent && (
@@ -841,7 +878,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       <div className="truncate opacity-75">{app.type}</div>
                       {height > 40 && (
                         <div className="flex items-center mt-1 gap-1 text-[10px]">
-                          <div className="w-4 h-4 rounded-full bg-white/30 flex items-center justify-center text-[9px]">{app.doctorName[0]}</div>
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] text-white" style={{ backgroundColor: doctorColor }}>{app.doctorName[0]}</div>
                           {app.time}
                         </div>
                       )}

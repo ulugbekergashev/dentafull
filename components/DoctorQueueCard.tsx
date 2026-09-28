@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Armchair, ArrowRight } from 'lucide-react';
 import { Appointment, FlowLog, Patient } from '../types';
 import { LiveTimer } from './LiveTimer';
+import { VisitStatusBadge } from './VisitStatusBadge';
+import { VisitStatus } from '../utils/visitStatus';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDateToISO, calcAge } from '../utils/dateUtils';
 import { maskPhone } from '../utils/accessControl';
@@ -18,6 +20,11 @@ interface DoctorQueueCardProps {
     inChair?: FlowLog;
     /** "Kirish" — bemor kabinetga kirdi: resepshn xaritasida u kabinetga o'tadi */
     onEnter?: (appointment: Appointment) => void;
+    /**
+     * Tashrif holati (utils/visitStatus). Berilsa, "Bugun qabul qildim" ro'yxatida
+     * "Yakunlangan" o'rniga to'landimi yoki to'lov kutilmoqdami ko'rinadi.
+     */
+    statusOf?: (appointment: Appointment) => VisitStatus;
 }
 
 const WAIT_CHIP: Record<'normal' | 'warn' | 'late', string> = {
@@ -33,7 +40,7 @@ const WAIT_CHIP: Record<'normal' | 'warn' | 'late', string> = {
  * bemor ro'yxat boshida taymer bilan turadi. Qabul kartada yakunlanganda bemor
  * navbatdan chiqadi.
  */
-export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appointments, patients, showPhone = true, onPatientClick, inChair, onEnter }) => {
+export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appointments, patients, showPhone = true, onPatientClick, inChair, onEnter, statusOf }) => {
     const { t } = useLanguage();
     const [, setTick] = useState(0);
     useEffect(() => {
@@ -193,7 +200,11 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
                     <div key={a.id} className="flex items-center gap-3 py-1.5">
                         <span className="w-12 shrink-0 text-sm font-bold text-gray-500 dark:text-gray-400">{a.time}</span>
                         <span className="flex-1 min-w-0 text-sm text-gray-700 dark:text-gray-300 truncate">{a.patientName}</span>
-                        <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">{t('myQueue.completed')}</span>
+                        {statusOf ? (
+                            <VisitStatusBadge status={statusOf(a)} className="shrink-0" />
+                        ) : (
+                            <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">{t('myQueue.completed')}</span>
+                        )}
                     </div>
                 ))}
             </div>

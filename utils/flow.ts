@@ -1,5 +1,5 @@
 import { Appointment, Doctor, FlowLog } from '../types';
-import { isOpenAppointment, minutesOf } from './queue';
+import { hasArrived, isOpenAppointment, minutesOf } from './queue';
 
 /**
  * Bosh sahifa xaritasi — bugun klinikada kim qayerda.
@@ -78,8 +78,8 @@ export function buildClinicFlow(
             .filter(a => !!log[a.id])
             .sort((a, b) => Date.parse(log[b.id].in) - Date.parse(log[a.id].in));
         const chair = seated[0] || null;
-        const queue = open.filter(a => !log[a.id] && minutesOf(a.time) <= nowMin).sort(byTime);
-        const coming = open.filter(a => !log[a.id] && minutesOf(a.time) > nowMin).sort(byTime);
+        const queue = open.filter(a => !log[a.id] && hasArrived(a, nowMin)).sort(byTime);
+        const coming = open.filter(a => !log[a.id] && !hasArrived(a, nowMin)).sort(byTime);
         const done = mine.filter(a => a.status === 'Completed').sort((a, b) => byTime(b, a));
 
         if (!chair && queue.length === 0 && coming.length === 0 && done.length === 0) {

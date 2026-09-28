@@ -1201,7 +1201,19 @@ const AppContent: React.FC = () => {
   // Shifokor yo'q klinika Kalendar orqali yozadi (u yerda individual tarifda shifokor avtomatik yaratiladi).
   const canBook = (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST || userRole === UserRole.DOCTOR)
     && !!clinicId && perms.can('calendar', 'appts', 'create') && doctors.length > 0;
-  const openBooking = (opts?: BookingRequest) => setBookingFor(opts || {});
+  // Bemor ro'yxatda bo'lmasa (shifokor faqat o'z bemorlarini ko'radi) — avval yuklanadi,
+  // aks holda panel bemorsiz ochiladi. Masalan, shifokor kabinetidagi bemorni hamkasbiga yo'naltirganda.
+  const openBooking = (opts?: BookingRequest) => {
+    const id = opts?.patientId;
+    if (id && !patientsRef.current.some(p => p.id === id)) {
+      api.patients.getById(id)
+        .then(p => { setPatients(prev => (prev.some(x => x.id === p.id) ? prev : [p, ...prev])); })
+        .catch(() => { /* topilmasa panel bemorsiz ochiladi */ })
+        .finally(() => setBookingFor(opts || {}));
+      return;
+    }
+    setBookingFor(opts || {});
+  };
   // Bildirishnoma qatori bosiladigan bo'ladimi — shu rolga ochiq bo'limlar
   const allowedModuleIds = useMemo(() => visibleNavigation.map(n => n.id), [visibleNavigation]);
 
@@ -1878,6 +1890,7 @@ const AppContent: React.FC = () => {
                 <Route path="/calendar" element={
                   <Calendar
                     appointments={scopedAppointments}
+                    transactions={scopedTransactions}
                     patients={scopedPatients}
                     doctors={scopedDoctors}
                     services={services}

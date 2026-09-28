@@ -16,12 +16,15 @@ import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from 
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
 import { DoctorQueueCard } from '../components/DoctorQueueCard';
-import { ClinicMap, FlowPayment } from '../components/ClinicMap';
+import { ClinicMap } from '../components/ClinicMap';
+import { ColleaguesCard } from '../components/ColleaguesCard';
+import { VisitStatusBadge } from '../components/VisitStatusBadge';
 import { PeriodPicker, Period, PeriodKey, periodOf, formatPeriodRange } from '../components/PeriodPicker';
 import { DeskMoneyCard, DeskLabCard, DeskCallsCard, CallActions } from '../components/DeskCards';
 import { BookingRequest } from '../components/BookingPanel';
 import { buildCallList, callSummary, confirmDay, confirmProgress, labSummary } from '../utils/desk';
-import { minutesOf, nowHHMM } from '../utils/queue';
+import { isOpenAppointment, minutesOf, nowHHMM } from '../utils/queue';
+import { isConfirmedBooking, visitStatus, VisitStatusContext } from '../utils/visitStatus';
 import { useCallLog } from '../hooks/useCallLog';
 import { useDeskFlow } from '../hooks/useDeskFlow';
 import { prefillFromQuery } from '../utils/patientSearch';
@@ -230,7 +233,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     () => filteredAppointmentsByDoctor.filter(a => a.date >= unpaidWindow.from && a.date <= unpaidWindow.to),
     [filteredAppointmentsByDoctor, unpaidWindow.from, unpaidWindow.to]);
   const unpaidRows = useMemo(
-    () => buildUnpaidRows(unpaidAppointments, filteredTransactionsByDoctor, services),
+    () => buildUnpaidRows(unpaidAppointments, filteredTransactionsByDoctor, services, { today: formatDateToISO(new Date()) }),
     [unpaidAppointments, filteredTransactionsByDoctor, services]);
 
   /**
@@ -300,15 +303,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // Bugungi tasdiqlashda vaqti o'tgan qabul chiqmasligi uchun daqiqa sayin yangilanadi
   const [nowMin, setNowMin] = useState(() => minutesOf(nowHHMM()));
   useEffect(() => {
-    if (!isDesk) return;
+    if (!isDesk && !isDoctor) return;
     const id = setInterval(() => setNowMin(minutesOf(nowHHMM())), 60000);
     return () => clearInterval(id);
-  }, [isDesk]);
+  }, [isDesk, isDoctor]);
   const callLog = useCallLog(clinicId, localToday, isDesk);
   const logCall = callLog.apply;
   // Bosh sahifa xaritasi: kim kabinetda. Shifokor "Kirish" ni bosganda belgilanadi,
   // resepshn xaritada "Kirdi" orqali belgilaydi — qabulning holati o'zgarmaydi.
   const deskFlow = useDeskFlow(clinicId, localToday, isDesk || (isDoctor && !!doctorId));
+  // Tashrif holati — xarita, jadval va shifokor kartasida bitta qoida (utils/visitStatus).
+  // Kassa yozuvlari to'liq olinadi: to'langanmi — tashrifga tegishli, daromad taqsimotiga emas.
+  const visitCtx: VisitStatusContext = useMemo(() => {
+    const from = startDate < localToday ? startDate : localToday;
+    const to = endDate > localToday ? endDate : localToday;
+    const inRange = transactions.filter(tx => {
+      const d = String(tx.date || '').slice(0, 10);
+      return d >= from && d <= to;
+    });
+    return { today: localToday, nowMin, flowLog: deskFlow.entries, transactions: inRange };
+  }, [localToday, nowMin, deskFlow.entries, transactions, startDate, endDate]);
+  const statusOf = (a: Appointment) => visitStatus(a, visitCtx);
+  // Shifokor hamkasbiga yo'naltirganda — hozir kabinetidagi bemor tanlangan holda yoziladi
+  const myChairPatientId = useMemo(() => {
+    if (!isDoctor || !doctorId) return undefined;
+    const log = deskFlow.entries;
+    const seated = appointments
+      .filter(a => a.date === localToday && a.doctorId === doctorId && isOpenAppointment(a) && !!log[a.id])
+      .sort((a, b) => Date.parse(log[b.id].in) - Date.parse(log[a.id].in));
+    return seated[0]?.patientId;
+  }, [isDoctor, doctorId, appointments, localToday, deskFlow.entries]);
   const calls = useMemo(() => buildCallList({
     appointments, patients, recalls: dueRecalls, leads, today: localToday, nowMin,
     includeLeads: perms.menu('leads'), log: callLog.entries,
@@ -470,23 +494,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const openPaymentForRow = (row: UnpaidRow) => {
     if (row.source === 'debt' && row.transaction) openDebtPayment(row.transaction);
     else if (row.appointment) openPaymentForAppointment(row.appointment);
-  };
-
-  /**
-   * Xaritadagi "Qabul yakunlandi" qatori uchun: shu qabulning puli olinganmi.
-   * Manba "Kutilayotgan to'lovlar" bilan bir xil — ikkala joyda holat bir xil ko'rinadi,
-   * "To'lov" ham o'sha oynani ochadi.
-   */
-  const paymentFor = (a: Appointment): FlowPayment => {
-    const row = visibleUnpaid.find(r =>
-      (r.source === 'appointment' && r.appointment?.id === a.id)
-      || (r.source === 'debt' && r.date === a.date
-        && (r.patientId && a.patientId ? r.patientId === a.patientId : r.patientName === a.patientName)));
-    if (!row) return { state: 'paid' };
-    return {
-      state: row.source === 'debt' ? 'debt' : 'unpaid',
-      pay: canCollect && (onUpdateTransaction || onAddTransaction) ? () => openPaymentForRow(row) : undefined,
-    };
   };
 
   // "Yakunlash" xaritada — kalendardagi holat o'zgartirish bilan bir xil
@@ -691,7 +698,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             onEnter={a => deskFlow.set(a.id, true)}
             onUndoEnter={a => deskFlow.set(a.id, false)}
             onFinish={canMoveAppt ? finishAppointment : undefined}
-            payment={paymentFor}
             onOpenBooking={canBookHere ? () => onOpenBooking!() : undefined}
             onSeeAll={perms.menu('calendar') ? () => navigate('/calendar') : undefined}
           />
@@ -733,15 +739,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </>
       )}
       {isDoctor && doctorId && (
-        <DoctorQueueCard
-          doctorId={doctorId}
-          appointments={appointments}
-          patients={patients}
-          showPhone={showPatientPhone}
-          onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
-          inChair={deskFlow.entries}
-          onEnter={a => { void deskFlow.set(a.id, true); }}
-        />
+        <>
+          <DoctorQueueCard
+            doctorId={doctorId}
+            appointments={appointments}
+            patients={patients}
+            showPhone={showPatientPhone}
+            onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+            inChair={deskFlow.entries}
+            onEnter={a => { void deskFlow.set(a.id, true); }}
+            statusOf={statusOf}
+          />
+          {/* Hamkasblar hozir — yo'naltirish boshqa kunga yoziladi: bazada bir bemorga bir kunda bitta qabul */}
+          <ColleaguesCard
+            selfId={doctorId}
+            doctors={doctors}
+            appointments={appointments}
+            flowLog={deskFlow.entries}
+            today={localToday}
+            nowMin={nowMin}
+            onRefer={canBookHere ? d => onOpenBooking!({ patientId: myChairPatientId, doctorId: d.id, mode: 'day' }) : undefined}
+          />
+        </>
       )}
 
       {/* UMUMIY */}
@@ -835,7 +854,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                         <span className="text-sm text-gray-500 dark:text-gray-400">{app.type}</span>
                       </td>
                       <td className="py-3.5 pr-4">
-                        <Badge status={app.status} />
+                        <VisitStatusBadge status={statusOf(app)} confirmed={isConfirmedBooking(app)} />
                       </td>
                       <td className="py-3.5 pr-4">
                         <div className="flex items-center gap-1.5">
@@ -857,11 +876,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                       <td className="py-3.5">
                         {app.status !== 'Completed' && app.status !== 'Cancelled' && onUpdateAppointment && (
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {/* "Keldi" — faqat bugungi qabulga; o'tgan kunni "keldi" deb bo'lmaydi */}
-                            {app.status !== 'Checked-In' && app.date === localToday && (
+                            {/* "Keldi" — xaritadagi bilan bir xil: faqat bugun hali yo'ldagi (yozilgan) bemorga */}
+                            {canMoveAppt && app.date === localToday && statusOf(app) === 'booked' && (
                               <button
-                                onClick={() => onUpdateAppointment(app.id, { status: 'Checked-In' })}
-                                title="Keldi — tasdiqlash"
+                                onClick={() => { void arriveNow(app); }}
+                                title={t('desk.arrivedHint')}
                                 className="flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold rounded-lg transition-colors"
                               >
                                 <UserCheck className="w-3 h-3" /> {t('auto.Keldi')}
@@ -1075,151 +1094,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       {isDoctor && (<>
         <TrendCharts appointments={filteredAppointments} transactions={filteredTransactions} showFinance={showFinance} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-6">
-          <Card className="p-8 lg:col-span-2 rounded-[2rem]">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xl font-black text-gray-900 dark:text-white">{t('auto.So\'nggi')} <span className="text-primary">{t('auto.Qabullar')}</span></h3>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-gray-800">
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDateTime')}</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colPatient')}</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colDoctor')}</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colService')}</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('dashboard.colStatus')}</th>
-                    <th className="pb-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t('auto.Baho')}</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm">
-                  {filteredAppointments.slice(0, 5).map(app => (
-                    <tr key={app.id} className="border-b border-gray-50 dark:border-gray-800 last:border-0">
-                      <td className="py-4 font-medium text-gray-900 dark:text-white">{app.date} {app.time}</td>
-                      <td className="py-4 text-gray-600 dark:text-gray-300">{app.patientName}</td>
-                      <td className="py-4 text-gray-500">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: doctors.find(d => d.id === app.doctorId)?.color || '#3B82F6' }} />
-                          {app.doctorName}
-                        </div>
-                      </td>
-                      <td className="py-4 text-gray-500">{app.type}</td>
-                      <td className="py-4"><Badge status={app.status} /></td>
-                      <td className="py-4">
-                        {app.review ? (
-                          <div className="flex items-center gap-0.5 text-yellow-500">
-                            {[...Array(5)].map((_, i) => (
-                              <Star key={i} className={`w-3 h-3 ${i < app.review.rating ? 'fill-current' : 'text-gray-200'}`} />
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">{t('auto.Baholanmagan')}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredAppointments.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center py-4 text-gray-500">{t('auto.Qabullar topilmadi')}</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          <Card className="p-8 rounded-[2rem]">
-            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-8">{t('dashboard.recentAppointments')}</h3>
-            <div className="space-y-8 relative before:absolute before:inset-0 before:left-4 before:h-full before:w-0.5 before:bg-gray-100 dark:before:bg-gray-700">
-              {(() => {
-                // Combine recent activities from all sources
-                const activities: Array<{ type: string; text: string; time: Date; icon: any; color: string }> = [];
-
-                // Recent patients (last 5)
-                patients.slice(-5).reverse().forEach(patient => {
-                  const createdDate = new Date(patient.lastVisit);
-                  activities.push({
-                    type: 'patient',
-                    text: `Yangi bemor ro'yxatga olindi: ${patient.lastName} ${patient.firstName}`,
-                    time: createdDate,
-                    icon: Users,
-                    color: 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
-                  });
-                });
-
-                // Recent transactions (last 5) — moliya yashirilgan rolga ko'rsatilmaydi
-                if (showFinance) filteredTransactions.slice(-5).reverse().forEach(tx => {
-                  const txDate = new Date(tx.date);
-                  activities.push({
-                    type: 'transaction',
-                    text: `To'lov qabul qilindi: ${tx.amount.toLocaleString()} UZS - ${tx.service}`,
-                    time: txDate,
-                    icon: DollarSign,
-                    color: 'bg-success-100 text-success-600 dark:bg-success-900/30 dark:text-success'
-                  });
-                });
-
-                // Recent completed appointments (last 5)
-                filteredAppointments
-                  .filter(a => a.status === 'Completed')
-                  .slice(-5)
-                  .reverse()
-                  .forEach(appt => {
-                    const apptDate = new Date(`${appt.date} ${appt.time}`);
-                    activities.push({
-                      type: 'appointment',
-                      text: `${appt.doctorName} ${appt.type} yakunladi`,
-                      time: apptDate,
-                      icon: CheckCircle,
-                      color: 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
-                    });
-                  });
-
-                // Sort by time (most recent first) and take top 5
-                const sortedActivities = activities
-                  .sort((a, b) => b.time.getTime() - a.time.getTime())
-                  .slice(0, 5);
-
-                // Helper function to format time ago
-                const getTimeAgo = (date: Date) => {
-                  if (!date || isNaN(date.getTime())) return t('dashboard.recently');
-                  const now = new Date();
-                  const diffMs = now.getTime() - date.getTime();
-                  if (diffMs < 0) return t('dashboard.justNow'); // Handle future dates gracefully
-                  const diffMins = Math.floor(diffMs / 60000);
-                  const diffHours = Math.floor(diffMs / 3600000);
-                  const diffDays = Math.floor(diffMs / 86400000);
-
-                  if (diffMins < 1) return t('dashboard.justNow');
-                  if (diffMins < 60) return `${diffMins} daq oldin`;
-                  if (diffHours < 24) return `${diffHours} soat oldin`;
-                  return `${diffDays} kun oldin`;
-                };
-
-                if (sortedActivities.length === 0) {
-                  return (
-                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                      {t('auto.Hozircha faoliyat yo\'q')}
-                    </div>
-                  );
-                }
-
-                return sortedActivities.map((item, i) => (
-                  <div key={i} className="flex gap-4 relative z-10">
-                    <div className={`mt-0.5 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${item.color} border-4 border-white dark:border-gray-800 shadow-sm transition-transform hover:scale-110`}>
-                      <item.icon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{item.text}</p>
-                      <p className="text-xs text-gray-500">{getTimeAgo(item.time)}</p>
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div >
-          </Card >
-        </div >
+        {/* "So'nggi qabullar" va "So'nggi faoliyat" olib tashlandi: ular tepadagi davr jadvalini
+            takrorlardi (xom status bilan), faoliyatda esa qarz yozuvi ham "to'lov qabul qilindi"
+            bo'lib ko'rinardi. Tashrif holati endi bitta joyda — jadval va shifokor kartasida. */}
 
         <IntensityChart appointments={appointments} />
       </>)}

@@ -28,17 +28,25 @@ export const minutesOf = (hhmm?: string): number => {
 
 const byTime = (a: Appointment, b: Appointment) => minutesOf(a.time) - minutesOf(b.time);
 
+/**
+ * Bemor kelganmi (navbatda): vaqti kelgan yoki "Keldi" deb belgilangan (Checked-In —
+ * kalendarda holatni qo'lda o'zgartirganda shunday bo'ladi). Xarita, shifokor navbati
+ * va jadval shu bitta qoida bilan hisoblaydi.
+ */
+export const hasArrived = (a: Pick<Appointment, 'status' | 'time'>, nowMin: number): boolean =>
+    a.status === 'Checked-In' || minutesOf(a.time) <= nowMin;
+
 /** Shifokorning hozirgi navbati — vaqti kelgan, yakunlanmagan bugungi qabullar */
 export function doctorQueue(appointments: Appointment[], doctorId: string, today: string, nowMin: number): Appointment[] {
     return appointments
-        .filter(a => a.date === today && a.doctorId === doctorId && isOpenAppointment(a) && minutesOf(a.time) <= nowMin)
+        .filter(a => a.date === today && a.doctorId === doctorId && isOpenAppointment(a) && hasArrived(a, nowMin))
         .sort(byTime);
 }
 
 /** Bugun keyinroqqa yozilganlar — hali vaqti kelmagan */
 export function doctorLater(appointments: Appointment[], doctorId: string, today: string, nowMin: number): Appointment[] {
     return appointments
-        .filter(a => a.date === today && a.doctorId === doctorId && isOpenAppointment(a) && minutesOf(a.time) > nowMin)
+        .filter(a => a.date === today && a.doctorId === doctorId && isOpenAppointment(a) && !hasArrived(a, nowMin))
         .sort(byTime);
 }
 
@@ -73,7 +81,7 @@ export function planArrival(appointments: Appointment[], patientId: string, toda
     const existing = appointments.find(a => a.patientId === patientId && a.date === today && a.status !== 'Cancelled');
     if (!existing) return { kind: 'create' };
     if (existing.status === 'Completed') return { kind: 'already-done', appointment: existing };
-    if (isOpenAppointment(existing) && minutesOf(existing.time) <= nowMin) return { kind: 'already-waiting', appointment: existing };
+    if (isOpenAppointment(existing) && hasArrived(existing, nowMin)) return { kind: 'already-waiting', appointment: existing };
     // Keyinroqqa yozilgan va erta keldi, yoki "Kelmadi" deb belgilangan edi — hozirga ko'chadi
     return { kind: 'move', appointment: existing };
 }
