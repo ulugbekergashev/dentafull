@@ -676,7 +676,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             </div>
 
             {/* Tabs */}
-            <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1.5">
+            <div data-tour="msg-tabs" className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1.5">
                 {TABS.map(tab => (
                     <button
                         key={tab.id}
@@ -695,14 +695,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             {activeTab === 'templates' && canAutomation && (
                 <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex flex-wrap gap-1.5">
+                        <div data-tour="msg-vars" className="flex flex-wrap gap-1.5">
                             {TEMPLATE_VARS.map(v => (
                                 <span key={v.token} className="px-2 py-0.5 text-xs font-mono text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-md bg-white dark:bg-gray-800">
                                     {v.token}
                                 </span>
                             ))}
                         </div>
-                        <Button onClick={() => openTemplateForm()}>
+                        <Button onClick={() => openTemplateForm()} data-tour="msg-new">
                             <Plus className="w-4 h-4 mr-1" /> {t('auto.Yangi shablon')}
                         </Button>
                     </div>
@@ -746,7 +746,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                         </Card>
                     )}
 
-                    <div className="space-y-3">
+                    <div className="space-y-3" data-tour={templates.length > 0 ? 'msg-templates' : undefined}>
                         {templates.map(tpl => {
                             const badge = eskizStatusBadge(tpl.eskizStatus);
                             return (

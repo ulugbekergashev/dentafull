@@ -48,7 +48,7 @@ export const ColleaguesCard: React.FC<ColleaguesCardProps> = ({ selfId, doctors,
     });
 
     return (
-        <section aria-labelledby="colleagues-title" className="p-5 sm:p-6 rounded-[2rem] bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm">
+        <section aria-labelledby="colleagues-title" data-tour="colleagues" className="p-5 sm:p-6 rounded-[2rem] bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h2 id="colleagues-title" className="text-lg font-black text-gray-900 dark:text-white">{t('colleagues.title')}</h2>
                 <span className="text-xs text-gray-500 dark:text-gray-400">{t('colleagues.subtitle')}</span>

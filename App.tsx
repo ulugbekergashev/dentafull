@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -1223,6 +1223,15 @@ const AppContent: React.FC = () => {
   // Bemorlar ro'yxatini backend o'zi filtrlaydi, kalendar va bosh sahifa esa
   // to'liq ro'yxatni oladi — shuning uchun ularga bu bayroq uzatiladi.
   const seeAllPatientsForRole = perms.scopeAll();
+  // Qo'llanma — joriy sahifa bo'yicha. driver.js va uning uslubi faqat tugma bosilganda yuklanadi
+  const openTour = () => {
+    setIsSidebarOpen(false);
+    // Yangi versiya chiqqach eski bo'lak topilmasa — sahifa yangilanadi, keyingi bosishda ochiladi
+    import('./components/tour').then(
+      m => m.startTour(location.pathname, t),
+      () => window.location.reload(),
+    );
+  };
 
   // --- Main Render ---
   // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
@@ -1351,9 +1360,22 @@ const AppContent: React.FC = () => {
             Boshqaruv panelidagi tab esa olib tashlandi. Bunisiz telefondan
             ishlaydigan shifokor AI ga umuman kira olmasdi. */}
         <div className="flex items-center gap-2">
+          {isStaffRole && (
+            <button
+              type="button"
+              onClick={openTour}
+              data-tour="tour"
+              title={t('tour.buttonHint')}
+              aria-label={t('tour.button')}
+              className="p-2 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
+            >
+              <GraduationCap className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
             aria-label="DentaAI"
+            data-tour="ai"
             className="flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-xl
                        text-white font-bold text-[12.5px] tracking-wide
                        bg-gradient-to-br from-violet-500 to-indigo-600 shadow-sm active:scale-95 transition-transform"
@@ -1363,7 +1385,7 @@ const AppContent: React.FC = () => {
           </button>
           {/* Telefondan ishlaydigan shifokor/resepshn ham qo'ng'iroqni ko'rsin */}
           {isStaffRole && <NotificationBell allowedModules={allowedModuleIds} />}
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600 dark:text-gray-300">
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} data-tour="menu" className="p-2 text-gray-600 dark:text-gray-300">
             {isSidebarOpen ? <X /> : <Menu />}
           </button>
         </div>
@@ -1497,7 +1519,7 @@ const AppContent: React.FC = () => {
                 to'ldirib yuborgandi: sana ikki qatorga sinib, bo'limlar
                 qatori gorizontal siljib qolgandi. */}
             <div className="flex-1 min-w-0 flex justify-center">
-              <div className="relative group w-full max-w-[440px]">
+              <div className="relative group w-full max-w-[440px]" data-tour="search">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                 <input
                   type="text"
@@ -1594,6 +1616,20 @@ const AppContent: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 xl:gap-3 shrink-0">
+              {/* Qo'llanma — DentaAI oldida: joriy sahifani qadamma-qadam ko'rsatadi */}
+              {isStaffRole && (
+                <button
+                  type="button"
+                  onClick={openTour}
+                  data-tour="tour"
+                  title={t('tour.buttonHint')}
+                  aria-label={t('tour.button')}
+                  className="flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[13px] font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.97] transition-all"
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  <span className="hidden xl:inline">{t('tour.button')}</span>
+                </button>
+              )}
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
                   Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
                   lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
@@ -1601,6 +1637,7 @@ const AppContent: React.FC = () => {
                 onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
                 title={t('auto.DentaAI — Ctrl+Shift+Space yoki F2 (ovoz bilan)')}
                 aria-label="DentaAI"
+                data-tour="ai"
                 className="group relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl
                            text-white font-bold text-[13px] tracking-wide
                            bg-gradient-to-br from-violet-500 to-indigo-600
@@ -1630,7 +1667,7 @@ const AppContent: React.FC = () => {
               {isStaffRole && <NotificationBell allowedModules={allowedModuleIds} />}
 
               {/* Language Switcher - Pill Toggle */}
-              <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 rounded-full p-0.5 gap-0.5 border border-gray-200 dark:border-gray-600">
+              <div data-tour="lang" className="flex items-center bg-gray-100 dark:bg-gray-700/60 rounded-full p-0.5 gap-0.5 border border-gray-200 dark:border-gray-600">
                 {(['uz', 'ru'] as const).map((lang) => (
                   <button
                     key={lang}
@@ -1684,7 +1721,7 @@ const AppContent: React.FC = () => {
                 atigi 12–56px zapas bor — 1px shrift ~60px qo'shadi va sig'maydi.
                 Uni sig'dirish uchun oraliqni qisqartirish kerak bo'lardi, bu esa
                 "yopishib turgan" holatni qaytarardi. */}
-            <div className="h-12 flex items-center gap-0 min-[1520px]:gap-0.5 min-[1600px]:gap-1 min-[1700px]:gap-2 overflow-x-auto no-scrollbar">
+            <div data-tour="nav" className="h-12 flex items-center gap-0 min-[1520px]:gap-0.5 min-[1600px]:gap-1 min-[1700px]:gap-2 overflow-x-auto no-scrollbar">
               {visibleNavigation.map((item) => {
                 const to = (item as any).to || (item.id === 'dashboard' ? '/' : `/${item.id}`);
                 // `?tab=` li havolalarda NavLink faol holatni o'zi aniqlay

@@ -372,6 +372,7 @@ export const Patients: React.FC<PatientsProps> = ({
           
           {canAdd && (
             <Button 
+              data-tour="pat-add"
               className="flex-1 lg:flex-none justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white shadow-lg shadow-primary-500/25 transition-all active:scale-95 py-2.5 border-none"
               onClick={() => {
                 setFormData((prev) => ({ ...prev, branchId: activeBranchId || '' }));
@@ -386,7 +387,7 @@ export const Patients: React.FC<PatientsProps> = ({
       </div>
 
       {/* Stats Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div data-tour="pat-stats" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
           label={t('patients.stats.total')} value={stats.total} icon={UsersIcon} color="primary"
           active={activeStatFilter === null} subtitle={t('patients.stats.allTime')}
@@ -411,7 +412,7 @@ export const Patients: React.FC<PatientsProps> = ({
 
       {/* Search + Filter toggle row */}
       <Card className="p-4 space-y-3">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div data-tour="pat-search" className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
             <input
@@ -573,7 +574,8 @@ export const Patients: React.FC<PatientsProps> = ({
                   className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group"
                   onClick={() => onPatientClick(patient.id)}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  {/* Qo'llanma ism katagini ko'rsatadi: butun qator telefonda ekrandan keng — jadval yon tomonga siljib ketardi */}
+                  <td data-tour="pat-row" className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="h-9 w-9 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold text-sm group-hover:bg-primary-200 dark:group-hover:bg-primary-800 transition-colors overflow-hidden">
                         {patient.avatarUrl ? (

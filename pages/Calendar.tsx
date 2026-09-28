@@ -553,7 +553,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4 w-full sm:w-auto">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('calendar.title')}</h1>
-          <div className="flex items-center bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 flex-1 sm:flex-none justify-between sm:justify-start">
+          <div data-tour="cal-date" className="flex items-center bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 flex-1 sm:flex-none justify-between sm:justify-start">
             <button onClick={handlePrev} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronLeft className="w-4 h-4" /></button>
             <button
               ref={jumpAnchorRef}
@@ -585,7 +585,7 @@ export const Calendar: React.FC<CalendarProps> = ({
             </button>
           )}
           {/* View Toggle for Desktop/Tablet */}
-          <div className="hidden md:flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+          <div data-tour="cal-view" className="hidden md:flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => setView('day')}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'day' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
@@ -607,13 +607,13 @@ export const Calendar: React.FC<CalendarProps> = ({
           </div>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          {canCreate && <Button onClick={() => openAddModal()} className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>}
+          {canCreate && <Button onClick={() => openAddModal()} data-tour="cal-new" className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>}
         </div>
       </div>
 
       {/* Shifokorlar: rang izohi va filtr bir joyda — blok rangi shifokor rangi */}
       {doctors.length > 1 && (
-        <div role="group" aria-label={t('calendar.doctorFilter')} className="flex flex-wrap items-center gap-2 px-1">
+        <div role="group" aria-label={t('calendar.doctorFilter')} data-tour="cal-doctors" className="flex flex-wrap items-center gap-2 px-1">
           <button
             type="button"
             onClick={() => setDoctorFilter(null)}
@@ -647,7 +647,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       )}
 
       {/* Calendar Grid */}
-      <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col relative">
+      <div data-tour="cal-grid" className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col relative">
         <div className="flex-1 overflow-auto">
           {view === 'month' ? (
             <CalendarMonthView
