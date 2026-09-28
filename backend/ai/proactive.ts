@@ -92,7 +92,7 @@ export const detectAnomalies = async (clinicId: string, today: string): Promise<
 
     // 'Balance' — avansdan yechish, kassaga yangi pul kirmaydi.
     // Manba: ai/tools.ts dagi MONEY_IN_METHODS bilan bir xil mantiq.
-    const MONEY_IN = new Set(['Cash', 'Card', 'Click', 'Transfer', 'Insurance']);
+    const MONEY_IN = new Set(['Cash', 'CashCollection', 'Card', 'UzcardTerminal', 'HumoTerminal', 'Click', 'P2P', 'QrBank', 'QrUzcard', 'QrHumo', 'Transfer', 'Insurance']);
 
     const revByDate = new Map<string, number>();
     for (const t of txs) {

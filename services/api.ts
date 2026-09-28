@@ -1,5 +1,6 @@
 import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
 import { applyCallChange } from '../utils/desk';
+import { applyClinicPaymentMethods } from '../utils/paymentMethods';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
 const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
@@ -859,9 +860,11 @@ export const api = {
         },
     },
     clinics: {
-        getById: (id: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_CLINIC);
-            return fetchJson<Clinic>(`/clinics/${id}`);
+        // Klinika kelishi bilan uning to'lov turlari to'lov oynalariga qo'llanadi
+        getById: async (id: string) => {
+            const clinic = isDemoMode() ? DEMO_CLINIC : await fetchJson<Clinic>(`/clinics/${id}`);
+            applyClinicPaymentMethods(clinic?.paymentMethods);
+            return clinic;
         },
         getAll: () => {
             if (isDemoMode()) return Promise.resolve(DEMO_CLINICS);
@@ -945,6 +948,22 @@ export const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ accessControl }),
             });
+        },
+        // To'lov oynasidagi usullar; bo'sh ro'yxat — sukut (hamma klinikadagidek)
+        updatePaymentMethods: async (id: string, methods: string[]) => {
+            const res = isDemoMode()
+                ? await Promise.resolve({ paymentMethods: methods.length ? methods : null })
+                : await fetchJson<{ paymentMethods: string[] | null }>(`/clinics/${id}/payment-methods`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ methods }),
+                });
+            if (isDemoMode()) {
+                (DEMO_CLINIC as any).paymentMethods = res.paymentMethods;
+                saveDemoData();
+            }
+            applyClinicPaymentMethods(res.paymentMethods);
+            return res;
         },
         // Kassa sozlamalari (kuniga nechta smena)
         updateCashSettings: (id: string, cashShiftsPerDay: number) => {

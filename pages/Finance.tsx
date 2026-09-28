@@ -12,7 +12,7 @@ import { calculateTotalFinancials, calculateDoctorShares, transactionBelongsToDo
 import { usePerms } from '../context/PermissionsContext';
 import { exportFinanceToExcel } from '../utils/excelExport';
 import {
-  PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, getPaymentMethodLabel,
+  PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, getPaymentMethodLabel,
 } from '../utils/paymentMethods';
 import type { PaymentMethod } from '../types';
 
@@ -390,7 +390,10 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   });
   // Ishlatilmagan usullar diagrammani to'ldirib yubormasin; hech biri bo'lmasa — hammasi ko'rsatiladi
   const usedMethodData = ALL_PAYMENT_METHOD_DATA.filter(m => m.value > 0);
-  const PAYMENT_METHOD_DATA = usedMethodData.length > 0 ? usedMethodData : ALL_PAYMENT_METHOD_DATA;
+  // Hech biri bo'lmasa — klinika yoqqan usullar (katalogdagi hammasi emas)
+  const PAYMENT_METHOD_DATA = usedMethodData.length > 0
+    ? usedMethodData
+    : ALL_PAYMENT_METHOD_DATA.filter(m => m.key === 'Balance' || INCOMING_PAYMENT_METHODS.includes(m.key));
 
   // Kassa tabidagi "Jami tushum" bilan farqni ochiq ko'rsatish uchun:
   // avansdan yechilgan to'lovlar daromadga kiradi, lekin kassaga bugun pul kirmaydi.

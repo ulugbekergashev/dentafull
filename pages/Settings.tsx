@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Modal, Select } from '../components/Common';
 import { UpgradePlanModal } from '../components/UpgradePlanModal';
+import { PaymentMethodsSettings } from '../components/PaymentMethodsSettings';
 import { tPlanFeature } from '../i18n/labels';
 
 /**
@@ -956,6 +957,9 @@ export const Settings: React.FC<SettingsProps> = ({
                {/* Maxsus imkoniyatlar: yoqib-o'chiriladigan qo'shimcha funksiyalar */}
                {activeTab === 'features' && canEditClinic && (
                   <div className="space-y-6">
+                     {/* To'lov oynasidagi usullar — klinikaning o'zi tanlaydi */}
+                     {currentClinic?.id && <PaymentMethodsSettings clinicId={currentClinic.id} />}
+
                      {/* Chek chiqarish — umumiy ma'lumotlar bilan bitta so'rovda saqlanadi */}
                      <Card className="p-6">
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t('auto.Chek chiqarish')}</h3>

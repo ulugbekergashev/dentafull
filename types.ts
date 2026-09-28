@@ -551,6 +551,8 @@ export interface Clinic {
   salesAgentId?: string | null; // Biriktirilgan sotuvchi (reseller)
   accessControl?: string | AccessControl | null; // DB'da JSON string, frontendda parse qilinadi
   cashShiftsPerDay?: number; // kuniga nechta kassa smenasi (1 yoki 2)
+  /** To'lov oynasidagi usullar (Sozlamalar → Maxsus imkoniyatlar). null — sukut ro'yxat */
+  paymentMethods?: string[] | null;
   leadApiKey?: string | null;        // tashqi lid manbalari uchun kalit
   leadApiKeyCreatedAt?: string | null;
 }

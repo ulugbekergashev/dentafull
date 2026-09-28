@@ -5259,7 +5259,7 @@ app.get('/api/clinics/:id', authenticateToken, async (req, res) => {
         }
         // Parol hashini javobdan olib tashlaymiz (UI'ga kerak emas)
         const { password, ...clinicSafe } = clinic as any;
-        res.json(clinicSafe);
+        res.json({ ...clinicSafe, paymentMethods: await getClinicPaymentMethods(clinicId) });
     } catch (error: any) {
         console.error('Failed to fetch clinic by ID:', error);
         res.status(500).json({ error: 'Failed to fetch clinic details', details: error.message });
@@ -5559,6 +5559,60 @@ app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
     } catch (error: any) {
         console.error('General settings update error:', error);
         res.status(500).json({ error: 'Umumiy sozlamalarni saqlashda xatolik' });
+    }
+});
+
+// ─── Klinika to'lov turlari ──────────────────────────────────────────────────
+// To'lov oynasida qaysi usullar chiqishini klinika o'zi tanlaydi (Sozlamalar →
+// Maxsus imkoniyatlar). Qator yo'q klinikada — sukut ro'yxat, ya'ni avvalgidek.
+// Migratsiyasiz: PlatformSetting'da har klinikaga bitta qator (usullar ro'yxati).
+// Ro'yxat utils/paymentMethods.ts dagi katalog bilan bir xil bo'lishi shart.
+const SELECTABLE_PAYMENT_METHODS = [
+    'Cash', 'CashCollection', 'Card', 'UzcardTerminal', 'HumoTerminal', 'Click',
+    'P2P', 'QrBank', 'QrUzcard', 'QrHumo', 'Transfer', 'Insurance',
+];
+const payMethodsKey = (clinicId: string) => `paymethods:${clinicId}`;
+
+// Naqd doim bor — to'lov oynalari sukut bo'yicha naqddan boshlanadi
+const normalizePayMethods = (list: unknown): string[] => {
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const wanted = new Set([...list.map(String), 'Cash']);
+    return SELECTABLE_PAYMENT_METHODS.filter(k => wanted.has(k));
+};
+
+/** Klinika tanlagan usullar; sozlanmagan yoki o'qib bo'lmasa — null (sukut) */
+async function getClinicPaymentMethods(clinicId: string): Promise<string[] | null> {
+    try {
+        const row = await prisma.platformSetting.findUnique({ where: { key: payMethodsKey(clinicId) } });
+        const list = row?.value ? normalizePayMethods(JSON.parse(row.value)) : [];
+        return list.length ? list : null;
+    } catch {
+        return null;
+    }
+}
+
+app.put('/api/clinics/:id/payment-methods', authenticateToken, async (req, res) => {
+    try {
+        if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
+        if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "to'lov turlarini o'zgartirish"))) return;
+        if (!Array.isArray(req.body?.methods)) return res.status(400).json({ error: 'methods ro\'yxat bo\'lishi kerak' });
+        const methods = normalizePayMethods(req.body.methods);
+        const key = payMethodsKey(req.params.id);
+        if (methods.length === 0) {
+            // Bo'sh ro'yxat — sukutga qaytish (qator o'chadi)
+            await prisma.platformSetting.deleteMany({ where: { key } });
+            return res.json({ paymentMethods: null });
+        }
+        const value = JSON.stringify(methods);
+        await prisma.platformSetting.upsert({
+            where: { key },
+            update: { value, updatedAt: new Date() },
+            create: { key, value },
+        });
+        res.json({ paymentMethods: methods });
+    } catch (error: any) {
+        console.error("To'lov turlarini saqlashda xatolik:", error?.message || error);
+        res.status(500).json({ error: "To'lov turlarini saqlab bo'lmadi" });
     }
 });
 

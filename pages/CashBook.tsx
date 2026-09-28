@@ -27,7 +27,7 @@ import {
     CashBookTotals,
 } from '../utils/cashbook';
 import { exportCashBookDay, exportCashBookMonth } from '../utils/cashbookExport';
-import { PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
+import { PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, getPaymentMethodLabel, reconcileTotal } from '../utils/paymentMethods';
 import { formatDateToISO } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
 import { buildWaivedTransaction, isAppointmentRecorded, isDebtTransaction } from '../utils/unpaid';
@@ -610,8 +610,9 @@ export const CashBook: React.FC<CashBookProps> = ({
         setIsCloseOpen(true);
     };
 
-    const expectedCard = day.totals.byMethod.Card || 0;
-    const expectedClick = day.totals.byMethod.Click || 0;
+    // Terminal — barcha terminal usullari (karta, Uzcard, Humo, terminal QR) bitta Z-hisobotda
+    const expectedCard = reconcileTotal(day.totals.byMethod, 'terminal');
+    const expectedClick = reconcileTotal(day.totals.byMethod, 'online');
     const parseOptional = (v: string): number | null => {
         if (v.trim() === '') return null;
         const n = Number(v.replace(/\s/g, ''));
@@ -1882,7 +1883,8 @@ export const CashBook: React.FC<CashBookProps> = ({
                             {t("auto.To'lov usuli")}
                         </label>
                         <div className="flex gap-2 flex-wrap">
-                            {PAYMENT_METHODS.filter(m => m.key !== 'Balance').map(m => (
+                            {/* Klinika yoqqan usullar; yozuvdagi eski usul o'chirilgan bo'lsa ham ko'rinib tursin */}
+                            {PAYMENT_METHODS.filter(m => m.key !== 'Balance' && (INCOMING_PAYMENT_METHODS.includes(m.key) || m.key === editForm.type)).map(m => (
                                 <button
                                     key={m.key}
                                     type="button"

@@ -47,7 +47,7 @@ const maskPhone = (phone?: string | null): string => {
 // bu yerni ham yangilang. Backend frontend'dagi util'ni import qila olmaydi
 // (tsconfig chegarasi), shuning uchun ataylab takrorlangan.
 // 'Balance' — avansdan yechish: pul ilgari tushgan, kassaga yangi pul kirmaydi.
-const MONEY_IN_METHODS = new Set(['Cash', 'Card', 'Click', 'Transfer', 'Insurance']);
+const MONEY_IN_METHODS = new Set(['Cash', 'CashCollection', 'Card', 'UzcardTerminal', 'HumoTerminal', 'Click', 'P2P', 'QrBank', 'QrUzcard', 'QrHumo', 'Transfer', 'Insurance']);
 const isMoneyIn = (method?: string | null): boolean =>
     !method ? true : MONEY_IN_METHODS.has(method);
 

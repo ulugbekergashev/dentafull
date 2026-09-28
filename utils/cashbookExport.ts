@@ -8,7 +8,7 @@ import {
     formatDateLabel,
     formatMonthLabel,
 } from './cashbook';
-import { PAYMENT_METHODS, getPaymentMethodLabel } from './paymentMethods';
+import { PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from './paymentMethods';
 
 type Cell = string | number | null;
 type Sheet = Cell[][];
@@ -301,7 +301,9 @@ export function exportCashBookMonth(
     XLSX.utils.book_append_sheet(wb, sheetFrom(summary, [40, 18, 14]), 'Yakun');
 
     // --- 2. Kunlik daftar ---
-    const methodKeys = PAYMENT_METHODS.filter(m => m.key !== 'Balance');
+    // Ustunlar — klinika yoqqan usullar va oy ichida ishlatilganlari (bo'sh ustun qo'shilmaydi)
+    const methodKeys = PAYMENT_METHODS.filter(m => m.key !== 'Balance'
+        && (INCOMING_PAYMENT_METHODS.includes(m.key) || month.days.some(d => (d.totals.byMethod[m.key] || 0) !== 0)));
     const ledger: Sheet = [
         [
             'Kun', 'Sana', ...methodKeys.map(m => m.label),
