@@ -759,6 +759,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             today={localToday}
             nowMin={nowMin}
             onRefer={canBookHere ? d => onOpenBooking!({ patientId: myChairPatientId, doctorId: d.id, mode: 'day' }) : undefined}
+            onOpenCalendar={perms.menu('calendar') ? d => navigate(`/calendar?doctor=${encodeURIComponent(d.id)}`) : undefined}
           />
         </>
       )}

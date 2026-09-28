@@ -1890,7 +1890,6 @@ const AppContent: React.FC = () => {
                 <Route path="/calendar" element={
                   <Calendar
                     appointments={scopedAppointments}
-                    transactions={scopedTransactions}
                     patients={scopedPatients}
                     doctors={scopedDoctors}
                     services={services}

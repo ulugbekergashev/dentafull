@@ -17,13 +17,15 @@ interface CalendarMonthViewProps {
     month: Date;
     appointments: Appointment[];
     doctors: Doctor[];
+    /** Hamkasb qabuli (ko'rish doirasi "faqat o'zinikini") — bemor ismi o'rniga "Band", bosilsa kun ochiladi */
+    isPrivate?: (appt: Appointment) => boolean;
     onOpenDay: (key: string) => void;
     onOpenAppointment: (appt: Appointment) => void;
     /** Bo'sh joy bosilganda yangi qabul (ruxsat bo'lmasa berilmaydi) */
     onCreate?: (key: string) => void;
 }
 
-export const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({ month, appointments, doctors, onOpenDay, onOpenAppointment, onCreate }) => {
+export const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({ month, appointments, doctors, isPrivate, onOpenDay, onOpenAppointment, onCreate }) => {
     const { t, language } = useLanguage();
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
     // Hafta dushanbadan boshlanadi; oy qancha hafta egallasa, shuncha qator (4–6)
@@ -81,18 +83,20 @@ export const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({ month, app
                                 {d.getDate()}
                             </button>
                             {list.slice(0, VISIBLE).map(a => {
-                                const faded = a.status === 'No-Show';
+                                const busy = !!isPrivate?.(a);
+                                const faded = !busy && a.status === 'No-Show';
+                                const label = busy ? t('calendar.busy') : a.patientName;
                                 return (
                                     <button
                                         key={a.id}
                                         type="button"
-                                        onClick={e => { e.stopPropagation(); onOpenAppointment(a); }}
-                                        title={`${a.time} · ${a.patientName} · ${a.doctorName}`}
+                                        onClick={e => { e.stopPropagation(); if (busy) onOpenDay(key); else onOpenAppointment(a); }}
+                                        title={`${a.time} · ${label} · ${a.doctorName}`}
                                         className={`w-full flex items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] leading-tight hover:bg-gray-100 dark:hover:bg-gray-700 ${faded ? 'opacity-50 line-through' : ''}`}
                                     >
                                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: colorOf(a) }} />
                                         <span className="tabular-nums text-gray-500 dark:text-gray-400 shrink-0">{a.time}</span>
-                                        <span className={`truncate text-gray-800 dark:text-gray-100 ${a.status === 'Completed' ? 'opacity-60' : ''}`}>{a.patientName}</span>
+                                        <span className={`truncate ${busy ? 'italic text-gray-500 dark:text-gray-400' : 'text-gray-800 dark:text-gray-100'} ${!busy && a.status === 'Completed' ? 'opacity-60' : ''}`}>{label}</span>
                                     </button>
                                 );
                             })}

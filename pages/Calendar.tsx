@@ -1,28 +1,21 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Modal, Input, Select, Badge, SearchableSelect } from '../components/Common';
 import {
   ChevronLeft, ChevronRight, Plus, Clock, User, FileText,
   XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
   Search, CalendarDays
 } from 'lucide-react';
-import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory, Transaction } from '../types';
+import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { DateField, DateJumpInput, DatePopover, MonthGrid, formatDayMonth, monthName, weekdayName } from '../components/DateField';
 import { CalendarMonthView } from '../components/CalendarMonthView';
 import { formatDateToISO } from '../utils/dateUtils';
 import { usePerms } from '../context/PermissionsContext';
-import { useDeskFlow } from '../hooks/useDeskFlow';
-import { minutesOf, nowHHMM } from '../utils/queue';
-import { visitStatus, VisitStatus, VisitStatusContext, VISIT_STATUS_COLOR } from '../utils/visitStatus';
-
-/** Kun/hafta ko'rinishidagi rang izohi — tashrif holatlari */
-const CALENDAR_LEGEND: VisitStatus[] = ['booked', 'waiting', 'inChair', 'awaitingPayment', 'paid', 'debt', 'noShow'];
 
 interface CalendarProps {
   appointments: Appointment[];
-  /** Kassa yozuvlari — blok rangi (to'landi / to'lov kutilmoqda) shundan hisoblanadi */
-  transactions?: Transaction[];
   patients: Patient[];
   doctors: Doctor[];
   services: { name: string; price: number; duration: number }[];
@@ -43,22 +36,9 @@ interface CalendarProps {
 
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, transactions = [], patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick
+  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick
 }) => {
   const { t, language } = useLanguage();
-
-  // Blok rangi = tashrif holati (bosh sahifadagi bilan bir xil qoida — utils/visitStatus):
-  // kabinetda — ko'k, to'lov kutilmoqda — binafsha, to'landi — yashil. Blok joyi o'zgarmaydi.
-  const visitToday = formatDateToISO(new Date());
-  const deskFlow = useDeskFlow(currentClinic?.id || '', visitToday, !!currentClinic?.id);
-  const [nowMin, setNowMin] = useState(() => minutesOf(nowHHMM()));
-  useEffect(() => {
-    const id = setInterval(() => setNowMin(minutesOf(nowHHMM())), 60000);
-    return () => clearInterval(id);
-  }, []);
-  const visitCtx: VisitStatusContext = useMemo(
-    () => ({ today: visitToday, nowMin, flowLog: deskFlow.entries, transactions }),
-    [visitToday, nowMin, deskFlow.entries, transactions]);
   const perms = usePerms();
   const canCreate = perms.can('calendar', 'appts', 'create');
   const canEdit = perms.can('calendar', 'appts', 'edit');
@@ -68,11 +48,50 @@ export const Calendar: React.FC<CalendarProps> = ({
   const startHour = currentClinic?.startHour ?? 8;
   const endHour = currentClinic?.endHour ?? 20;
   const HOURS = Array.from({ length: Math.max(1, endHour - startHour + 1) }, (_, i) => i + startHour);
-  // Filter appointments for doctors — ruxsat berilgan bo'lsa (Ruxsatlar → Ko'rish
-  // doirasi) shifokor ham butun klinika jadvalini ko'radi
-  const filteredAppointments = userRole === UserRole.DOCTOR && doctorId && !seeAllPatients
-    ? appointments.filter(a => a.doctorId === doctorId)
-    : appointments;
+
+  // ─── Shifokor filtri ───────────────────────────────────────────────────────
+  // Kalendar shifokor bo'yicha: blok rangi — shifokor rangi, rang izohi esa filtr ham.
+  // Standart: shifokorga — o'z qabullari, admin va resepshnga — hammasi; boshqasini
+  // shu filtrdan tanlaydi. Tanlov manzilda turadi (?doctor=id1,id2 yoki ?doctor=all):
+  // bosh sahifadagi "Hamkasblar hozir" → "Batafsil" hamkasb kalendarini shu orqali ochadi.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ownDoctorId = userRole === UserRole.DOCTOR ? doctorId : '';
+  const doctorParam = searchParams.get('doctor');
+  /** null — barcha shifokorlar */
+  const selectedDoctorIds: string[] | null = useMemo(() => {
+    if (doctorParam === 'all') return null;
+    const fromUrl = (doctorParam || '').split(',').filter(id => doctors.some(d => d.id === id));
+    if (fromUrl.length > 0) return fromUrl;
+    return ownDoctorId ? [ownDoctorId] : null;
+  }, [doctorParam, doctors, ownDoctorId]);
+  const setDoctorFilter = (ids: string[] | null) => {
+    const next = new URLSearchParams(searchParams);
+    const isDefault = ids === null ? !ownDoctorId : ids.length === 1 && ids[0] === ownDoctorId;
+    if (isDefault) next.delete('doctor');
+    else next.set('doctor', ids === null ? 'all' : ids.join(','));
+    setSearchParams(next, { replace: true });
+  };
+  const toggleDoctor = (id: string) => {
+    // "Hammasi"dan keyin birinchi bosish — faqat shu shifokor; keyin qo'shib yoki olib tashlab boriladi
+    if (!selectedDoctorIds) return setDoctorFilter([id]);
+    const next = selectedDoctorIds.includes(id) ? selectedDoctorIds.filter(x => x !== id) : [...selectedDoctorIds, id];
+    setDoctorFilter(next.length > 0 ? next : null);
+  };
+  const activeDoctors = doctors.filter(d => d.status === 'Active');
+  // Filtr qatori: faol shifokorlar + tanlangani (masalan, "Batafsil"dan ochilgan ta'tildagi hamkasb)
+  const filterDoctors = doctors.filter(d => d.status === 'Active' || !!selectedDoctorIds?.includes(d.id));
+  // Kun ko'rinishidagi ustunlar — tanlangan shifokorlar
+  const columnDoctors = selectedDoctorIds ? filterDoctors.filter(d => selectedDoctorIds.includes(d.id)) : activeDoctors;
+  // Ko'rish doirasi "faqat o'zinikini" (Ruxsatlar → Bemorlar) bo'lgan shifokor hamkasb
+  // qabullarini faqat "Band" deb ko'radi — bemor ismi va xizmat ko'rinmaydi, xuddi
+  // bosh sahifadagi "Hamkasblar hozir" kabi. Doira "hammasi" bo'lsa — to'liq ko'radi.
+  const restricted = userRole === UserRole.DOCTOR && !!doctorId && !seeAllPatients;
+  const isPrivate = (a: Appointment) => restricted && a.doctorId !== doctorId;
+  const visibleAppointments = useMemo(() => appointments.filter(a =>
+    (!selectedDoctorIds || selectedDoctorIds.includes(a.doctorId))
+    // Hamkasbning bekor qilingan yozuvi vaqtni band qilmaydi
+    && !(restricted && a.doctorId !== doctorId && a.status === 'Cancelled')
+  ), [appointments, selectedDoctorIds, restricted, doctorId]);
   // State
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
@@ -137,8 +156,9 @@ export const Calendar: React.FC<CalendarProps> = ({
 
     setFormData({
       patientId: patients.length > 0 ? patients[0].id : '',
-      // Defolt shifokor: berilgan → kirgan shifokor (DOCTOR roli) → birinchi shifokor
-      doctorId: initialDoctorId || (userRole === UserRole.DOCTOR && doctorId ? doctorId : '') || (doctors.length > 0 ? doctors[0].id : ''),
+      // Defolt shifokor: berilgan → filtrda bitta shifokor tanlangan bo'lsa, o'sha →
+      // kirgan shifokor (DOCTOR roli) → birinchi shifokor
+      doctorId: initialDoctorId || (selectedDoctorIds?.length === 1 ? selectedDoctorIds[0] : '') || (userRole === UserRole.DOCTOR && doctorId ? doctorId : '') || (doctors.length > 0 ? doctors[0].id : ''),
       type: '',
       categoryId: '',
       // Tugma onClick hodisasini uzatib yuborsa ham sana har doim matn bo'lsin
@@ -204,11 +224,11 @@ export const Calendar: React.FC<CalendarProps> = ({
   // Oylik kalendarda har kun ostida qabullar soni — bo'sh kunni tez topish uchun
   const appointmentCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    filteredAppointments.forEach(a => {
+    visibleAppointments.forEach(a => {
       if (a.status !== 'Cancelled') counts[a.date] = (counts[a.date] || 0) + 1;
     });
     return counts;
-  }, [filteredAppointments]);
+  }, [visibleAppointments]);
   // Tushda: kun o'zgarmaydi, qaysi soat mintaqasida bo'lmasin
   const goToDate = (key: string) => { setCurrentDate(new Date(`${key}T12:00`)); setJumpOpen(false); };
   // Oylik ko'rinishdan kunga: shu kunning soatli jadvali ochiladi
@@ -222,11 +242,10 @@ export const Calendar: React.FC<CalendarProps> = ({
       : `${formatDayMonth(first)} – ${formatDayMonth(last)}`;
   })();
 
-  const activeDoctors = doctors.filter(d => d.status === 'Active');
   const gridColsClass = view === 'week' 
     ? 'grid-cols-8' 
-    : activeDoctors.length > 0 
-      ? `grid-cols-[60px_repeat(${activeDoctors.length},minmax(200px,1fr))]` 
+    : columnDoctors.length > 0 
+      ? `grid-cols-[60px_repeat(${columnDoctors.length},minmax(200px,1fr))]` 
       : 'grid-cols-[60px_1fr]';
 
   // Handlers
@@ -592,24 +611,40 @@ export const Calendar: React.FC<CalendarProps> = ({
         </div>
       </div>
 
-      {/* Rang izohi: kun/hafta ko'rinishida blok rangi — holat; oyda — shifokor */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 py-1">
-        {view !== 'month' && CALENDAR_LEGEND.map(k => (
-          <div key={k} className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm" style={k === 'booked'
-              ? { border: `1.5px dashed ${VISIT_STATUS_COLOR[k]}` }
-              : { backgroundColor: `${VISIT_STATUS_COLOR[k]}26`, borderLeft: `3px solid ${VISIT_STATUS_COLOR[k]}` }} />
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{t(`visit.status.${k}` as any)}</span>
-          </div>
-        ))}
-        {view === 'week' && <span aria-hidden="true" className="w-px h-4 bg-gray-200 dark:bg-gray-700" />}
-        {view !== 'day' && doctors.filter(d => d.status === 'Active').map(doc => (
-          <div key={doc.id} className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: doc.color || '#3B82F6' }} />
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Dr. {doc.lastName}</span>
-          </div>
-        ))}
-      </div>
+      {/* Shifokorlar: rang izohi va filtr bir joyda — blok rangi shifokor rangi */}
+      {doctors.length > 1 && (
+        <div role="group" aria-label={t('calendar.doctorFilter')} className="flex flex-wrap items-center gap-2 px-1">
+          <button
+            type="button"
+            onClick={() => setDoctorFilter(null)}
+            aria-pressed={!selectedDoctorIds}
+            className={`h-8 px-3 rounded-full border text-xs font-bold transition-colors ${!selectedDoctorIds
+              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/30 dark:text-primary-200'
+              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}
+          >
+            {t('calendar.allDoctors')}
+          </button>
+          {filterDoctors.map(doc => {
+            const color = doc.color || '#3B82F6';
+            const on = !!selectedDoctorIds?.includes(doc.id);
+            return (
+              <button
+                key={doc.id}
+                type="button"
+                onClick={() => toggleDoctor(doc.id)}
+                aria-pressed={on}
+                style={on ? { borderColor: color, backgroundColor: `${color}1F` } : undefined}
+                className={`inline-flex items-center gap-2 h-8 px-3 rounded-full border text-xs font-semibold transition-all ${on
+                  ? 'text-gray-900 dark:text-white'
+                  : `border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 ${selectedDoctorIds ? 'opacity-60 hover:opacity-100' : ''}`}`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                Dr. {doc.lastName}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Calendar Grid */}
       <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col relative">
@@ -617,14 +652,15 @@ export const Calendar: React.FC<CalendarProps> = ({
           {view === 'month' ? (
             <CalendarMonthView
               month={currentDate}
-              appointments={filteredAppointments}
+              appointments={visibleAppointments}
               doctors={doctors}
+              isPrivate={restricted ? isPrivate : undefined}
               onOpenDay={openDay}
               onOpenAppointment={setSelectedAppointment}
               onCreate={canCreate ? key => openAddModal(key) : undefined}
             />
           ) : (
-          <div className={`h-full relative ${view === 'week' ? 'min-w-[1000px]' : activeDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
+          <div className={`h-full relative ${view === 'week' ? 'min-w-[1000px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
             {/* Header Row */}
             <div className={`grid ${gridColsClass} border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 bg-white dark:bg-gray-800`}>
               <div className="p-4 border-r border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-40"></div>
@@ -639,8 +675,8 @@ export const Calendar: React.FC<CalendarProps> = ({
                   );
                 })
               ) : (
-                activeDoctors.length > 0 ? (
-                  activeDoctors.map((doc, i) => (
+                columnDoctors.length > 0 ? (
+                  columnDoctors.map((doc, i) => (
                     <div key={doc.id} className="p-3 text-center border-r border-gray-100 dark:border-gray-700 last:border-0">
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: doc.color || '#3B82F6' }} />
@@ -695,8 +731,8 @@ export const Calendar: React.FC<CalendarProps> = ({
                   );
                 })
               ) : (
-                activeDoctors.length > 0 ? (
-                  activeDoctors.map((doc, i) => {
+                columnDoctors.length > 0 ? (
+                  columnDoctors.map((doc, i) => {
                     const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
                     return (
                       <div key={doc.id} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
@@ -743,7 +779,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                 // Group by day (+ doctor if in day view) to handle overlaps independently
                 const getGroupKey = (app: Appointment) => view === 'day' ? `${app.date}-${app.doctorId}` : app.date;
                 const dayGroups: Record<string, Appointment[]> = {};
-                filteredAppointments.forEach(app => {
+                visibleAppointments.forEach(app => {
                   const key = getGroupKey(app);
                   if (!dayGroups[key]) dayGroups[key] = [];
                   dayGroups[key].push(app);
@@ -792,7 +828,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                   });
                 });
 
-                return filteredAppointments.map(app => {
+                return visibleAppointments.map(app => {
                   const appDate = new Date(app.date);
                   const dayIndex = displayDays.findIndex(d => d.toDateString() === appDate.toDateString());
                   if (dayIndex === -1 && view === 'week') return null;
@@ -815,10 +851,10 @@ export const Calendar: React.FC<CalendarProps> = ({
                     left = `calc(${(dayIndex + 1) * (100 / 8)}% + 2px + ${(colOffset / 100) * (100 / 8)}%)`;
                     width = `calc(${(colWidth / 100) * (100 / 8)}% - 4px)`;
                   } else {
-                    const docIndex = activeDoctors.findIndex(d => d.id === app.doctorId);
-                    if (docIndex === -1 && activeDoctors.length > 0) return null; // Shouldn't happen with filtered appointments
+                    const docIndex = columnDoctors.findIndex(d => d.id === app.doctorId);
+                    if (docIndex === -1 && columnDoctors.length > 0) return null; // Shouldn't happen with filtered appointments
 
-                    const numDocs = Math.max(1, activeDoctors.length);
+                    const numDocs = Math.max(1, columnDoctors.length);
                     const docColumnWidth = `(100% - 60px) / ${numDocs}`;
                     
                     left = `calc(60px + (${docIndex === -1 ? 0 : docIndex} * (${docColumnWidth})) + ${(colOffset / 100)} * (${docColumnWidth}) + 2px)`;
@@ -827,10 +863,28 @@ export const Calendar: React.FC<CalendarProps> = ({
 
                   const doctor = doctors.find(d => d.id === app.doctorId);
                   const doctorColor = doctor?.color || '#3B82F6';
-                  const vs = visitStatus(app, visitCtx);
-                  const statusColor = VISIT_STATUS_COLOR[vs];
-                  // Tasdiqlanmagan yozuv — punktir chiziq
-                  const unconfirmed = vs === 'booked' && app.status === 'Pending';
+                  const box = { top: `${topOffset}px`, left, width, height: `${height - 4}px` };
+
+                  // Hamkasb qabuli (ko'rish doirasi "faqat o'zinikini") — faqat vaqt band ekani
+                  if (isPrivate(app)) {
+                    return (
+                      <div
+                        key={app.id}
+                        title={`${app.time} · ${t('calendar.busy')} · ${app.doctorName}`}
+                        className="absolute m-1 p-2 rounded-md border-l-4 text-xs overflow-hidden z-10 cursor-default"
+                        style={{
+                          ...box,
+                          backgroundColor: `${doctorColor}0D`,
+                          backgroundImage: `repeating-linear-gradient(135deg, ${doctorColor}1A 0 6px, transparent 6px 12px)`,
+                          borderLeftColor: doctorColor,
+                          color: doctorColor,
+                        }}
+                      >
+                        <div className="font-bold truncate">{t('calendar.busy')}</div>
+                        {height > 40 && <div className="mt-1 text-[10px] tabular-nums opacity-75">{app.time}</div>}
+                      </div>
+                    );
+                  }
 
                   const statusColors = {
                     'Confirmed': 'border-current',
@@ -847,27 +901,16 @@ export const Calendar: React.FC<CalendarProps> = ({
                     <div
                       key={app.id}
                       onClick={() => setSelectedAppointment(app)}
-                      className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all z-10 ${isSpecialStatus ? statusColors : unconfirmed ? 'border-dashed' : ''}`}
+                      className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all z-10 ${isSpecialStatus ? statusColors : ''}`}
                       style={!isSpecialStatus ? {
-                        top: `${topOffset}px`,
-                        left: left,
-                        width: width,
-                        height: `${height - 4}px`,
-                        backgroundColor: `${statusColor}15`,
-                        borderLeftColor: statusColor,
-                        color: statusColor,
-                      } : {
-                        top: `${topOffset}px`,
-                        left: left,
-                        width: width,
-                        height: `${height - 4}px`,
-                      }}
+                        ...box,
+                        backgroundColor: `${doctorColor}15`,
+                        borderLeftColor: doctorColor,
+                        color: doctorColor,
+                      } : box}
                     >
                       <div className="font-bold truncate pr-4 flex items-center justify-between">
-                        <span className="truncate flex items-center gap-1">
-                          {view === 'week' && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: doctorColor }} title={app.doctorName} />}
-                          <span className="truncate">{app.patientName}</span>
-                        </span>
+                        <span className="truncate">{app.patientName}</span>
                         {app.status === 'Completed' && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
                       </div>
                       {app.reminderSent && (
@@ -878,7 +921,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       <div className="truncate opacity-75">{app.type}</div>
                       {height > 40 && (
                         <div className="flex items-center mt-1 gap-1 text-[10px]">
-                          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] text-white" style={{ backgroundColor: doctorColor }}>{app.doctorName[0]}</div>
+                          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] text-white" style={{ backgroundColor: doctorColor }}>{(doctor?.lastName || app.doctorName.replace(/^Dr\.\s*/, '')).charAt(0)}</div>
                           {app.time}
                         </div>
                       )}

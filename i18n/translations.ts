@@ -1332,6 +1332,9 @@ export const translations = {
     'calendar.month': "Oy",
     'calendar.moreAppts': "yana",
     'calendar.openDay': "Kunni ochish",
+    'calendar.allDoctors': "Hammasi",
+    'calendar.doctorFilter': "Shifokorlar bo'yicha filtr",
+    'calendar.busy': "Band",
     'calendar.newAppointment': "Yangi qabul",
     'calendar.sendReminder': "Eslatma yuborish",
     'calendar.editAppointment': "Qabulni tahrirlash",
@@ -2561,6 +2564,8 @@ export const translations = {
     'colleagues.noNext': "Bugun boshqa qabul yo'q",
     'colleagues.refer': "Yo'naltirish",
     'colleagues.referHint': '{doctor} qabuliga yozish',
+    'colleagues.calendar': 'Batafsil',
+    'colleagues.calendarHint': '{doctor} kalendarini ochish',
   },
   ru: {
     // DentaAI
@@ -3423,6 +3428,9 @@ export const translations = {
     'calendar.month': 'Месяц',
     'calendar.moreAppts': 'ещё',
     'calendar.openDay': 'Открыть день',
+    'calendar.allDoctors': 'Все',
+    'calendar.doctorFilter': 'Фильтр по врачам',
+    'calendar.busy': 'Занято',
     'calendar.newAppointment': 'Новая запись',
     'calendar.sendReminder': 'Отправить напоминание',
     'calendar.editAppointment': 'Редактировать запись',
@@ -4819,6 +4827,8 @@ export const translations = {
     'colleagues.noNext': 'Больше записей сегодня нет',
     'colleagues.refer': 'Направить',
     'colleagues.referHint': 'Записать к {doctor}',
+    'colleagues.calendar': 'Подробнее',
+    'colleagues.calendarHint': 'Открыть календарь {doctor}',
   }
 };
 

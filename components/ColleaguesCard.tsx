@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, CalendarDays } from 'lucide-react';
 import { Appointment, Doctor, FlowLog } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { hasArrived, isOpenAppointment, minutesOf } from '../utils/queue';
@@ -15,6 +15,8 @@ interface ColleaguesCardProps {
     nowMin: number;
     /** "Yo'naltirish" — bemorni shu hamkasbga yozish. Qabul yozish ruxsati bo'lmasa berilmaydi */
     onRefer?: (doctor: Doctor) => void;
+    /** "Batafsil" — hamkasbning kalendarini ochish. Kalendar bo'limi yopiq bo'lsa berilmaydi */
+    onOpenCalendar?: (doctor: Doctor) => void;
 }
 
 const byTime = (a: Appointment, b: Appointment) => minutesOf(a.time) - minutesOf(b.time);
@@ -24,7 +26,7 @@ const byTime = (a: Appointment, b: Appointment) => minutesOf(a.time) - minutesOf
  * (masalan, ortodont bemorni xirurgga yuborishdan oldin). Bemorlarning ismi
  * ko'rsatilmaydi: faqat band/bo'sh, navbat va keyingi qabul vaqti.
  */
-export const ColleaguesCard: React.FC<ColleaguesCardProps> = ({ selfId, doctors, appointments, flowLog, today, nowMin, onRefer }) => {
+export const ColleaguesCard: React.FC<ColleaguesCardProps> = ({ selfId, doctors, appointments, flowLog, today, nowMin, onRefer, onOpenCalendar }) => {
     const { t } = useLanguage();
     const others = doctors.filter(d => d.id !== selfId);
     if (others.length === 0) return null;
@@ -70,15 +72,29 @@ export const ColleaguesCard: React.FC<ColleaguesCardProps> = ({ selfId, doctors,
                             </span>
                             {line && <p className="mt-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400">{line}</p>}
                         </div>
-                        {onRefer && (
-                            <button
-                                type="button"
-                                onClick={() => onRefer(d)}
-                                title={t('colleagues.referHint').replace('{doctor}', `Dr. ${d.lastName}`)}
-                                className="shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-xl border border-primary-200 dark:border-primary-800 bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 text-xs font-bold hover:bg-primary-50 dark:hover:bg-primary-900/20"
-                            >
-                                {t('colleagues.refer')} <ArrowRight className="w-3.5 h-3.5" />
-                            </button>
+                        {(onRefer || onOpenCalendar) && (
+                            <div className="shrink-0 flex flex-col items-stretch gap-1.5">
+                                {onRefer && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onRefer(d)}
+                                        title={t('colleagues.referHint').replace('{doctor}', `Dr. ${d.lastName}`)}
+                                        className="inline-flex items-center justify-center gap-1 h-8 px-3 rounded-xl border border-primary-200 dark:border-primary-800 bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 text-xs font-bold hover:bg-primary-50 dark:hover:bg-primary-900/20"
+                                    >
+                                        {t('colleagues.refer')} <ArrowRight className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                                {onOpenCalendar && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenCalendar(d)}
+                                        title={t('colleagues.calendarHint').replace('{doctor}', `Dr. ${d.lastName}`)}
+                                        className="inline-flex items-center justify-center gap-1 h-8 px-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    >
+                                        <CalendarDays className="w-3.5 h-3.5" /> {t('colleagues.calendar')}
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </div>
                 ))}
