@@ -17,8 +17,14 @@ export const toEskizTemplate = (text: string): string => (text || '').replace(ne
 // bo'sh joy va registr farqlarini yo'qotamiz.
 export const normalizeForMatch = (text: string): string => (text || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
-/** Eskiz holatlari aniq ro'yxat sifatida kafolatlanmagan — Xabarlar sahifasidagi yorliq bilan bir xil kalit so'zlar */
-export const isApprovedStatus = (status?: string | null): boolean => /(confirm|approv|activ|tasdiq)/i.test(status || '');
+/**
+ * Shablon tasdiqlanganmi. Eskiz hujjatidagi holatlar: moderation — moderatsiyada,
+ * inproccess — jarayonda, service — servis sifatida tasdiqlangan, reklama — reklama
+ * sifatida tasdiqlangan. Hujjatda yo'q yozilishlar uchun kalit so'zlar ham qoldirildi
+ * (Xabarlar sahifasidagi yorliq bilan bir xil qoida).
+ */
+export const isApprovedStatus = (status?: string | null): boolean =>
+    /^(service|reklama)$|\b(confirm|approv|activ|tasdiq)/i.test((status || '').trim());
 
 export interface EskizTemplate {
     id: number;

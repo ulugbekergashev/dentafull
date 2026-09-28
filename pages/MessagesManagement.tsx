@@ -85,15 +85,22 @@ const inputCls = "w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gra
 const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5";
 
 // Eskiz'dan qaytgan xom holat matnini o'qiladigan yorliq + rangga aylantiradi.
-// Aniq enum kafolatlanmagani uchun kalit so'zlarga qarab taxminiy rang beriladi.
+// Eskiz hujjatidagi holatlar: moderation, inproccess — moderatsiyada; service, reklama —
+// tasdiqlangan (shablon turi). Hujjatda yo'q yozilishlar kalit so'zlar bo'yicha taxmin qilinadi
+// (backend/eskizTemplates.ts dagi isApprovedStatus bilan bir xil qoida).
 function eskizStatusBadge(status?: string | null): { label: string; cls: string } | null {
     if (!status) return null;
-    const s = status.toLowerCase();
+    const s = status.trim().toLowerCase();
+    const approved = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400';
+    const pending = 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400';
     if (s === 'error') return { label: 'Yuborishda xatolik', cls: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' };
     if (s === 'not_found') return { label: 'Eskiz\'da topilmadi', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' };
+    if (s === 'service') return { label: 'Tasdiqlandi (servis)', cls: approved };
+    if (s === 'reklama') return { label: 'Tasdiqlandi (reklama)', cls: approved };
+    if (s === 'moderation' || s === 'inproccess' || s === 'inprocess') return { label: 'Moderatsiyada', cls: pending };
     if (/(declin|reject|rad)/.test(s)) return { label: `Rad etildi (${status})`, cls: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' };
-    if (/(confirm|approv|activ|tasdiq)/.test(s)) return { label: `Tasdiqlandi (${status})`, cls: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' };
-    return { label: `Moderatsiyada (${status})`, cls: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' };
+    if (/\b(confirm|approv|activ|tasdiq)/.test(s)) return { label: `Tasdiqlandi (${status})`, cls: approved };
+    return { label: `Moderatsiyada (${status})`, cls: pending };
 }
 
 /**
