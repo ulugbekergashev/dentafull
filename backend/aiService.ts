@@ -603,13 +603,36 @@ const makeStreamGate = (onEvent?: (e: AiEvent) => void) => {
     };
 };
 
+// ─── Band provayderni vaqtincha oxirga surish ────────────────────────────────
+//
+// Zanjir har raundda BOSHIDAN boshlanadi. Birinchi provayder yuklama ostida
+// bo'lsa (Gemini "high demand" — 503 ni 30 soniyadan keyin qaytarardi), har
+// bir raund va har bir savol o'sha kutishni qayta to'lardi: tool'li javob
+// ikki raund, ya'ni foydalanuvchi bir daqiqa kutardi, zaxiradagi Groq esa
+// bir soniyada javob bera oladigan holatda turardi.
+//
+// Endi band/bo'sh javob bergan provayder bir daqiqa zanjir OXIRIGA suriladi.
+// Chiqarib tashlanmaydi: boshqalari ham ishlamasa, baribir unga navbat keladi.
+
+const COOLDOWN_MS = Number(process.env.AI_COOLDOWN_MS || 60_000);
+const cooldownUntil = new Map<string, number>();
+
+/** Provayder + kalit (kalitning o'zi emas — oxirgi belgilari) bo'yicha kalit. */
+const healthKey = (p: ProviderConfig): string => `${p.name}:${String(p.apiKey || '').slice(-6)}`;
+
+const byHealth = (chain: ProviderConfig[]): ProviderConfig[] => {
+    const now = Date.now();
+    const cooled = (p: ProviderConfig) => (cooldownUntil.get(healthKey(p)) || 0) > now;
+    return [...chain.filter(p => !cooled(p)), ...chain.filter(cooled)];
+};
+
 /** Fallback zanjiri bilan bitta raund. */
 const roundWithFallback = async (
     messages: ChatMessage[],
     tools: any[],
     opts: ChatOptions
 ): Promise<{ data: any; provider: ProviderConfig }> => {
-    const chain = providerChain(opts.clinicKey);
+    const chain = byHealth(providerChain(opts.clinicKey));
     if (chain.length === 0) {
         throw new Error(
             'AI sozlanmagan: GEMINI_API_KEY, GROQ_API_KEY yoki OPENROUTER_API_KEY dan ' +
@@ -638,6 +661,8 @@ const roundWithFallback = async (
                 gate.rollback();
                 errors.push(e.message);
                 if (!isRetryable(e?.status ?? 500)) throw e;
+                // Band, vaqt tugadi yoki bo'sh javob — keyingi daqiqada oxirida tursin.
+                if (chain.length > 1) cooldownUntil.set(healthKey(p), Date.now() + COOLDOWN_MS);
                 if (e?.status === 429 && e.retryAfter) {
                     waitFor = Math.min(waitFor ?? Infinity, e.retryAfter);
                 }
@@ -762,8 +787,13 @@ export const chatWithTools = async (
 
         let data: any;
         let provider: ProviderConfig;
+        // expectContent: matn ham, tool chaqiruvi ham bo'lmagan javob — provayder
+        // nosozligi, zanjirdagi keyingisiga o'tiladi. Ilgari bu tekshiruv faqat
+        // tool'siz so'rovda (chatMeta) bor edi: Gemini yuklama paytida bo'sh 200
+        // qaytarganda javob "Model bo'sh javob qaytardi" xatosi bilan tugardi,
+        // navbatdagi Groq esa o'sha savolga to'g'ri javob bera olardi.
         try {
-            ({ data, provider } = await roundWithFallback(roundMessages, active, { ...opts, deadlineAt }));
+            ({ data, provider } = await roundWithFallback(roundMessages, active, { ...opts, deadlineAt, expectContent: true }));
         } catch (e: any) {
             // Yuqoridagi ko'rsatma ehtimolni kamaytiradi, lekin kafolatlamaydi.
             // Model baribir tool chaqirsa — yana bir marta, qat'iyroq talab
@@ -778,7 +808,7 @@ export const chatWithTools = async (
                     content: 'TOOL CHAQIRMA. Faqat oddiy matn yoz — boshqa hech narsa.',
                 }],
                 [],
-                { ...opts, deadlineAt }
+                { ...opts, deadlineAt, expectContent: true }
             ));
         }
 
