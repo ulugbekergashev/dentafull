@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Button, Modal, Input, Select, Badge, SearchableSelect } from '../components/Common';
+import { Card, Button, Modal, Input, Select, Badge, SearchableSelect, statusLabel } from '../components/Common';
 import {
   ChevronLeft, ChevronRight, Plus, Clock, User, FileText,
   XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
@@ -13,6 +13,19 @@ import { DateField, DateJumpInput, DatePopover, MonthGrid, formatDayMonth, month
 import { CalendarMonthView } from '../components/CalendarMonthView';
 import { formatDateToISO } from '../utils/dateUtils';
 import { usePerms } from '../context/PermissionsContext';
+
+/** Oxirgi tanlangan ko'rinish (Kun / Hafta / Oy) */
+const CALENDAR_VIEW_KEY = 'dentalflow_calendar_view';
+/** Jadvalda bir soat balandligi va vaqt ustuni kengligi (px) */
+const HOUR_PX = 96;
+const TIME_COL_PX = 60;
+type CalView = 'day' | 'week' | 'month';
+
+const minutesOfTime = (time: string) => {
+  const [h, m] = String(time || '').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+const hhmmOf = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
 interface CalendarProps {
   appointments: Appointment[];
@@ -47,7 +60,6 @@ export const Calendar: React.FC<CalendarProps> = ({
   const canAddPatient = perms.can('patients', 'card', 'create');
   const startHour = currentClinic?.startHour ?? 8;
   const endHour = currentClinic?.endHour ?? 20;
-  const HOURS = Array.from({ length: Math.max(1, endHour - startHour + 1) }, (_, i) => i + startHour);
 
   // ─── Shifokor filtri ───────────────────────────────────────────────────────
   // Kalendar shifokor bo'yicha: blok rangi — shifokor rangi, rang izohi esa filtr ham.
@@ -94,7 +106,23 @@ export const Calendar: React.FC<CalendarProps> = ({
   ), [appointments, selectedDoctorIds, restricted, doctorId]);
   // State
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState<'day' | 'week' | 'month'>('week');
+  // Ko'rinish: oxirgi tanlangani eslab qolinadi. Hali tanlanmagan bo'lsa: klinikada bir
+  // nechta shifokor bo'lsa admin va resepshnga — "Kun" (har shifokor alohida ustunda, qabul
+  // o'qiladigan kenglikda), shifokorga va bitta shifokorli klinikaga — "Hafta".
+  // Telefonda doim "Kun".
+  const [chosenView, setChosenView] = useState<CalView | null>(() => {
+    try {
+      const saved = localStorage.getItem(CALENDAR_VIEW_KEY);
+      if (saved === 'day' || saved === 'week' || saved === 'month') return saved;
+    } catch { /* xotira yopiq bo'lsa — standart */ }
+    return null;
+  });
+  const [narrow, setNarrow] = useState(() => window.innerWidth < 768);
+  const view: CalView = narrow ? 'day' : chosenView ?? (!ownDoctorId && activeDoctors.length > 1 ? 'day' : 'week');
+  const setView = (v: CalView) => {
+    setChosenView(v);
+    try { localStorage.setItem(CALENDAR_VIEW_KEY, v); } catch { /* sessiya davomida baribir ishlaydi */ }
+  };
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [editingApptId, setEditingApptId] = useState<string | null>(null);
@@ -132,16 +160,9 @@ export const Calendar: React.FC<CalendarProps> = ({
     secondaryPhone: ''
   });
 
-  // Handle Resize for Responsive View
+  // Telefon o'lchamida jadval har doim "Kun" ko'rinishida (tanlov saqlanib qoladi)
   React.useEffect(() => {
-    // "Oy" qo'lda tanlangan bo'lsa, oyna o'lchami o'zgarganda saqlanib qoladi
-    const handleResize = () => {
-      setView(v => v === 'month' ? v : window.innerWidth < 768 ? 'day' : 'week');
-    };
-
-    // Initial check
-    handleResize();
-
+    const handleResize = () => setNarrow(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -196,7 +217,7 @@ export const Calendar: React.FC<CalendarProps> = ({
   };
 
   // Helper: Get days to display
-  const getDisplayDays = (date: Date, currentView: 'day' | 'week' | 'month') => {
+  const getDisplayDays = (date: Date, currentView: CalView) => {
     if (currentView === 'day') {
       return [new Date(date)];
     }
@@ -242,11 +263,117 @@ export const Calendar: React.FC<CalendarProps> = ({
       : `${formatDayMonth(first)} – ${formatDayMonth(last)}`;
   })();
 
-  const gridColsClass = view === 'week' 
-    ? 'grid-cols-8' 
-    : columnDoctors.length > 0 
-      ? `grid-cols-[60px_repeat(${columnDoctors.length},minmax(200px,1fr))]` 
-      : 'grid-cols-[60px_1fr]';
+  // ─── Jadval (Kun / Hafta) ──────────────────────────────────────────────────
+  const dayKeys = displayDays.map(d => formatDateToISO(d));
+  const gridColumns = view === 'week' ? 7 : Math.max(1, columnDoctors.length);
+  const gridTemplate = view === 'week'
+    ? `${TIME_COL_PX}px repeat(7, minmax(0, 1fr))`
+    : columnDoctors.length > 0
+      ? `${TIME_COL_PX}px repeat(${columnDoctors.length}, minmax(160px, 1fr))`
+      : `${TIME_COL_PX}px 1fr`;
+  const doctorRank = new Map<string, number>(doctors.map((d, i) => [d.id, i]));
+  const spanOf = (a: Appointment): [number, number] => {
+    const start = minutesOfTime(a.time);
+    return [start, start + Math.max(10, a.duration || 30)];
+  };
+
+  // Bekor qilingan qabul vaqtni band qilmaydi — jadvalda ko'rsatilmaydi (u bemor kartasida qoladi)
+  const gridAppointments = visibleAppointments.filter(a =>
+    a.status !== 'Cancelled' && (view === 'week' ? dayKeys.includes(a.date) : a.date === currentKey));
+
+  // Soatlar: klinika ish vaqti; undan tashqaridagi qabul bo'lsa — jadval o'sha soatgacha kengayadi
+  const gridFirstHour = gridAppointments.reduce((h, a) => Math.min(h, Math.floor(spanOf(a)[0] / 60)), startHour);
+  const gridLastHour = Math.min(23, gridAppointments.reduce((h, a) => Math.max(h, Math.ceil(spanOf(a)[1] / 60) - 1), endHour));
+  const gridHours = Array.from({ length: Math.max(1, gridLastHour - gridFirstHour + 1) }, (_, i) => i + gridFirstHour);
+  const gridStartMin = gridFirstHour * 60;
+  const gridHeight = gridHours.length * HOUR_PX;
+
+  // Joylashuv: ustun (hafta — kun, kun — shifokor) ichida vaqti ustma-ust tushgan qabullar
+  // yonma-yon turadi, qolgani ustunning to'liq kengligini oladi; yonida bo'sh joy bo'lsa
+  // blok o'sha tomonga kengayadi (Google Calendar kabi). Bir vaqtda turganlar shifokor
+  // tartibida — bir shifokor hafta davomida bir tomonda turadi.
+  const placements: Record<string, { col: number; sub: number; subs: number; span: number }> = (() => {
+    const res: Record<string, { col: number; sub: number; subs: number; span: number }> = {};
+    const groups = new Map<number, Appointment[]>();
+    for (const a of gridAppointments) {
+      const col = view === 'week'
+        ? dayKeys.indexOf(a.date)
+        : columnDoctors.length > 0 ? columnDoctors.findIndex(d => d.id === a.doctorId) : 0;
+      if (col < 0) continue;
+      if (!groups.has(col)) groups.set(col, []);
+      groups.get(col)!.push(a);
+    }
+    for (const [col, list] of groups) {
+      list.sort((a, b) => spanOf(a)[0] - spanOf(b)[0]
+        || (doctorRank.get(a.doctorId) ?? 99) - (doctorRank.get(b.doctorId) ?? 99)
+        || spanOf(b)[1] - spanOf(a)[1]);
+      let cluster: Appointment[] = [];
+      let clusterEnd = -1;
+      let ends: number[] = [];
+      const flush = () => {
+        const subs = Math.max(1, ends.length);
+        for (const a of cluster) {
+          const p = res[a.id];
+          const [s, e] = spanOf(a);
+          let span = 1;
+          while (p.sub + span < subs && !cluster.some(b =>
+            res[b.id].sub === p.sub + span && spanOf(b)[0] < e && spanOf(b)[1] > s)) span++;
+          p.subs = subs;
+          p.span = span;
+        }
+        cluster = [];
+        ends = [];
+        clusterEnd = -1;
+      };
+      for (const a of list) {
+        const [s, e] = spanOf(a);
+        if (cluster.length && s >= clusterEnd) flush();
+        let sub = ends.findIndex(x => x <= s);
+        if (sub === -1) { sub = ends.length; ends.push(e); } else ends[sub] = e;
+        res[a.id] = { col, sub, subs: 1, span: 1 };
+        cluster.push(a);
+        clusterEnd = Math.max(clusterEnd, e);
+      }
+      flush();
+    }
+    return res;
+  })();
+
+  // Blok matni kenglikka qarab tanlanadi — shuning uchun jadval kengligi o'lchab turiladi
+  const gridRef = React.useRef<HTMLDivElement>(null);
+  const [gridWidth, setGridWidth] = useState(0);
+  React.useEffect(() => {
+    const el = gridRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(entries => setGridWidth(entries[0].contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view]);
+
+  // "Hozir" chizig'i — daqiqa sayin yangilanadi
+  const [nowTick, setNowTick] = useState(() => new Date());
+  React.useEffect(() => {
+    const id = setInterval(() => setNowTick(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMin = nowTick.getHours() * 60 + nowTick.getMinutes();
+  const nowTop = (nowMin - gridStartMin) * HOUR_PX / 60;
+  const todayCol = view === 'week' ? dayKeys.indexOf(todayKey) : currentKey === todayKey ? 0 : -1;
+  const showNowLine = view !== 'month' && todayCol !== -1 && nowTop >= 0 && nowTop <= gridHeight;
+
+  // Ochilganda jadval hozirgi vaqtga (bugun bo'lmasa — birinchi qabulga) suriladi.
+  // Faqat ko'rinish yoki sana almashganda: foydalanuvchi o'zi aylantirganini buzmaymiz.
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || view === 'month') return;
+    const first = gridAppointments.reduce((mn, a) => Math.min(mn, minutesOfTime(a.time)), Infinity);
+    const fromMin = showNowLine
+      ? (nowTick.getHours() - 1) * 60
+      : Number.isFinite(first) ? Math.floor(first / 60) * 60 : gridStartMin;
+    el.scrollTop = Math.max(0, (fromMin - gridStartMin) * HOUR_PX / 60);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, currentKey]);
 
   // Handlers
   const handlePrev = () => {
@@ -547,7 +674,8 @@ export const Calendar: React.FC<CalendarProps> = ({
   ];
 
   return (
-    <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col animate-fade-in">
+    // Balandlik ekranga teng: sahifa emas, faqat jadval aylanadi (yuqori panel va chekkalar ayiriladi)
+    <div className="space-y-6 h-[calc(100vh-12.25rem)] lg:h-[calc(100vh-11rem)] flex flex-col animate-fade-in">
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -648,7 +776,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
       {/* Calendar Grid */}
       <div data-tour="cal-grid" className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col relative">
-        <div className="flex-1 overflow-auto">
+        <div ref={scrollRef} className="flex-1 overflow-auto">
           {view === 'month' ? (
             <CalendarMonthView
               month={currentDate}
@@ -660,31 +788,40 @@ export const Calendar: React.FC<CalendarProps> = ({
               onCreate={canCreate ? key => openAddModal(key) : undefined}
             />
           ) : (
-          <div className={`h-full relative ${view === 'week' ? 'min-w-[1000px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
-            {/* Header Row */}
-            <div className={`grid ${gridColsClass} border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 bg-white dark:bg-gray-800`}>
-              <div className="p-4 border-r border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-40"></div>
+          <div ref={gridRef} className={`relative ${view === 'week' ? 'min-w-[1000px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
+            {/* Sarlavha: kunlar yoki shifokorlar */}
+            <div className="grid border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 bg-white dark:bg-gray-800" style={{ gridTemplateColumns: gridTemplate }}>
+              <div className="border-r border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-40"></div>
               {view === 'week' ? (
                 displayDays.map((day, i) => {
-                  const isToday = day.toDateString() === new Date().toDateString();
+                  const isToday = dayKeys[i] === todayKey;
+                  const count = gridAppointments.filter(a => a.date === dayKeys[i]).length;
                   return (
-                    <div key={i} className={`p-4 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
+                    <div key={i} className={`px-2 py-3 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
                       <p className={`text-sm font-semibold ${isToday ? 'text-primary-600' : 'text-gray-900 dark:text-white'}`}>{dayNames[day.getDay()]}</p>
-                      <p className={`text-xs ${isToday ? 'text-primary-500' : 'text-gray-500 dark:text-gray-400'}`}>{day.getDate()}</p>
+                      <p className={`text-xs ${isToday ? 'text-primary-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                        {day.getDate()}
+                        {count > 0 && <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500">· {t('calendar.dayCount').replace('{n}', String(count))}</span>}
+                      </p>
                     </div>
                   );
                 })
               ) : (
                 columnDoctors.length > 0 ? (
-                  columnDoctors.map((doc, i) => (
-                    <div key={doc.id} className="p-3 text-center border-r border-gray-100 dark:border-gray-700 last:border-0">
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: doc.color || '#3B82F6' }} />
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">Dr. {doc.lastName}</p>
+                  columnDoctors.map(doc => {
+                    const count = gridAppointments.filter(a => a.doctorId === doc.id).length;
+                    return (
+                      <div key={doc.id} className="p-3 text-center border-r border-gray-100 dark:border-gray-700 last:border-0">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: doc.color || '#3B82F6' }} />
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">Dr. {doc.lastName}</p>
+                        </div>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                          {doc.specialty}{count > 0 && ` · ${t('calendar.dayCount').replace('{n}', String(count))}`}
+                        </p>
                       </div>
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{doc.specialty}</p>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="p-4 text-center border-r border-gray-100 dark:border-gray-700">
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">{dayNames[displayDays[0].getDay()]}</p>
@@ -694,242 +831,194 @@ export const Calendar: React.FC<CalendarProps> = ({
               )}
             </div>
 
-            {/* Body */}
-            <div className={`grid ${gridColsClass} h-[1200px] relative`}>
-              {/* Time Column */}
+            {/* Jadval */}
+            <div className="grid relative" style={{ gridTemplateColumns: gridTemplate, height: gridHeight }}>
+              {/* Soatlar */}
               <div className="border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-20">
-                {HOURS.map(hour => (
+                {gridHours.map(hour => (
                   <React.Fragment key={hour}>
-                    <div className="h-12 border-b border-gray-100 dark:border-gray-700/50 text-xs text-gray-400 p-2 text-right">{hour}:00</div>
+                    <div className={`h-12 border-b border-gray-100 dark:border-gray-700/50 text-xs text-gray-400 p-2 text-right tabular-nums ${showNowLine && nowMin >= hour * 60 - 5 && nowMin < hour * 60 + 22 ? 'invisible' : ''}`}>{hour}:00</div>
                     <div className="h-12 border-b border-gray-100 dark:border-gray-700/50"></div>
                   </React.Fragment>
                 ))}
+                {showNowLine && (
+                  <div className="absolute right-1 -translate-y-1/2 px-1 py-px rounded bg-red-500 text-white text-[10px] font-bold tabular-nums pointer-events-none" style={{ top: nowTop }}>
+                    {hhmmOf(nowMin)}
+                  </div>
+                )}
               </div>
 
-              {/* Days/Doctors Columns */}
-              {view === 'week' ? (
-                displayDays.map((day, i) => {
-                  const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-                  return (
-                    <div key={i} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
-                      {HOURS.map(hour => {
-                        const formattedHour = hour.toString().padStart(2, '0');
-                        return (
-                          <React.Fragment key={hour}>
-                            <div
-                              className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors"
-                              onClick={() => openAddModal(dateStr, `${formattedHour}:00`)}
-                            ></div>
-                            <div
-                              className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors"
-                              onClick={() => openAddModal(dateStr, `${formattedHour}:30`)}
-                            ></div>
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                  );
-                })
-              ) : (
-                columnDoctors.length > 0 ? (
-                  columnDoctors.map((doc, i) => {
-                    const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-                    return (
-                      <div key={doc.id} className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
-                        {HOURS.map(hour => {
-                          const formattedHour = hour.toString().padStart(2, '0');
-                          return (
-                            <React.Fragment key={hour}>
-                              <div
-                                className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors"
-                                onClick={() => openAddModal(dateStr, `${formattedHour}:00`, doc.id)}
-                              ></div>
-                              <div
-                                className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10 transition-colors"
-                                onClick={() => openAddModal(dateStr, `${formattedHour}:30`, doc.id)}
-                              ></div>
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="border-r border-gray-100 dark:border-gray-700 last:border-0 relative">
-                    {HOURS.map(hour => {
-                      const formattedHour = hour.toString().padStart(2, '0');
-                      const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+              {/* Bo'sh kataklar: bosilsa — shu vaqtga yangi qabul */}
+              {(view === 'week' ? dayKeys : columnDoctors.length > 0 ? columnDoctors.map(d => d.id) : [currentKey]).map((key, i) => {
+                const dateStr = view === 'week' ? key : currentKey;
+                const docId = view === 'day' && columnDoctors.length > 0 ? key : undefined;
+                const isTodayCol = view === 'week' && key === todayKey;
+                return (
+                  <div key={key} className={`border-r border-gray-100 dark:border-gray-700 last:border-0 relative ${isTodayCol ? 'bg-primary-50/30 dark:bg-primary-900/5' : ''}`}>
+                    {gridHours.map(hour => {
+                      const hh = hour.toString().padStart(2, '0');
                       return (
                         <React.Fragment key={hour}>
-                          <div className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer" onClick={() => openAddModal(dateStr, `${formattedHour}:00`)}></div>
-                          <div className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer" onClick={() => openAddModal(dateStr, `${formattedHour}:30`)}></div>
+                          <div
+                            className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/40 dark:hover:bg-primary-900/10 transition-colors"
+                            onClick={() => openAddModal(dateStr, `${hh}:00`, docId)}
+                          ></div>
+                          <div
+                            className="h-12 border-b border-dashed border-gray-50 dark:border-gray-800/40 cursor-pointer hover:bg-primary-50/40 dark:hover:bg-primary-900/10 transition-colors"
+                            onClick={() => openAddModal(dateStr, `${hh}:30`, docId)}
+                          ></div>
                         </React.Fragment>
                       );
                     })}
                   </div>
-                )
+                );
+              })}
+
+              {/* Hozir — qabullar ostida: ism ustidan o'tib, "Kelmadi" chizig'iga o'xshab qolmasin */}
+              {showNowLine && (
+                <div
+                  className="absolute z-[5] pointer-events-none"
+                  style={{
+                    top: nowTop,
+                    left: view === 'week' ? `calc(${TIME_COL_PX}px + ${todayCol} * ((100% - ${TIME_COL_PX}px) / 7))` : TIME_COL_PX,
+                    width: view === 'week' ? `calc((100% - ${TIME_COL_PX}px) / 7)` : `calc(100% - ${TIME_COL_PX}px)`,
+                  }}
+                >
+                  <div className="relative h-0.5 bg-red-500/90">
+                    <span className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full bg-red-500" />
+                  </div>
+                </div>
               )}
 
-              {/* Appointments Overlay */}
-              {/* Appointments Overlay */}
-              {(() => {
-                // Calculate layout data for overlapping appointments
-                const layoutData: Record<string, { col: number; total: number }> = {};
+              {/* Qabullar */}
+              {gridAppointments.map(app => {
+                const place = placements[app.id];
+                if (!place) return null;
+                const start = minutesOfTime(app.time);
+                const dur = Math.max(10, app.duration || 30);
+                const end = start + dur;
+                // Jadval qabullarga qarab kengayadi; faqat yarim tundan o'tib ketgan qismi kesiladi
+                const top = Math.max(0, (start - gridStartMin) * HOUR_PX / 60);
+                const bottom = Math.min(gridHeight, (end - gridStartMin) * HOUR_PX / 60);
+                if (bottom <= 0 || top >= gridHeight) return null;
+                const heightPx = Math.max(18, bottom - top - 2);
+                const colW = `((100% - ${TIME_COL_PX}px) / ${gridColumns})`;
+                const subW = `(${colW} / ${place.subs})`;
+                const box: React.CSSProperties = {
+                  top: top + 1,
+                  height: heightPx,
+                  left: `calc(${TIME_COL_PX}px + ${place.col} * ${colW} + ${place.sub} * ${subW} + 1px)`,
+                  width: `calc(${place.span} * ${subW} - 3px)`,
+                };
+                // Blok necha piksel — shunga qarab qancha matn sig'ishi tanlanadi
+                const blockPx = gridWidth > 0 ? (gridWidth - TIME_COL_PX) / gridColumns / place.subs * place.span : 160;
+                const tier = blockPx < 40 ? 'tiny' : blockPx < 72 ? 'mini' : blockPx < 120 ? 'compact' : 'full';
+                const oneLine = heightPx < 34;
+                const doctor = doctors.find(d => d.id === app.doctorId);
+                const color = doctor?.color || '#3B82F6';
+                const doctorLabel = doctor ? `Dr. ${doctor.lastName}` : app.doctorName;
+                const timeRange = `${app.time}–${hhmmOf(end)}`;
 
-                // Group by day (+ doctor if in day view) to handle overlaps independently
-                const getGroupKey = (app: Appointment) => view === 'day' ? `${app.date}-${app.doctorId}` : app.date;
-                const dayGroups: Record<string, Appointment[]> = {};
-                visibleAppointments.forEach(app => {
-                  const key = getGroupKey(app);
-                  if (!dayGroups[key]) dayGroups[key] = [];
-                  dayGroups[key].push(app);
-                });
-
-                Object.values(dayGroups).forEach(dayAppts => {
-                  const sorted = [...dayAppts].sort((a, b) => a.time.localeCompare(b.time));
-                  const groups: Appointment[][] = [];
-
-                  sorted.forEach(app => {
-                    let placed = false;
-                    for (const group of groups) {
-                      const overlaps = group.some(other => {
-                        const startA = new Date(`${app.date}T${app.time}`).getTime();
-                        const endA = startA + app.duration * 60000;
-                        const startB = new Date(`${other.date}T${other.time}`).getTime();
-                        const endB = startB + other.duration * 60000;
-                        return Math.max(startA, startB) < Math.min(endA, endB);
-                      });
-                      if (overlaps) { group.push(app); placed = true; break; }
-                    }
-                    if (!placed) groups.push([app]);
-                  });
-
-                  groups.forEach(group => {
-                    const columns: string[][] = [];
-                    group.forEach(app => {
-                      let colIndex = 0;
-                      while (true) {
-                        if (!columns[colIndex]) { columns[colIndex] = [app.id]; break; }
-                        const overlapsInCol = columns[colIndex].some(otherId => {
-                          const other = group.find(o => o.id === otherId)!;
-                          const startA = new Date(`${app.date}T${app.time}`).getTime();
-                          const endA = startA + app.duration * 60000;
-                          const startB = new Date(`${other.date}T${other.time}`).getTime();
-                          const endB = startB + other.duration * 60000;
-                          return Math.max(startA, startB) < Math.min(endA, endB);
-                        });
-                        if (!overlapsInCol) { columns[colIndex].push(app.id); break; }
-                        colIndex++;
-                      }
-                    });
-                    group.forEach(app => {
-                      layoutData[app.id] = { col: columns.findIndex(c => c.includes(app.id)), total: columns.length };
-                    });
-                  });
-                });
-
-                return visibleAppointments.map(app => {
-                  const appDate = new Date(app.date);
-                  const dayIndex = displayDays.findIndex(d => d.toDateString() === appDate.toDateString());
-                  if (dayIndex === -1 && view === 'week') return null;
-                  if (view === 'day' && app.date !== currentKey) return null;
-
-                  const [h, m] = app.time.split(':').map(Number);
-                  if (isNaN(h)) return null;
-
-                  const topOffset = ((h - startHour) * 96) + (m >= 30 ? 48 : 0) + (m % 30 / 30 * 48);
-                  const height = (app.duration / 30) * 48;
-
-                  const { col = 0, total = 1 } = layoutData[app.id] || {};
-                  const colWidth = 100 / total;
-                  const colOffset = col * colWidth;
-
-                  let left = '';
-                  let width = '';
-
-                  if (view === 'week') {
-                    left = `calc(${(dayIndex + 1) * (100 / 8)}% + 2px + ${(colOffset / 100) * (100 / 8)}%)`;
-                    width = `calc(${(colWidth / 100) * (100 / 8)}% - 4px)`;
-                  } else {
-                    const docIndex = columnDoctors.findIndex(d => d.id === app.doctorId);
-                    if (docIndex === -1 && columnDoctors.length > 0) return null; // Shouldn't happen with filtered appointments
-
-                    const numDocs = Math.max(1, columnDoctors.length);
-                    const docColumnWidth = `(100% - 60px) / ${numDocs}`;
-                    
-                    left = `calc(60px + (${docIndex === -1 ? 0 : docIndex} * (${docColumnWidth})) + ${(colOffset / 100)} * (${docColumnWidth}) + 2px)`;
-                    width = `calc(${(colWidth / 100)} * (${docColumnWidth}) - 4px)`;
-                  }
-
-                  const doctor = doctors.find(d => d.id === app.doctorId);
-                  const doctorColor = doctor?.color || '#3B82F6';
-                  const box = { top: `${topOffset}px`, left, width, height: `${height - 4}px` };
-
-                  // Hamkasb qabuli (ko'rish doirasi "faqat o'zinikini") — faqat vaqt band ekani
-                  if (isPrivate(app)) {
-                    return (
-                      <div
-                        key={app.id}
-                        title={`${app.time} · ${t('calendar.busy')} · ${app.doctorName}`}
-                        className="absolute m-1 p-2 rounded-md border-l-4 text-xs overflow-hidden z-10 cursor-default"
-                        style={{
-                          ...box,
-                          backgroundColor: `${doctorColor}0D`,
-                          backgroundImage: `repeating-linear-gradient(135deg, ${doctorColor}1A 0 6px, transparent 6px 12px)`,
-                          borderLeftColor: doctorColor,
-                          color: doctorColor,
-                        }}
-                      >
-                        <div className="font-bold truncate">{t('calendar.busy')}</div>
-                        {height > 40 && <div className="mt-1 text-[10px] tabular-nums opacity-75">{app.time}</div>}
-                      </div>
-                    );
-                  }
-
-                  const statusColors = {
-                    'Confirmed': 'border-current',
-                    'Checked-In': 'border-current',
-                    'Completed': 'border-current opacity-80',
-                    'Pending': 'border-current border-dashed',
-                    'Cancelled': 'border-red-500 bg-red-50 text-red-700 opacity-50',
-                    'No-Show': 'border-gray-400 bg-gray-100 text-gray-500 opacity-50'
-                  }[app.status] || 'border-current';
-
-                  const isSpecialStatus = app.status === 'Cancelled' || app.status === 'No-Show';
-
+                // Hamkasb qabuli (ko'rish doirasi "faqat o'zinikini") — faqat vaqt band ekani
+                if (isPrivate(app)) {
                   return (
                     <div
                       key={app.id}
-                      onClick={() => setSelectedAppointment(app)}
-                      className={`absolute m-1 p-2 rounded-md border-l-4 text-xs shadow-sm cursor-pointer hover:brightness-95 transition-all z-10 ${isSpecialStatus ? statusColors : ''}`}
-                      style={!isSpecialStatus ? {
+                      title={`${timeRange} · ${t('calendar.busy')} · ${doctorLabel}`}
+                      className={`absolute px-1.5 ${oneLine ? '' : 'py-1'} rounded-md text-[11px] leading-tight overflow-hidden z-10 cursor-default bg-white dark:bg-gray-800`}
+                      style={{
                         ...box,
-                        backgroundColor: `${doctorColor}15`,
-                        borderLeftColor: doctorColor,
-                        color: doctorColor,
-                      } : box}
+                        backgroundImage: `repeating-linear-gradient(135deg, ${color}1A 0 6px, transparent 6px 12px), linear-gradient(${color}0D, ${color}0D)`,
+                        borderLeft: `3px solid ${color}`,
+                        color,
+                      }}
                     >
-                      <div className="font-bold truncate pr-4 flex items-center justify-between">
-                        <span className="truncate">{app.patientName}</span>
-                        {app.status === 'Completed' && <CheckCircle className="w-3 h-3 flex-shrink-0" />}
-                      </div>
-                      {app.reminderSent && (
-                        <div className="absolute top-1 right-1">
-                          <Bell className="w-3 h-3 text-primary-600 dark:text-primary-400 fill-current" />
+                      {tier === 'tiny' ? null : oneLine ? (
+                        <div className="h-full flex items-center gap-1 leading-none whitespace-nowrap">
+                          <span className="text-[10px] font-bold tabular-nums">{app.time}</span>
+                          {tier !== 'mini' && <span className="min-w-0 font-semibold truncate opacity-80">{t('calendar.busy')}</span>}
                         </div>
-                      )}
-                      <div className="truncate opacity-75">{app.type}</div>
-                      {height > 40 && (
-                        <div className="flex items-center mt-1 gap-1 text-[10px]">
-                          <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] text-white" style={{ backgroundColor: doctorColor }}>{(doctor?.lastName || app.doctorName.replace(/^Dr\.\s*/, '')).charAt(0)}</div>
-                          {app.time}
-                        </div>
+                      ) : (
+                        <>
+                          <div className="text-[10px] font-bold tabular-nums truncate">{app.time}</div>
+                          {/* Tor blokda "Band" so'zi sig'maydi — chiziqli fon buni baribir bildiradi */}
+                          {tier !== 'mini' && <div className="font-semibold truncate opacity-80">{t('calendar.busy')}</div>}
+                        </>
                       )}
                     </div>
                   );
-                });
-              })()}
+                }
 
+                const done = app.status === 'Completed';
+                const noShow = app.status === 'No-Show';
+                const arrived = app.status === 'Checked-In';
+                const pending = app.status === 'Pending';
+                const tint = noShow ? 'rgba(156, 163, 175, 0.16)' : `${color}${done ? '1A' : '26'}`;
+                const [surname = app.patientName, first = ''] = app.patientName.split(/\s+/);
+                const shortName = first ? `${surname} ${first.charAt(0)}.` : surname;
+                const title = [timeRange, app.patientName, app.type, doctorLabel, statusLabel(app.status, language)].filter(Boolean).join(' · ');
+                const statusIcon = done
+                  ? <CheckCircle className="w-3 h-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  : noShow
+                    ? <XCircle className="w-3 h-3 shrink-0 text-gray-400" />
+                    : arrived
+                      ? <span className="w-2 h-2 shrink-0 rounded-full bg-indigo-500 animate-pulse" />
+                      : app.reminderSent
+                        ? <Bell className="w-3 h-3 shrink-0 text-primary-500 fill-current" />
+                        : null;
+
+                return (
+                  <div
+                    key={app.id}
+                    onClick={() => setSelectedAppointment(app)}
+                    title={title}
+                    className="absolute rounded-md overflow-hidden z-10 cursor-pointer transition-shadow hover:shadow-md hover:z-20 bg-white dark:bg-gray-800"
+                    style={{
+                      ...box,
+                      backgroundImage: `linear-gradient(${tint}, ${tint})`,
+                      borderLeft: `3px ${pending ? 'dashed' : 'solid'} ${noShow ? '#9CA3AF' : color}`,
+                    }}
+                  >
+                    <div className={`h-full ${done ? 'opacity-70' : ''}`}>
+                      {tier === 'tiny' ? null : oneLine ? (
+                        // Qisqa qabul: vaqt va ism bir qatorda
+                        <div className="h-full px-1.5 flex items-center gap-1 text-[10px] leading-none whitespace-nowrap">
+                          <span className="font-bold tabular-nums text-gray-700 dark:text-gray-200">{app.time}</span>
+                          {tier !== 'mini' && statusIcon}
+                          <span className={`min-w-0 font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>
+                            {tier === 'full' ? app.patientName : tier === 'compact' ? shortName : surname}
+                          </span>
+                        </div>
+                      ) : tier === 'mini' ? (
+                        <div className="px-1 py-0.5 leading-tight">
+                          <div className="text-[10px] font-bold tabular-nums text-gray-700 dark:text-gray-200">{app.time}</div>
+                          {heightPx >= 30 && (
+                            <div className={`text-[10px] font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>{surname}</div>
+                          )}
+                        </div>
+                      ) : tier === 'compact' ? (
+                        <div className="px-1.5 py-1 leading-tight">
+                          <div className="flex items-center gap-1 text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
+                            <span className="truncate">{app.time}</span>
+                            {statusIcon}
+                          </div>
+                          <div className={`text-[11px] font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>{shortName}</div>
+                          {heightPx >= 62 && <div className="text-[10px] truncate text-gray-500 dark:text-gray-400">{app.type}</div>}
+                        </div>
+                      ) : (
+                        <div className="px-2 py-1 leading-snug">
+                          <div className="flex items-center justify-between gap-1 text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
+                            <span className="truncate">{timeRange}</span>
+                            {statusIcon}
+                          </div>
+                          <div className={`text-xs font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>{app.patientName}</div>
+                          {heightPx >= 56 && <div className="text-[11px] truncate text-gray-500 dark:text-gray-400">{app.type}</div>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
           )}

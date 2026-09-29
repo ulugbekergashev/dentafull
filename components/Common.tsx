@@ -90,6 +90,10 @@ const STATUS_TRANSLATIONS: Record<'uz' | 'ru', Record<string, string>> = {
   },
 };
 
+/** Holat nomi tanlangan tilda (Badge bilan bir xil lug'at) */
+export const statusLabel = (status: string, language: 'uz' | 'ru'): string =>
+  STATUS_TRANSLATIONS[language]?.[(status || '').toLowerCase()] || status;
+
 export const Badge: React.FC<{ status?: string }> = ({ status = 'pending' }) => {
   const { language } = useLanguage();
   let colorClass = 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
