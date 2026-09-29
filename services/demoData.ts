@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor, SegmentFieldDescriptor, Recall, FlowLog, TicketLog } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor, SegmentFieldDescriptor, Recall, FlowLog, TicketLog, UserRole } from '../types';
 import { formatDateToISO } from '../utils/dateUtils';
 import { advanceDemoDay, buildDemoSeed, DEMO_SEED_VERSION, DemoDayState } from './demoSeed';
 
@@ -342,5 +342,40 @@ export const DEMO_CREDENTIALS = {
     password: 'demoklinikaparol',
 };
 
+/** Login demo akkauntniki (bo'sh joy va katta-kichik harf farq qilmaydi) */
+export const isDemoUsername = (username: unknown): boolean =>
+    String(username ?? '').trim().toLowerCase() === DEMO_CREDENTIALS.username;
+
+/** Brauzer demosi sessiyasi — serverga bormaydi, token soxta */
+export const demoAuthData = () => ({
+    role: UserRole.CLINIC_ADMIN,
+    name: 'Demo Admin',
+    clinicId: 'demo-clinic-1',
+    username: DEMO_CREDENTIALS.username,
+    token: 'demo-token',
+    isDemo: true,
+});
+
+/**
+ * Saytdagi demo login ilgari serverdagi "Demo Klinika"ga kirardi. O'sha paytda ochilgan
+ * sessiya brauzerda qolgan bo'lsa, ilova login oynasini ko'rsatmay eski klinikani ochaverardi.
+ * Bunday sessiya ham brauzer demosiga o'tkaziladi (server tokeni tashlanadi) — boshqa
+ * foydalanuvchilarning sessiyasiga tegilmaydi.
+ */
+function migrateDemoLogin(): void {
+    for (const store of [sessionStorage, localStorage]) {
+        try {
+            const raw = store.getItem('dentalflow_auth');
+            if (!raw) continue;
+            const auth = JSON.parse(raw);
+            if (auth && !auth.isDemo && isDemoUsername(auth.username)) {
+                store.setItem('dentalflow_auth', JSON.stringify(demoAuthData()));
+            }
+        } catch { /* xotira yopiq — o'tkazib yuboriladi */ }
+    }
+}
+
+// Ilova sessiyani o'qishidan oldin: eski demo sessiyasi — brauzer demosiga
+migrateDemoLogin();
 // Sahifa demo ochiq holda yangilangan bo'lsa — ma'lumot birinchi so'rovgacha tayyor bo'lsin
 if (demoSessionActive()) ensureDemoData();

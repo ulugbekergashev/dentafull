@@ -3,7 +3,7 @@ import { Button, Input, Card } from '../components/Common';
 import { UserRole } from '../types';
 import { AlertCircle, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { api } from '../services/api';
-import { DEMO_CREDENTIALS } from '../services/demoData';
+import { demoAuthData, isDemoUsername } from '../services/demoData';
 import { useLanguage } from '../context/LanguageContext';
 import { LogoMark } from '../components/Logo';
 
@@ -26,19 +26,12 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
 
     try {
       // Demo klinika butunlay brauzerda ishlaydi (services/demoData.ts): bu login serverga
-      // yuborilmaydi va bazaga hech narsa yozilmaydi. Boshqa loginlar odatdagidek serverga boradi.
-      if (username.trim() === DEMO_CREDENTIALS.username && password === DEMO_CREDENTIALS.password) {
-        const demoAuthData = {
-          role: UserRole.CLINIC_ADMIN,
-          name: 'Demo Admin',
-          clinicId: 'demo-clinic-1',
-          username: DEMO_CREDENTIALS.username,
-          token: 'demo-token',
-          isDemo: true,
-        };
-
+      // yuborilmaydi va bazaga hech narsa yozilmaydi. Parol tekshirilmaydi — demo'da maxfiy
+      // narsa yo'q, bazadagi eski demo akkauntning paroli esa boshqacha bo'lishi mumkin.
+      // Boshqa loginlar odatdagidek serverga boradi.
+      if (isDemoUsername(username)) {
         // Har doim eslab qolinadi
-        localStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData));
+        localStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData()));
 
         onLogin(UserRole.CLINIC_ADMIN, 'Demo Admin', 'demo-clinic-1');
         setIsLoading(false);

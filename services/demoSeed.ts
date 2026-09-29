@@ -26,8 +26,6 @@ const FUTURE_DAYS = 7;
 const PATIENT_COUNT = 320;
 /** Shu raqamdan boshlab bemorlar hali kelmagan — faqat bugun va keyingi kunlarga yozilgan */
 const NEW_PATIENTS_FROM = 291;
-const LUNCH_FROM = 13 * 60;
-const LUNCH_TO = 14 * 60;
 const LAST_SLOT_END = 23 * 60 + 45;
 /** Erta smena bundan oldin boshlanmaydi (tunda ochilgan demo 00:10 ga bemor yozmasin) */
 const FIRST_SLOT_START = 6 * 60;
@@ -106,6 +104,8 @@ interface Profile {
     doctor: Doctor;
     /** Ish vaqti, kun boshidan daqiqa */
     hours: [number, number];
+    /** Tushlik — har shifokorda har xil, kabinetlar birdaniga bo'shab qolmasin */
+    lunch: [number, number];
     /** Yakshanba navbatchiligi; yo'q bo'lsa — dam oladi */
     sunday?: [number, number];
     /** [xizmat id, ulushi] */
@@ -126,22 +126,22 @@ const doctorOf = (id: string, firstName: string, lastName: string, specialty: st
 const PROFILES: Profile[] = [
     {
         doctor: doctorOf('demo-doctor-1', 'Kamola', 'Ahmedova', 'Terapevt', '#3B82F6', 40, 'kamola', 9001),
-        hours: [9 * 60, 19 * 60], sunday: [10 * 60, 15 * 60], late: true,
+        hours: [9 * 60, 19 * 60], lunch: [13 * 60, 14 * 60], sunday: [10 * 60, 15 * 60], late: true,
         mix: [[3, 5], [8, 3], [1, 2], [2, 2], [5, 1]],
     },
     {
         doctor: doctorOf('demo-doctor-2', 'Jamshid', 'Karimov', 'Ortodont', '#10B981', 50, 'jamshid', 9002),
-        hours: [10 * 60, 20 * 60], late: true,
+        hours: [10 * 60, 20 * 60], lunch: [14 * 60, 15 * 60], late: true,
         mix: [[10, 7], [1, 2], [2, 1], [7, 0.4]],
     },
     {
         doctor: doctorOf('demo-doctor-3', 'Sardor', 'Yusupov', 'Jarroh-implantolog', '#F59E0B', 45, 'sardor', 9003),
-        hours: [9 * 60, 17 * 60], sunday: [10 * 60, 14 * 60], early: true,
+        hours: [9 * 60, 17 * 60], lunch: [12 * 60 + 30, 13 * 60 + 30], sunday: [10 * 60, 14 * 60], early: true,
         mix: [[4, 4], [1, 2], [6, 2], [8, 1], [9, 0.8]],
     },
     {
         doctor: doctorOf('demo-doctor-4', 'Malika', 'Rustamova', 'Bolalar stomatologi', '#EC4899', 40, 'malika', 9004),
-        hours: [8 * 60, 15 * 60], kids: true, early: true,
+        hours: [8 * 60, 15 * 60], lunch: [12 * 60, 12 * 60 + 30], kids: true, early: true,
         mix: [[11, 5], [12, 3], [1, 2], [2, 1], [4, 1]],
     },
 ];
@@ -218,7 +218,7 @@ export interface DemoDayState {
 
 interface PlannedSlot extends DemoSlot { patient: Patient; serviceId: number; note: string }
 
-const GAPS = [0, 0, 5, 10, 10, 15, 20, 30, -10, -15];
+const GAPS = [0, 0, 5, 10, 10, 15, 20, 30, -10];
 
 function toothOf(r: () => number, kid: boolean): number {
     const quadrant = 1 + Math.floor(r() * 4);
@@ -272,7 +272,8 @@ function planDay(date: string, offset: number, pool: { patients: Patient[]; meta
         }
         let t = from + pick(r, [0, 0, 10, 20]);
         for (;;) {
-            if (t >= LUNCH_FROM && t < LUNCH_TO && from < LUNCH_FROM && to > LUNCH_TO) t = LUNCH_TO + pick(r, [0, 10]);
+            const [lunchFrom, lunchTo] = profile.lunch;
+            if (t >= lunchFrom && t < lunchTo && from < lunchFrom && to > lunchTo) t = lunchTo + pick(r, [0, 10]);
             const serviceId = weighted(r, profile.mix);
             const service = SERVICE_BY_ID.get(serviceId)!;
             const duration = service.duration || 30;
