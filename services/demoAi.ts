@@ -1,13 +1,14 @@
 import { Appointment } from '../types';
-import { formatDateToISO } from '../utils/dateUtils';
+import { calcAge, formatDateToISO } from '../utils/dateUtils';
 import { buildUnpaidRows } from '../utils/unpaid';
-import { DEMO_APPOINTMENTS, DEMO_DOCTORS, DEMO_EXPENSES, DEMO_INVENTORY, DEMO_LEADS, DEMO_PATIENTS, DEMO_SERVICES, DEMO_TRANSACTIONS, ensureDemoData } from './demoData';
+import { DEMO_APPOINTMENTS, DEMO_CLINIC, DEMO_DOCTORS, DEMO_EXPENSES, DEMO_INVENTORY, DEMO_LEADS, DEMO_PATIENTS, DEMO_SERVICES, DEMO_TEETH, DEMO_TRANSACTIONS, ensureDemoData } from './demoData';
 
 /**
  * DentaAI demo rejimda. Haqiqiy DentaAI serverdagi model orqali klinika ma'lumotini o'qiydi;
- * demo esa serverga bormaydi — hisobot va javoblar shu yerda demo klinika ma'lumotidan
- * hisoblanadi va oqim ko'rinishida (so'zma-so'z) chiqariladi. Javob turlari server
- * javoblari bilan bir xil shaklda (pages/DentaAiMode.tsx ularni o'zgartirmasdan chizadi).
+ * demo esa serverga bormaydi — hisobot, kun pulsi, kartochkalar va javoblar shu yerda demo
+ * klinika ma'lumotidan hisoblanadi va oqim ko'rinishida (so'zma-so'z) chiqariladi. Javob
+ * turlari server javoblari bilan bir xil shaklda (components/ai/ ularni o'zgartirmasdan chizadi):
+ * pulsi — backend/ai/pulse.ts, kartochkalar — backend/ai/evidence.ts.
  */
 
 type Lang = 'uz' | 'ru';
@@ -136,12 +137,12 @@ const METHOD: Record<string, Record<Lang, string>> = {
 
 function debtorFacts() {
     const rows = buildUnpaidRows(DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_SERVICES, { today: dates().today });
-    const byPatient = new Map<string, { name: string; phone: string; debt: number; last: string }>();
+    const byPatient = new Map<string, { id: string | null; name: string; phone: string; debt: number; last: string }>();
     for (const r of rows) {
         if (r.amount <= 0) continue;
         const key = r.patientId || r.patientName;
         const p = DEMO_PATIENTS.find(x => x.id === r.patientId);
-        const cur = byPatient.get(key) || { name: r.patientName, phone: p?.phone || '—', debt: 0, last: p?.lastVisit || '—' };
+        const cur = byPatient.get(key) || { id: r.patientId || null, name: r.patientName, phone: p?.phone || '—', debt: 0, last: p?.lastVisit || '—' };
         cur.debt += r.amount;
         byPatient.set(key, cur);
     }
@@ -297,12 +298,324 @@ function buildReport(type: ReportType, lang: Lang) {
     };
 }
 
+// ── Kontekst, kartochkalar va puls ───────────────────────────────────────────
+// Server bilan bir xil shakl: backend/ai/evidence.ts (kartochkalar) va
+// backend/ai/pulse.ts (kun pulsi). Demo ham panelning to'liq imkoniyatini
+// ko'rsatishi kerak — sotuvchi aynan shu yerda mahsulotni namoyish qiladi.
+
+type Ctx = { kind?: string; patientId?: string; page?: string } | undefined;
+
+const toMin = (t: string) => {
+    const [h, m] = String(t || '').split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+};
+const hhmm = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+const nowHHMM = () => {
+    const d = new Date();
+    return hhmm(d.getHours() * 60 + d.getMinutes());
+};
+const shiftDay = (days: number) => formatDateToISO(new Date(Date.now() + days * 86400000));
+const fullName = (p?: { firstName?: string; lastName?: string }) => (p ? `${p.lastName || ''} ${p.firstName || ''}`.trim() : '—');
+const uiLang = (): Lang => {
+    try { return localStorage.getItem('app_language') === 'ru' ? 'ru' : 'uz'; } catch { return 'uz'; }
+};
+
+/** "- Plomba (Tish #16) [300 000 UZS]" — backend/ai/tools.ts dagi bilan bir xil o'qiladi. */
+function procedures(notes: string | undefined, date: string) {
+    const out: { date: string; name: string; tooth: number | null; price: number }[] = [];
+    for (const raw of String(notes || '').split('\n')) {
+        const line = raw.trim();
+        if (!line.startsWith('-')) continue;
+        let name = line.replace(/^-\s*/, '');
+        const cut = name.search(/\s*(\((?:Tish #\d+|Umumiy)\)|\[[\d\s]+UZS\])/i);
+        if (cut > 0) name = name.slice(0, cut);
+        const tooth = line.match(/\(Tish #(\d+)\)/i);
+        const price = line.match(/\[([\d\s]+)UZS\]/i);
+        if (name.trim()) {
+            out.push({ date, name: name.trim(), tooth: tooth ? Number(tooth[1]) : null, price: price ? Number(price[1].replace(/\D/g, '')) : 0 });
+        }
+    }
+    return out;
+}
+
+function patientCard(id: string) {
+    const p = DEMO_PATIENTS.find(x => x.id === id);
+    if (!p) return null;
+    const { today } = dates();
+    const now = nowHHMM();
+    const mine = DEMO_APPOINTMENTS
+        .filter(a => a.patientId === id)
+        .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+    const next = mine
+        .filter(a => (a.status === 'Pending' || a.status === 'Confirmed') && (a.date > today || (a.date === today && a.time >= now)))
+        .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))[0];
+    const past = mine.filter(a => a.date < today || (a.date === today && a.time < now));
+    const teeth: Record<string, number> = {};
+    for (const t of DEMO_TEETH.filter((x: any) => x?.patientId === id)) {
+        let list: any = t.conditions;
+        try { if (typeof list === 'string') list = JSON.parse(list); } catch { list = []; }
+        for (const c of Array.isArray(list) ? list : []) {
+            const k = typeof c === 'string' ? c : c?.type;
+            if (k) teeth[k] = (teeth[k] || 0) + 1;
+        }
+    }
+    const doc = DEMO_DOCTORS.find(d => d.id === p.doctorId) || DEMO_DOCTORS.find(d => d.id === mine[0]?.doctorId);
+    return {
+        id, name: fullName(p), firstName: p.firstName, lastName: p.lastName,
+        age: calcAge(p.dob), gender: p.gender, status: p.status, since: '',
+        lastVisit: past.find(a => a.status === 'Completed')?.date || '',
+        doctor: doc ? { id: doc.id, name: `${doc.lastName} ${doc.firstName}` } : null,
+        visits: mine.filter(a => a.status === 'Completed').length,
+        noShows: mine.filter(a => a.status === 'No-Show').length,
+        cancelled: mine.filter(a => a.status === 'Cancelled').length,
+        next: next ? { date: next.date, time: next.time, doctorName: doctorName(next.doctorId), type: next.type } : null,
+        recent: past.slice(0, 5).map(a => ({ date: a.date, type: a.type, status: a.status, doctorName: doctorName(a.doctorId) })),
+        procedures: mine
+            .filter(a => a.status === 'Completed' || a.status === 'Checked-In')
+            .flatMap(a => procedures(a.notes, a.date))
+            .slice(0, 12),
+        teeth,
+        debt: debtorFacts().list.find(d => d.id === id)?.debt || 0,
+        advance: Math.max(0, Math.round(p.balance || 0)),
+        recall: null,
+        diagnoses: [],
+    };
+}
+
+function freeSlots(date: string) {
+    const { today } = dates();
+    const d0 = new Date();
+    const earliest = date === today ? Math.ceil((d0.getHours() * 60 + d0.getMinutes()) / 30) * 30 : 0;
+    return DEMO_DOCTORS.map(d => {
+        const start = (d.startHour ?? DEMO_CLINIC.startHour ?? 8) * 60;
+        const end = (d.endHour ?? DEMO_CLINIC.endHour ?? 20) * 60;
+        const busy = DEMO_APPOINTMENTS
+            .filter(a => a.doctorId === d.id && a.date === date && a.status !== 'Cancelled')
+            .map(a => ({ s: toMin(a.time), e: toMin(a.time) + (a.duration || 30) }));
+        const free: string[] = [];
+        for (let t = Math.max(start, earliest); t + 30 <= end; t += 30) {
+            if (!busy.some(b => t < b.e && t + 30 > b.s)) free.push(hhmm(t));
+        }
+        return { id: d.id, name: `Dr. ${d.lastName}`, start: hhmm(start), end: hhmm(end), free };
+    }).sort((a, b) => b.free.length - a.free.length);
+}
+
+function demoPulse(lang: Lang) {
+    const ru = lang === 'ru';
+    const role = currentRole();
+    const fin = role === 'CLINIC_ADMIN';
+    const desk = fin || role === 'RECEPTIONIST';
+    const { today } = dates();
+    const days7 = Array.from({ length: 7 }, (_, i) => shiftDay(i - 6));
+    const tomorrow = shiftDay(1);
+    const live = DEMO_APPOINTMENTS.filter(a => a.status !== 'Cancelled');
+    const todays = live.filter(a => a.date === today);
+    const n = (s: Appointment['status']) => todays.filter(a => a.status === s).length;
+    const done = n('Completed');
+    const here = n('Checked-In');
+    const noShow = n('No-Show');
+    const waiting = todays.length - done - here - noShow;
+    const tiles: any[] = [];
+
+    tiles.push({
+        key: 'appts', label: ru ? 'Приёмы сегодня' : 'Bugungi qabullar', value: String(todays.length),
+        sub: [done && `${done} ${ru ? 'завершено' : 'yakunlandi'}`, here && `${here} ${ru ? 'в клинике' : 'klinikada'}`,
+            waiting > 0 && `${waiting} ${ru ? 'ожидается' : 'kutilmoqda'}`, noShow && `${noShow} ${ru ? 'не пришли' : 'kelmadi'}`]
+            .filter(Boolean).join(' · '),
+        tone: noShow ? 'warn' : 'neutral',
+        spark: days7.map(d => live.filter(a => a.date === d).length),
+        action: { type: 'ask', text: ru ? 'Как идут приёмы сегодня? Кто пришёл, кого ждём, кто не пришёл?' : 'Bugungi qabullar holati qanday? Kim keldi, kim kutilmoqda, kim kelmadi?' },
+    });
+
+    if (fin) {
+        const byDate = new Map<string, number>();
+        for (const t of DEMO_TRANSACTIONS) if (t.status === 'Paid') byDate.set(t.date, (byDate.get(t.date) || 0) + t.amount);
+        const todayRev = byDate.get(today) || 0;
+        const past = [...byDate.entries()].filter(([d, v]) => d < today && v > 0).map(([, v]) => v).slice(-30);
+        const avg = past.length ? past.reduce((s, v) => s + v, 0) / past.length : 0;
+        tiles.push({
+            key: 'revenue', label: ru ? 'Выручка сегодня' : 'Bugungi tushum', value: fmt(todayRev), unit: ru ? 'сум' : "so'm",
+            sub: avg ? `${ru ? 'обычно' : 'odatda'} ${fmt(avg)}` : undefined,
+            tone: todayRev > 0 ? 'good' : 'neutral',
+            delta: avg && todayRev ? Math.round(((todayRev - avg) / avg) * 100) : undefined,
+            spark: days7.map(d => byDate.get(d) || 0),
+            action: { type: 'ask', text: ru ? 'Какая выручка сегодня?' : 'Bugungi tushum qancha?' },
+        });
+    }
+    if (desk) {
+        const d = debtorFacts();
+        tiles.push({
+            key: 'debt', label: ru ? 'Должники' : 'Qarzdorlar', value: fmt(d.total), unit: ru ? 'сум' : "so'm",
+            sub: `${d.list.length} ${ru ? 'пациентов' : 'nafar bemor'}`, tone: d.total > 0 ? 'warn' : 'good',
+            action: { type: 'report', report: 'debtors' },
+        });
+        const l = leadFacts();
+        if (l.total) {
+            tiles.push({
+                key: 'leads', label: ru ? 'Лиды без ответа' : 'Javobsiz lidlar', value: String(l.fresh),
+                sub: `${l.total} ${ru ? 'за 30 дней' : '30 kunda'}`, tone: l.fresh ? 'warn' : 'good',
+                action: { type: 'report', report: 'leads' },
+            });
+        }
+    }
+    const tom = live.filter(a => a.date === tomorrow);
+    const unconfirmed = tom.filter(a => a.status === 'Pending').length;
+    tiles.push({
+        key: 'tomorrow', label: ru ? 'Приёмы завтра' : 'Ertangi qabullar', value: String(tom.length),
+        sub: unconfirmed ? `${unconfirmed} ${ru ? 'не подтверждены' : 'tasdiqlanmagan'}` : undefined,
+        tone: unconfirmed ? 'warn' : 'neutral',
+        action: { type: 'ask', text: ru ? 'Покажи приёмы на завтра — кто не подтвердил?' : "Ertangi qabullar ro'yxatini ko'rsat — kim tasdiqlanmagan?" },
+    });
+    const low = lowStock();
+    if (DEMO_INVENTORY.length) {
+        tiles.push({
+            key: 'stock', label: ru ? 'Заканчивается' : 'Tugayotgan material', value: String(low.length),
+            sub: low.length ? low.slice(0, 2).map(i => i.name).join(', ') : (ru ? 'всё в норме' : 'hammasi yetarli'),
+            tone: low.length ? 'warn' : 'good',
+            action: { type: 'ask', text: ru ? 'Что заканчивается?' : 'Nima tugayapti?' },
+        });
+    }
+
+    const now = nowHHMM();
+    const next = todays
+        .filter(a => (a.status === 'Pending' || a.status === 'Confirmed') && a.time >= now)
+        .sort((a, b) => a.time.localeCompare(b.time))[0];
+    return {
+        date: today,
+        tiles: tiles.slice(0, 6),
+        next: next ? { time: next.time, patientId: next.patientId, patientName: next.patientName, doctorName: doctorName(next.doctorId), type: next.type } : null,
+        inClinic: here,
+        alerts: [] as { text: string; tone: string }[],
+    };
+}
+
+/** Ish talab qiladiganlari oldinda — backend/ai/evidence.ts dagi APPT_PRIORITY bilan bir xil. */
+const APPT_RANK: Record<string, number> = { 'Checked-In': 0, Pending: 1, Confirmed: 1, 'No-Show': 2, Completed: 3, Cancelled: 4 };
+
+const dmy = (d: string) => (/^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : d);
+
+function apptCard(list: Appointment[], lang: Lang, total = list.length) {
+    return {
+        kind: 'appointments', title: lang === 'ru' ? 'Приёмы' : 'Qabullar', total,
+        items: [...list]
+            .sort((a, b) => (APPT_RANK[a.status] ?? 3) - (APPT_RANK[b.status] ?? 3)
+                || `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
+            .slice(0, 12).map(a => ({
+            id: a.id, patientId: a.patientId, patientName: a.patientName, doctorName: doctorName(a.doctorId),
+            date: a.date, time: a.time, status: a.status, type: a.type,
+        })),
+    };
+}
+
 // ── Savol-javob ──────────────────────────────────────────────────────────────
 
-function answer(question: string, lang: Lang): { reply: string; sources: string[] } {
+interface DemoAnswer {
+    reply: string;
+    sources: string[];
+    cards?: any[];
+    action?: any;
+}
+
+const demoAction = (name: string, preview: any) => ({ id: `demo-${name}-${Date.now()}`, name, preview });
+
+function answer(question: string, lang: Lang, ctx?: Ctx): DemoAnswer {
     const q = question.toLowerCase();
     const ru = lang === 'ru';
     const has = (...words: string[]) => words.some(w => q.includes(w));
+    const { today } = dates();
+
+    // ── Bo'sh vaqt — qabulga yozishdan oldingi savol
+    if (has("bo'sh", 'bosh vaqt', 'свобод', 'окошк', 'окно')) {
+        const date = has('bugun', 'сегодня') ? today : shiftDay(1);
+        const slots = freeSlots(date);
+        const withFree = slots.filter(s => s.free.length);
+        const top = withFree.slice(0, 3).map(s => `${s.name} — ${s.free.slice(0, 3).join(', ')}`).join('; ');
+        return {
+            reply: withFree.length
+                ? (ru ? `${date === today ? 'Сегодня' : 'Завтра'} свободное время есть у ${withFree.length} врачей: ${top}. Нажмите на время — я подготовлю запись.`
+                    : `${date === today ? 'Bugun' : 'Ertaga'} ${withFree.length} ta shifokorda bo'sh vaqt bor: ${top}. Vaqtni bossangiz — qabulni tayyorlab beraman.`)
+                : (ru ? 'Свободного времени нет — все врачи заняты.' : "Bo'sh vaqt yo'q — hamma shifokor band."),
+            sources: ['find_free_slots'],
+            cards: [{ kind: 'slots', title: ru ? 'Свободное время' : "Bo'sh vaqtlar", date, duration: 30, doctors: slots.slice(0, 6).map(s => ({ ...s, free: s.free.slice(0, 16) })) }],
+        };
+    }
+
+    const patient = ctx?.kind === 'patient' && ctx.patientId ? patientCard(ctx.patientId) : null;
+
+    // ── Qabulga yozish (bo'sh vaqt bosilganda shunday gap keladi)
+    if (has('yoz', 'запиш')) {
+        const time = q.match(/(\d{1,2}:\d{2})/)?.[1];
+        const date = q.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || shiftDay(1);
+        const who = patient?.name || (question.split(/bemor:|пациента:/i)[1] || '').trim();
+        if (time && who) {
+            return {
+                reply: ru ? `Запись ${who} на ${date} ${time} — ждёт вашего подтверждения.` : `${who}ni ${date} ${time} ga yozish — tasdiqlashingizni kutmoqda.`,
+                sources: ['book_appointment'],
+                action: demoAction('book_appointment', {
+                    title: ru ? 'Запись на приём' : 'Qabulga yozish',
+                    summary: `${who} · ${date} ${time}`,
+                    items: [
+                        { label: ru ? 'Пациент' : 'Bemor', detail: who },
+                        { label: ru ? 'Дата' : 'Sana', detail: date },
+                        { label: ru ? 'Время' : 'Vaqt', detail: time },
+                    ],
+                    confirmLabel: ru ? 'Записать' : 'Yozish',
+                }),
+            };
+        }
+    }
+
+    // ── Ochiq bemor kartasi: savol shu bemor haqida
+    if (patient) {
+        const card = { kind: 'patient', card: patient };
+        if (has('eslat', 'xabar', 'напом', 'сообщ')) {
+            const text = patient.next
+                ? (ru ? `Здравствуйте! Напоминаем о приёме ${patient.next.date} в ${patient.next.time}. Ждём вас!` : `Assalomu alaykum! ${patient.next.date} kuni soat ${patient.next.time} dagi qabulingizni eslatamiz. Kutamiz!`)
+                : (ru ? 'Здравствуйте! Приглашаем вас на профилактический осмотр.' : "Assalomu alaykum! Sizni profilaktik ko'rikka taklif qilamiz.");
+            return {
+                reply: ru ? `Сообщение для ${patient.name} — ждёт вашего подтверждения.` : `${patient.name}ga xabar — tasdiqlashingizni kutmoqda.`,
+                sources: ['send_message'],
+                action: demoAction('send_message', {
+                    title: ru ? 'Сообщение пациенту' : 'Bemorga xabar',
+                    summary: ru ? `${patient.name} · Telegram или SMS` : `${patient.name} · Telegram yoki SMS`,
+                    items: [], message: text, confirmLabel: ru ? 'Отправить' : 'Yuborish',
+                }),
+            };
+        }
+        const debt = patient.debt ? som(patient.debt, lang) : (ru ? 'долга нет' : "qarzi yo'q");
+        const next = patient.next ? `${patient.next.date} ${patient.next.time} (${patient.next.doctorName})` : (ru ? 'не назначен' : 'belgilanmagan');
+        const works = patient.procedures.slice(0, 3).map(p => `${p.name}${p.tooth ? ` #${p.tooth}` : ''}`).join(', ');
+        return {
+            reply: ru
+                ? `${patient.name}: ${patient.visits} визитов${patient.noShows ? `, неявок — ${patient.noShows}` : ''}. ${works ? `Последние работы: ${works}. ` : ''}Долг: ${debt}. Следующий приём: ${next}.`
+                : `${patient.name}: ${patient.visits} ta tashrif${patient.noShows ? `, ${patient.noShows} marta kelmagan` : ''}. ${works ? `Oxirgi ishlar: ${works}. ` : ''}Qarz: ${debt}. Keyingi qabul: ${next}.`,
+            sources: ['get_patient_card'],
+            cards: [card],
+        };
+    }
+
+    // ── Guruhga eslatma
+    if (has('eslat', 'xabar', 'напом', 'сообщ')) {
+        const tomorrowList = DEMO_APPOINTMENTS.filter(a => a.date === shiftDay(1) && (a.status === 'Pending' || a.status === 'Confirmed'));
+        const debtors = debtorFacts().list;
+        const toDebtors = has('qarz', 'долг', 'должн');
+        const people = toDebtors ? debtors.map(d => ({ label: d.name, detail: som(d.debt, lang) }))
+            : tomorrowList.map(a => ({ label: a.patientName, detail: a.time }));
+        const title = toDebtors ? (ru ? 'Напоминание должникам' : 'Qarzdorlarga eslatma') : (ru ? 'Напоминание о завтрашнем приёме' : 'Ertangi qabul eslatmasi');
+        return {
+            reply: ru ? `${title}: ${people.length} получателей — ждёт вашего подтверждения.` : `${title}: ${people.length} ta bemor — tasdiqlashingizni kutmoqda.`,
+            sources: [toDebtors ? 'send_reminder' : 'send_reminder'],
+            action: demoAction('send_reminder', {
+                title,
+                summary: ru ? `${people.length} пациентам через Telegram или SMS` : `${people.length} ta bemorga Telegram yoki SMS orqali`,
+                items: people.slice(0, 20),
+                message: toDebtors
+                    ? (ru ? 'Уважаемый пациент! У вас есть неоплаченная сумма в нашей клинике. Пожалуйста, зайдите в удобное время.' : "Hurmatli bemor! Klinikamizda to'lanmagan qarzingiz mavjud. Iltimos, qulay vaqtda murojaat qiling.")
+                    : (ru ? 'Напоминание: завтра у вас приём в нашей клинике. Ждём вас!' : 'Eslatma: ertaga klinikamizda qabulingiz bor. Kutamiz!'),
+                confirmLabel: ru ? 'Отправить' : 'Yuborish',
+            }),
+        };
+    }
 
     if (has('qarz', 'долг', 'должник')) {
         const d = debtorFacts();
@@ -312,10 +625,13 @@ function answer(question: string, lang: Lang): { reply: string; sources: string[
                 ? `Сейчас ${d.list.length} пациентов должны клинике всего ${som(d.total, lang)}. Больше всего: ${top || '—'}.`
                 : `Hozir ${d.list.length} nafar bemor klinikaga jami ${som(d.total, lang)} qarz. Eng kattalari: ${top || '—'}.`,
             sources: ['get_debtors'],
+            cards: d.list.length ? [{
+                kind: 'patients', title: ru ? 'Должники' : 'Qarzdorlar', total: d.list.length, sum: d.total,
+                items: d.list.slice(0, 8).map(x => ({ id: x.id, name: x.name, detail: /^\d{4}-/.test(x.last) ? `${ru ? 'последний визит' : 'oxirgi tashrif'}: ${dmy(x.last)}` : undefined, amount: x.debt })),
+            }] : [],
         };
     }
-    if (has('tushum', 'daromad', 'pul', 'kassa', 'moliya', 'выручк', 'доход', 'касс', 'деньг', 'финанс')) {
-        const { today } = dates();
+    if (has('tushum', 'daromad', 'pul', 'kassa', 'moliya', 'xarajat', 'выручк', 'доход', 'касс', 'деньг', 'финанс', 'расход')) {
         const f = financeFacts();
         const day = paidIn(today, today);
         const dayTotal = day.reduce((s, t) => s + t.amount, 0);
@@ -325,6 +641,15 @@ function answer(question: string, lang: Lang): { reply: string; sources: string[
                 ? `Сегодня в кассу поступило ${som(dayTotal, lang)} (${day.length} платежей). С начала месяца — ${som(f.revenue, lang)}: ${methods}. Расходы за месяц — ${som(f.expenses, lang)}.`
                 : `Bugun kassaga ${som(dayTotal, lang)} tushdi (${day.length} ta to'lov). Oy boshidan — ${som(f.revenue, lang)}: ${methods}. Oylik xarajat — ${som(f.expenses, lang)}.`,
             sources: ['get_revenue'],
+            cards: [{
+                kind: 'metrics', title: ru ? 'Финансы' : 'Moliya',
+                items: [
+                    { label: ru ? 'Поступило' : 'Kassaga kirgan', value: fmt(f.revenue), unit: ru ? 'сум' : "so'm", tone: f.revenue > 0 ? 'good' : 'neutral' },
+                    { label: ru ? 'Расходы' : 'Xarajat', value: fmt(f.expenses), unit: ru ? 'сум' : "so'm", tone: f.expenses > 0 ? 'bad' : 'neutral' },
+                    { label: ru ? 'Чистыми' : 'Sof', value: fmt(f.net), unit: ru ? 'сум' : "so'm", tone: f.net >= 0 ? 'good' : 'bad' },
+                    { label: ru ? 'Платежей' : "To'lovlar", value: f.count, unit: ru ? 'шт' : 'ta' },
+                ],
+            }],
         };
     }
     if (has('shifokor', 'doktor', 'vrach', 'samarador', 'врач', 'доктор', 'эффектив')) {
@@ -335,24 +660,65 @@ function answer(question: string, lang: Lang): { reply: string; sources: string[
         return {
             reply: ru ? `С начала месяца по врачам: ${lines}.` : `Oy boshidan shifokorlar kesimida: ${lines}.`,
             sources: ['get_doctor_stats'],
+            cards: [{
+                kind: 'table', title: ru ? 'Врачи' : 'Shifokorlar',
+                columns: ru ? ['Врач', 'Приёмы', 'Завершено', 'Неявки', 'Выручка'] : ['Shifokor', 'Qabul', 'Bajarilgan', 'Kelmagan', 'Tushum'],
+                rows: docs.map(d => [d.name, d.visits, d.done, d.noShow, fmt(d.revenue)]),
+            }],
         };
     }
-    if (has('ombor', 'material', 'склад', 'материал')) {
+    if (has('ombor', 'material', 'tugay', 'склад', 'материал', 'заканчива')) {
         const low = lowStock();
         return {
             reply: low.length
                 ? (ru ? `Заканчиваются ${low.length} позиции: ${low.map(i => `${i.name} (${i.quantity} ${i.unit})`).join(', ')}.` : `${low.length} ta material tugayapti: ${low.map(i => `${i.name} (${i.quantity} ${i.unit})`).join(', ')}.`)
                 : (ru ? 'Все материалы в норме.' : 'Hamma material yetarli.'),
             sources: ['get_low_stock'],
+            cards: low.length ? [{
+                kind: 'stock', title: ru ? 'Заканчиваются' : 'Tugayotgan materiallar', total: low.length,
+                items: low.slice(0, 8).map(i => ({ name: i.name, qty: i.quantity, min: i.minQuantity, unit: i.unit })),
+            }] : [],
         };
     }
-    if (has('lid', 'ariza', 'лид', 'заявк')) {
+    if (has('lid', 'ariza', 'лид', 'заявк', 'manba', 'источник')) {
         const l = leadFacts();
         return {
             reply: ru
                 ? `За 30 дней пришло ${l.total} заявок, ${l.booked} стали пациентами. ${l.fresh} новых ждут звонка.`
                 : `Oxirgi 30 kunda ${l.total} ta ariza keldi, ${l.booked} tasi bemorga aylandi. ${l.fresh} tasi hali qo'ng'iroq kutyapti.`,
             sources: ['get_leads'],
+            cards: [{
+                kind: 'metrics', title: ru ? 'Лиды' : 'Lidlar',
+                items: [
+                    { label: ru ? 'Всего лидов' : 'Jami lid', value: l.total, unit: ru ? 'шт' : 'ta' },
+                    { label: ru ? 'Стали пациентами' : 'Bemorga aylandi', value: l.booked, unit: ru ? 'шт' : 'ta', tone: l.booked ? 'good' : 'neutral' },
+                    { label: ru ? 'Ждут звонка' : "Qo'ng'iroq kutyapti", value: l.fresh, unit: ru ? 'шт' : 'ta', tone: l.fresh ? 'warn' : 'neutral' },
+                ],
+            }],
+        };
+    }
+    if (has('ertang', 'ertaga', 'завтра')) {
+        const list = DEMO_APPOINTMENTS.filter(a => a.date === shiftDay(1) && a.status !== 'Cancelled');
+        const pending = list.filter(a => a.status === 'Pending').length;
+        return {
+            reply: ru
+                ? `На завтра записано ${list.length} пациентов${pending ? `, из них ${pending} ещё не подтвердили` : ''}.`
+                : `Ertaga ${list.length} nafar bemor yozilgan${pending ? `, shundan ${pending} tasi hali tasdiqlamagan` : ''}.`,
+            sources: ['get_appointments'],
+            cards: list.length ? [apptCard(list, lang)] : [],
+        };
+    }
+    // "Bugungi qabullar ... kim kelmadi?" — bugungi holat savoli, haftalik
+    // kelmaganlar ro'yxati emas.
+    if (has('kelma', 'неявк', 'не приш') && !has('bugun', 'сегодня')) {
+        const from = shiftDay(-7);
+        const list = DEMO_APPOINTMENTS.filter(a => a.status === 'No-Show' && a.date >= from && a.date <= today);
+        return {
+            reply: ru
+                ? (list.length ? `За неделю не пришли ${list.length} пациентов — им стоит позвонить и перезаписать.` : 'За неделю неявок не было.')
+                : (list.length ? `Shu hafta ${list.length} nafar bemor kelmadi — ularga qo'ng'iroq qilib, qayta yozish kerak.` : "Shu hafta kelmagan bemor yo'q."),
+            sources: ['get_appointments'],
+            cards: list.length ? [apptCard(list, lang)] : [],
         };
     }
     if (has('bemor', 'пациент') && !has('bugun', 'сегодня')) {
@@ -371,19 +737,22 @@ function answer(question: string, lang: Lang): { reply: string; sources: string[
             sources: ['find_patient'],
         };
     }
-    if (has('bugun', 'qabul', 'navbat', 'kabinet', 'сегодня', 'приём', 'прием', 'очеред')) {
+    if (has('bugun', 'qabul', 'navbat', 'kabinet', 'klinikada', 'e\'tibor', 'сегодня', 'приём', 'прием', 'очеред', 'внимани')) {
         const f = todayFacts();
+        const focus = has("e'tibor", 'внимани');
+        const d = debtorFacts();
         return {
             reply: ru
-                ? `Сегодня ${f.total} приёмов: ${f.completed} завершено, ${f.arrived} пациентов в клинике (в кабинете или в очереди), ${f.confirmed + f.pending} ещё придут${f.noShow ? `, ${f.noShow} не пришли` : ''}. ${f.busiest ? `Больше всего приёмов у ${doctorName(f.busiest[0])} — ${f.busiest[1]}.` : ''}`
-                : `Bugun ${f.total} ta qabul: ${f.completed} tasi yakunlandi, ${f.arrived} nafar bemor klinikada (kabinetda yoki navbatda), yana ${f.confirmed + f.pending} nafari keladi${f.noShow ? `, ${f.noShow} nafari kelmadi` : ''}. ${f.busiest ? `Eng band shifokor — ${doctorName(f.busiest[0])}, ${f.busiest[1]} ta qabul.` : ''}`,
-            sources: ['get_appointments'],
+                ? `Сегодня ${f.total} приёмов: ${f.completed} завершено, ${f.arrived} пациентов в клинике, ${f.confirmed + f.pending} ещё придут${f.noShow ? `, ${f.noShow} не пришли` : ''}.${focus && d.list.length ? ` Отдельно: ${d.list.length} должников на ${som(d.total, lang)} — стоит напомнить.` : ''}`
+                : `Bugun ${f.total} ta qabul: ${f.completed} tasi yakunlandi, ${f.arrived} nafar bemor klinikada, yana ${f.confirmed + f.pending} nafari keladi${f.noShow ? `, ${f.noShow} nafari kelmadi` : ''}.${focus && d.list.length ? ` Alohida: ${d.list.length} nafar qarzdor, jami ${som(d.total, lang)} — eslatma yuborish kerak.` : ''}`,
+            sources: focus ? ['get_appointments', 'get_debtors'] : ['get_appointments'],
+            cards: [apptCard(f.list.filter(a => a.status !== 'Cancelled'), lang, f.total)],
         };
     }
     return {
         reply: ru
-            ? 'В демо-режиме я отвечаю по данным демо-клиники: приёмы на сегодня, выручка, должники, врачи, склад и заявки. Например: «Сколько сегодня приёмов?» или «Кто должен клинике?»'
-            : "Demo rejimida demo klinika ma'lumotlari bo'yicha javob beraman: bugungi qabullar, tushum, qarzdorlar, shifokorlar, ombor va arizalar. Masalan: «Bugun nechta qabul bor?» yoki «Kim qarzdor?»",
+            ? 'В демо-режиме я отвечаю по данным демо-клиники: приёмы, свободное время, выручка, должники, врачи, склад и заявки. Откройте карту пациента — и спросите о нём, например «есть долг?».'
+            : "Demo rejimida demo klinika ma'lumotlari bo'yicha javob beraman: qabullar, bo'sh vaqt, tushum, qarzdorlar, shifokorlar, ombor va arizalar. Bemor kartasini ochib, u haqida so'rang — masalan «qarzi bormi?».",
         sources: [],
     };
 }
@@ -399,13 +768,16 @@ const lastQuestion = (body: any): string => {
     return '';
 };
 
-/** DentaAiMode'dagi `api()` o'rnida: yo'l bo'yicha server javobi shaklida qaytaradi */
+/** components/ai/aiClient.ts dagi so'rov o'rnida: yo'l bo'yicha server javobi shaklida qaytaradi */
 export async function demoAiRequest(path: string, body?: any, method?: string): Promise<any> {
     ensureDemoData();
     const [route, query = ''] = path.split('?');
     const lang: Lang = /lang=ru/.test(query) || body?.lang === 'ru' ? 'ru' : 'uz';
     await new Promise(r => setTimeout(r, 350));
 
+    if (route === '/ai/pulse') {
+        return { success: true, pulse: demoPulse(lang) };
+    }
     if (route === '/ai/reports') {
         const role = currentRole();
         const reports = (Object.keys(TEXT) as ReportType[])
@@ -420,8 +792,8 @@ export async function demoAiRequest(path: string, body?: any, method?: string): 
         return { success: true, report: buildReport(type, lang), logId: null };
     }
     if (route === '/ai/ask') {
-        const { reply, sources } = answer(lastQuestion(body), lang);
-        return { success: true, reply, sources, action: null, logId: null };
+        const a = answer(lastQuestion(body), lang, body?.context);
+        return { success: true, reply: a.reply, sources: a.sources, action: a.action || null, logId: null, cards: a.cards || [] };
     }
     if (route === '/ai/conversations' && method !== 'DELETE' && body) {
         const now = new Date().toISOString();
@@ -449,7 +821,12 @@ export async function demoAiRequest(path: string, body?: any, method?: string): 
         return { success: true, conversation: conversations[idx] };
     }
     if (route === '/ai/act') {
-        return { success: true, message: "Demo rejimida o'zgarish kiritilmaydi." };
+        return {
+            success: true,
+            message: uiLang() === 'ru'
+                ? 'Демо-режим: изменения не сохраняются. В вашей клинике эта кнопка выполнит действие.'
+                : "Demo rejimi: o'zgarish saqlanmaydi. Sizning klinikangizda shu tugma ishni bajaradi.",
+        };
     }
     // Baho va boshqalar — demo'da saqlanmaydi
     return { success: true };
@@ -462,22 +839,23 @@ export async function demoAiRequest(path: string, body?: any, method?: string): 
 export async function demoAiStream(body: any, onEvent: (e: any) => void, signal?: AbortSignal): Promise<boolean> {
     ensureDemoData();
     const lang: Lang = body?.lang === 'ru' ? 'ru' : 'uz';
-    const { reply, sources } = answer(lastQuestion(body), lang);
+    const a = answer(lastQuestion(body), lang, body?.context);
     const sleep = (ms: number) => new Promise<void>((resolve, reject) => {
         if (signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
         const id = setTimeout(resolve, ms);
         signal?.addEventListener('abort', () => { clearTimeout(id); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
     });
-    for (const name of sources) {
+    // Harakatlar ma'lumot o'qimaydi — ular faqat tasdiqlash kartasini tayyorlaydi.
+    for (const name of a.sources.filter(s => !a.action || s !== a.action.name)) {
         onEvent({ type: 'tool_start', name });
         await sleep(450);
         onEvent({ type: 'tool_done', name, ok: true });
     }
-    const words = reply.split(/(\s+)/);
+    const words = a.reply.split(/(\s+)/);
     for (let i = 0; i < words.length; i += 2) {
         onEvent({ type: 'token', text: words.slice(i, i + 2).join('') });
         await sleep(28);
     }
-    onEvent({ type: 'done', reply, sources, action: null, logId: null });
+    onEvent({ type: 'done', reply: a.reply, sources: a.sources, action: a.action || null, logId: null, cards: a.cards || [] });
     return true;
 }

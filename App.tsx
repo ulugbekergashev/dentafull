@@ -1,13 +1,15 @@
 ﻿
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
-import { AiOverlay } from './components/AiOverlay';
+import { AiDock } from './components/ai/AiDock';
+import { AiOrb } from './components/ai/AiOrb';
+import { deriveContext } from './components/ai/aiContext';
 import { BookingPanel, BookingRequest } from './components/BookingPanel';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
@@ -37,7 +39,7 @@ import { BottomNav } from './components/BottomNav';
 import { Logo } from './components/Logo';
 import { BranchSwitcher } from './components/BranchSwitcher';
 import { NotificationBell } from './components/NotificationBell';
-import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } from './services/api';
+import { api, getActiveBranchId, isDemoMode, setActiveBranchId as persistActiveBranchId } from './services/api';
 import type { CashCloseInput } from './services/api';
 import { makePermChecker } from './utils/permissions';
 import { PermissionsProvider } from './context/PermissionsContext';
@@ -120,31 +122,14 @@ const AppContent: React.FC = () => {
   const [authChecked, setAuthChecked] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>(UserRole.CLINIC_ADMIN);
 
-  // DentaAI paneli — har qanday sahifa ustidan ochiladi.
-  // Ilgari u Boshqaruv paneli ichidagi tab edi, ya'ni unga kirish uchun
-  // avval bosh sahifaga qaytish kerak edi. Shifokor esa Kalendar yoki
-  // Bemor kartasida turadi va savolni aynan o'sha yerda beradi.
+  // DentaAI — o'ng tomondagi yon panel (components/ai/AiDock.tsx). Har qanday
+  // sahifa yonida ochiladi va ochiq sahifani (bemor kartasi, kalendar) biladi.
+  // Klaviatura (Ctrl+/, F2) panelning o'zida — bu yerda faqat holat.
   const [aiOpen, setAiOpen] = useState(false);
+  // Keng ekranda panel sahifani shuncha piksel suradi (yopiq bo'lsa — 0).
+  const [aiPush, setAiPush] = useState(0);
   // "Qabul" yon paneli — bosh sahifadagi "Qabul" tugmasidan va qo'ng'iroq ro'yxatidan ochiladi (null — yopiq)
   const [bookingFor, setBookingFor] = useState<BookingRequest | null>(null);
-  const [aiAutoVoice, setAiAutoVoice] = useState(false);
-
-  // Global hot key. Panel YOPIQ bo'lganda uni ochadi va darhol
-  // mikrofonni yoqadi — shifokor F2 bosdi, demak u gapirmoqchi.
-  // Panel ochiq bo'lsa aralashmaymiz: u yerda DentaAiMode o'zi
-  // mikrofonni boshqaradi.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const combo = (e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Space';
-      if (!combo && e.key !== 'F2') return;
-      if (aiOpen) return;
-      e.preventDefault();
-      setAiAutoVoice(true);
-      setAiOpen(true);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [aiOpen]);
   const [userName, setUserName] = useState('');
   const [clinicId, setClinicId] = useState<string>('');
   const [doctorId, setDoctorId] = useState<string>('');
@@ -1204,6 +1189,32 @@ const AppContent: React.FC = () => {
   // Qo'ng'iroq faqat klinika xodimlarida: SUPER_ADMIN va sotuvchi boshqa
   // tizimda ishlaydi, ularning klinika lentasi yo'q.
   const isStaffRole = userRole !== UserRole.SUPER_ADMIN && userRole !== UserRole.SALES_AGENT;
+  // DentaAI faqat admin, shifokor va resepshnda: AI tool'lari shu uch rol uchun
+  // yozilgan. SUPER_ADMIN va sotuvchida klinika yo'q, laborantga esa bironta
+  // tool ochiq emas — ular uchun har bir savol "ruxsat yo'q" bilan qaytardi.
+  const aiEnabled = !!clinicId
+    && (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.DOCTOR || userRole === UserRole.RECEPTIONIST);
+  // Panel ochiq sahifani biladi: bemor kartasida "qarzi bormi?" deyish yetarli.
+  const aiContext = useMemo(() => deriveContext(location.pathname, patients), [location.pathname, patients]);
+  // AI harakati bajarildi — yonidagi sahifa eskirib qolmasin. Faqat o'sha harakat
+  // o'zgartirgan ro'yxat qayta yuklanadi: qabulga yozilgach kalendar darhol yangilanadi.
+  const refreshAfterAi = useCallback((action: string) => {
+    if (!clinicId || isDemoMode()) return;
+    const has = (...names: string[]) => names.includes(action);
+    (async () => {
+      try {
+        if (has('book_appointment', 'add_procedure')) setAppointments(await api.appointments.getAll(clinicId));
+        if (has('record_payment', 'add_charge', 'add_procedure')) {
+          setTransactions(await api.transactions.getAll(clinicId));
+          setPatients(await api.patients.getAll(clinicId));
+        }
+        if (has('create_expense', 'pay_doctor')) setExpenses((await api.expenses.getAll(clinicId)) || []);
+        if (has('add_cash')) setCashMovements((await api.cashMovements.getAll(clinicId)) || []);
+        if (has('update_lead_status')) setLeads((await api.leads.getAll(clinicId)) || []);
+        if (has('update_doctor_pay')) setDoctors(await api.doctors.getAll(clinicId));
+      } catch { /* keyingi to'liq yuklashda yangilanadi */ }
+    })();
+  }, [clinicId]);
   // Qabul yozish paneli: klinika xodimi, ruxsati bor va kamida bitta shifokor bor bo'lsa.
   // Shifokor yo'q klinika Kalendar orqali yozadi (u yerda individual tarifda shifokor avtomatik yaratiladi).
   const canBook = (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST || userRole === UserRole.DOCTOR)
@@ -1402,17 +1413,19 @@ const AppContent: React.FC = () => {
               {!guideSeen && <GuideDot />}
             </button>
           )}
-          <button
-            onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
-            aria-label="DentaAI"
-            data-tour="ai"
-            className="flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-xl
-                       text-white font-bold text-[12.5px] tracking-wide
-                       bg-gradient-to-br from-violet-500 to-indigo-600 shadow-sm active:scale-95 transition-transform"
-          >
-            <Sparkles className="w-3.5 h-3.5 opacity-90" />
-            DentaAI
-          </button>
+          {aiEnabled && (
+            <button
+              onClick={() => setAiOpen(true)}
+              aria-label="DentaAI"
+              data-tour="ai"
+              className="flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-600
+                         active:scale-95 transition-transform"
+            >
+              <AiOrb size={24} />
+              <span className="text-[12.5px] font-bold bg-gradient-to-r from-indigo-600 to-sky-500 bg-clip-text text-transparent
+                               dark:from-indigo-300 dark:to-sky-300">AI</span>
+            </button>
+          )}
           {/* Telefondan ishlaydigan shifokor/resepshn ham qo'ng'iroqni ko'rsin */}
           {isStaffRole && <NotificationBell allowedModules={allowedModuleIds} />}
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} data-tour="menu" className="p-2 text-gray-600 dark:text-gray-300">
@@ -1661,23 +1674,27 @@ const AppContent: React.FC = () => {
                   {!guideSeen && <GuideDot />}
                 </button>
               )}
-              {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
-                  Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
-                  lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
-              <button
-                onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
-                title={t('auto.DentaAI — Ctrl+Shift+Space yoki F2 (ovoz bilan)')}
-                aria-label="DentaAI"
-                data-tour="ai"
-                className="group relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl
-                           text-white font-bold text-[13px] tracking-wide
-                           bg-gradient-to-br from-violet-500 to-indigo-600
-                           shadow-sm hover:shadow-md hover:from-violet-500 hover:to-indigo-500
-                           active:scale-[0.97] transition-all"
-              >
-                <Sparkles className="w-4 h-4 opacity-90 group-hover:rotate-12 transition-transform" />
-                <span className="hidden xl:inline">DentaAI</span>
-              </button>
+              {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi. Panel o'ng
+                  tomondan chiqadi; tugma ochiq holatini ham ko'rsatadi. */}
+              {aiEnabled && (
+                <button
+                  onClick={() => setAiOpen(o => !o)}
+                  title={`DentaAI · Ctrl+/ · F2 — ${language === 'ru' ? 'голосом' : 'ovoz bilan'}`}
+                  aria-label="DentaAI"
+                  aria-pressed={aiOpen}
+                  data-tour="ai"
+                  className={`group relative flex items-center gap-2 pl-1 pr-1 xl:pr-3 py-1 rounded-full border
+                              active:scale-[0.97] transition-all ${aiOpen
+                      ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-400/40 dark:bg-indigo-500/15'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-indigo-300 hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10'}`}
+                >
+                  <AiOrb size={28} />
+                  <span className="hidden xl:inline text-[13px] font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-sky-500
+                                   bg-clip-text text-transparent dark:from-indigo-300 dark:to-sky-300">
+                    DentaAI
+                  </span>
+                </button>
+              )}
 
               {/* Sana faqat keng ekranda: u ma'lumot emas, bezak — tor
                   oynada qidiruv joyini yeyishiga arzimaydi. */}
@@ -1797,14 +1814,19 @@ const AppContent: React.FC = () => {
         </div>
       </header>
 
-      {/* DentaAI paneli. Sahifadan tashqarida turadi, shuning uchun qaysi
-          bo'limda bo'lishingizdan qat'i nazar bir xil ishlaydi. */}
-      <AiOverlay
-        open={aiOpen}
-        onClose={() => setAiOpen(false)}
-        userRole={userRole}
-        autoVoice={aiAutoVoice}
-      />
+      {/* DentaAI paneli — o'ng tomonda, sahifa bilan yonma-yon. Yopilganda
+          suhbat saqlanib qoladi (komponent o'chirilmaydi). */}
+      {aiEnabled && (
+        <AiDock
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+          userRole={userRole}
+          userName={userName}
+          context={aiContext}
+          onLayoutChange={setAiPush}
+          onDataChanged={refreshAfterAi}
+        />
+      )}
 
       {canBook && (
         <BookingPanel
@@ -1826,7 +1848,11 @@ const AppContent: React.FC = () => {
         />
       )}
 
-      <main className="flex-1 lg:pt-28 min-h-screen flex flex-col items-center">
+      {/* Keng ekranda DentaAI paneli sahifani o'ng tomondan suradi — ustiga chiqmaydi */}
+      <main
+        className="flex-1 lg:pt-28 min-h-screen flex flex-col items-center transition-[padding] duration-300"
+        style={aiEnabled && aiPush ? { paddingRight: aiPush } : undefined}
+      >
         {/* Kalendar ekranni to'liq egallaydi — tepa-past chekkasi ixchamroq */}
         <div className={`w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 sm:py-6 flex-1 overflow-x-clip pb-24 ${onCalendarPage ? 'lg:py-4 lg:pb-4' : 'lg:py-8 lg:pb-8'}`}>
           <Routes>
