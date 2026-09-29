@@ -13,7 +13,7 @@ import { tPlanFeature } from '../i18n/labels';
 
 import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus, VisitRequirements } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal } from 'lucide-react';
-import { api, API_URL } from '../services/api';
+import { api, API_URL, isDemoMode } from '../services/api';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -441,7 +441,8 @@ export const Settings: React.FC<SettingsProps> = ({
             botToken: currentClinic?.botToken?.substring(0, 10) + '...'
          });
 
-         if (currentClinic?.id && currentClinic?.botToken) {
+         // Demo'da bot yo'q: token soxta, serverga so'rov yuborilmaydi
+         if (currentClinic?.id && currentClinic?.botToken && !isDemoMode()) {
             try {
                const authData = localStorage.getItem('dentalflow_auth');
                if (!authData) {

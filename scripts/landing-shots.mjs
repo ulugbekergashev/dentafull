@@ -17,10 +17,9 @@
  *   node scripts/landing-shots.mjs --prep    — brauzerni ochiq qoldiradi,
  *        ekranlarni qo'lda sozlab olish uchun
  *
- * Ma'lumotlar: standart demo yozuvlari 2026-yil yanvariga qotirilgan, shu
- * sababli panel bo'sh ko'rinardi. `scripts/landing-seed.mjs` o'sha
- * o'ylab topilgan bemorlar bilan bugungi sanaga bog'langan qabullar,
- * to'lovlar va tish holatlarini tayyorlab beradi.
+ * Ma'lumotlar: demo o'zi har kuni bugungi kunga moslab jonli klinika quradi
+ * (`services/demoSeed.ts`). `scripts/landing-seed.mjs` unga faqat tish
+ * xaritasi va ruscha skrinshot uchun xizmat nomlarini qo'shadi.
  */
 import { chromium } from "playwright-core";
 import { execFileSync } from "node:child_process";
@@ -28,7 +27,7 @@ import { mkdirSync, existsSync, rmSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
-import { buildDemoSeed } from "./landing-seed.mjs";
+import { buildLandingOverlay } from "./landing-seed.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, "public", "landing");
@@ -160,21 +159,36 @@ async function main() {
     args: ["--hide-scrollbars"],
   });
 
-  // Standart demo ma'lumotlar 2026-yil yanvariga qotirilgan — panel bo'sh
-  // ko'rinadi. Shu sababli qabullar, to'lovlar va tish holatlarini bugungi
-  // kunga moslab yozib qo'yamiz (scripts/landing-seed.mjs).
-  // `addInitScript` sahifa skriptlaridan OLDIN ishlaydi, shuning uchun
-  // demoData moduli yuklanganda ma'lumot allaqachon joyida bo'ladi.
-  await context.addInitScript((seeds) => {
+  // Demo o'zi quriladi (services/demoSeed.ts). Unga tish xaritasi va ruscha
+  // nomlarni qo'shamiz (scripts/landing-seed.mjs). `addInitScript` sahifa
+  // skriptlaridan OLDIN ishlaydi: demoData moduli qo'shimchani tayyor holda
+  // o'qiydi. Birinchi yuklanishda demo hali qurilmagan — shuning uchun
+  // captureLanguage uni qurib, sahifani yana bir marta yangilaydi.
+  await context.addInitScript((overlays) => {
     try {
       const KEY = "dentalflow_demo_data";
+      const data = JSON.parse(localStorage.getItem(KEY) || "null");
+      if (!data || !data.seedVersion) return;
       const lang = localStorage.getItem("app_language") === "ru" ? "ru" : "uz";
-      const prev = JSON.parse(localStorage.getItem(KEY) || "{}");
-      localStorage.setItem(KEY, JSON.stringify({ ...prev, ...seeds[lang] }));
+      const { teeth, names } = overlays[lang];
+      data.teeth = teeth;
+      if (names) {
+        const tr = (v) => (typeof v === "string"
+          ? Object.entries(names).reduce((acc, [from, to]) => acc.split(from).join(to), v)
+          : v);
+        data.services = (data.services || []).map((x) => ({ ...x, name: tr(x.name) }));
+        data.doctors = (data.doctors || []).map((x) => ({ ...x, specialty: tr(x.specialty) }));
+        data.appointments = (data.appointments || []).map((x) => ({ ...x, type: tr(x.type), notes: tr(x.notes) }));
+        data.transactions = (data.transactions || []).map((x) => ({ ...x, service: tr(x.service) }));
+        for (const slot of Object.values(data.dayState?.plan || {})) {
+          slot.items = (slot.items || []).map((i) => ({ ...i, name: tr(i.name) }));
+        }
+      }
+      localStorage.setItem(KEY, JSON.stringify(data));
     } catch {
       /* private rejim */
     }
-  }, { uz: buildDemoSeed("uz"), ru: buildDemoSeed("ru") });
+  }, { uz: buildLandingOverlay("uz"), ru: buildLandingOverlay("ru") });
 
   const page = context.pages()[0] ?? (await context.newPage());
   page.on("console", (m) => m.type() === "error" && console.warn("  [brauzer]", m.text()));
@@ -208,6 +222,9 @@ async function main() {
       localStorage.setItem("app_language", l);
       localStorage.removeItem("dentalflow_demo_data");
     }, lang);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await settle(page, 1500);
+    // Demo shu yuklanishda qurildi — qayta yuklab, tish xaritasi va nomlarni qo'shamiz
     await page.reload({ waitUntil: "domcontentloaded" });
     await settle(page, 2500);
     await page.addStyleTag({ content: HIDE_CSS });

@@ -310,21 +310,25 @@ const AppContent: React.FC = () => {
         const isDemo = storedAuth ? JSON.parse(storedAuth).isDemo : false;
 
         if (isDemo && clinicId === 'demo-clinic-1') {
-          const { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_SERVICES, DEMO_DOCTORS, DEMO_CLINIC, DEMO_PLAN, DEMO_CATEGORIES, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_RECEPTIONISTS, DEMO_LEADS, DEMO_INVENTORY } = await import('./services/demoData');
-          setCurrentClinic(DEMO_CLINIC);
-          setPatients(DEMO_PATIENTS);
-          setAppointments(DEMO_APPOINTMENTS);
-          setTransactions(DEMO_TRANSACTIONS);
-          setExpenses(DEMO_EXPENSES);
-          setServices(DEMO_SERVICES);
-          setCategories(DEMO_CATEGORIES);
-          setDoctors(DEMO_DOCTORS);
-          setPlans([DEMO_PLAN]);
-          setInventoryItems(DEMO_INVENTORY || []);
-          setLabTechnicians(DEMO_LAB_TECHNICIANS || []);
-          setLabOrders(DEMO_LAB_ORDERS || []);
-          setReceptionists(DEMO_RECEPTIONISTS || []);
-          setLeads(DEMO_LEADS || []);
+          const demo = await import('./services/demoData');
+          // Demo har kuni shu kunga moslab quriladi (kun almashgan bo'lsa — shu yerda)
+          demo.ensureDemoData();
+          setCurrentClinic(demo.DEMO_CLINIC);
+          // Nusxalar: ilova holati demo massivining o'zi bo'lsa, demo'ga qo'shilgan
+          // bemor/to'lov holatda "allaqachon bor" ko'rinib, ekranda chiqmay qolardi
+          setPatients([...demo.DEMO_PATIENTS]);
+          setAppointments([...demo.DEMO_APPOINTMENTS]);
+          setTransactions([...demo.DEMO_TRANSACTIONS]);
+          setExpenses([...demo.DEMO_EXPENSES]);
+          setServices([...demo.DEMO_SERVICES]);
+          setCategories([...demo.DEMO_CATEGORIES]);
+          setDoctors([...demo.DEMO_DOCTORS]);
+          setPlans([demo.DEMO_PLAN]);
+          setInventoryItems([...demo.DEMO_INVENTORY]);
+          setLabTechnicians([...demo.DEMO_LAB_TECHNICIANS]);
+          setLabOrders([...demo.DEMO_LAB_ORDERS]);
+          setReceptionists([...demo.DEMO_RECEPTIONISTS]);
+          setLeads([...demo.DEMO_LEADS]);
         } else if (userRole === UserRole.SALES_AGENT) {
           const [plns, clns] = await Promise.all([
             api.plans.getAll(),

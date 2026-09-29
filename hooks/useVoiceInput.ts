@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { API_URL } from '../services/api';
+import { API_URL, DEMO_UNAVAILABLE, isDemoMode } from '../services/api';
 
 // ─── Ovozli kiritish ──────────────────────────────────────────────────────────
 //
@@ -218,6 +218,8 @@ export function useVoiceInput({ lang, onResult }: Options) {
 
     /** 2-yo'l: yozib olib, serverga yuborish. */
     const startRecording = useCallback(async () => {
+        // Demo'da server yo'q — ovoz faqat brauzerning o'z tanigichi bilan
+        if (isDemoMode()) { fail(DEMO_UNAVAILABLE); return; }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const rec = new MediaRecorder(stream);
@@ -368,7 +370,7 @@ export function useVoiceInput({ lang, onResult }: Options) {
         // lug'at to'liq beriladi — Whisper'dagi ~224 token chegarasi yo'q.
         //
         // Ruscha uchun brauzer qoladi: u yerda tanish ishonchli va tekin.
-        const preferServer = lang === 'uz' && !serverSttDown;
+        const preferServer = lang === 'uz' && !serverSttDown && !isDemoMode();
         const Recognition = preferServer ? null : nativeRecognition();
         if (!Recognition) return startRecording();
 

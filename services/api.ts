@@ -1,5 +1,6 @@
 import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
-import { applyCallChange } from '../utils/desk';
+import { addDaysISO, applyCallChange } from '../utils/desk';
+import { formatDateToISO } from '../utils/dateUtils';
 import { applyClinicPaymentMethods } from '../utils/paymentMethods';
 
 // Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
@@ -7,12 +8,7 @@ const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
 const DEMO_CASH_MOVEMENTS: CashMovement[] = [];
 // Demo: bugungi qo'ng'iroq natijalari ham faqat sessiya davomida
 let DEMO_CALLS: { date: string; entries: CallLog } = { date: '', entries: {} };
-// Demo: bosh sahifa xaritasidagi "kabinetda" belgilari ham faqat sessiya davomida
-let DEMO_FLOW: { date: string; entries: FlowLog; tickets: TicketLog; seq: number } = { date: '', entries: {}, tickets: {}, seq: 0 };
-const demoFlowDay = (date: string) => {
-    if (DEMO_FLOW.date !== date) DEMO_FLOW = { date, entries: {}, tickets: {}, seq: 0 };
-    return DEMO_FLOW;
-};
+// Demo: bosh sahifa xaritasidagi "kabinetda" belgilari demo ma'lumoti bilan birga saqlanadi (demoData)
 const demoAssignTickets = (date: string, ids: string[]) => {
     const day = demoFlowDay(date);
     for (const id of ids) if (!day.tickets[id]) day.tickets[id] = ++day.seq;
@@ -39,7 +35,7 @@ export interface CashCloseInput {
     expectedClick?: number | null;
     note?: string;
 }
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, DEMO_TRIGGERS, DEMO_SEGMENT_FIELDS, saveDemoData } from './demoData';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, DEMO_TRIGGERS, DEMO_SEGMENT_FIELDS, DEMO_RECALLS, DEMO_FLOW, demoFlowDay, ensureDemoData, saveDemoData } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -120,7 +116,34 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
     }
 }
 
+/** Demo rejimda serverga bog'liq amal bosilganda ko'rsatiladigan xabar */
+export const DEMO_UNAVAILABLE = 'Demo rejimida bu amal mavjud emas';
+
+/** Demo: bemor rasmi serverga yuklanmaydi — brauzerda kichraytirilib, demo ichida saqlanadi */
+const demoImageUrl = (file: File, max = 320): Promise<string> => new Promise((resolve, reject) => {
+    const src = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * k));
+        canvas.height = Math.max(1, Math.round(img.height * k));
+        canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(src);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => {
+        URL.revokeObjectURL(src);
+        reject(new Error(DEMO_UNAVAILABLE));
+    };
+    img.src = src;
+});
+
 async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> {
+    // Demo butunlay brauzerda ishlaydi. Demo tarmog'i yo'q metod shu yerda to'xtaydi:
+    // aks holda so'rov production API'ga "demo-token" bilan borib 401 olardi, 401 esa
+    // demo foydalanuvchini tizimdan chiqarib yuborardi (auth:unauthorized).
+    if (isDemoMode()) throw new Error(DEMO_UNAVAILABLE);
     const headers: HeadersInit = {
         ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...(options.headers || {}),
@@ -201,7 +224,8 @@ export const api = {
     },
     patients: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_PATIENTS);
+            // Nusxa: ilova holati demo massivining o'zi bo'lib qolmasin (qo'shilgan yozuv ko'rinmay qolardi)
+            if (isDemoMode()) return Promise.resolve([...DEMO_PATIENTS]);
             return fetchJson<Patient[]>(`/patients?clinicId=${clinicId}`);
         },
         getById: (id: string) => {
@@ -271,6 +295,7 @@ export const api = {
             });
         },
         uploadAvatar: (id: string, file: File) => {
+            if (isDemoMode()) return demoImageUrl(file).then(url => ({ success: true as const, url }));
             const formData = new FormData();
             formData.append('photo', file);
             return fetchJson<{ success: true, url: string }>(`/patients/${id}/avatar`, {
@@ -279,6 +304,7 @@ export const api = {
             });
         },
         uploadPortrait: (id: string, file: File) => {
+            if (isDemoMode()) return demoImageUrl(file, 640).then(url => ({ success: true as const, url }));
             const formData = new FormData();
             formData.append('photo', file);
             return fetchJson<{ success: true, url: string }>(`/patients/${id}/portrait`, {
@@ -303,12 +329,19 @@ export const api = {
     },
     appointments: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_APPOINTMENTS);
+            if (isDemoMode()) {
+                ensureDemoData();
+                return Promise.resolve([...DEMO_APPOINTMENTS]);
+            }
             return fetchJson<Appointment[]>(`/appointments?clinicId=${clinicId}`);
         },
         // Bir kunlik qabullar — bosh sahifadagi navbatni yangilab turish uchun (yengil so'rov)
         getByDate: (clinicId: string, date: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_APPOINTMENTS.filter(a => a.date === date));
+            if (isDemoMode()) {
+                // Demo kuni "yashaydi": har so'rovda qabullar hozirgi soatga yetkaziladi
+                ensureDemoData();
+                return Promise.resolve(DEMO_APPOINTMENTS.filter(a => a.date === date));
+            }
             return fetchJson<Appointment[]>(`/appointments?clinicId=${clinicId}&date=${encodeURIComponent(date)}`);
         },
         create: (data: Omit<Appointment, 'id'>) => {
@@ -453,7 +486,7 @@ export const api = {
     },
     transactions: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_TRANSACTIONS);
+            if (isDemoMode()) return Promise.resolve([...DEMO_TRANSACTIONS]);
             return fetchJson<Transaction[]>(`/transactions?clinicId=${clinicId}`);
         },
         // Bir kunlik kassa yozuvlari — navbatda qabul yakunlanganda "olinmagan pul" to'g'ri chiqishi uchun
@@ -518,7 +551,7 @@ export const api = {
     },
     expenses: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_EXPENSES);
+            if (isDemoMode()) return Promise.resolve([...DEMO_EXPENSES]);
             return fetchJson<Expense[]>(`/expenses?clinicId=${clinicId}`);
         },
         create: (data: Omit<Expense, 'id'>) => {
@@ -645,7 +678,7 @@ export const api = {
     },
     doctors: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_DOCTORS);
+            if (isDemoMode()) return Promise.resolve([...DEMO_DOCTORS]);
             return fetchJson<Doctor[]>(`/doctors?clinicId=${clinicId}`);
         },
         create: (data: Omit<Doctor, 'id'>) => {
@@ -720,7 +753,7 @@ export const api = {
     },
     receptionists: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_RECEPTIONISTS);
+            if (isDemoMode()) return Promise.resolve([...DEMO_RECEPTIONISTS]);
             return fetchJson<Receptionist[]>(`/receptionists?clinicId=${clinicId}`);
         },
         create: (data: Omit<Receptionist, 'id'>) => {
@@ -768,7 +801,7 @@ export const api = {
     },
     services: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_SERVICES);
+            if (isDemoMode()) return Promise.resolve([...DEMO_SERVICES]);
             return fetchJson<Service[]>(`/services?clinicId=${clinicId}`);
         },
         create: (data: Omit<Service, 'id'>) => {
@@ -812,7 +845,7 @@ export const api = {
     categories: {
         getAll: (clinicId: string) => {
             if (isDemoMode()) {
-                return Promise.resolve(DEMO_CATEGORIES);
+                return Promise.resolve([...DEMO_CATEGORIES]);
             }
             return fetchJson<ServiceCategory[]>(`/categories?clinicId=${clinicId}`);
         },
@@ -867,7 +900,7 @@ export const api = {
             return clinic;
         },
         getAll: () => {
-            if (isDemoMode()) return Promise.resolve(DEMO_CLINICS);
+            if (isDemoMode()) return Promise.resolve([...DEMO_CLINICS]);
             return fetchJson<Clinic[]>('/clinics');
         },
         create: (data: Omit<Clinic, 'id'>) => {
@@ -1199,17 +1232,20 @@ export const api = {
     // Nazorat (qayta tashrif): shifokor "N oydan keyin kelsin" deb belgilaydi
     recalls: {
         getByPatient: (patientId: string) => {
-            if (isDemoMode()) return Promise.resolve([] as Recall[]);
+            if (isDemoMode()) return Promise.resolve(DEMO_RECALLS.filter(r => r.patientId === patientId));
             return fetchJson<Recall[]>(`/recalls?patientId=${patientId}`);
         },
         // Resepshn ro'yxati: muddati kelgan yoki `days` kun ichida keladiganlar
         getDue: (clinicId: string, days = 14) => {
-            if (isDemoMode()) return Promise.resolve([] as Recall[]);
+            if (isDemoMode()) {
+                const until = addDaysISO(formatDateToISO(new Date()), days);
+                return Promise.resolve(DEMO_RECALLS.filter(r => (r.status === 'planned' || r.status === 'reminded') && r.dueDate <= until));
+            }
             return fetchJson<Recall[]>(`/recalls?clinicId=${clinicId}&due=${days}`);
         },
         // Hisobot uchun: barcha holatlar (bekor qilinganlar bilan)
         list: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve([] as Recall[]);
+            if (isDemoMode()) return Promise.resolve([...DEMO_RECALLS]);
             return fetchJson<Recall[]>(`/recalls?clinicId=${clinicId}&status=planned,reminded,booked,done,cancelled`);
         },
         /** mergeCheckup — ochiq nazorat bo'lsa yangisi yaratilmaydi, uning sanasi yangilanadi */
@@ -1217,7 +1253,25 @@ export const api = {
             if (isDemoMode()) {
                 const now = new Date().toISOString();
                 const { mergeCheckup, ...rest } = data;
-                return Promise.resolve({ id: `demo-recall-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, status: 'planned', createdAt: now, updatedAt: now, ...rest } as Recall);
+                // Server qoidasi: ochiq nazorat bo'lsa — yangisi ochilmaydi, sanasi ko'chadi
+                const kind = rest.kind || 'checkup';
+                const openIdx = mergeCheckup && kind === 'checkup'
+                    ? DEMO_RECALLS.findIndex(r => r.patientId === rest.patientId && (r.kind || 'checkup') === 'checkup' && (r.status === 'planned' || r.status === 'reminded'))
+                    : -1;
+                if (openIdx !== -1) {
+                    const open = DEMO_RECALLS[openIdx];
+                    DEMO_RECALLS[openIdx] = { ...open, dueDate: rest.dueDate, reason: rest.reason || open.reason, doctorId: rest.doctorId || open.doctorId, status: 'planned', remindedAt: null, updatedAt: now };
+                    saveDemoData();
+                    return Promise.resolve(DEMO_RECALLS[openIdx]);
+                }
+                const p = DEMO_PATIENTS.find(x => x.id === rest.patientId);
+                const recall: Recall = {
+                    id: `demo-recall-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, status: 'planned', createdAt: now, updatedAt: now, ...rest, kind,
+                    ...(p ? { patient: { id: p.id, firstName: p.firstName, lastName: p.lastName, phone: p.phone, doctorId: p.doctorId || null } } : {}),
+                };
+                DEMO_RECALLS.push(recall);
+                saveDemoData();
+                return Promise.resolve(recall);
             }
             return fetchJson<Recall>('/recalls', {
                 method: 'POST',
@@ -1226,7 +1280,13 @@ export const api = {
             });
         },
         update: (id: string, data: Partial<Pick<Recall, 'status' | 'dueDate' | 'reason'>>) => {
-            if (isDemoMode()) return Promise.resolve({ id, ...data } as Recall);
+            if (isDemoMode()) {
+                const i = DEMO_RECALLS.findIndex(r => r.id === id);
+                if (i === -1) return Promise.resolve({ id, ...data } as Recall);
+                DEMO_RECALLS[i] = { ...DEMO_RECALLS[i], ...data, updatedAt: new Date().toISOString() };
+                saveDemoData();
+                return Promise.resolve(DEMO_RECALLS[i]);
+            }
             return fetchJson<Recall>(`/recalls/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1258,6 +1318,7 @@ export const api = {
          */
         getFlow: (clinicId: string, date: string, withTickets = false) => {
             if (isDemoMode()) {
+                ensureDemoData();
                 if (withTickets) {
                     const d = new Date();
                     const nowMin = d.getHours() * 60 + d.getMinutes();
@@ -1285,6 +1346,7 @@ export const api = {
                     const { [data.appointmentId]: _removed, ...rest } = day.entries;
                     day.entries = rest;
                 }
+                saveDemoData();
                 return Promise.resolve(demoFlowBody(data.date));
             }
             return fetchJson<{ date: string; entries: FlowLog; tickets?: TicketLog }>('/desk/flow', {
@@ -1297,6 +1359,7 @@ export const api = {
         issueTicket: (data: { clinicId: string; date: string; appointmentId: string }) => {
             if (isDemoMode()) {
                 demoAssignTickets(data.date, [data.appointmentId]);
+                saveDemoData();
                 return Promise.resolve({ ...demoFlowBody(data.date), number: DEMO_FLOW.tickets[data.appointmentId] || null });
             }
             return fetchJson<{ date: string; entries: FlowLog; tickets?: TicketLog; number: number | null }>('/desk/ticket', {
@@ -1360,11 +1423,24 @@ export const api = {
     },
     diagnoses: {
         searchCodes: (query: string) => fetchJson<ICD10Code[]>(`/icd10?query=${query}`),
-        add: (data: Omit<PatientDiagnosis, 'id' | 'icd10'>) => fetchJson<PatientDiagnosis>('/diagnoses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        }),
+        add: (data: Omit<PatientDiagnosis, 'id' | 'icd10'> & { name?: string; description?: string }) => {
+            if (isDemoMode()) {
+                const { name, description, ...rest } = data;
+                const diagnosis: PatientDiagnosis = {
+                    ...rest,
+                    id: `demo-dx-${Date.now()}`,
+                    icd10: { code: data.code, name: name || data.code, description },
+                };
+                DEMO_DIAGNOSES.unshift(diagnosis);
+                saveDemoData();
+                return Promise.resolve(diagnosis);
+            }
+            return fetchJson<PatientDiagnosis>('/diagnoses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+        },
         getByPatient: (patientId: string) => {
             if (isDemoMode()) return Promise.resolve(DEMO_DIAGNOSES.filter(d => d.patientId === patientId));
             return fetchJson<PatientDiagnosis[]>(`/diagnoses?patientId=${patientId}`);
@@ -1426,7 +1502,7 @@ export const api = {
     },
     messageTemplates: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_MESSAGE_TEMPLATES);
+            if (isDemoMode()) return Promise.resolve([...DEMO_MESSAGE_TEMPLATES]);
             return fetchJson<MessageTemplate[]>(`/message-templates?clinicId=${clinicId}`);
         },
         create: (data: Omit<MessageTemplate, 'id'>) => {
@@ -1482,7 +1558,7 @@ export const api = {
     },
     automationRules: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_AUTOMATION_RULES);
+            if (isDemoMode()) return Promise.resolve([...DEMO_AUTOMATION_RULES]);
             return fetchJson<AutomationRule[]>(`/automation-rules?clinicId=${clinicId}`);
         },
         create: (data: Omit<AutomationRule, 'id'>) => {
@@ -1639,7 +1715,7 @@ export const api = {
     },
     inventory: {
         getAll: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve(DEMO_INVENTORY);
+            if (isDemoMode()) return Promise.resolve([...DEMO_INVENTORY]);
             return fetchJson<InventoryItem[]>(`/inventory?clinicId=${clinicId}`);
         },
         create: (data: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'> & { initialCost?: number }) => {

@@ -3,6 +3,7 @@ import { Button, Input, Card } from '../components/Common';
 import { UserRole } from '../types';
 import { AlertCircle, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { api } from '../services/api';
+import { DEMO_CREDENTIALS } from '../services/demoData';
 import { useLanguage } from '../context/LanguageContext';
 import { LogoMark } from '../components/Logo';
 
@@ -24,17 +25,14 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      // Check if on localhost
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-      // Demo mode credentials (localhost only)
-      // Demo mode credentials (localhost only)
-      if (isLocalhost && username === 'demoklinikaadmin' && password === 'demoklinikaparol') {
+      // Demo klinika butunlay brauzerda ishlaydi (services/demoData.ts): bu login serverga
+      // yuborilmaydi va bazaga hech narsa yozilmaydi. Boshqa loginlar odatdagidek serverga boradi.
+      if (username.trim() === DEMO_CREDENTIALS.username && password === DEMO_CREDENTIALS.password) {
         const demoAuthData = {
           role: UserRole.CLINIC_ADMIN,
           name: 'Demo Admin',
           clinicId: 'demo-clinic-1',
-          username: username,
+          username: DEMO_CREDENTIALS.username,
           token: 'demo-token',
           isDemo: true,
         };

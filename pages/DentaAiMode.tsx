@@ -5,7 +5,8 @@ import {
   CalendarCheck, TrendingUp, Wallet, Users, Package, Sparkles, RotateCcw,
   ThumbsUp, ThumbsDown, Check, X, History, Send, Trash2, Mic, MicOff,
 } from 'lucide-react';
-import { API_URL } from '../services/api';
+import { API_URL, isDemoMode } from '../services/api';
+import { demoAiRequest, demoAiStream } from '../services/demoAi';
 import { UserRole } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useVoiceInput } from '../hooks/useVoiceInput';
@@ -121,6 +122,8 @@ function authHeaders(): Record<string, string> {
 }
 
 async function api<T>(path: string, body?: object, method?: string): Promise<T> {
+  // Demo serverga bormaydi: javoblar demo klinika ma'lumotidan (services/demoAi.ts)
+  if (isDemoMode()) return demoAiRequest(path, body, method) as Promise<T>;
   const res = await fetch(`${API_URL}${path}`, {
     method: method || (body ? 'POST' : 'GET'),
     headers: authHeaders(),
@@ -157,6 +160,7 @@ async function streamAsk(
   onEvent: (e: StreamEvent) => void,
   signal?: AbortSignal
 ): Promise<boolean> {
+  if (isDemoMode()) return demoAiStream(body, onEvent, signal);
   const res = await fetch(`${API_URL}/ai/ask/stream`, {
     method: 'POST',
     headers: authHeaders(),

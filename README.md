@@ -89,6 +89,7 @@ npm run dev
 **Demo Clinic Admin:**
 - Username: `demoklinikaadmin`
 - Password: `demoklinikaparol`
+- Runs entirely in the browser (no backend requests, nothing is written to the database); demo data is rebuilt for the current day (`services/demoSeed.ts`)
 
 ## 🚢 Deployment
 

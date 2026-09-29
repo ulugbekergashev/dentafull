@@ -2,10 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Camera, Upload, Trash2, X, ZoomIn } from 'lucide-react';
 import { Button, Card, Modal, Input, Select, Badge } from './Common';
 import { PatientPhoto } from '../types';
-import { API_URL } from '../services/api';
+import { API_URL, isDemoMode } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 
 const BASE_URL = API_URL.replace('/api', '');
+
+/**
+ * Demo rejimda suratlar serverga yuklanmaydi: sessiya davomida brauzer xotirasida
+ * turadi (sahifa yangilansa yo'qoladi). Rasm manzili — brauzerdagi blob: havola.
+ */
+const demoPhotos: Record<string, PatientPhoto[]> = {};
+const photoSrc = (url: string) => (/^(https?:|blob:|data:)/.test(url) ? url : `${BASE_URL}${url}`);
 
 interface PatientPhotosProps {
     patientId: string;
@@ -20,6 +27,7 @@ interface PatientPhotosProps {
 
 /** Bemorning suratlari ro'yxati (serverdan) */
 export const fetchPatientPhotos = async (patientId: string, token: string): Promise<PatientPhoto[]> => {
+    if (isDemoMode()) return [...(demoPhotos[patientId] || [])];
     const response = await fetch(`${API_URL}/patients/${patientId}/photos`, {
         headers: { Authorization: `Bearer ${token}` }
     });
@@ -40,6 +48,11 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
     }, [patientId]);
 
     const fetchPhotos = async () => {
+        if (isDemoMode()) {
+            setPhotos([...(demoPhotos[patientId] || [])]);
+            setLoading(false);
+            return;
+        }
         try {
             const response = await fetch(`${API_URL}/patients/${patientId}/photos`, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -65,6 +78,13 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
 
     const handleDelete = async (photoId: string) => {
         if (!confirm(t('patients.details.photos.deleteConfirm'))) return;
+
+        if (isDemoMode()) {
+            demoPhotos[patientId] = (demoPhotos[patientId] || []).filter(p => p.id !== photoId);
+            setPhotos(photos.filter(p => p.id !== photoId));
+            if (viewPhoto?.id === photoId) setViewPhoto(null);
+            return;
+        }
 
         try {
             const response = await fetch(`${API_URL}/photos/${photoId}`, {
@@ -114,7 +134,7 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
                     {photos.map(photo => (
                         <div key={photo.id} className="group relative aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all">
                             <img
-                                src={photo.url.startsWith('http') ? photo.url : `${BASE_URL}${photo.url}`}
+                                src={photoSrc(photo.url)}
                                 alt={photo.description || 'Patient photo'}
                                 className="w-full h-full object-cover cursor-pointer"
                                 onClick={() => setViewPhoto(photo)}
@@ -167,7 +187,7 @@ export const PatientPhotos: React.FC<PatientPhotosProps> = ({ patientId, clinicI
 
                     <div className="max-w-4xl max-h-[90vh] relative" onClick={e => e.stopPropagation()}>
                         <img
-                            src={viewPhoto.url.startsWith('http') ? viewPhoto.url : `${BASE_URL}${viewPhoto.url}`}
+                            src={photoSrc(viewPhoto.url)}
                             alt={viewPhoto.description || 'Full view'}
                             className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
                         />
@@ -254,6 +274,17 @@ export const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({ isOpen, onCl
 
     const handleUpload = async () => {
         if (!selectedFile) return;
+
+        if (isDemoMode()) {
+            const now = new Date().toISOString();
+            (demoPhotos[patientId] ||= []).unshift({
+                id: `demo-photo-${Date.now()}`, patientId, url: URL.createObjectURL(selectedFile),
+                description, category, date: now, createdAt: now,
+            });
+            await onUploaded();
+            handleCloseModal();
+            return;
+        }
 
         setUploading(true);
         const formData = new FormData();
