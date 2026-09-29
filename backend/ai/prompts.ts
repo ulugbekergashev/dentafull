@@ -56,6 +56,51 @@ export const replyLang = (question: string, uiLang: Lang): Lang => {
 };
 
 /**
+ * Foydalanuvchi hozir qaysi sahifada turibdi.
+ *
+ * Panel endi har qanday sahifa YONIDA ochiladi va savol ko'rib turilgan
+ * narsa haqida beriladi: bemor kartasida "qarzi bormi?", kalendarda "ertaga
+ * bo'sh joy bormi?". Model buni bilmasa, "qaysi bemor?" deb qayta so'rardi —
+ * shifokor esa kartani allaqachon ochib turibdi.
+ */
+export interface PageContext {
+    /** Sahifa kaliti: patient, calendar, finance, patients, leads va h.k. */
+    page: string;
+    /** Bemor kartasi ochiq bo'lsa — maskalangan ism ("Aliyev S."). */
+    patientLabel?: string;
+}
+
+const PAGE_NAMES: Record<string, string> = {
+    dashboard: 'Bosh sahifa',
+    calendar: 'Kalendar (qabullar jadvali)',
+    finance: 'Moliya va kassa',
+    patients: 'Bemorlar ro\'yxati',
+    leads: 'Lidlar',
+    inventory: 'Ombor',
+    queue: 'Onlayn navbat',
+    lab: 'Laboratoriya',
+    messages: 'Xabarlar',
+    doctors: 'Xodimlar',
+    settings: 'Sozlamalar',
+};
+
+const pageLine = (ctx?: PageContext | null): string => {
+    if (!ctx) return '';
+    if (ctx.page === 'patient' && ctx.patientLabel) {
+        return 'HOZIRGI SAHIFA: foydalanuvchi bemor kartasini ochib turibdi — '
+            + `${ctx.patientLabel}. "Bu bemor", "shu bemor", "u", "uning" deganda `
+            + 'AYNAN shu bemor nazarda tutiladi. U haqidagi savolga get_patient_card ni '
+            + 'query BERMASDAN chaqir. Shu bemor uchun harakat qilganda (xabar, qabul, '
+            + 'to\'lov, protsedura) patientQuery ga "joriy bemor" deb yoz — server uni '
+            + 'o\'zi taniydi. Boshqa bemor ismi aytilsa — gap o\'sha bemor haqida.\n\n';
+    }
+    const name = PAGE_NAMES[ctx.page];
+    return name
+        ? `HOZIRGI SAHIFA: ${name}. Savol noaniq bo'lsa, shu bo'lim nazarda tutilgan bo'lishi mumkin.\n\n`
+        : '';
+};
+
+/**
  * @param today   klinika mintaqasidagi bugungi sana (UTC+5)
  * @param lang    javob tili
  * @param profile klinika profili — nom, shifokorlar, narxlar, ish vaqti.
@@ -74,12 +119,15 @@ export const askSystemPrompt = (
     today: string,
     lang: Lang = 'uz',
     profile = '',
-    canAct: boolean | string[] = false
+    canAct: boolean | string[] = false,
+    page: PageContext | null = null
 ): string =>
     'Sen DentaCRM tizimining yordamchisisan — stomatologiya klinikasi uchun.\n\n' +
 
     `Bugungi sana: ${today}. "Bugun", "kecha", "shu oy" kabi iboralarni shu ` +
     'sanadan kelib chiqib hisobla.\n\n' +
+
+    pageLine(page) +
 
     // Klinika profili — AI shu klinikaning shifokorlarini, narxlarini va ish
     // vaqtini bilib turishi uchun. Ilgari prompt hamma klinika uchun bir xil
@@ -149,6 +197,13 @@ export const askSystemPrompt = (
     'ichida tabiiy ayt ("avgust oyida", "bugun"). Lekin tool nomlarini ' +
     '(find_patient, get_revenue va h.k.) HECH QACHON yozma — foydalanuvchi ' +
     'ularni ko\'rmasligi kerak.\n\n' +
+
+    // Ro'yxatlar endi javob ostida bosiladigan kartochka bo'lib chiqadi
+    // (ai/evidence.ts). Model ularni matnda ham sanab chiqsa, bir ro'yxat
+    // ikki marta ko'rinadi va javob keraksiz cho'ziladi.
+    'RO\'YXATLAR: bemorlar, qabullar, qarzdorlar va bo\'sh vaqtlar ro\'yxati ' +
+    'javob ostida alohida kartochka bo\'lib ko\'rsatiladi. Matnda ularni to\'liq ' +
+    'sanab o\'tirma — xulosani va eng muhim 2-3 tasini ayt.\n\n' +
 
     'MAXFIYLIK: bemor ismlari senga qisqartirilgan holda keladi (masalan "Aliyev S.") — ' +
     'ularni shu ko\'rinishda ishlat, to\'liq ismni tiklashga urinma.\n\n' +

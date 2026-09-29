@@ -7542,6 +7542,18 @@ const {
     actionsForRole, isAction, previewAction, executeAction, storePending, takePending,
     PENDING_INSTRUCTION,
 } = require('./ai/actions');
+const { buildEvidence } = require('./ai/evidence');
+const { buildPulse, invalidatePulse } = require('./ai/pulse');
+const { refersToCurrentPatient } = require('./ai/tools');
+
+// Bemor bilan ishlaydigan harakatlar — ochiq kartadagi bemor ularga bog'lanadi.
+// Ro'yxat ta'riflardan olinadi: yangi harakat qo'shilsa, bu yerni unutib
+// qo'yib bo'lmaydi.
+const PATIENT_ACTIONS = new Set<string>(
+    require('./ai/actions').ACTION_DEFS
+        .filter((a: any) => a.parameters?.properties?.patientQuery)
+        .map((a: any) => a.name)
+);
 
 // Klinikalar O'zbekistonda — sana UTC+5 bo'yicha hisoblanadi. Server UTC'da
 // ishlaydi, shuning uchun oddiy toISOString() kechqurun soat 19:00 dan keyin
@@ -7631,6 +7643,35 @@ app.get('/api/ai/status', authenticateToken, async (req: any, res: any) => {
     res.json({ success: true, ...aiStatus(await getClinicKey(getScopedClinicId(req))) });
 });
 
+/**
+ * GET /api/ai/pulse — panel ochilganda ko'rinadigan "kun pulsi".
+ *
+ * Model chaqirilmaydi (ai/pulse.ts), shuning uchun AI kaliti sozlanmagan
+ * klinikada ham ishlaydi va token sarflamaydi. Rol cheklovlari AI
+ * tool'laridagi bilan bir xil: shifokor faqat o'z qabullarini ko'radi,
+ * tushumni esa faqat moliyaga ruxsati borlar.
+ */
+const PULSE_ROLES = ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'RECEPTIONIST'];
+
+app.get('/api/ai/pulse', authenticateToken, async (req: any, res: any) => {
+    try {
+        const user = req.user;
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId || !PULSE_ROLES.includes(user?.role)) return res.json({ success: true, pulse: null });
+        if (!aiRateLimit(`pulse:${userKey(user)}`, 240, 60 * 60 * 1000)) {
+            return res.status(429).json({ success: false, message: 'Soatlik chegaraga yetdingiz.' });
+        }
+        const pulse = await buildPulse(
+            { clinicId, role: user.role, doctorId: user?.doctorId },
+            reqLang(req)
+        );
+        res.json({ success: true, pulse });
+    } catch (e: any) {
+        console.error('[AI/pulse]', e.message);
+        res.status(500).json({ success: false, message: safeAiError(e) });
+    }
+});
+
 // ─── Umumiy savol-javob mantiqi ──────────────────────────────────────────────
 //
 // /ai/ask va /ai/ask/stream AYNAN bir xil ishlashi shart. Ilgari bunday
@@ -7644,7 +7685,61 @@ interface AskOutcome {
     /** Tasdiqlash kutayotgan harakat, bo'lsa. */
     action: { id: string; name: string; preview: any } | null;
     logId: string | null;
+    /** Javob ostidagi kartochkalar (ai/evidence.ts). */
+    cards: any[];
 }
+
+const AI_PAGES = new Set([
+    'dashboard', 'calendar', 'finance', 'patients', 'leads', 'inventory',
+    'queue', 'lab', 'messages', 'doctors', 'settings',
+]);
+
+/**
+ * Mijoz aytgan sahifa kontekstini TEKSHIRADI.
+ *
+ * Bemor id si mijozdan keladi, ya'ni unga ishonib bo'lmaydi: boshqa klinika
+ * bemorining id sini yuborib, uning kartasini AI orqali o'qish mumkin
+ * bo'lmasligi kerak. Shuning uchun:
+ *   • bemor shu klinikaniki bo'lishi shart;
+ *   • shifokor faqat o'z bemorini — klinika "shifokor hammani ko'rsin" deb
+ *     sozlamagan bo'lsa yoki bemor unga yozilmagan bo'lsa.
+ * Tekshiruvdan o'tmasa kontekst jimgina tashlanadi — savol baribir oddiy
+ * yo'l bilan javob oladi.
+ */
+const resolvePageContext = async (
+    raw: any,
+    clinicId: string,
+    user: any
+): Promise<{ page: string; patientId?: string; patientLabel?: string } | null> => {
+    if (!raw || typeof raw !== 'object' || !clinicId) return null;
+
+    if (raw.kind === 'patient' && typeof raw.patientId === 'string' && raw.patientId) {
+        const p = await prisma.patient.findFirst({
+            where: { id: raw.patientId, clinicId },
+            select: { id: true, firstName: true, lastName: true, doctorId: true },
+        });
+        if (!p) return null;
+        if (user?.role === 'DOCTOR' && user?.doctorId && p.doctorId !== user.doctorId
+            && !(await doctorSeesAllPatients(clinicId))) {
+            const mine = await prisma.appointment.findFirst({
+                where: { clinicId, patientId: p.id, doctorId: user.doctorId },
+                select: { id: true },
+            });
+            if (!mine) return null;
+        }
+        const first = String(p.firstName || '').trim();
+        const last = String(p.lastName || '').trim();
+        return {
+            page: 'patient',
+            patientId: p.id,
+            // Modelga maskalangan ism boradi — tool'lardagi qoida bilan bir xil.
+            patientLabel: last ? `${last} ${first.charAt(0).toUpperCase()}.` : first || 'Bemor',
+        };
+    }
+
+    const page = String(raw.page || '');
+    return AI_PAGES.has(page) ? { page } : null;
+};
 
 /**
  * So'rov qaysi bosqichda ekanini kuzatib boradi.
@@ -7687,16 +7782,30 @@ const runAsk = async (
     // interfeys tili qoladi — batafsil: ai/prompts.ts -> replyLang
     const lang = replyLang(question, reqLang(req));
 
-    const ctx = { clinicId, role, doctorId: user?.doctorId };
+    // Sahifa konteksti: bemor kartasi ochiq bo'lsa, "bu bemor" — shu bemor.
+    // Tekshiruvdan o'tmagan kontekst jimgina tashlanadi (resolvePageContext).
+    progress.stage = 'kontekst';
+    const page = await resolvePageContext(req.body?.context, clinicId, user).catch(() => null);
+    const ctx = { clinicId, role, doctorId: user?.doctorId, patientId: page?.patientId };
     // Klinikaning o'z kaliti (keshlangan). Bo'lsa — zanjirning boshida
     // turadi va platforma chegarasi umuman ishlatilmaydi.
     const clinicKey = await getClinicKey(clinicId);
 
     // Kesh orqali o'qish — bir xil tool + argument 60 soniya ichida bazaga
     // qayta bormaydi.
+    //
+    // Kesh kalitida SHIFOKOR ham bor: natija unga qarab o'zgaradi (shifokor
+    // faqat o'z qabullarini ko'radi). Ilgari kalitda faqat rol turardi, ya'ni
+    // bir klinikadagi ikki shifokor bir daqiqa ichida bir-birining qabullarini
+    // ko'rib qolishi mumkin edi. Bemor kartasida esa ochiq bemor ham kalitda —
+    // argumentsiz chaqiruv har bir bemor uchun boshqa natija beradi.
+    const cacheScope = `${role}:${user?.doctorId || ''}`;
     const toolResults: any[] = [];
+    // Kartochkalar uchun: qaysi tool qanday argument bilan nima qaytardi.
+    const calls: { name: string; args: any; result: any }[] = [];
     const readTool = async (name: string, args: any) => {
-        const { value } = await cachedTool(clinicId, role, name, args, () => runTool(name, args, ctx));
+        const keyArgs = name === 'get_patient_card' ? { ...args, _patient: ctx.patientId || '' } : args;
+        const { value } = await cachedTool(clinicId, cacheScope, name, keyArgs, () => runTool(name, args, ctx));
         return value;
     };
 
@@ -7711,11 +7820,20 @@ const runAsk = async (
             latencyMs: Date.now() - t0, cached: true, groundingOk: true,
         });
         onEvent?.({ type: 'token', text: fast.reply });
-        return { reply: fast.reply, sources: fast.sources, action: null, logId };
+        const cards = await buildEvidence(fast.calls || [], ctx, lang).catch(() => []);
+        return { reply: fast.reply, sources: fast.sources, action: null, logId, cards };
     }
 
     // ── 2-qatlam: yo'naltirish. Savol turiga qarab faqat kerakli tool'lar.
-    const { tools: readTools, route } = toolsForRequest(role, question, isFollowUp);
+    let { tools: readTools, route } = toolsForRequest(role, question, isFollowUp);
+    // Bemor kartasi ochiq — "qarzi bormi?", "qachon kelgan?" kabi savollarda
+    // bemor ismi aytilmaydi, ya'ni yo'naltirgich uni taniy olmaydi. Karta
+    // tool'i shu holatda doim qo'shiladi (foydalanish haqidagi savoldan tashqari).
+    if (ctx.patientId && route.intent !== 'tizim'
+        && !readTools.some((t: any) => t.function.name === 'get_patient_card')) {
+        const card = toolsForRole(role).find((t: any) => t.function.name === 'get_patient_card');
+        if (card) readTools = [...readTools, card];
+    }
 
     // Yozuvchi tool'lar faqat BUYRUQ berilganda qo'shiladi. Ularning ta'rifi
     // ~590 token va har so'rovga qo'shilsa, yo'naltirishdan olingan tejash
@@ -7777,6 +7895,17 @@ const runAsk = async (
         // Yozuvchi tool BAJARILMAYDI — faqat ko'rib chiqiladi va saqlanadi.
         // Bajarish /api/ai/act orqali, foydalanuvchi tasdiqlagandan keyin.
         if (isAction(name)) {
+            // "_" bilan boshlanadigan maydonlar — serverning ichki argumentlari
+            // (_patientId va h.k.). Model ularni o'zi yuborsa, olib tashlanadi:
+            // bemorni faqat server tekshirgan kontekst bog'lay oladi.
+            const clean: any = {};
+            for (const k of Object.keys(args || {})) if (!k.startsWith('_')) clean[k] = args[k];
+            // Ochiq kartadagi bemor: model "joriy bemor" deb yozadi yoki ismni
+            // umuman bermaydi — ikkalasida ham gap shu bemor haqida.
+            if (ctx.patientId && PATIENT_ACTIONS.has(name) && refersToCurrentPatient(clean.patientQuery)) {
+                clean._patientId = ctx.patientId;
+            }
+
             // Ko'rib chiqish yiqilsa, BUTUN javob yiqilmasligi kerak.
             // Productionda aynan shunday bo'ldi: bemor qidiruvidagi xato
             // to'g'ridan-to'g'ri foydalanuvchi ekraniga chiqdi. Tool
@@ -7784,7 +7913,7 @@ const runAsk = async (
             // shunda aniqlashtirish so'raydi yoki boshqa yo'l tanlaydi.
             let p: any;
             try {
-                p = await previewAction(name, args, ctx, today);
+                p = await previewAction(name, clean, ctx, today);
             } catch (err: any) {
                 console.error(`[AI:action] ${name} ko'rib chiqishda xatolik:`, err?.message);
                 return { xato: 'Bu harakatni tayyorlab bo\'lmadi. Ma\'lumotlarni tekshirib qayta ayting.' };
@@ -7811,15 +7940,21 @@ const runAsk = async (
         progress.stage = `tool:${name}`;
         const value = await readTool(name, args);
         toolResults.push(value);
+        calls.push({ name, args, result: value });
         // <data> blokiga o'rash — bazadagi matn ko'rsatma bo'lib ketmasligi uchun.
         return wrapToolResult(value);
     };
+
+    const pagePrompt = page ? { page: page.page, patientLabel: page.patientLabel } : null;
 
     progress.stage = 'model';
     try {
         const { reply, toolCalls, meta } = await chatWithTools(
             [
-                { role: 'system', content: askSystemPrompt(today, lang, profile, actionTools.map((t: any) => t.function.name)) },
+                {
+                    role: 'system',
+                    content: askSystemPrompt(today, lang, profile, actionTools.map((t: any) => t.function.name), pagePrompt),
+                },
                 ...history,
             ],
             tools,
@@ -7876,9 +8011,13 @@ const runAsk = async (
 
         console.log(`[AI/ask] yo'nalish=${route.intent} tool=${tools.length} ta`);
         const pa = paCard;
+        // Harakat kartasi bo'lsa kartochkalar chizilmaydi: foydalanuvchining
+        // e'tibori tasdiqlashda bo'lishi kerak, yonida ro'yxat chalg'itardi.
+        progress.stage = 'kartochkalar';
+        const cards = pa ? [] : await buildEvidence(calls, ctx, lang).catch(() => []);
         return {
             reply: pa ? enforcePendingTone(text, pa.preview) : text,
-            sources, action: pa, logId,
+            sources, action: pa, logId, cards,
         };
     } catch (e: any) {
         await logAi({
@@ -7940,6 +8079,7 @@ app.post('/api/ai/ask', authenticateToken, async (req: any, res: any) => {
             sources: out.sources,
             action: out.action,
             logId: out.logId,
+            cards: out.cards,
         });
     } catch (e: any) {
         console.error('[AI/ask]', e.message);
@@ -8010,6 +8150,7 @@ app.post('/api/ai/ask/stream', authenticateToken, async (req: any, res: any) => 
             sources: out.sources,
             action: out.action,
             logId: out.logId,
+            cards: out.cards,
         });
     } catch (e: any) {
         console.error('[AI/ask/stream]', e.message);
@@ -8136,6 +8277,9 @@ app.post('/api/ai/act', authenticateToken, async (req: any, res: any) => {
         );
 
         invalidateToolCache(p.clinicId);
+        // Kun pulsi ham shu ma'lumotdan hisoblanadi — harakatdan keyin
+        // panel eski raqamni bir daqiqa ko'rsatib turmasligi uchun.
+        invalidatePulse(p.clinicId);
 
         await logAi({
             clinicId: p.clinicId, userId: userKey(user), userName: user?.name, role: p.role,

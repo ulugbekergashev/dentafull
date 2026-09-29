@@ -17,12 +17,21 @@ const { prisma } = require('../db');
 import { sanitizeToolResult } from './guard';
 import { searchVariants } from './translit';
 import { fuzzyFind, confidentPick } from './fuzzy';
+import { resolveDoctor } from './context';
 
 export interface ToolContext {
     clinicId: string;
     role: string;
     /** DOCTOR roli uchun — o'z bemorlari bilan cheklash. */
     doctorId?: string;
+    /**
+     * Foydalanuvchi ochib turgan bemor kartasi (sahifa konteksti).
+     *
+     * Mijozdan keladi, lekin server uni klinika va shifokor doirasi bo'yicha
+     * TEKSHIRGANDAN keyingina shu yerga tushadi (server.ts, resolvePageContext).
+     * Model bu id ni hech qachon ko'rmaydi va almashtira olmaydi.
+     */
+    patientId?: string;
 }
 
 // ─── Maxfiylik ───────────────────────────────────────────────────────────────
@@ -185,7 +194,53 @@ export const TOOL_DEFS: ToolDef[] = [
         },
         roles: FRONT_DESK,
     },
+    // Quyidagi ikkitasi "qo'shimcha" tool'lar: ular faqat kerak bo'lganda
+    // yuboriladi (router.ts, EXTRA_TOOLS). Keng savolga har safar qo'shilsa,
+    // ~200 token hech narsa bermasdan yeyilardi.
+    {
+        name: 'get_patient_card',
+        description:
+            'BITTA bemorning kartasi: yoshi, shifokori, tashriflar va kelmaganlar ' +
+            'soni, oxirgi va keyingi qabul, bajarilgan ishlar (tish raqami bilan), ' +
+            'tish xaritasi, qarz va avans, nazorat ko\'rigi. "Bu bemor haqida xulosa", ' +
+            '"qanday davolangan?", "keyingi qabuli qachon?" kabi savollar uchun. ' +
+            'Bemor kartasi ochiq bo\'lsa query BERMA — ochiq bemor olinadi.',
+        parameters: {
+            type: 'object',
+            properties: {
+                query: {
+                    type: 'string',
+                    description: 'Bemor ismi yoki telefoni. Ochiq kartadagi bemor haqida bo\'lsa — berilmaydi.',
+                },
+            },
+            required: [],
+        },
+        roles: ALL,
+    },
+    {
+        name: 'find_free_slots',
+        description:
+            'Berilgan kunda shifokorlarning BO\'SH vaqtlari: ish vaqti va band ' +
+            'qabullar hisobga olinadi. "Ertaga bo\'sh joy bormi?", "Rahimovda ' +
+            'qachon bo\'sh?" kabi savollar uchun, qabulga yozishdan oldin.',
+        parameters: {
+            type: 'object',
+            properties: {
+                date: { type: 'string', description: 'Sana, YYYY-MM-DD' },
+                doctorName: { type: 'string', description: 'Shifokor familiyasi yoki ismi. Berilmasa — barcha shifokorlar.' },
+                duration: { type: 'integer', description: 'Qabul davomiyligi, daqiqa (standart 30)' },
+            },
+            required: ['date'],
+        },
+        roles: ALL,
+    },
 ];
+
+/**
+ * Faqat kerak bo'lganda yuboriladigan tool'lar. Keng savol va tanilmagan
+ * savolga ular qo'shilmaydi — batafsil: router.ts.
+ */
+export const EXTRA_TOOLS = new Set(['get_patient_card', 'find_free_slots']);
 
 /** Rolga ko'ra ko'rinadigan tool ta'riflari (OpenAI `tools` formatida). */
 export const toolsForRole = (role: string) =>
@@ -412,6 +467,352 @@ export const searchPatients = async (
 
     return [];
 
+};
+
+// ─── Klinika soati ───────────────────────────────────────────────────────────
+// Server UTC'da ishlaydi, klinikalar esa UTC+5 da. "Keyingi qabul" va "bugun
+// qolgan bo'sh vaqt" aynan shu soatga nisbatan hisoblanishi shart.
+export const clinicClock = (): { date: string; time: string } => {
+    const iso = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString();
+    return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+};
+
+const toMinutes = (hhmm: string): number => {
+    const [h, m] = String(hhmm || '').split(':').map(Number);
+    return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+};
+
+const toHHMM = (min: number): string =>
+    `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
+// ─── Bemor kartasi ───────────────────────────────────────────────────────────
+//
+// Ma'lumot BIR MARTA yig'iladi va ikki shaklga keltiriladi:
+//   • modelga (get_patient_card) — maskalangan: ism qisqartirilgan, telefon,
+//     manzil va anamnez umuman yo'q;
+//   • UI ga (ai/evidence.ts) — to'liq ism va id bilan, bosiladigan karta.
+// Ikkalasi bitta yuklovchidan olingani uchun bir-biridan farq qila olmaydi.
+
+/**
+ * "shu bemor", "bu bemor", "joriy bemor" — ochiq kartadagi bemorga ishora.
+ *
+ * Bo'sh qiymat ham shunday hisoblanadi: model kartani ochiq bemor uchun
+ * so'raganda argumentni umuman bermaydi.
+ */
+export const refersToCurrentPatient = (q: unknown): boolean => {
+    const s = String(q ?? '')
+        .toLowerCase()
+        .replace(/['ʻʼ`’]/g, '')
+        .replace(/[.,!?«»"]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!s) return true;
+    return [
+        /^(shu|bu|ushbu|joriy|ochiq|hozirgi|mana shu|osha)( bemor[a-z]*)?$/,
+        /^(bemor[a-z]*|пациент[а-яё]*|patient|current( patient)?)$/,
+        /^(этот|эта|этого|этой|этому|текущ[а-яё]*|данн[а-яё]*|открыт[а-яё]*)( пациент[а-яё]*)?$/,
+        /^(u|uni|unga|uning|его|её|ее|ему|ей)$/,
+    ].some(re => re.test(s));
+};
+
+export interface PatientCardData {
+    id: string;
+    firstName: string;
+    lastName: string;
+    age: number | null;
+    gender: string;
+    status: string;
+    /** Bemor klinikada ro'yxatga olingan sana. */
+    since: string;
+    lastVisit: string;
+    doctor: { id: string; name: string } | null;
+    visits: number;
+    noShows: number;
+    cancelled: number;
+    next: { date: string; time: string; doctorName: string; type: string } | null;
+    recent: { date: string; type: string; status: string; doctorName: string }[];
+    procedures: { date: string; name: string; tooth: number | null; price: number }[];
+    /** Tish xaritasi: holat -> tishlar soni. */
+    teeth: Record<string, number>;
+    debt: number;
+    advance: number;
+    recall: { date: string; reason: string } | null;
+    diagnoses: { code: string; name: string; date: string }[];
+}
+
+/**
+ * Sanani "YYYY-MM-DD" ga keltiradi, sana bo'lmasa — bo'sh satr.
+ *
+ * `Patient.lastVisit` ga ishonib bo'lmaydi: bazada ko'p bemorda u "Never",
+ * qolganlarida to'liq ISO vaqt ("2026-09-12T08:30:00.000Z"). Kartada
+ * "oxirgi tashrif: Never" chiqmasligi uchun faqat haqiqiy sana olinadi.
+ */
+export const isoDay = (v: unknown): string => {
+    const m = String(v ?? '').match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : '';
+};
+
+/**
+ * Tug'ilgan sanadan yosh. Bazada ikki format uchraydi: "1990-05-14" va
+ * "14.05.1990". Boshqasi bo'lsa — null (taxmin qilinmaydi).
+ */
+const ageFrom = (dob: string, today: string): number | null => {
+    const s = String(dob || '').trim();
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const dmy = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    const [y, mo, d] = iso ? [iso[1], iso[2], iso[3]] : dmy ? [dmy[3], dmy[2], dmy[1]] : [];
+    if (!y) return null;
+    let age = Number(today.slice(0, 4)) - Number(y);
+    if (today.slice(5) < `${mo}-${d}`) age--;
+    return age >= 0 && age < 120 ? age : null;
+};
+
+/**
+ * Qabul izohidagi protsedura qatorlari.
+ *
+ * Format ilovaning O'Z formati (pages/PatientDetails.tsx, ProceduresSection):
+ *   "- Plomba (Tish #16) [300 000 UZS]"
+ * AI ning add_procedure harakati ham xuddi shu formatda yozadi.
+ */
+const parseProcedures = (notes: string | null | undefined, date: string) => {
+    const out: { date: string; name: string; tooth: number | null; price: number }[] = [];
+    for (const raw of String(notes || '').split('\n')) {
+        const line = raw.trim();
+        if (!line.startsWith('-')) continue;
+        // Nom — "(Tish #..)", "(Umumiy)" yoki "[.. UZS]" dan oldingi qism. Bitta
+        // regex bilan olinmaydi: nomning o'zida qavs bo'lishi mumkin
+        // ("Koronka (metallokeramika)") va u holda butun qator tushib qolardi.
+        let name = line.replace(/^-\s*/, '');
+        const cut = name.search(/\s*(\((?:Tish #\d+|Umumiy)\)|\[[\d\s]+UZS\])/i);
+        if (cut > 0) name = name.slice(0, cut);
+        name = name.trim();
+        if (!name) continue;
+        const tooth = line.match(/\(Tish #(\d+)\)/i);
+        const price = line.match(/\[([\d\s]+)UZS\]/i);
+        out.push({
+            date,
+            name: name.slice(0, 120),
+            tooth: tooth ? Number(tooth[1]) : null,
+            price: price ? Number(price[1].replace(/\D/g, '')) || 0 : 0,
+        });
+    }
+    return out;
+};
+
+/**
+ * Bemor kartasi uchun barcha ma'lumotni yuklaydi.
+ * Bemor topilmasa yoki boshqa klinikaniki bo'lsa — null.
+ */
+export const loadPatientCard = async (
+    patientId: string,
+    ctx: ToolContext
+): Promise<PatientCardData | null> => {
+    const patient = await prisma.patient.findFirst({
+        where: { id: patientId, clinicId: ctx.clinicId },
+        select: {
+            id: true, firstName: true, lastName: true, dob: true, gender: true, status: true,
+            createdAt: true, lastVisit: true, balance: true,
+            doctor: { select: { id: true, firstName: true, lastName: true } },
+        },
+    });
+    if (!patient) return null;
+
+    const { date: today, time: now } = clinicClock();
+
+    const [appts, pending, plans, teeth, recall, diagnoses] = await Promise.all([
+        prisma.appointment.findMany({
+            where: { clinicId: ctx.clinicId, patientId },
+            orderBy: [{ date: 'desc' }, { time: 'desc' }],
+            take: 80,
+            select: { date: true, time: true, status: true, type: true, doctorName: true, notes: true },
+        }),
+        prisma.transaction.findMany({
+            where: { clinicId: ctx.clinicId, patientId, status: 'Pending' },
+            select: { amount: true },
+        }),
+        prisma.installmentPlan.findMany({
+            where: { clinicId: ctx.clinicId, patientId, status: 'Active' },
+            select: { totalAmount: true, totalPaid: true },
+        }),
+        prisma.toothData.findMany({
+            where: { patientId },
+            select: { conditions: true },
+        }),
+        prisma.recall.findFirst({
+            where: { clinicId: ctx.clinicId, patientId, status: { in: ['planned', 'reminded'] } },
+            orderBy: { dueDate: 'asc' },
+            select: { dueDate: true, reason: true },
+        }),
+        prisma.patientDiagnosis.findMany({
+            where: { clinicId: ctx.clinicId, patientId },
+            orderBy: { date: 'desc' },
+            take: 5,
+            select: { code: true, date: true, icd10: { select: { name: true } } },
+        }),
+    ]);
+
+    const upcoming = appts
+        .filter((a: any) => ['Pending', 'Confirmed'].includes(a.status)
+            && (a.date > today || (a.date === today && a.time >= now)))
+        .sort((a: any, b: any) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+    const past = appts.filter((a: any) => a.date < today || (a.date === today && a.time < now));
+
+    // Tish xaritasi: har bir tishdagi holatlar JSON massiv sifatida saqlanadi.
+    const teethSummary: Record<string, number> = {};
+    for (const t of teeth) {
+        let list: string[] = [];
+        try {
+            const o = JSON.parse(t.conditions || '[]');
+            if (Array.isArray(o)) list = o.map((x: any) => (typeof x === 'string' ? x : x?.type || x?.condition)).filter(Boolean);
+        } catch { /* buzuq yozuv — o'tkazib yuboramiz */ }
+        for (const c of list) teethSummary[c] = (teethSummary[c] || 0) + 1;
+    }
+
+    const debt = pending.reduce((s: number, t: any) => s + (t.amount || 0), 0)
+        + plans.reduce((s: number, p: any) => s + Math.max(0, (p.totalAmount || 0) - (p.totalPaid || 0)), 0);
+
+    return {
+        id: patient.id,
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        age: ageFrom(patient.dob, today),
+        gender: patient.gender,
+        status: patient.status,
+        since: patient.createdAt ? new Date(patient.createdAt).toISOString().slice(0, 10) : '',
+        // Yakunlangan qabul — eng ishonchli manba; lastVisit maydoni faqat zaxira.
+        lastVisit: past.find((a: any) => a.status === 'Completed')?.date
+            || isoDay(patient.lastVisit),
+        doctor: patient.doctor
+            ? { id: patient.doctor.id, name: `${patient.doctor.lastName} ${patient.doctor.firstName}`.trim() }
+            : null,
+        visits: appts.filter((a: any) => a.status === 'Completed').length,
+        noShows: appts.filter((a: any) => a.status === 'No-Show').length,
+        cancelled: appts.filter((a: any) => a.status === 'Cancelled').length,
+        next: upcoming[0]
+            ? { date: upcoming[0].date, time: upcoming[0].time, doctorName: upcoming[0].doctorName, type: upcoming[0].type }
+            : null,
+        recent: past.slice(0, 5).map((a: any) => ({
+            date: a.date, type: a.type, status: a.status, doctorName: a.doctorName,
+        })),
+        procedures: appts
+            .filter((a: any) => a.status === 'Completed' || a.status === 'Checked-In')
+            .flatMap((a: any) => parseProcedures(a.notes, a.date))
+            .slice(0, 12),
+        teeth: teethSummary,
+        debt: Math.round(debt),
+        advance: Math.max(0, Math.round(patient.balance || 0)),
+        recall: recall ? { date: recall.dueDate, reason: recall.reason || '' } : null,
+        diagnoses: diagnoses.map((d: any) => ({ code: d.code, name: d.icd10?.name || '', date: d.date })),
+    };
+};
+
+/**
+ * Karta qaysi bemor uchun ekanini aniqlaydi.
+ *
+ * Ochiq karta (ctx.patientId) ustun turadi: shifokor kartani ochib "qanday
+ * davolangan?" deb so'raganda model ism aytmaydi va aytishi ham shart emas.
+ */
+export const resolveCardPatient = async (
+    query: unknown,
+    ctx: ToolContext
+): Promise<{ id?: string; candidates?: any[]; xato?: string }> => {
+    if (ctx.patientId && refersToCurrentPatient(query)) return { id: ctx.patientId };
+    const q = String(query ?? '').trim();
+    if (q.length < 2) {
+        return { xato: 'Qaysi bemor haqida ekani aniq emas — ismini ayting yoki bemor kartasini oching.' };
+    }
+    const rows = await searchPatients(q, ctx, 5);
+    if (!rows.length) return { xato: `"${q}" bo'yicha bemor topilmadi.` };
+    if (rows.length > 1) return { candidates: rows };
+    return { id: rows[0].id };
+};
+
+// ─── Bo'sh vaqtlar ───────────────────────────────────────────────────────────
+//
+// Kalendar ilgari AI uchun faqat "nechta qabul bor" edi. "Ertaga Rahimovda
+// bo'sh joy bormi?" — resepshnning eng ko'p savoli — javobsiz qolardi yoki
+// model ro'yxatga qarab o'zi taxmin qilardi. Hisob endi deterministik:
+// ish vaqti − band qabullar, 30 daqiqalik qadam bilan.
+
+export interface SlotsData {
+    date: string;
+    duration: number;
+    doctors: { id: string; name: string; start: string; end: string; free: string[]; busy: number }[];
+}
+
+const SLOT_STEP = 30;
+
+export const computeFreeSlots = async (
+    args: any,
+    ctx: ToolContext
+): Promise<SlotsData | { xato: string }> => {
+    const date = String(args?.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { xato: 'Sana YYYY-MM-DD ko\'rinishida bo\'lishi kerak.' };
+
+    const { date: today, time: now } = clinicClock();
+    if (date < today) return { xato: 'Bu sana o\'tib ketgan — bo\'sh vaqt faqat bugun va keyingi kunlar uchun.' };
+
+    const duration = clampLimit(args?.duration, 30, 180);
+
+    const where: any = { clinicId: ctx.clinicId, status: 'Active' };
+    // Shifokor faqat O'Z jadvalini ko'radi — boshqa tool'lardagi kabi.
+    if (ctx.role === 'DOCTOR' && ctx.doctorId) {
+        where.id = ctx.doctorId;
+    } else if (args?.doctorName) {
+        const found = await resolveDoctor(ctx.clinicId, String(args.doctorName));
+        if (!found) return { xato: `"${args.doctorName}" ismli shifokor topilmadi.` };
+        where.id = found.id;
+    }
+
+    const [clinic, doctors] = await Promise.all([
+        prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { startHour: true, endHour: true } }),
+        prisma.doctor.findMany({
+            where,
+            select: { id: true, firstName: true, lastName: true, startHour: true, endHour: true },
+            take: 20,
+        }),
+    ]);
+    if (!doctors.length) return { xato: 'Faol shifokor topilmadi.' };
+
+    const appts = await prisma.appointment.findMany({
+        where: {
+            clinicId: ctx.clinicId,
+            date,
+            doctorId: { in: doctors.map((d: any) => d.id) },
+            status: { notIn: ['Cancelled'] },
+        },
+        select: { doctorId: true, time: true, duration: true },
+    });
+
+    // Bugun bo'lsa — o'tib ketgan vaqtlar taklif qilinmaydi.
+    const earliest = date === today ? Math.ceil(toMinutes(now) / SLOT_STEP) * SLOT_STEP : 0;
+
+    return {
+        date,
+        duration,
+        doctors: doctors.map((d: any) => {
+            const start = (d.startHour ?? clinic?.startHour ?? 8) * 60;
+            const end = (d.endHour ?? clinic?.endHour ?? 20) * 60;
+            const busy = appts
+                .filter((a: any) => a.doctorId === d.id)
+                .map((a: any) => {
+                    const s = toMinutes(a.time);
+                    return { s, e: s + (a.duration > 0 ? a.duration : 30) };
+                });
+            const free: string[] = [];
+            for (let t = Math.max(start, earliest); t + duration <= end; t += SLOT_STEP) {
+                if (!busy.some((b: { s: number; e: number }) => t < b.e && t + duration > b.s)) free.push(toHHMM(t));
+            }
+            return {
+                id: d.id,
+                name: `${d.lastName} ${d.firstName}`.trim(),
+                start: toHHMM(start),
+                end: toHHMM(end),
+                free,
+                busy: busy.length,
+            };
+        }),
+    };
 };
 
 const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
@@ -641,6 +1042,77 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
             izoh: sovigan > 0
                 ? `${sovigan} ta lid 7 kundan beri "New" holatida — ular bilan bog'lanilmagan.`
                 : undefined,
+        };
+    },
+
+    get_patient_card: async (args, ctx) => {
+        const who = await resolveCardPatient(args.query, ctx);
+        if (who.xato) return { xato: who.xato };
+        if (who.candidates) {
+            return {
+                topildi: who.candidates.length,
+                bemorlar: who.candidates.map((r: any) => ({
+                    bemor: maskName(r.firstName, r.lastName),
+                    oxirgi_tashrif: r.lastVisit,
+                })),
+                izoh: 'Bir nechta bemor mos keldi — qaysi biri ekanini familiyasi va ismi bilan so\'ra.',
+            };
+        }
+        const c = await loadPatientCard(who.id as string, ctx);
+        if (!c) return { xato: 'Bemor topilmadi.' };
+
+        return {
+            bemor: maskName(c.firstName, c.lastName),
+            yosh: c.age ?? undefined,
+            jins: c.gender || undefined,
+            holat: c.status,
+            shifokor: c.doctor?.name || '-',
+            bemor_bolgan_sana: c.since || undefined,
+            oxirgi_tashrif: c.lastVisit || undefined,
+            tashriflar: c.visits,
+            kelmagan: c.noShows,
+            bekor_qilingan: c.cancelled,
+            keyingi_qabul: c.next
+                ? { sana: c.next.date, vaqt: c.next.time, shifokor: c.next.doctorName, turi: c.next.type }
+                : 'yo\'q',
+            oxirgi_qabullar: c.recent.map(r => ({ sana: r.date, turi: r.type, status: r.status })),
+            bajarilgan_ishlar: c.procedures.map(p => ({
+                sana: p.date, ish: p.name, tish: p.tooth ?? undefined, narx: p.price || undefined,
+            })),
+            tish_xaritasi: Object.keys(c.teeth).length ? c.teeth : undefined,
+            qarz: c.debt,
+            avans: c.advance,
+            nazorat_korigi: c.recall ? { sana: c.recall.date, sabab: c.recall.reason || undefined } : undefined,
+            tashxislar: c.diagnoses.length
+                ? c.diagnoses.map(d => `${d.code}${d.name ? ` ${d.name}` : ''}`)
+                : undefined,
+            izoh: 'Summalar so\'mda. qarz — to\'lanmagan hisoblar va bo\'lib-bo\'lib to\'lash qoldig\'i; '
+                + 'avans — oldindan to\'langan qoldiq. Ism maxfiylik uchun qisqartirilgan.',
+        };
+    },
+
+    find_free_slots: async (args, ctx) => {
+        const r = await computeFreeSlots(args, ctx);
+        if ('xato' in r) return r;
+        // Barcha bo'sh vaqtlar foydalanuvchiga kartochkada chiqadi (ai/evidence.ts).
+        // Modelga hammasi berilsa, u ularni matnda qatorlab sanab chiqardi —
+        // kartochkaning takrori va ortiqcha token. Bitta shifokor so'ralganda esa
+        // to'liq ro'yxat kerak: "soat 15:00 bo'shmi?" degan savolga javob shunda.
+        const perDoctor = args?.doctorName || r.doctors.length === 1 ? 24 : 4;
+        return {
+            sana: r.date,
+            davomiylik_daqiqa: r.duration,
+            shifokorlar: r.doctors.map(d => ({
+                shifokor: d.name,
+                ish_vaqti: `${d.start}–${d.end}`,
+                band_qabullar: d.busy,
+                bosh_vaqtlar: d.free.slice(0, perDoctor),
+                jami_bosh: d.free.length,
+            })),
+            izoh: 'Vaqtlar klinika soati bo\'yicha, har biri — qabul boshlanishi. '
+                + 'jami_bosh — shu kundagi barcha bo\'sh vaqtlar soni. To\'liq ro\'yxat '
+                + 'foydalanuvchiga kartochkada ko\'rsatiladi: matnda har shifokor uchun '
+                + 'eng yaqin 1-2 vaqtni va jami sonini ayt.',
         };
     },
 };

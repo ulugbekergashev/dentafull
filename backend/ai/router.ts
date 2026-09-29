@@ -18,25 +18,36 @@
 // bermaydigan holatda qo'shimcha kechikish qo'shardi. Shuning uchun
 // noaniqlikda "hamma tool" — bu xavfsiz va tekin standart.
 
-import { TOOL_DEFS, toolsForRole } from './tools';
+import { TOOL_DEFS, toolsForRole, EXTRA_TOOLS } from './tools';
 
 // ─── 2-qatlam: yo'naltirish ──────────────────────────────────────────────────
 
 export type Intent =
-    | 'qabul' | 'moliya' | 'qarz' | 'shifokor' | 'bemor' | 'ombor' | 'lid'
+    | 'qabul' | 'bosh' | 'karta' | 'moliya' | 'qarz' | 'shifokor' | 'bemor' | 'ombor' | 'lid'
     | 'keng' | 'tizim';
+
+/**
+ * Asosiy tool'lar — keng va tanilmagan savolga beriladiganlari.
+ *
+ * Qo'shimchalari (bemor kartasi, bo'sh vaqtlar) bu yerga ATAYLAB kirmaydi:
+ * ular aniq savol turiga bog'langan va keng savolda faqat token yeyardi.
+ * Bemor kartasi ochiq bo'lsa, get_patient_card ni server o'zi qo'shadi.
+ */
+const CORE_TOOLS = TOOL_DEFS.map(t => t.name).filter(n => !EXTRA_TOOLS.has(n));
 
 /** Har bir yo'nalish uchun kerakli tool'lar. */
 const INTENT_TOOLS: Record<Intent, string[]> = {
     qabul: ['get_appointments', 'find_patient'],
+    bosh: ['find_free_slots', 'get_appointments'],
+    karta: ['get_patient_card', 'find_patient', 'get_appointments'],
     moliya: ['get_revenue', 'get_appointments'],
     qarz: ['get_debtors', 'find_patient'],
     shifokor: ['get_doctor_stats', 'get_appointments'],
-    bemor: ['find_patient', 'get_appointments'],
+    bemor: ['find_patient', 'get_patient_card', 'get_appointments'],
     ombor: ['get_low_stock'],
     lid: ['get_leads'],
     // Keng savolda model o'zi bir nechta manbadan yig'ishi kerak — cheklamaymiz.
-    keng: TOOL_DEFS.map(t => t.name),
+    keng: CORE_TOOLS,
     // Tizimdan foydalanish haqidagi savolga ma'lumot kerak emas.
     tizim: [],
 };
@@ -45,8 +56,16 @@ const INTENT_TOOLS: Record<Intent, string[]> = {
  * Kalit so'zlar. Tartib MUHIM — birinchi mos kelgani yutadi, shuning uchun
  * keng savol namunalari eng oldinda turadi: "umumiy ahvol qanday, qarz ham
  * bormi?" savoli 'qarz' emas, 'keng' bo'lishi kerak.
+ *
+ * Istisno — 'karta': "shu bemor haqida xulosa ber" dagi "xulosa ber" keng
+ * savolniki, lekin gap BITTA bemor haqida. Uning iboralari aniq, shuning
+ * uchun u kengdan oldin turadi.
  */
 const RULES: { intent: Intent; re: RegExp }[] = [
+    {
+        intent: 'karta',
+        re: /(davolash tarix|qanday davolan|nima (ish|davolash) qilin|tish xarita|keyingi qabul\S*\s+qachon|(bu|shu|ushbu) bemor|bemor(ning)? (kartasi|tarixi)|истори\S* лечени|карт\S* пациент|(этот|этого|этой|этому) пациент|когда следующ)/i,
+    },
     {
         intent: 'keng',
         re: /(umumiy|umuman|ahvol|holat qanday|ishlar qanday|muammo qayer|nimaga e'?tibor|qayerda yo'?qot|nima yaxshi|nima yomon|tahlil qil|xulosa ber|hisobot ber|как дела|общая картина|где проблем|проанализируй)/i,
@@ -54,6 +73,12 @@ const RULES: { intent: Intent; re: RegExp }[] = [
     {
         intent: 'tizim',
         re: /(qanday qo'?sh|qayerdan topa|qanday yoza|qanday o'?chir|qanday sozla|tugma qayer|bo'?limi qayer|как добавить|где найти|как настроить)/i,
+    },
+    // Bo'sh vaqt — shifokor va qabul so'zlaridan OLDIN: "shifokor Rahimovda
+    // ertaga bo'sh vaqt bormi?" samaradorlik savoli emas.
+    {
+        intent: 'bosh',
+        re: /(bo['ʻʼ‘’]?sh\s*(vaqt|joy|oyna|soat|slot)|qachon bo['ʻʼ‘’]?sh|bo['ʻʼ‘’]?shmi|свободн|окошк|окно)/i,
     },
     { intent: 'qarz', re: /(qarz|qarzdor|to'?lamagan|balans manfiy|долг|должник|задолжен)/i },
     { intent: 'ombor', re: /(ombor|material|zaxira|tugay|qoldiq|склад|материал|заканчива)/i },
@@ -110,7 +135,8 @@ const ACTION_ROUTES: { name: string | string[]; re: RegExp }[] = [
     // buyrug'i protsedura deb talqin qilinardi.
     { name: 'add_procedure', re: /(plomba|plomb|koronka|kanal davola|tozalash|protsedura|implant|ekstraksiya|davolad|пломб|коронк|канал|чистк|процедур|имплант|удалил|удален|лечил|лечен)/i },
     { name: ['record_payment', 'add_charge'], re: /(to'?la|qarz|hisob|тўла|оплат|долг|счёт|счет)/i },
-    { name: 'book_appointment', re: /(qabul|band|navbat|приём|прием|запис)/i },
+    // Bo'sh vaqt so'ralgan — keyingi qadam deyarli har doim qabulga yozish.
+    { name: 'book_appointment', re: /(qabul|band|navbat|bo['ʻʼ‘’]?sh\s*(vaqt|joy)|приём|прием|запис|свободн)/i },
     { name: 'update_lead_status', re: /(lid|lead|holatini|status|лид|статус)/i },
 ];
 
@@ -152,15 +178,16 @@ export const route = (question: string, isFollowUp = false): RouteResult => {
         if (r.re.test(q)) {
             const tools = INTENT_TOOLS[r.intent];
             // Davomiy savolda ("va o'tgan oychi?") oldingi mavzu ham kerak
-            // bo'lishi mumkin — tor cheklov javobni buzardi.
+            // bo'lishi mumkin — tor cheklov javobni buzardi. Asosiy tool'lar
+            // hammasi beriladi, qo'shimchalari esa faqat shu savolga keraklisi.
             if (isFollowUp && r.intent !== 'keng' && r.intent !== 'tizim') {
-                return { intent: r.intent, tools: TOOL_DEFS.map(t => t.name), fallback: false };
+                return { intent: r.intent, tools: Array.from(new Set([...CORE_TOOLS, ...tools])), fallback: false };
             }
             return { intent: r.intent, tools, fallback: false };
         }
     }
 
-    return { intent: 'keng', tools: TOOL_DEFS.map(t => t.name), fallback: true };
+    return { intent: 'keng', tools: CORE_TOOLS, fallback: true };
 };
 
 /**
@@ -175,8 +202,11 @@ export const toolsForRequest = (role: string, question: string, isFollowUp = fal
     const picked = allowed.filter((t: any) => r.tools.includes(t.function.name));
     // Yo'nalish tool'lari rolga ruxsat etilmagan bo'lsa, bo'sh ro'yxat qolardi
     // va model umuman ma'lumot ololmasdi. Bunday holatda rolga ruxsat etilgan
-    // hamma narsani beramiz.
-    return { tools: picked.length ? picked : allowed, route: r };
+    // asosiy tool'larning hammasini beramiz.
+    return {
+        tools: picked.length ? picked : allowed.filter((t: any) => !EXTRA_TOOLS.has(t.function.name)),
+        route: r,
+    };
 };
 
 // ─── 3-qatlam: tool natijalari keshi ─────────────────────────────────────────
@@ -253,6 +283,8 @@ export interface FastAnswer {
     reply: string;
     sources: string[];
     toolResults: any[];
+    /** Kartochkalar uchun (ai/evidence.ts): tool, argument va natija. */
+    calls: { name: string; args: any; result: any }[];
 }
 
 type FastRule = {
@@ -317,11 +349,12 @@ export const tryFastPath = async (
     for (const rule of FAST_RULES) {
         if (!rule.re.test(q)) continue;
         try {
-            const data = await run(rule.tool, rule.args(today));
+            const args = rule.args(today);
+            const data = await run(rule.tool, args);
             if (data?.xato) return null;
             const reply = rule.render(data, lang);
             if (!reply) return null;
-            return { reply, sources: [rule.tool], toolResults: [data] };
+            return { reply, sources: [rule.tool], toolResults: [data], calls: [{ name: rule.tool, args, result: data }] };
         } catch {
             return null;   // Tez yo'l yiqilsa — jimgina oddiy yo'lga o'tamiz.
         }

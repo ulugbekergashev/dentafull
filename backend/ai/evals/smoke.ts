@@ -79,6 +79,8 @@ const short = (v: any): string => {
         find_patient: { query: patientName },
         get_low_stock: {},
         get_leads: { days: 30 },
+        get_patient_card: { query: patientName },
+        find_free_slots: { date: today },
     };
 
     const ACTION_ARGS: Record<string, any> = {
