@@ -2,22 +2,28 @@ import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Modal, Input, Select, Badge, SearchableSelect, statusLabel } from '../components/Common';
 import {
-  ChevronLeft, ChevronRight, Plus, Clock, User, FileText,
+  ChevronLeft, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Clock, User, FileText,
   XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
-  Search, CalendarDays
+  Search
 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
-import { DateField, DateJumpInput, DatePopover, MonthGrid, formatDayMonth, monthName, weekdayName } from '../components/DateField';
+import { DateField, DateJumpInput, DatePopover, MonthGrid, monthName, weekdayName } from '../components/DateField';
 import { CalendarMonthView } from '../components/CalendarMonthView';
-import { formatDateToISO } from '../utils/dateUtils';
+import { CalendarSidebar } from '../components/CalendarSidebar';
+import { formatDateToISO, formatDayLong, formatHeaderDate } from '../utils/dateUtils';
+import { doctorHours, initials } from '../utils/staffStats';
 import { usePerms } from '../context/PermissionsContext';
 
 /** Oxirgi tanlangan ko'rinish (Kun / Hafta / Oy) */
 const CALENDAR_VIEW_KEY = 'dentalflow_calendar_view';
-/** Jadvalda bir soat balandligi va vaqt ustuni kengligi (px) */
-const HOUR_PX = 96;
+/** Yon panel (keng ekranda) yig'ib qo'yilganmi */
+const CALENDAR_SIDEBAR_KEY = 'dentalflow_calendar_sidebar';
+/** Bir soat balandligi (px) chegaralari: ish kuni imkon qadar jadvalga to'liq sig'adi */
+const HOUR_MIN_PX = 56;
+const HOUR_MAX_PX = 120;
+/** Vaqt ustuni kengligi (px) */
 const TIME_COL_PX = 60;
 type CalView = 'day' | 'week' | 'month';
 
@@ -123,6 +129,14 @@ export const Calendar: React.FC<CalendarProps> = ({
     setChosenView(v);
     try { localStorage.setItem(CALENDAR_VIEW_KEY, v); } catch { /* sessiya davomida baribir ishlaydi */ }
   };
+  // Yon panel faqat keng ekranda (2xl); yig'ib qo'yilsa — shifokorlar qatori qaytadi, jadval kengayadi
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try { return localStorage.getItem(CALENDAR_SIDEBAR_KEY) !== '0'; } catch { return true; }
+  });
+  const toggleSidebar = () => setSidebarOpen(open => {
+    try { localStorage.setItem(CALENDAR_SIDEBAR_KEY, open ? '0' : '1'); } catch { /* sessiya davomida baribir ishlaydi */ }
+    return !open;
+  });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [editingApptId, setEditingApptId] = useState<string | null>(null);
@@ -256,11 +270,16 @@ export const Calendar: React.FC<CalendarProps> = ({
   const openDay = (key: string) => { goToDate(key); setView('day'); };
   const headerLabel = (() => {
     if (view === 'month') return `${monthName(currentDate, language)} ${currentDate.getFullYear()}`;
-    if (view === 'day') return `${formatDayMonth(displayDays[0])}, ${weekdayName(displayDays[0], language)}`;
+    const thisYear = new Date().getFullYear();
+    if (view === 'day') {
+      const d = displayDays[0];
+      return `${formatDayLong(language, d)}${d.getFullYear() !== thisYear ? ` ${d.getFullYear()}` : ''}, ${weekdayName(d, language)}`;
+    }
     const [first, last] = [displayDays[0], displayDays[6]];
-    return first.getFullYear() === last.getFullYear()
-      ? `${formatDayMonth(first, false)} – ${formatDayMonth(last)}`
-      : `${formatDayMonth(first)} – ${formatDayMonth(last)}`;
+    const year = first.getFullYear() !== thisYear || last.getFullYear() !== thisYear ? ` ${last.getFullYear()}` : '';
+    // Bir oy ichida: "5 – 11-oktabr", aks holda "28-sentabr – 4-oktabr"
+    const from = first.getMonth() === last.getMonth() ? String(first.getDate()) : formatDayLong(language, first);
+    return `${from} – ${formatDayLong(language, last)}${year}`;
   })();
 
   // ─── Jadval (Kun / Hafta) ──────────────────────────────────────────────────
@@ -283,10 +302,38 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   // Soatlar: klinika ish vaqti; undan tashqaridagi qabul bo'lsa — jadval o'sha soatgacha kengayadi
   const gridFirstHour = gridAppointments.reduce((h, a) => Math.min(h, Math.floor(spanOf(a)[0] / 60)), startHour);
-  const gridLastHour = Math.min(23, gridAppointments.reduce((h, a) => Math.max(h, Math.ceil(spanOf(a)[1] / 60) - 1), endHour));
+  const gridLastHour = Math.min(23, gridAppointments.reduce((h, a) => Math.max(h, Math.ceil(spanOf(a)[1] / 60) - 1), Math.max(startHour, endHour - 1)));
   const gridHours = Array.from({ length: Math.max(1, gridLastHour - gridFirstHour + 1) }, (_, i) => i + gridFirstHour);
   const gridStartMin = gridFirstHour * 60;
-  const gridHeight = gridHours.length * HOUR_PX;
+
+  // Soat balandligi: jadval ko'rinadigan qismiga ish kuni to'liq sig'sin (56–120px oralig'ida)
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const headerRef = React.useRef<HTMLDivElement>(null);
+  const [bodyViewport, setBodyViewport] = useState(0);
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || view === 'month' || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setBodyViewport(el.clientHeight - (headerRef.current?.offsetHeight || 0));
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    if (headerRef.current) ro.observe(headerRef.current);
+    measure();
+    return () => ro.disconnect();
+  }, [view]);
+  const fitPx = bodyViewport > 0 ? Math.floor(bodyViewport / gridHours.length / 2) * 2 : 72;
+  const hourPx = Math.min(HOUR_MAX_PX, Math.max(HOUR_MIN_PX, fitPx));
+  const gridHeight = gridHours.length * hourPx;
+  const yOf = (min: number) => (min - gridStartMin) * hourPx / 60;
+
+  // Ish vaqtidan tashqarisi xira: kun ko'rinishida — har shifokorning o'z vaqti (Xodimlar →
+  // ish vaqti), haftada — bitta shifokor tanlangan bo'lsa uniki, aks holda klinikaniki
+  const workOf = (doc?: Doctor): [number, number] => {
+    const h = doc ? doctorHours(doc, currentClinic) : { start: startHour, end: endHour };
+    return [h.start * 60, h.end * 60];
+  };
+  const columnWork: [number, number][] = view === 'week'
+    ? dayKeys.map(() => workOf(columnDoctors.length === 1 ? columnDoctors[0] : undefined))
+    : columnDoctors.length > 0 ? columnDoctors.map(d => workOf(d)) : [workOf()];
 
   // Joylashuv: ustun (hafta — kun, kun — shifokor) ichida vaqti ustma-ust tushgan qabullar
   // yonma-yon turadi, qolgani ustunning to'liq kengligini oladi; yonida bo'sh joy bo'lsa
@@ -357,13 +404,13 @@ export const Calendar: React.FC<CalendarProps> = ({
     return () => clearInterval(id);
   }, []);
   const nowMin = nowTick.getHours() * 60 + nowTick.getMinutes();
-  const nowTop = (nowMin - gridStartMin) * HOUR_PX / 60;
+  const nowTop = yOf(nowMin);
   const todayCol = view === 'week' ? dayKeys.indexOf(todayKey) : currentKey === todayKey ? 0 : -1;
   const showNowLine = view !== 'month' && todayCol !== -1 && nowTop >= 0 && nowTop <= gridHeight;
 
   // Ochilganda jadval hozirgi vaqtga (bugun bo'lmasa — birinchi qabulga) suriladi.
-  // Faqat ko'rinish yoki sana almashganda: foydalanuvchi o'zi aylantirganini buzmaymiz.
-  const scrollRef = React.useRef<HTMLDivElement>(null);
+  // Faqat ko'rinish, sana yoki soat balandligi almashganda: foydalanuvchi o'zi
+  // aylantirganini buzmaymiz.
   React.useEffect(() => {
     const el = scrollRef.current;
     if (!el || view === 'month') return;
@@ -371,9 +418,9 @@ export const Calendar: React.FC<CalendarProps> = ({
     const fromMin = showNowLine
       ? (nowTick.getHours() - 1) * 60
       : Number.isFinite(first) ? Math.floor(first / 60) * 60 : gridStartMin;
-    el.scrollTop = Math.max(0, (fromMin - gridStartMin) * HOUR_PX / 60);
+    el.scrollTop = Math.max(0, yOf(fromMin));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, currentKey]);
+  }, [view, currentKey, hourPx]);
 
   // Handlers
   const handlePrev = () => {
@@ -668,85 +715,107 @@ export const Calendar: React.FC<CalendarProps> = ({
 
   // UI Data
   const dayNames = [
-    t('calendar.days.sun'), t('calendar.days.mon'), t('calendar.days.tue'), 
-    t('calendar.days.wed'), t('calendar.days.thu'), t('calendar.days.fri'), 
+    t('calendar.days.sun'), t('calendar.days.mon'), t('calendar.days.tue'),
+    t('calendar.days.wed'), t('calendar.days.thu'), t('calendar.days.fri'),
     t('calendar.days.sat')
   ];
 
+  // Ko'rinib turgan davr (kun / hafta / oy) bo'yicha har shifokorning qabullari soni
+  const inViewRange = (date: string) => view === 'month'
+    ? date.slice(0, 7) === currentKey.slice(0, 7)
+    : view === 'week' ? dayKeys.includes(date) : date === currentKey;
+  const doctorCounts: Record<string, number> = {};
+  appointments.forEach(a => {
+    if (a.status !== 'Cancelled' && inViewRange(a.date)) doctorCounts[a.doctorId] = (doctorCounts[a.doctorId] || 0) + 1;
+  });
+
+  const viewButton = (v: CalView, label: string) => (
+    <button
+      type="button"
+      onClick={() => setView(v)}
+      aria-pressed={view === v}
+      className={`h-7 px-3 text-xs font-semibold rounded-md transition-all ${view === v
+        ? 'bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-white'
+        : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+    >
+      {label}
+    </button>
+  );
+  const colW = `((100% - ${TIME_COL_PX}px) / ${gridColumns})`;
+
   return (
     // Balandlik ekranga teng: sahifa emas, faqat jadval aylanadi (yuqori panel va chekkalar ayiriladi)
-    <div className="space-y-6 h-[calc(100vh-12.25rem)] lg:h-[calc(100vh-11rem)] flex flex-col animate-fade-in">
+    <div className="h-[calc(100vh-12.25rem)] lg:h-[calc(100vh-9rem)] flex flex-col gap-3 animate-fade-in">
+      {/* Sahifa nomi menyuda turibdi — ekranda joy olmasin, ekran o'quvchisi uchun qoladi */}
+      <h1 className="sr-only">{t('calendar.title')}</h1>
 
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-4 w-full sm:w-auto">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('calendar.title')}</h1>
-          <div data-tour="cal-date" className="flex items-center bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 flex-1 sm:flex-none justify-between sm:justify-start">
-            <button onClick={handlePrev} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronLeft className="w-4 h-4" /></button>
-            <button
-              ref={jumpAnchorRef}
-              type="button"
-              onClick={() => setJumpOpen(o => !o)}
-              title={t('datefield.openCalendar')}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium tabular-nums min-w-[150px] rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <CalendarDays className="w-4 h-4 text-gray-400" />
-              {headerLabel}
-            </button>
-            <button onClick={handleNext} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"><ChevronRight className="w-4 h-4" /></button>
-          </div>
-          <DatePopover anchorRef={jumpAnchorRef} open={jumpOpen} onClose={() => setJumpOpen(false)}>
-            {/* Sanani bosmasdan yozib ham o'tish mumkin: 26.09.2026 yoki 26.09 + Enter */}
-            <DateJumpInput onSubmit={goToDate} />
-            <MonthGrid value={currentKey} onPick={goToDate} counts={appointmentCounts} />
-            <button type="button" onClick={() => goToDate(todayKey)} className="mt-2 w-full py-1.5 rounded-lg text-xs font-bold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20">
-              {t('datefield.today')}
-            </button>
-          </DatePopover>
-          {!showsToday && (
-            <button
-              type="button"
-              onClick={() => goToDate(todayKey)}
-              className="px-3 py-1.5 text-xs font-bold rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-primary-600 hover:bg-primary-50 dark:hover:bg-gray-700 shrink-0"
-            >
-              {t('datefield.today')}
-            </button>
-          )}
-          {/* View Toggle for Desktop/Tablet */}
-          <div data-tour="cal-view" className="hidden md:flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-            <button
-              onClick={() => setView('day')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'day' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
-            >
-              {t('calendar.day')}
-            </button>
-            <button
-              onClick={() => setView('week')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'week' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
-            >
-              {t('calendar.week')}
-            </button>
-            <button
-              onClick={() => setView('month')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${view === 'month' ? 'bg-white dark:bg-gray-600 shadow text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
-            >
-              {t('calendar.month')}
-            </button>
-          </div>
+      {/* Asboblar qatori: bugun, sana, ko'rinish, yangi qabul */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-pressed={sidebarOpen}
+          aria-label={t('calendar.sidebar.toggle')}
+          title={t('calendar.sidebar.toggle')}
+          className="hidden 2xl:inline-flex p-2 -ml-1 rounded-lg shrink-0 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+        >
+          {sidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => goToDate(todayKey)}
+          className={`h-9 px-3 rounded-lg border text-sm font-semibold shrink-0 transition-colors ${showsToday
+            ? 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+            : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-900/30 dark:text-primary-200'}`}
+        >
+          {t('datefield.today')}
+        </button>
+        <div data-tour="cal-date" className="flex items-center min-w-0">
+          <button type="button" onClick={handlePrev} aria-label={t('calendar.prev')} title={t('calendar.prev')} className="p-1.5 rounded-lg shrink-0 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"><ChevronLeft className="w-5 h-5" /></button>
+          <button type="button" onClick={handleNext} aria-label={t('calendar.next')} title={t('calendar.next')} className="p-1.5 rounded-lg shrink-0 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"><ChevronRight className="w-5 h-5" /></button>
+          <button
+            ref={jumpAnchorRef}
+            type="button"
+            onClick={() => setJumpOpen(o => !o)}
+            title={t('datefield.openCalendar')}
+            className="sm:ml-1 flex items-center gap-1 min-w-0 px-1 sm:px-2 py-1 rounded-lg text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-700"
+          >
+            {/* Telefonda qisqa: "29-sentabr, sesh" (u yerda doim "Kun") */}
+            <span className="sm:hidden text-sm font-bold truncate">{view === 'day' ? formatHeaderDate(language, displayDays[0]) : headerLabel}</span>
+            <span className="hidden sm:inline text-xl font-bold truncate">{headerLabel}</span>
+            <ChevronDown className="w-4 h-4 shrink-0 text-gray-400" />
+          </button>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          {canCreate && <Button onClick={() => openAddModal()} data-tour="cal-new" className="flex-1 sm:flex-none"><Plus className="w-4 h-4 mr-2" /> {t('calendar.newAppointment')}</Button>}
+        <DatePopover anchorRef={jumpAnchorRef} open={jumpOpen} onClose={() => setJumpOpen(false)}>
+          {/* Sanani bosmasdan yozib ham o'tish mumkin: 26.09.2026 yoki 26.09 + Enter */}
+          <DateJumpInput onSubmit={goToDate} />
+          <MonthGrid value={currentKey} onPick={goToDate} counts={appointmentCounts} />
+          <button type="button" onClick={() => goToDate(todayKey)} className="mt-2 w-full py-1.5 rounded-lg text-xs font-bold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20">
+            {t('datefield.today')}
+          </button>
+        </DatePopover>
+        <div className="flex-1" />
+        {/* Telefonda doim "Kun" — tanlov kerak emas */}
+        <div data-tour="cal-view" className="hidden md:flex items-center gap-0.5 p-1 rounded-lg shrink-0 bg-gray-100 dark:bg-gray-700/60">
+          {viewButton('day', t('calendar.day'))}
+          {viewButton('week', t('calendar.week'))}
+          {viewButton('month', t('calendar.month'))}
         </div>
+        {canCreate && (
+          <Button onClick={() => openAddModal()} data-tour="cal-new" className="shrink-0" title={t('calendar.newAppointment')}>
+            <Plus className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">{t('calendar.newAppointment')}</span>
+          </Button>
+        )}
       </div>
 
-      {/* Shifokorlar: rang izohi va filtr bir joyda — blok rangi shifokor rangi */}
+      {/* Shifokorlar (keng ekranda — yon panelda): rang izohi va filtr bir joyda, blok rangi shifokor rangi */}
       {doctors.length > 1 && (
-        <div role="group" aria-label={t('calendar.doctorFilter')} data-tour="cal-doctors" className="flex flex-wrap items-center gap-2 px-1">
+        <div role="group" aria-label={t('calendar.doctorFilter')} data-tour="cal-doctors" className={`${sidebarOpen ? '2xl:hidden' : ''} flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-0.5`}>
           <button
             type="button"
             onClick={() => setDoctorFilter(null)}
             aria-pressed={!selectedDoctorIds}
-            className={`h-8 px-3 rounded-full border text-xs font-bold transition-colors ${!selectedDoctorIds
+            className={`h-8 px-3 rounded-full border text-xs font-bold shrink-0 transition-colors ${!selectedDoctorIds
               ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/30 dark:text-primary-200'
               : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}
           >
@@ -762,21 +831,35 @@ export const Calendar: React.FC<CalendarProps> = ({
                 onClick={() => toggleDoctor(doc.id)}
                 aria-pressed={on}
                 style={on ? { borderColor: color, backgroundColor: `${color}1F` } : undefined}
-                className={`inline-flex items-center gap-2 h-8 px-3 rounded-full border text-xs font-semibold transition-all ${on
+                className={`inline-flex items-center gap-2 h-8 px-3 rounded-full border text-xs font-semibold shrink-0 transition-all ${on
                   ? 'text-gray-900 dark:text-white'
                   : `border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 ${selectedDoctorIds ? 'opacity-60 hover:opacity-100' : ''}`}`}
               >
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
                 Dr. {doc.lastName}
+                {!!doctorCounts[doc.id] && <span className="tabular-nums font-normal text-gray-400">{doctorCounts[doc.id]}</span>}
               </button>
             );
           })}
         </div>
       )}
 
-      {/* Calendar Grid */}
-      <div data-tour="cal-grid" className="flex-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col relative">
-        <div ref={scrollRef} className="flex-1 overflow-auto">
+      {/* Kalendar: yon panel (keng ekranda) va jadval */}
+      <div className="flex-1 min-h-0 flex bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {sidebarOpen && <CalendarSidebar
+          dateKey={view === 'week' ? dayKeys[0] : currentKey}
+          rangeFrom={view === 'week' ? dayKeys[0] : undefined}
+          rangeTo={view === 'week' ? dayKeys[6] : undefined}
+          dayCounts={appointmentCounts}
+          onPickDate={goToDate}
+          doctors={filterDoctors}
+          selectedDoctorIds={selectedDoctorIds}
+          doctorCounts={doctorCounts}
+          onShowAll={() => setDoctorFilter(null)}
+          onToggleDoctor={toggleDoctor}
+          showBusy={restricted}
+        />}
+        <div ref={scrollRef} data-tour="cal-grid" className="flex-1 min-w-0 overflow-auto">
           {view === 'month' ? (
             <CalendarMonthView
               month={currentDate}
@@ -788,58 +871,72 @@ export const Calendar: React.FC<CalendarProps> = ({
               onCreate={canCreate ? key => openAddModal(key) : undefined}
             />
           ) : (
-          <div ref={gridRef} className={`relative ${view === 'week' ? 'min-w-[1000px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
+          <div ref={gridRef} className={`relative ${view === 'week' ? 'min-w-[840px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
             {/* Sarlavha: kunlar yoki shifokorlar */}
-            <div className="grid border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30 bg-white dark:bg-gray-800" style={{ gridTemplateColumns: gridTemplate }}>
-              <div className="border-r border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-40"></div>
+            <div ref={headerRef} className="grid sticky top-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700" style={{ gridTemplateColumns: gridTemplate }}>
+              <div className="sticky left-0 z-40 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700"></div>
               {view === 'week' ? (
                 displayDays.map((day, i) => {
                   const isToday = dayKeys[i] === todayKey;
                   const count = gridAppointments.filter(a => a.date === dayKeys[i]).length;
                   return (
-                    <div key={i} className={`px-2 py-3 text-center border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
-                      <p className={`text-sm font-semibold ${isToday ? 'text-primary-600' : 'text-gray-900 dark:text-white'}`}>{dayNames[day.getDay()]}</p>
-                      <p className={`text-xs ${isToday ? 'text-primary-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                        {day.getDate()}
-                        {count > 0 && <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500">· {t('calendar.dayCount').replace('{n}', String(count))}</span>}
-                      </p>
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => openDay(dayKeys[i])}
+                      title={t('calendar.openDay')}
+                      className={`flex items-center justify-center gap-2 min-w-0 px-1 py-2 border-r border-gray-100 dark:border-gray-700 last:border-0 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/40 ${isToday ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}
+                    >
+                      <span className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-lg font-semibold tabular-nums ${isToday ? 'bg-primary-600 text-white' : 'text-gray-800 dark:text-gray-100'}`}>{day.getDate()}</span>
+                      <span className="min-w-0 text-left leading-tight">
+                        <span className={`block text-xs font-bold uppercase tracking-wide ${isToday ? 'text-primary-600 dark:text-primary-300' : 'text-gray-500 dark:text-gray-400'}`}>{dayNames[day.getDay()]}</span>
+                        <span className="block text-[11px] truncate text-gray-400">{count > 0 ? t('calendar.dayCount').replace('{n}', String(count)) : '—'}</span>
+                      </span>
+                    </button>
+                  );
+                })
+              ) : columnDoctors.length > 0 ? (
+                columnDoctors.map(doc => {
+                  const color = doc.color || '#3B82F6';
+                  const count = gridAppointments.filter(a => a.doctorId === doc.id).length;
+                  const hours = doctorHours(doc, currentClinic);
+                  return (
+                    <div key={doc.id} className="flex items-center gap-2.5 min-w-0 px-3 py-2 border-r border-gray-100 dark:border-gray-700 last:border-0">
+                      <span className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: color }}>{initials(doc)}</span>
+                      <span className="flex-1 min-w-0 leading-tight">
+                        <span className="block text-sm font-semibold truncate text-gray-900 dark:text-white">Dr. {doc.lastName}</span>
+                        <span className="block text-[11px] truncate text-gray-500 dark:text-gray-400">
+                          {[doc.specialty, hours.custom ? `${hours.start}:00–${hours.end}:00` : ''].filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                      {count > 0 && (
+                        <span className="shrink-0 min-w-[1.75rem] px-1.5 py-0.5 rounded-full text-center text-[11px] font-bold tabular-nums" style={{ backgroundColor: `${color}1F`, color }} title={t('calendar.dayCount').replace('{n}', String(count))}>
+                          {count}
+                        </span>
+                      )}
                     </div>
                   );
                 })
               ) : (
-                columnDoctors.length > 0 ? (
-                  columnDoctors.map(doc => {
-                    const count = gridAppointments.filter(a => a.doctorId === doc.id).length;
-                    return (
-                      <div key={doc.id} className="p-3 text-center border-r border-gray-100 dark:border-gray-700 last:border-0">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: doc.color || '#3B82F6' }} />
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">Dr. {doc.lastName}</p>
-                        </div>
-                        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-                          {doc.specialty}{count > 0 && ` · ${t('calendar.dayCount').replace('{n}', String(count))}`}
-                        </p>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="p-4 text-center border-r border-gray-100 dark:border-gray-700">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{dayNames[displayDays[0].getDay()]}</p>
-                    <p className="text-xs text-gray-500">{displayDays[0].getDate()}</p>
-                  </div>
-                )
+                <div className="px-3 py-2 text-sm font-semibold text-gray-900 dark:text-white">
+                  {dayNames[displayDays[0].getDay()]} {displayDays[0].getDate()}
+                </div>
               )}
             </div>
 
             {/* Jadval */}
             <div className="grid relative" style={{ gridTemplateColumns: gridTemplate, height: gridHeight }}>
-              {/* Soatlar */}
-              <div className="border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 sticky left-0 z-20">
-                {gridHours.map(hour => (
-                  <React.Fragment key={hour}>
-                    <div className={`h-12 border-b border-gray-100 dark:border-gray-700/50 text-xs text-gray-400 p-2 text-right tabular-nums ${showNowLine && nowMin >= hour * 60 - 5 && nowMin < hour * 60 + 22 ? 'invisible' : ''}`}>{hour}:00</div>
-                    <div className="h-12 border-b border-gray-100 dark:border-gray-700/50"></div>
-                  </React.Fragment>
+              {/* Soatlar: yozuv soat chizig'i ustida (birinchisi — chiziq ostida) */}
+              <div className="sticky left-0 z-20 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700">
+                {gridHours.map((hour, i) => (
+                  <div key={hour} className="relative" style={{ height: hourPx }}>
+                    <span
+                      className={`absolute right-2 text-[11px] tabular-nums text-gray-400 dark:text-gray-500 ${showNowLine && Math.abs(nowMin - hour * 60) * hourPx / 60 < 14 ? 'invisible' : ''}`}
+                      style={{ top: i === 0 ? 4 : -8 }}
+                    >
+                      {hour}:00
+                    </span>
+                  </div>
                 ))}
                 {showNowLine && (
                   <div className="absolute right-1 -translate-y-1/2 px-1 py-px rounded bg-red-500 text-white text-[10px] font-bold tabular-nums pointer-events-none" style={{ top: nowTop }}>
@@ -849,22 +946,24 @@ export const Calendar: React.FC<CalendarProps> = ({
               </div>
 
               {/* Bo'sh kataklar: bosilsa — shu vaqtga yangi qabul */}
-              {(view === 'week' ? dayKeys : columnDoctors.length > 0 ? columnDoctors.map(d => d.id) : [currentKey]).map((key, i) => {
+              {(view === 'week' ? dayKeys : columnDoctors.length > 0 ? columnDoctors.map(d => d.id) : [currentKey]).map(key => {
                 const dateStr = view === 'week' ? key : currentKey;
                 const docId = view === 'day' && columnDoctors.length > 0 ? key : undefined;
                 const isTodayCol = view === 'week' && key === todayKey;
                 return (
-                  <div key={key} className={`border-r border-gray-100 dark:border-gray-700 last:border-0 relative ${isTodayCol ? 'bg-primary-50/30 dark:bg-primary-900/5' : ''}`}>
+                  <div key={key} className={`border-r border-gray-100 dark:border-gray-700 last:border-0 ${isTodayCol ? 'bg-primary-50/30 dark:bg-primary-900/5' : ''}`}>
                     {gridHours.map(hour => {
                       const hh = hour.toString().padStart(2, '0');
                       return (
                         <React.Fragment key={hour}>
                           <div
-                            className="h-12 border-b border-gray-50 dark:border-gray-800/50 cursor-pointer hover:bg-primary-50/40 dark:hover:bg-primary-900/10 transition-colors"
+                            className="border-b border-dashed border-gray-100 dark:border-gray-700/40 cursor-pointer transition-colors hover:bg-primary-50/60 dark:hover:bg-primary-900/10"
+                            style={{ height: hourPx / 2 }}
                             onClick={() => openAddModal(dateStr, `${hh}:00`, docId)}
                           ></div>
                           <div
-                            className="h-12 border-b border-dashed border-gray-50 dark:border-gray-800/40 cursor-pointer hover:bg-primary-50/40 dark:hover:bg-primary-900/10 transition-colors"
+                            className="border-b border-gray-200/70 dark:border-gray-700/70 cursor-pointer transition-colors hover:bg-primary-50/60 dark:hover:bg-primary-900/10"
+                            style={{ height: hourPx / 2 }}
                             onClick={() => openAddModal(dateStr, `${hh}:30`, docId)}
                           ></div>
                         </React.Fragment>
@@ -874,14 +973,36 @@ export const Calendar: React.FC<CalendarProps> = ({
                 );
               })}
 
+              {/* Ish vaqtidan tashqari — chiziqli xira fon (bosish baribir ishlaydi) */}
+              {columnWork.map(([ws, we], col) => {
+                const parts: [number, number][] = [];
+                if (ws > gridStartMin) parts.push([0, Math.min(gridHeight, yOf(ws))]);
+                if (yOf(we) < gridHeight) parts.push([Math.max(0, yOf(we)), gridHeight]);
+                return parts.filter(([a, b]) => b > a).map(([a, b], k) => (
+                  <div
+                    key={`off-${col}-${k}`}
+                    aria-hidden="true"
+                    className="absolute pointer-events-none"
+                    style={{
+                      top: a,
+                      height: b - a,
+                      left: `calc(${TIME_COL_PX}px + ${col} * ${colW})`,
+                      width: `calc(${colW})`,
+                      backgroundColor: 'rgba(148, 163, 184, 0.06)',
+                      backgroundImage: 'repeating-linear-gradient(-45deg, rgba(148, 163, 184, 0.16) 0 1px, transparent 1px 8px)',
+                    }}
+                  />
+                ));
+              })}
+
               {/* Hozir — qabullar ostida: ism ustidan o'tib, "Kelmadi" chizig'iga o'xshab qolmasin */}
               {showNowLine && (
                 <div
                   className="absolute z-[5] pointer-events-none"
                   style={{
                     top: nowTop,
-                    left: view === 'week' ? `calc(${TIME_COL_PX}px + ${todayCol} * ((100% - ${TIME_COL_PX}px) / 7))` : TIME_COL_PX,
-                    width: view === 'week' ? `calc((100% - ${TIME_COL_PX}px) / 7)` : `calc(100% - ${TIME_COL_PX}px)`,
+                    left: view === 'week' ? `calc(${TIME_COL_PX}px + ${todayCol} * ${colW})` : TIME_COL_PX,
+                    width: view === 'week' ? `calc(${colW})` : `calc(100% - ${TIME_COL_PX}px)`,
                   }}
                 >
                   <div className="relative h-0.5 bg-red-500/90">
@@ -898,11 +1019,10 @@ export const Calendar: React.FC<CalendarProps> = ({
                 const dur = Math.max(10, app.duration || 30);
                 const end = start + dur;
                 // Jadval qabullarga qarab kengayadi; faqat yarim tundan o'tib ketgan qismi kesiladi
-                const top = Math.max(0, (start - gridStartMin) * HOUR_PX / 60);
-                const bottom = Math.min(gridHeight, (end - gridStartMin) * HOUR_PX / 60);
+                const top = Math.max(0, yOf(start));
+                const bottom = Math.min(gridHeight, yOf(end));
                 if (bottom <= 0 || top >= gridHeight) return null;
-                const heightPx = Math.max(18, bottom - top - 2);
-                const colW = `((100% - ${TIME_COL_PX}px) / ${gridColumns})`;
+                const heightPx = Math.max(14, bottom - top - 2);
                 const subW = `(${colW} / ${place.subs})`;
                 const box: React.CSSProperties = {
                   top: top + 1,
@@ -914,6 +1034,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                 const blockPx = gridWidth > 0 ? (gridWidth - TIME_COL_PX) / gridColumns / place.subs * place.span : 160;
                 const tier = blockPx < 40 ? 'tiny' : blockPx < 72 ? 'mini' : blockPx < 120 ? 'compact' : 'full';
                 const oneLine = heightPx < 34;
+                const tightY = heightPx < 42 ? 'py-0.5' : 'py-1';
                 const doctor = doctors.find(d => d.id === app.doctorId);
                 const color = doctor?.color || '#3B82F6';
                 const doctorLabel = doctor ? `Dr. ${doctor.lastName}` : app.doctorName;
@@ -992,27 +1113,25 @@ export const Calendar: React.FC<CalendarProps> = ({
                       ) : tier === 'mini' ? (
                         <div className="px-1 py-0.5 leading-tight">
                           <div className="text-[10px] font-bold tabular-nums text-gray-700 dark:text-gray-200">{app.time}</div>
-                          {heightPx >= 30 && (
-                            <div className={`text-[10px] font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>{surname}</div>
-                          )}
+                          <div className={`text-[10px] font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>{surname}</div>
                         </div>
                       ) : tier === 'compact' ? (
-                        <div className="px-1.5 py-1 leading-tight">
+                        <div className={`px-1.5 ${tightY} leading-tight`}>
                           <div className="flex items-center gap-1 text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
                             <span className="truncate">{app.time}</span>
                             {statusIcon}
                           </div>
                           <div className={`text-[11px] font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>{shortName}</div>
-                          {heightPx >= 62 && <div className="text-[10px] truncate text-gray-500 dark:text-gray-400">{app.type}</div>}
+                          {heightPx >= 54 && <div className="text-[10px] truncate text-gray-500 dark:text-gray-400">{app.type}</div>}
                         </div>
                       ) : (
-                        <div className="px-2 py-1 leading-snug">
+                        <div className={`px-2 ${tightY} leading-snug`}>
                           <div className="flex items-center justify-between gap-1 text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
                             <span className="truncate">{timeRange}</span>
                             {statusIcon}
                           </div>
                           <div className={`text-xs font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>{app.patientName}</div>
-                          {heightPx >= 56 && <div className="text-[11px] truncate text-gray-500 dark:text-gray-400">{app.type}</div>}
+                          {heightPx >= 50 && <div className="text-[11px] truncate text-gray-500 dark:text-gray-400">{app.type}</div>}
                         </div>
                       )}
                     </div>

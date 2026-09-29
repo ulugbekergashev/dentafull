@@ -410,6 +410,7 @@ const AppContent: React.FC = () => {
   // Bosh sahifadagi navbat va Onlayn navbat (TV ham): bugungi qabullar sahifani
   // yangilamasdan yangilanib turadi. Onlayn navbatda tezroq — TV kutish zalida turadi.
   const onQueuePage = location.pathname === '/queue';
+  const onCalendarPage = location.pathname === '/calendar';
   const todaySync = useTodaySync({
     active: isAuthenticated && !isLoading && !error && (location.pathname === '/' || onQueuePage)
       && (userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST || userRole === UserRole.DOCTOR),
@@ -1378,7 +1379,8 @@ const AppContent: React.FC = () => {
     <PermissionsProvider value={perms}>
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
-      <InstallPWAButton />
+      {/* Kalendarda pastki o'ng burchakdagi qabullarni to'sib qo'ymasin */}
+      {!onCalendarPage && <InstallPWAButton />}
 
       {/* Mobile Header (Hidden on Desktop) */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
@@ -1825,7 +1827,8 @@ const AppContent: React.FC = () => {
       )}
 
       <main className="flex-1 lg:pt-28 min-h-screen flex flex-col items-center">
-        <div className="w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 sm:py-6 lg:py-8 flex-1 overflow-x-clip pb-24 lg:pb-8">
+        {/* Kalendar ekranni to'liq egallaydi — tepa-past chekkasi ixchamroq */}
+        <div className={`w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 sm:py-6 flex-1 overflow-x-clip pb-24 ${onCalendarPage ? 'lg:py-4 lg:pb-4' : 'lg:py-8 lg:pb-8'}`}>
           <Routes>
 
             <>

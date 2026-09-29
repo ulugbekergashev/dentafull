@@ -63,6 +63,10 @@ const MONTHS_RU = ['января', 'февраля', 'марта', 'апреля
 const WEEKDAYS_UZ = ['yak', 'dush', 'sesh', 'chor', 'pay', 'jum', 'shan'];
 const WEEKDAYS_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
+/** "29-sentabr" / "29 сентября" — kalendar sarlavhasi uchun */
+export const formatDayLong = (lang: string, date: Date): string =>
+    lang === 'ru' ? `${date.getDate()} ${MONTHS_RU[date.getMonth()]}` : `${date.getDate()}-${MONTHS_UZ[date.getMonth()]}`;
+
 export const formatHeaderDate = (lang: string, date: Date = new Date()): string => {
     const day = date.getDate();
     const month = date.getMonth();
