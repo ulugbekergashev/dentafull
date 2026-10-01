@@ -682,7 +682,7 @@ export const previewAction = async (
         // Band vaqt tekshiruvi — tasdiqlashdan OLDIN, chunki foydalanuvchi
         // "yoz" deb bosgandan keyin xato ko'rish yomon tajriba.
         const clash = await prisma.appointment.findFirst({
-            where: { clinicId: ctx.clinicId, doctorId: doctor.id, date, time, status: { notIn: ['Cancelled'] } },
+            where: { clinicId: ctx.clinicId, doctorId: doctor.id, date, time, status: { notIn: ['Cancelled', 'No-Show'] } },
             select: { id: true },
         });
         if (clash) return { xato: `${doctor.name} da ${date} kuni ${time} vaqti band.` };
@@ -1385,7 +1385,7 @@ export const executeAction = async (
             const clash = await prisma.appointment.findFirst({
                 where: {
                     clinicId: ctx.clinicId, doctorId: doctor.id,
-                    date: args.date, time: args.time, status: { notIn: ['Cancelled'] },
+                    date: args.date, time: args.time, status: { notIn: ['Cancelled', 'No-Show'] },
                 },
                 select: { id: true },
             });

@@ -1,5 +1,5 @@
 import { Appointment, CallLog, CallLogChange, CallLogEntry, LabOrder, Lead, Patient, Recall } from '../types';
-import { isOpenAppointment, minutesOf } from './queue';
+import { isOpenAppointment, minutesOf, occupiesDoctorTime } from './queue';
 
 /**
  * Resepshn ish stoli (bosh sahifa) uchun tanlovlar — sof funksiyalar.
@@ -263,7 +263,7 @@ export interface Slot {
 
 /**
  * Shifokorning bir kunlik vaqtlari (klinika ish soatlari ichida, qadam bilan).
- * Band — shu oraliqqa boshqa (bekor qilinmagan) qabul tushsa.
+ * Band — shu oraliqqa boshqa qabul tushsa (bekor qilingan va "Kelmadi" hisobga olinmaydi).
  */
 export function daySlots(
     appointments: Appointment[],
@@ -273,7 +273,7 @@ export function daySlots(
 ): Slot[] {
     const step = opts.step ?? 30;
     const taken = appointments
-        .filter(a => a.doctorId === doctorId && a.date === date && a.status !== 'Cancelled' && a.id !== opts.ignoreAppointmentId)
+        .filter(a => a.doctorId === doctorId && a.date === date && occupiesDoctorTime(a) && a.id !== opts.ignoreAppointmentId)
         .map(a => {
             const s = minutesOf(a.time);
             return [s, s + (Number(a.duration) || 30)] as const;

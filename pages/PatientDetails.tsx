@@ -17,7 +17,7 @@ import { buildWaivedTransaction, isAppointmentRecorded } from '../utils/unpaid';
 import { isConfirmedBooking, visitStatus, VisitStatusContext } from '../utils/visitStatus';
 import { VisitStatusBadge } from '../components/VisitStatusBadge';
 import { useDeskFlow } from '../hooks/useDeskFlow';
-import { minutesOf, nowHHMM } from '../utils/queue';
+import { minutesOf, nowHHMM, occupiesDoctorTime } from '../utils/queue';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { tLabel } from '../i18n/labels';
 import { PaymentPart, balanceUsed, buildPaymentRecords, splitError } from '../utils/paymentSplit';
@@ -929,7 +929,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          appt.doctorId === doctor.id &&
          appt.date === apptData.date &&
          appt.time === apptData.time &&
-         appt.status !== 'Cancelled'
+         occupiesDoctorTime(appt)
       );
 
       if (doctorConflict) {

@@ -15,6 +15,14 @@ const OPEN_STATUSES = new Set(['Pending', 'Confirmed', 'Checked-In']);
 
 export const isOpenAppointment = (a: Pick<Appointment, 'status'>): boolean => OPEN_STATUSES.has(a.status);
 
+/**
+ * Qabul shifokor vaqtini band qiladimi. Bekor qilingan va "Kelmadi" — yo'q:
+ * 9:00–11:00 ga yozilgan bemor kelmasa, resepshn uni "Kelmadi" qiladi va shu
+ * oraliqqa boshqa bemorni yoza oladi. Yozuvning o'zi kalendarda qoladi.
+ */
+export const occupiesDoctorTime = (a: Pick<Appointment, 'status'>): boolean =>
+    a.status !== 'Cancelled' && a.status !== 'No-Show';
+
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Hozirgi vaqt "HH:MM" ko'rinishida (mahalliy soat) */

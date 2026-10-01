@@ -6,7 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { searchPatients, prefillFromQuery, findSimilarPatients } from '../utils/patientSearch';
 import { formatDateToISO } from '../utils/dateUtils';
 import { maskPhone } from '../utils/accessControl';
-import { doctorQueue, minutesOf, nowHHMM, planArrival } from '../utils/queue';
+import { doctorQueue, minutesOf, nowHHMM, occupiesDoctorTime, planArrival } from '../utils/queue';
 import { addDaysISO, daySlots } from '../utils/desk';
 
 type Mode = 'now' | 'today' | 'day';
@@ -233,12 +233,12 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
 
     const nowPlan = mode === 'now' && patientId ? planArrival(appointments, patientId, today, nowMin) : null;
     const sameTime = mode !== 'now' && doctorId && TIME_RE.test(time)
-        ? appointments.find(a => a.doctorId === doctorId && a.date === targetDate && a.time === time && a.status !== 'Cancelled' && a.patientId !== patientId)
+        ? appointments.find(a => a.doctorId === doctorId && a.date === targetDate && a.time === time && occupiesDoctorTime(a) && a.patientId !== patientId)
         : undefined;
     const overlaps = mode !== 'now' && TIME_RE.test(time) && !sameTime && (() => {
         const s = minutesOf(time);
         const e = s + (Number(duration) || 30);
-        return appointments.some(a => a.doctorId === doctorId && a.date === targetDate && a.status !== 'Cancelled'
+        return appointments.some(a => a.doctorId === doctorId && a.date === targetDate && occupiesDoctorTime(a)
             && a.patientId !== patientId && minutesOf(a.time) < e && s < minutesOf(a.time) + (Number(a.duration) || 30));
     })();
 

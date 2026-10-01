@@ -553,8 +553,9 @@ class BotManager {
                 const doctor = await prisma.doctor.findUnique({ where: { id: doctorId }, include: { clinic: true } });
                 if (!doctor) return ctx.answerCbQuery("Shifokor topilmadi");
 
+                // Bekor qilingan va "Kelmadi" qabul shifokor vaqtini band qilmaydi
                 const appointments = await prisma.appointment.findMany({
-                    where: { doctorId, date: dateStr, status: { notIn: ['Cancelled'] } }
+                    where: { doctorId, date: dateStr, status: { notIn: ['Cancelled', 'No-Show'] } }
                 });
 
                 const startHour = (doctor as any).startHour ?? doctor.clinic.startHour ?? 8;
@@ -632,7 +633,7 @@ class BotManager {
                 if (!doctor) return ctx.answerCbQuery("Shifokor topilmadi.");
 
                 const overlapping = await prisma.appointment.findMany({
-                    where: { doctorId, date: dateStr, status: { notIn: ['Cancelled'] } }
+                    where: { doctorId, date: dateStr, status: { notIn: ['Cancelled', 'No-Show'] } }
                 });
                 
                 const [h, m] = timeStr.split(':').map(Number);

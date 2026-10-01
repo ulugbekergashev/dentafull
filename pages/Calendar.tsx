@@ -14,6 +14,7 @@ import { CalendarMonthView } from '../components/CalendarMonthView';
 import { CalendarSidebar } from '../components/CalendarSidebar';
 import { formatDateToISO, formatDayLong, formatHeaderDate } from '../utils/dateUtils';
 import { doctorHours, initials } from '../utils/staffStats';
+import { occupiesDoctorTime } from '../utils/queue';
 import { usePerms } from '../context/PermissionsContext';
 
 /** Oxirgi tanlangan ko'rinish (Kun / Hafta / Oy) */
@@ -546,7 +547,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       appt.doctorId === finalDoctorId &&
       appt.date === formData.date &&
       appt.time === formData.time &&
-      appt.status !== 'Cancelled'
+      occupiesDoctorTime(appt)
     );
 
     if (doctorConflict) {
