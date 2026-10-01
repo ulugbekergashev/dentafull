@@ -1602,14 +1602,14 @@ export const api = {
     messages: {
         // Yuborish serverda fonda bajariladi — javob darhol qaytadi, jarayonni
         // bulkStatus() orqali kuzatiladi, natija esa Tarix bo'limida ko'rinadi.
-        sendBulk: (clinicId: string, patientIds: string[], message: string, channel: MessageChannel, ignoreCooldown = false) => {
+        sendBulk: (clinicId: string, patientIds: string[], message: string, channel: MessageChannel) => {
             if (isDemoMode()) {
                 return Promise.resolve({ total: patientIds.length, queued: true });
             }
             return fetchJson<{ total: number; queued: boolean }>('/messages/send-bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clinicId, patientIds, message, channel, ignoreCooldown }),
+                body: JSON.stringify({ clinicId, patientIds, message, channel }),
             });
         },
         testSend: (clinicId: string, message: string, channel: 'sms' | 'telegram', phone?: string, patientId?: string) => {
@@ -1618,18 +1618,6 @@ export const api = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ clinicId, message, channel, phone, patientId }),
-            });
-        },
-        getSettings: (clinicId: string) => {
-            if (isDemoMode()) return Promise.resolve({ cooldownDays: 0 });
-            return fetchJson<{ cooldownDays: number }>(`/messages/settings?clinicId=${clinicId}`);
-        },
-        saveSettings: (clinicId: string, cooldownDays: number) => {
-            if (isDemoMode()) return Promise.resolve({ cooldownDays });
-            return fetchJson<{ cooldownDays: number }>('/messages/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clinicId, cooldownDays }),
             });
         },
         // Segment qurish uchun mavjud maydonlar — forma shu ro'yxatdan quriladi

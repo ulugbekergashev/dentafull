@@ -258,7 +258,6 @@ export type AutomationTrigger = string;
 export interface TriggerDescriptor {
   id: string;
   label: string;
-  respectCooldown: boolean;
   supportsDoctorFilter: boolean;
   /** Tinch soatlar — trigger faqat shu oraliqda yuboradi (Toshkent vaqti) */
   sendWindow?: { fromHour: number; toHour: number };
@@ -311,7 +310,8 @@ export interface MessageLog {
   patientId?: string | null;
   type: string;
   // 'Retried' — xato yozuv qayta yuborishga jo'natilgan, natijasi alohida logda
-  // 'Skipped' — chastota chegarasi sababli ataylab yuborilmagan (xato emas)
+  // 'Skipped' — ataylab yuborilmagan, xato emas (eski yozuvlar: chastota chegarasi
+  // olib tashlanishidan oldin shu holat bilan yozilgan)
   status: 'Sent' | 'Failed' | 'Retried' | 'Skipped';
   message?: string | null;
   error?: string | null;

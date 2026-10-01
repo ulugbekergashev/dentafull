@@ -205,7 +205,6 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     .catch(() => { });
             }
         }).catch(() => { });
-        api.messages.getSettings(clinicId).then(s => setCooldownDays(s.cooldownDays || 0)).catch(() => { });
         loadLogs('all');
         // Sahifa qayta ochilganda fonda ketayotgan yuborish bo'lsa — ulanib olamiz
         api.messages.bulkStatus(clinicId).then(s => { if (s.active && !s.done) setBulkJob(s); }).catch(() => { });
@@ -523,24 +522,6 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         }
     };
 
-    // ── Chastota chegarasi ──
-    const [cooldownDays, setCooldownDays] = useState(0);
-    const [cooldownSaving, setCooldownSaving] = useState(false);
-    const [ignoreCooldown, setIgnoreCooldown] = useState(false);
-
-    const saveCooldown = async (days: number) => {
-        setCooldownDays(days);
-        setCooldownSaving(true);
-        try {
-            await api.messages.saveSettings(clinicId, days);
-            addToast('success', days === 0 ? "Chastota chegarasi o'chirildi." : `Chegara: ${days} kunda bir marta.`);
-        } catch (e: any) {
-            addToast('error', e.message || 'Saqlashda xatolik');
-        } finally {
-            setCooldownSaving(false);
-        }
-    };
-
     // Yuborish serverda fonda ketadi (yuzlab SMS bir HTTP so'roviga sig'maydi).
     const [bulkJob, setBulkJob] = useState<BulkSendStatus | null>(null);
 
@@ -574,7 +555,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
         if (!confirm(`${recipientCount} ta bemorga xabar yuborilsinmi?${costNote}`)) return;
         setManualSending(true);
         try {
-            const result = await api.messages.sendBulk(clinicId, recipientIds, manualMessage, manualChannel, ignoreCooldown);
+            const result = await api.messages.sendBulk(clinicId, recipientIds, manualMessage, manualChannel);
             addToast('info', `${result.total} ta bemorga yuborish boshlandi. Jarayonni Tarix bo'limida kuzating.`);
             setBulkJob({ active: true, total: result.total, sent: 0, failed: 0, done: false });
             setManualMessage('');
@@ -801,32 +782,6 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             {/* ═══ AVTOMATIK ═══ */}
             {activeTab === 'auto' && canAutomation && (
                 <div className="space-y-4">
-                    {/* Chastota chegarasi — bir bemorga N kunda bittadan ko'p xabar ketmasin */}
-                    <Card className="p-5">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <h4 className="font-bold text-gray-900 dark:text-white text-sm">{t('auto.Chastota chegarasi')}</h4>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                    {t("auto.Bitta bemorga shu muddat ichida bittadan ko'p xabar yuborilmaydi. Qabul eslatmalari bundan mustasno — ular baribir yetib boradi.")}
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                {[0, 1, 3, 7, 30].map(d => (
-                                    <button
-                                        key={d}
-                                        disabled={cooldownSaving}
-                                        onClick={() => saveCooldown(d)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 ${cooldownDays === d
-                                            ? 'bg-primary-600 text-white'
-                                            : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                                    >
-                                        {d === 0 ? t("auto.O'chiq") : t('auto.{n} kun').replace('{n}', String(d))}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </Card>
-
                     <div className="flex justify-end">
                         <Button onClick={() => openRuleForm()}>
                             <Plus className="w-4 h-4 mr-1" /> {t('auto.Yangi qoida')}
@@ -1014,18 +969,11 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     </select>
                                 </div>
                             )}
-                            {activeTriggerDef && (
-                                <div className="text-xs text-gray-400 space-y-1">
-                                    {activeTriggerDef.sendWindow && (
-                                        <p>
-                                            Yuborish vaqti: <strong>{activeTriggerDef.sendWindow.fromHour}:00 – {activeTriggerDef.sendWindow.toHour}:00</strong> oralig'ida
-                                            (bemorlarga tunda xabar ketmaydi).
-                                        </p>
-                                    )}
-                                    {!activeTriggerDef.respectCooldown && cooldownDays > 0 && (
-                                        <p>Bu trigger transaksion hisoblanadi — chastota chegarasiga ({cooldownDays} kun) bo'ysunmaydi.</p>
-                                    )}
-                                </div>
+                            {activeTriggerDef?.sendWindow && (
+                                <p className="text-xs text-gray-400">
+                                    Yuborish vaqti: <strong>{activeTriggerDef.sendWindow.fromHour}:00 – {activeTriggerDef.sendWindow.toHour}:00</strong> oralig'ida
+                                    (bemorlarga tunda xabar ketmaydi).
+                                </p>
                             )}
                             <div className="flex justify-end gap-2 pt-2">
                                 <Button variant="secondary" onClick={closeRuleForm}>{t('auto.Bekor')}</Button>
@@ -1459,7 +1407,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         <p className="text-xs text-gray-500">
                                             {manualChannel === 'telegram'
                                                 ? "Test xabar klinikaning Telegram chatiga yuboriladi."
-                                                : "Test SMS shu raqamga yuboriladi (bemorlarga tegmaydi, chastota chegarasidan ozod)."}
+                                                : "Test SMS shu raqamga yuboriladi (bemorlarga tegmaydi)."}
                                         </p>
                                         <div className="flex flex-wrap gap-2">
                                             {manualChannel !== 'telegram' && (
@@ -1479,18 +1427,6 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                     </div>
                                 )}
                             </div>
-                        )}
-
-                        {cooldownDays > 0 && (
-                            <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={ignoreCooldown}
-                                    onChange={e => setIgnoreCooldown(e.target.checked)}
-                                    className="w-3.5 h-3.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                                />
-                                Chastota chegarasini ({cooldownDays} kun) e'tiborsiz qoldirish — yaqinda xabar olganlarga ham yuborilsin
-                            </label>
                         )}
 
                         <button
