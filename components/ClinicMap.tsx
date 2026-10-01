@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGroup, MotionConfig, motion } from 'motion/react';
-import { Armchair, ArrowRight, Check, ChevronRight, Clock, Footprints, Loader2, Plus, Undo2 } from 'lucide-react';
+import { Armchair, ArrowRight, Check, ChevronRight, Clock, Footprints, Loader2, Plus, Undo2, UserX } from 'lucide-react';
 import { Appointment, Doctor, FlowLog } from '../types';
 import { Card } from './Common';
 import { LiveTimer } from './LiveTimer';
@@ -21,6 +21,11 @@ interface ClinicMapProps {
     onEnter?: (a: Appointment) => void | Promise<void>;
     /** Adashib bosilgan "Kirdi" — bemor navbatga qaytadi */
     onUndoEnter?: (a: Appointment) => void | Promise<void>;
+    /**
+     * "Kelmadi" — vaqti kelgani uchun kutish zaliga tushgan, lekin aslida
+     * kelmagan bemor navbatdan chiqadi. Ruxsat bo'lmasa berilmaydi
+     */
+    onNoShow?: (a: Appointment) => Promise<void>;
     /** "Yakunlash" — qabul yakunlandi. Ruxsat bo'lmasa berilmaydi */
     onFinish?: (a: Appointment) => Promise<void>;
     onOpenBooking?: () => void;
@@ -114,7 +119,7 @@ const Name: React.FC<{ a: Appointment; onOpen?: (id: string) => void; className?
 };
 
 export const ClinicMap: React.FC<ClinicMapProps> = ({
-    appointments, doctors, flowLog, onPatientClick, onArrived, onEnter, onUndoEnter, onFinish, onOpenBooking, onSeeAll,
+    appointments, doctors, flowLog, onPatientClick, onArrived, onEnter, onUndoEnter, onNoShow, onFinish, onOpenBooking, onSeeAll,
 }) => {
     const { t } = useLanguage();
     const now = useNow(30000);
@@ -176,6 +181,11 @@ export const ClinicMap: React.FC<ClinicMapProps> = ({
             {pending === a.id ? <Loader2 className="w-3 h-3 animate-spin" /> : t('desk.arrived')}
         </button>
     );
+
+    const markNoShow = (a: Appointment) => {
+        if (!onNoShow || !window.confirm(t('queue.noShowConfirm').replace('{name}', a.patientName))) return;
+        void run(`noshow:${a.id}`, () => onNoShow(a));
+    };
 
     const delayBadge = (a: Appointment) => {
         const d = delayOf(a);
@@ -382,6 +392,19 @@ export const ClinicMap: React.FC<ClinicMapProps> = ({
                 </Token>
                 <Name a={a} onOpen={onPatientClick} short className="mt-1.5 text-[11.5px] font-bold text-gray-900 dark:text-white" />
                 <span className={`text-[11px] font-bold whitespace-nowrap ${waitTone(a)}`}>{waitText(a)}</span>
+                {onNoShow && (
+                    <button
+                        type="button"
+                        onClick={() => markNoShow(a)}
+                        disabled={!!pending}
+                        title={t('queue.noShow')}
+                        aria-label={`${a.patientName}: ${t('queue.noShow')}`}
+                        className="mt-0.5 inline-flex items-center gap-0.5 h-5 px-1.5 rounded-md text-[10.5px] font-bold text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-900/20 disabled:opacity-50 transition-colors"
+                    >
+                        {pending === `noshow:${a.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserX className="w-3 h-3" />}
+                        {t('queue.noShow')}
+                    </button>
+                )}
             </div>
         );
     };

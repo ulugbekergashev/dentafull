@@ -700,6 +700,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               onArrived={canMoveAppt ? arriveNow : undefined}
               onEnter={a => deskFlow.set(a.id, true)}
               onUndoEnter={a => deskFlow.set(a.id, false)}
+              onNoShow={canMoveAppt ? a => onUpdateAppointment!(a.id, { status: 'No-Show' }) : undefined}
               onFinish={canMoveAppt ? finishAppointment : undefined}
               onOpenBooking={canBookHere ? () => onOpenBooking!() : undefined}
               onSeeAll={perms.menu('calendar') ? () => navigate('/calendar') : undefined}
