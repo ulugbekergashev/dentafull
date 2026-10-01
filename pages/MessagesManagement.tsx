@@ -37,6 +37,7 @@ const TEMPLATE_VARS: { token: string; label: string }[] = [
 // Trigger ro'yxati backenddan keladi (backend/triggers.ts) — bu yerda faqat
 // belgichalar. Yangi trigger qo'shilsa, forma o'zi yangilanadi.
 const TRIGGER_ICONS: Record<string, string> = {
+    appointment_booked: '📅',
     before_appointment: '⏰',
     birthday: '🎂',
     no_show: '❗',
@@ -67,6 +68,7 @@ const SOURCE_LABELS: Record<string, string> = {
     bulk: "Qo'lda yuborildi",
     auto: 'Avtomatik',
     scheduled: 'Jadval bo\'yicha',
+    appointment_booked: 'Qabulga yozilganda',
     before_appointment: 'Qabuldan oldin',
     after_appointment: 'Qabuldan keyin',
     new_patient: 'Yangi bemor',

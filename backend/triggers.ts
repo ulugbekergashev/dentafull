@@ -172,6 +172,57 @@ export const TRIGGERS: TriggerDef[] = [
         },
     },
 
+    // ── 1b. Qabulga yozilganda (tasdiq) ─────────────────────────────────────
+    // Xodim (yoki AI yordamchi) qabul yozgach bemorga "siz ... kuni ... da
+    // yozildingiz" xabari. Yozilish vaqti — Appointment.bookedAt; eski
+    // qabullar va Telegram bot orqali yozilganlarda u NULL, ularga ketmaydi.
+    {
+        id: 'appointment_booked',
+        label: 'Qabulga yozilganda',
+        respectCooldown: false, // transaksion tasdiq
+        sendWindow: { fromHour: 8, toHour: 22 },
+        supportsDoctorFilter: true,
+        async findDue(rule, clinic) {
+            // Oxirgi sutkada yozilganlar (kechqurun yozilgani ertalab ketadi),
+            // lekin qoida yaratilgunga qadar yozilganlar emas — qoida yoqilgan
+            // zahoti oldingi yozilishlarga birdaniga SMS ketmasin
+            const since = new Date(Math.max(Date.now() - 86400000, new Date(rule.createdAt).getTime()));
+            const appointments = await prisma.appointment.findMany({
+                where: {
+                    clinicId: rule.clinicId,
+                    bookedAt: { gte: since },
+                    date: { gte: tashkentDateStr(0) },
+                    status: { in: ['Confirmed', 'Pending'] },
+                    ...(rule.doctorId ? { doctorId: rule.doctorId } : {}),
+                },
+                include: { patient: true, doctor: true },
+            });
+
+            const nowMs = tashkentNowMs();
+            const due: DueItem[] = [];
+            for (const appt of appointments) {
+                const apptMs = wallClockMs(appt.date, appt.time);
+                // Hozir kelgan bemor (qabul vaqti = hozir) yoki qabulgacha 30 daqiqa
+                // ham qolmagan — bemor klinikada yoki hozirgina gaplashildi
+                if (isNaN(apptMs) || apptMs - nowMs < 30 * 60000) continue;
+                due.push({
+                    patient: appt.patient,
+                    // Yozilish vaqti bilan: bekor qilinib qayta yozilsa yana ketadi
+                    refId: `${appt.id}:${new Date(appt.bookedAt!).getTime()}`,
+                    type: 'Booked',
+                    vars: {
+                        ...patientName(appt.patient),
+                        date: appt.date.split('-').reverse().join('.'),
+                        time: appt.time,
+                        clinicName: clinic.name,
+                        doctorName: doctorName(appt.doctor),
+                    },
+                });
+            }
+            return due;
+        },
+    },
+
     // ── 2. Tug'ilgan kun ────────────────────────────────────────────────────
     {
         id: 'birthday',

@@ -670,7 +670,10 @@ class BotManager {
                             duration: 30,
                             status: prepaymentEnabled ? 'Pending' : 'Confirmed',
                             type: 'Konsultatsiya',
-                            notes: prepaymentEnabled ? 'Telegram bot orqali yozildi (to\'lov kutilmoqda)' : 'Telegram bot orqali yozildi'
+                            notes: prepaymentEnabled ? 'Telegram bot orqali yozildi (to\'lov kutilmoqda)' : 'Telegram bot orqali yozildi',
+                            // Bot pastda chatda o'zi tasdiqlaydi — "Qabulga yozilganda"
+                            // avtomatikasi ikkinchi xabar (yoki pullik SMS) yubormasin
+                            bookedAt: null,
                         }
                     });
 

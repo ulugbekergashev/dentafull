@@ -2072,7 +2072,8 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
         if (cancelled) {
             const revived = await prisma.appointment.update({
                 where: { id: cancelled.id },
-                data: { patientName, doctorId, doctorName, type, time, duration, status, reminderSent: reminderSent ?? false, notes: notes ?? null, sentToCashierAt: null },
+                // Qayta yozilish — yangi yozilish: "Qabulga yozilganda" xabari yana ketadi
+                data: { patientName, doctorId, doctorName, type, time, duration, status, reminderSent: reminderSent ?? false, notes: notes ?? null, sentToCashierAt: null, bookedAt: new Date() },
             });
             if (revived.clinicId) {
                 await mutateDeskFlow(revived.clinicId, date, day => {
@@ -2083,6 +2084,7 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
                 }).catch((err: any) => console.error('Navbat belgisini tozalab bo\'lmadi:', err?.message || err));
             }
             await linkRecallToAppointment(revived);
+            kickTrigger('appointment_booked');
             return res.json(revived);
         }
 
@@ -2105,6 +2107,8 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
         });
         // Bemorning ochiq nazorati bo'lsa — shu qabulga bog'lanadi
         await linkRecallToAppointment(appointment);
+        // "Qabulga yozilganda" xabari 10 daqiqalik aylanishni kutmasin
+        kickTrigger('appointment_booked');
         res.json(appointment);
     } catch (error) {
         console.error('Failed to create appointment:', error);
@@ -6765,6 +6769,13 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // bitta yozuv qo'shiladi — bu yerdagi dvigatel va cron o'zgarmaydi.
 const { TRIGGERS, isWithinSendWindow } = require('./triggers');
 
+// Bir trigger bir vaqtda ikki marta aylanmasin. Log xabar yuborilgandan KEYIN
+// yoziladi, shuning uchun ustma-ust ikki aylanish (cron + kickTrigger yoki
+// ketma-ket ikki qabul) dedupe tekshiruvidan ikkalasi ham o'tib, bemorga ikki
+// SMS ketardi. Band paytida kelgan so'rov tugagach bir marta qayta aylantiriladi.
+const runningTriggers = new Set<string>();
+const rerunTriggers = new Set<string>();
+
 /**
  * Bitta trigger bo'yicha barcha faol qoidalarni bajaradi.
  * Dedupe TelegramLog.ruleId + refId indeksi orqali — bir hodisaga bir marta.
@@ -6773,6 +6784,32 @@ async function runTrigger(triggerDef: any, ignoreWindow = false) {
     // Tinch soatlar: tug'ilgan kun tabrigi yarim tunda ketmasligi uchun
     if (!ignoreWindow && !isWithinSendWindow(triggerDef)) return;
 
+    if (runningTriggers.has(triggerDef.id)) {
+        rerunTriggers.add(triggerDef.id);
+        return;
+    }
+    runningTriggers.add(triggerDef.id);
+    try {
+        await runTriggerRules(triggerDef);
+    } finally {
+        runningTriggers.delete(triggerDef.id);
+    }
+    if (rerunTriggers.delete(triggerDef.id)) await runTrigger(triggerDef, ignoreWindow);
+}
+
+/**
+ * Hodisa sodir bo'lgan zahoti triggerni aylantiradi (javobni kutmasdan).
+ * Cron kabi DISABLE_CRON=1 da ishlamaydi — dasturchi kompyuteridan
+ * prod bazaga qarab turgan server mijozlarga xabar yubormasin.
+ */
+function kickTrigger(id: string) {
+    if (CRON_DISABLED) return;
+    const def = getTrigger(id);
+    if (!def) return;
+    runTrigger(def).catch((err: any) => console.error(`❌ [${id}] darhol yuborishda xatolik:`, err));
+}
+
+async function runTriggerRules(triggerDef: any) {
     const rules = await prisma.automationRule.findMany({
         where: { active: true, trigger: triggerDef.id },
         include: { template: true },
@@ -9021,6 +9058,12 @@ async function runStartupMigrations() {
     // Shifokor tugagan qabulni kassaga uzatganini belgilash uchun.
     await migrationStep('Appointment.sentToCashierAt', `ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "sentToCashierAt" TIMESTAMP(3)`);
 
+    // "Qabulga yozilganda" xabari uchun yozilgan vaqt. Transaction.createdAt
+    // kabi avval DEFAULTsiz: eski qabullar NULL qoladi, aks holda trigger
+    // yoqilganda barcha kelgusi qabullarga birdaniga SMS ketardi.
+    await migrationStep('Appointment.bookedAt', `ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "bookedAt" TIMESTAMP(3)`);
+    await migrationStep('Appointment.bookedAt default', `ALTER TABLE "Appointment" ALTER COLUMN "bookedAt" SET DEFAULT CURRENT_TIMESTAMP`);
+
     // Resepshnni Telegram botiga ulash. botManager bu ustunni allaqachon o'qiydi
     // (kontakt ulash oqimi, notifyReceptionists), lekin migratsiyasi yo'q edi —
     // shuning uchun prodda ustun bo'lmagan va o'sha kod jimgina xato berardi.
@@ -9080,6 +9123,7 @@ const CRITICAL_COLUMNS: ReadonlyArray<{ table: string; column: string; type: str
     { table: 'Transaction', column: 'createdAt', type: 'TIMESTAMP(3)' },
     { table: 'Transaction', column: 'isDebt', type: 'BOOLEAN NOT NULL DEFAULT false' },
     { table: 'Appointment', column: 'sentToCashierAt', type: 'TIMESTAMP(3)' },
+    { table: 'Appointment', column: 'bookedAt', type: 'TIMESTAMP(3)' },
 ];
 
 async function verifyCriticalSchema(): Promise<boolean> {

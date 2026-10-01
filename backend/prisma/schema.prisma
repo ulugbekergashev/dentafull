@@ -148,6 +148,10 @@ model Appointment {
   /// Shifokor "Kassaga yuborish" bosgan payt. null bo'lsa — qabul tugagan, lekin
   /// shifokor pulni o'zi olish/kassaga o'tkazish haqida hali qaror qilmagan.
   sentToCashierAt DateTime?
+  /// Bemor qachon qabulga yozilgan. "Qabulga yozilganda" xabari shunga
+  /// qarab ketadi. null — xabar kerak emas: eski qabullar va Telegram bot
+  /// orqali yozilganlar (bot chatda o'zi tasdiqlaydi).
+  bookedAt        DateTime? @default(now())
   branchId        String?
   branch          Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
   clinic          Clinic    @relation(fields: [clinicId], references: [id])

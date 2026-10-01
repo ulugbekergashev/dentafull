@@ -283,6 +283,7 @@ export const demoFlowDay = (date: string): DemoFlow => {
 // Demo rejim uchun trigger tavsiflari — backend/triggers.ts bilan mos
 export const DEMO_TRIGGERS: TriggerDescriptor[] = [
     { id: 'before_appointment', label: 'Qabuldan oldin', respectCooldown: false, supportsDoctorFilter: true, offset: { label: 'Necha soat oldin', unit: 'hour', options: [1, 2, 3, 6, 12, 24], default: 2 } },
+    { id: 'appointment_booked', label: 'Qabulga yozilganda', respectCooldown: false, supportsDoctorFilter: true },
     { id: 'birthday', label: "Tug'ilgan kun", respectCooldown: true, supportsDoctorFilter: true },
     { id: 'no_show', label: 'Kelmagan bemor', respectCooldown: true, supportsDoctorFilter: true },
     { id: 'after_appointment', label: 'Qabuldan keyin', respectCooldown: true, supportsDoctorFilter: true, offset: { label: 'Necha soat keyin', unit: 'hour', options: [2, 4, 24, 48, 72], default: 24 } },
