@@ -33,6 +33,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { AddPatientModal } from '../components/AddPatientModal';
 import { QuickPaymentModal } from '../components/QuickPaymentModal';
+import { CollapseToggle, useCollapsed } from '../components/CollapseToggle';
 import { api } from '../services/api';
 
 interface DashboardProps {
@@ -93,6 +94,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // Resepshn va admin uchun bosh sahifa — ish stoli: navbat, bugungi qabullar, pul,
   // laboratoriya va qo'ng'iroqlar. Shifokorda o'z navbati (DoctorQueueCard).
   const isDesk = !isDoctor;
+  // Ro'yxatli kartalar yig'ilgan holda ochiladi (sarlavha va soni ko'rinadi) —
+  // klinikalar so'radi: shifokor va resepshnni chalg'itmasin. Tanlov eslab qolinadi.
+  const roleKey = isDoctor ? 'doctor' : 'desk';
+  const [apptsCollapsed, toggleAppts] = useCollapsed(`${roleKey}.appts`);
+  const [recallsCollapsed, toggleRecalls] = useCollapsed(`${roleKey}.recalls`);
+  const [debtsCollapsed, toggleDebts] = useCollapsed(`${roleKey}.debts`);
+  const [unpaidCollapsed, toggleUnpaid] = useCollapsed(`${roleKey}.unpaid`);
   // "Qabul" tugmasi yon panelni ochadi (Kalendarga o'tmasdan).
   // Shifokor umuman yo'q bo'lsa — Kalendarga (u yerda individual tarif uchun shifokor avtomatik yaratiladi).
   const canBookHere = !!onOpenBooking && perms.can('calendar', 'appts', 'create') && doctors.length > 0;
@@ -784,7 +792,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
 
       {/* Tanlangan davrdagi qabullar (odatda — bugungi) */}
       <Card className={`p-6 rounded-[2rem] ${hasSideCards ? 'xl:col-span-8' : 'xl:col-span-12'}`}>
-        <div className="flex items-center justify-between mb-5">
+        <div className={`flex items-center justify-between ${apptsCollapsed ? '' : 'mb-5'}`}>
           <div>
             <h3 className="text-xl font-black text-gray-900 dark:text-white">
               {t(`dashboard.apptsTitleA.${period.key}` as any)} <span className="text-primary">{t(`dashboard.apptsTitleB.${period.key}` as any)}</span>
@@ -803,10 +811,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             >
               {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
             </button>
+            <CollapseToggle collapsed={apptsCollapsed} onToggle={toggleAppts} />
           </div>
         </div>
 
-        {periodAppointments.length === 0 ? (
+        {!apptsCollapsed && (periodAppointments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">
             <Calendar className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm font-medium">{period.key === 'today' ? t('dashboard.noAppointmentsToday') : t('dashboard.noAppointmentsPeriod')}</p>
@@ -931,7 +940,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
               </button>
             )}
           </div>
-        )}
+        ))}
       </Card>
 
       {/* Yig'ilmagan pul — o'ng ustunda ustma-ust.
@@ -942,7 +951,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           {/* Nazoratga chaqirish — muddati kelgan qayta tashriflar */}
           {visibleRecalls.length > 0 && (
             <Card className="p-6 rounded-[2rem] border border-sky-200 dark:border-sky-800/50">
-              <div className="flex items-start justify-between gap-3 mb-4">
+              <div className={`flex items-start justify-between gap-3 ${recallsCollapsed ? '' : 'mb-4'}`}>
                 <div className="min-w-0">
                   <h3 className="text-lg font-black text-gray-900 dark:text-white">
                     {t('dashboard.recall.titleA')} <span className="text-sky-500">{t('dashboard.recall.titleB')}</span>
@@ -951,11 +960,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                     {t('dashboard.recall.desc')}
                   </p>
                 </div>
-                <span className="px-3 py-1 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 text-xs font-black rounded-full flex-shrink-0">
-                  {visibleRecalls.length} {t('dashboard.count')}
-                </span>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="px-3 py-1 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 text-xs font-black rounded-full">
+                    {visibleRecalls.length} {t('dashboard.count')}
+                  </span>
+                  <CollapseToggle collapsed={recallsCollapsed} onToggle={toggleRecalls} />
+                </div>
               </div>
 
+              {!recallsCollapsed && (<>
               <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
                 {(showAllRecalls ? visibleRecalls : visibleRecalls.slice(0, DASH_ROW_LIMIT)).map(recall => {
                   const overdue = recall.dueDate < recallToday;
@@ -1006,6 +1019,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   <ChevronRight className={`w-3.5 h-3.5 ${showAllRecalls ? '-rotate-90' : ''}`} />
                 </button>
               )}
+              </>)}
             </Card>
           )}
 
@@ -1016,7 +1030,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           */}
           {debtRows.length > 0 && (
             <Card className="p-6 rounded-[2rem] border border-red-200 dark:border-red-800/50">
-              <div className="flex items-start justify-between gap-3 mb-4">
+              <div className={`flex items-start justify-between gap-3 ${debtsCollapsed ? '' : 'mb-4'}`}>
                 <div className="min-w-0">
                   <h3 className="text-lg font-black text-gray-900 dark:text-white">
                     {t('dashboard.debtsTitleA')} <span className="text-red-500">{t('dashboard.debtsTitleB')}</span>
@@ -1033,8 +1047,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   )}
                   <span className="text-[10px] font-bold text-gray-400">{debtRows.length} {t('dashboard.count')}</span>
                 </div>
+                <CollapseToggle collapsed={debtsCollapsed} onToggle={toggleDebts} />
               </div>
 
+              {!debtsCollapsed && (<>
               <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
                 {debtRows.slice(0, DASH_ROW_LIMIT).map(renderUnpaidRow)}
               </div>
@@ -1047,13 +1063,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   {t('dashboard.moreAll')} {debtRows.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               )}
+              </>)}
             </Card>
           )}
 
           {/* To'lovi olinmagan qabullar — kassada qarz sifatida yozilmagan pul */}
           {awaitingRows.length > 0 && (
             <Card className="p-6 rounded-[2rem] border border-amber-200 dark:border-amber-800/50">
-              <div className="flex items-start justify-between gap-3 mb-4">
+              <div className={`flex items-start justify-between gap-3 ${unpaidCollapsed ? '' : 'mb-4'}`}>
                 <div className="min-w-0">
                   <h3 className="text-lg font-black text-gray-900 dark:text-white">
                     {t('dashboard.unpaidTitleA')} <span className="text-amber-500">{t('dashboard.unpaidTitleB')}</span>
@@ -1070,8 +1087,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   )}
                   <span className="text-[10px] font-bold text-gray-400">{awaitingRows.length} {t('dashboard.count')}</span>
                 </div>
+                <CollapseToggle collapsed={unpaidCollapsed} onToggle={toggleUnpaid} />
               </div>
 
+              {!unpaidCollapsed && (<>
               <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
                 {awaitingRows.slice(0, DASH_ROW_LIMIT).map(renderUnpaidRow)}
               </div>
@@ -1084,6 +1103,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                   {t('dashboard.moreAll')} {awaitingRows.length - DASH_ROW_LIMIT} {t('dashboard.count')} · {t('dashboard.seeAll')} <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               )}
+              </>)}
             </Card>
           )}
         </div>

@@ -6,6 +6,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { LabOrder, Patient } from '../types';
 import { Card } from './Common';
+import { CollapseToggle, useCollapsed } from './CollapseToggle';
 import { weekdayShort } from './DateField';
 import { useLanguage } from '../context/LanguageContext';
 import { UnpaidRow } from '../utils/unpaid';
@@ -26,17 +27,25 @@ const Shell: React.FC<{
     badge?: React.ReactNode;
     children: React.ReactNode;
     footer?: React.ReactNode;
-}> = ({ icon: Icon, tone, title, badge, children, footer }) => (
-    <Card className="p-5 rounded-[2rem] flex flex-col min-w-0">
-        <div className="flex items-center gap-3 mb-3">
-            <span className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center ${tone}`}><Icon className="w-[18px] h-[18px]" /></span>
-            <h3 className="flex-1 min-w-0 text-base font-black text-gray-900 dark:text-white truncate">{title}</h3>
-            {badge}
-        </div>
-        <div className="flex-1 min-w-0">{children}</div>
-        {footer}
-    </Card>
-);
+    /** Berilsa — karta yig'iladi (sarlavha va soni qoladi), tanlov brauzerda eslab qolinadi */
+    collapseKey?: string;
+    defaultCollapsed?: boolean;
+}> = ({ icon: Icon, tone, title, badge, children, footer, collapseKey, defaultCollapsed = true }) => {
+    const [collapsedState, toggle] = useCollapsed(collapseKey || '', defaultCollapsed);
+    const collapsed = !!collapseKey && collapsedState;
+    return (
+        <Card className="p-5 rounded-[2rem] flex flex-col min-w-0">
+            <div className={`flex items-center gap-3 ${collapsed ? '' : 'mb-3'}`}>
+                <span className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center ${tone}`}><Icon className="w-[18px] h-[18px]" /></span>
+                <h3 className="flex-1 min-w-0 text-base font-black text-gray-900 dark:text-white truncate">{title}</h3>
+                {badge}
+                {collapseKey && <CollapseToggle collapsed={collapsed} onToggle={toggle} />}
+            </div>
+            {!collapsed && <div className="flex-1 min-w-0">{children}</div>}
+            {!collapsed && footer}
+        </Card>
+    );
+};
 
 const Empty: React.FC<{ text: string }> = ({ text }) => (
     <p className="flex items-center gap-2 py-2 text-sm text-gray-500 dark:text-gray-400">
@@ -101,6 +110,9 @@ export const DeskMoneyCard: React.FC<DeskMoneyCardProps> = ({ awaiting, debts, s
             icon={Wallet}
             tone="bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
             title={t('desk.moneyTitle')}
+            // Kassa ishi — ochiq turadi, xohlagan xodim yig'ib qo'yadi
+            collapseKey="desk.money"
+            defaultCollapsed={false}
             badge={count > 0 ? (
                 <span className="shrink-0 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-black tabular-nums">
                     {showAmounts && total > 0 ? `${total.toLocaleString()} UZS` : count}
@@ -173,6 +185,7 @@ export const DeskLabCard: React.FC<DeskLabCardProps> = ({ summary, patients, sho
             icon={FlaskConical}
             tone="bg-teal-50 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400"
             title={t('desk.labTitle')}
+            collapseKey="desk.lab"
             badge={attention > 0 ? (
                 <span className="shrink-0 px-2.5 py-1 rounded-full bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 text-xs font-black">{attention}</span>
             ) : undefined}
@@ -425,6 +438,7 @@ export const DeskCallsCard: React.FC<DeskCallsCardProps> = ({ items, today, show
             icon={PhoneCall}
             tone="bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400"
             title={t('desk.callsTitle')}
+            collapseKey="desk.calls"
             badge={items.length > 0 ? (
                 <span className="shrink-0 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-xs font-black">{items.length}</span>
             ) : undefined}

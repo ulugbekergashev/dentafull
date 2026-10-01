@@ -4,7 +4,7 @@ import { Card, Button, Modal, Input, Select, Badge, SearchableSelect, statusLabe
 import {
   ChevronLeft, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Clock, User, FileText,
   XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
-  Search
+  Search, Phone
 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
@@ -12,7 +12,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { DateField, DateJumpInput, DatePopover, MonthGrid, monthName, weekdayName } from '../components/DateField';
 import { CalendarMonthView } from '../components/CalendarMonthView';
 import { CalendarSidebar } from '../components/CalendarSidebar';
-import { formatDateToISO, formatDayLong, formatHeaderDate } from '../utils/dateUtils';
+import { calcAge, formatDateToISO, formatDayLong, formatHeaderDate } from '../utils/dateUtils';
 import { doctorHours, initials } from '../utils/staffStats';
 import { occupiesDoctorTime } from '../utils/queue';
 import { usePerms } from '../context/PermissionsContext';
@@ -51,12 +51,14 @@ interface CalendarProps {
   currentClinic?: Clinic;
   plans: SubscriptionPlan[];
   onPatientClick?: (id: string) => void;
+  /** Bemor telefonini ko'rish ruxsati (Xodimlar → Ruxsatlar) — boshqa sahifalardagi bilan bir xil */
+  showPatientPhone?: boolean;
 }
 
 
 
 export const Calendar: React.FC<CalendarProps> = ({
-  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick
+  appointments, patients, doctors, services, categories, onAddAppointment, onUpdateAppointment, onDeleteAppointment, onAddPatient, userRole, doctorId, seeAllPatients, currentClinic, plans, onPatientClick, showPatientPhone = false
 }) => {
   const { t, language } = useLanguage();
   const perms = usePerms();
@@ -140,6 +142,12 @@ export const Calendar: React.FC<CalendarProps> = ({
   });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  // Qabul oynasida darhol qo'ng'iroq qilish uchun telefon va yosh
+  const selectedPatient = selectedAppointment ? patients.find(p => p.id === selectedAppointment.patientId) : undefined;
+  const selectedAge = calcAge(selectedPatient?.dob);
+  const selectedPhones = showPatientPhone
+    ? [selectedPatient?.phone, selectedPatient?.secondaryPhone].filter((p): p is string => !!p && !!p.trim())
+    : [];
   const [editingApptId, setEditingApptId] = useState<string | null>(null);
   const [remindedAppts, setRemindedAppts] = useState<Set<string>>(new Set());
 
@@ -1253,7 +1261,9 @@ export const Calendar: React.FC<CalendarProps> = ({
                 >
                   {selectedAppointment.patientName}
                 </h3>
-                <p className="text-gray-500 text-sm">{selectedAppointment.type}</p>
+                <p className="text-gray-500 text-sm">
+                  {[selectedAppointment.type, selectedAge !== null && selectedAge >= 0 ? t('myQueue.age').replace('{n}', String(selectedAge)) : null].filter(Boolean).join(' · ')}
+                </p>
               </div>
               <div className="flex items-center gap-3">
                 {canEdit && (
@@ -1270,6 +1280,20 @@ export const Calendar: React.FC<CalendarProps> = ({
             </div>
 
             <div className="space-y-3">
+              {selectedPhones.length > 0 && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Phone className="w-5 h-5 text-gray-400" />
+                  {selectedPhones.map(phone => (
+                    <a
+                      key={phone}
+                      href={`tel:${phone.replace(/[^\d+]/g, '')}`}
+                      className="inline-flex items-center px-3 py-1.5 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-bold tabular-nums hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors"
+                    >
+                      {phone}
+                    </a>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
                 <Clock className="w-5 h-5 text-gray-400" />
                 <span>{selectedAppointment.date}, {selectedAppointment.time} ({selectedAppointment.duration} daq)</span>

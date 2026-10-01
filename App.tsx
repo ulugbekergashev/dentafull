@@ -1973,6 +1973,7 @@ const AppContent: React.FC = () => {
                     currentClinic={currentClinic}
                     plans={plans}
                     onPatientClick={handlePatientClick}
+                    showPatientPhone={showPatientPhoneForRole}
                   />
                 } />
               )}
