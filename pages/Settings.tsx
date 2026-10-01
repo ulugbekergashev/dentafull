@@ -28,6 +28,16 @@ import { useLanguage } from '../context/LanguageContext';
 // "Umumiy" tepasida, xodimlar uch bo'lakka bo'lingan edi. Xodimlar va ruxsatlar
 // endi yon menyudagi "Xodimlar" sahifasida, klinika reytingi — uning statistikasida.
 
+// Tashqi xizmat kalitlari (Eskiz, DHP, AI) uchun. "Login + parol" juftligini
+// brauzer DentaCRM'ga kirish formasi deb o'ylab, saqlangan DentaCRM login va
+// parolini shu yerga o'zi yozib qo'yardi — "Saqlash" bosilsa ular Eskiz'ga
+// yuborilib, klinika sozlamasiga yozilib qolardi.
+// autocomplete="off" ni Chrome login maydonlarida e'tiborsiz qoldiradi, parol
+// maydonidagi "new-password" esa butun juftlikni to'ldirishni to'xtatadi.
+// data-1p-ignore / data-lpignore — 1Password va LastPass uchun.
+const NO_AUTOFILL = { autoComplete: 'off', 'data-1p-ignore': true, 'data-lpignore': 'true' } as const;
+const NO_AUTOFILL_PASSWORD = { ...NO_AUTOFILL, autoComplete: 'new-password' } as const;
+
 interface SettingsProps {
    userRole: UserRole;
    services: Service[];
@@ -1290,11 +1300,13 @@ export const Settings: React.FC<SettingsProps> = ({
                                        value={smsForm.eskizEmail} 
                                        onChange={(e) => setSmsForm({...smsForm, eskizEmail: e.target.value})}
                                        required
+                                       {...NO_AUTOFILL}
                                     />
                                     <div className="space-y-1">
                                         <p className="sms-settings-label text-sm font-medium text-gray-700 dark:text-gray-300">{t('auto.Eskiz.uz Kabinet Paroli')}</p>
                                         <input
                                             type="password"
+                                            {...NO_AUTOFILL_PASSWORD}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                             placeholder={smsHasPassword ? t("auto.(Parol kiritilgan. O'zgartirish uchun yangisini kiriting)") : t('auto.Yashirin kalitni kiriting')}
                                             value={smsForm.eskizPassword}
@@ -1414,12 +1426,14 @@ export const Settings: React.FC<SettingsProps> = ({
                                  onChange={e => setDmedApiKey(e.target.value)}
                                  placeholder={t('auto.UZINFOCOM bergan client_id')}
                                  disabled={!dmedEnabled}
+                                 {...NO_AUTOFILL}
                               />
                               <Input
                                  label={t('auto.Client Secret')}
                                  value={dmedApiSecret}
                                  onChange={e => setDmedApiSecret(e.target.value)}
                                  type="password"
+                                 {...NO_AUTOFILL_PASSWORD}
                                  placeholder={currentClinic?.dmedApiSecret ? t("auto.Saqlangan — o'zgartirish uchun kiriting") : '••••••••••••'}
                                  disabled={!dmedEnabled}
                               />
@@ -1581,6 +1595,7 @@ export const Settings: React.FC<SettingsProps> = ({
                         <div className="flex gap-2">
                            <input
                               type="password"
+                              {...NO_AUTOFILL_PASSWORD}
                               value={aiKeyInput}
                               onChange={e => setAiKeyInput(e.target.value)}
                               placeholder={aiInfo?.hasKey ? 'Yangi kalit kiriting (almashtirish uchun)' : 'API kalitini shu yerga qo\'ying'}
