@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, AuditLogEntry, AuditLogQuery, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
 import { addDaysISO, applyCallChange } from '../utils/desk';
 import { formatDateToISO } from '../utils/dateUtils';
 import { applyClinicPaymentMethods } from '../utils/paymentMethods';
@@ -35,7 +35,7 @@ export interface CashCloseInput {
     expectedClick?: number | null;
     note?: string;
 }
-import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, DEMO_TRIGGERS, DEMO_SEGMENT_FIELDS, DEMO_RECALLS, DEMO_FLOW, demoFlowDay, ensureDemoData, saveDemoData } from './demoData';
+import { DEMO_PATIENTS, DEMO_APPOINTMENTS, DEMO_TRANSACTIONS, DEMO_EXPENSES, DEMO_DOCTORS, DEMO_SERVICES, DEMO_CLINIC, DEMO_CLINICS, DEMO_PLAN, DEMO_INVENTORY, DEMO_INVENTORY_LOGS, DEMO_RECEPTIONISTS, DEMO_TEETH, DEMO_DIAGNOSES, DEMO_CATEGORIES, DEMO_LEADS, DEMO_INSTALLMENTS, DEMO_LAB_TECHNICIANS, DEMO_LAB_ORDERS, DEMO_MESSAGE_TEMPLATES, DEMO_AUTOMATION_RULES, DEMO_MESSAGE_LOGS, DEMO_TRIGGERS, DEMO_SEGMENT_FIELDS, DEMO_RECALLS, DEMO_FLOW, demoFlowDay, ensureDemoData, saveDemoData, DEMO_AUDIT_ACTORS, demoAuditLogs } from './demoData';
 
 // Determine API URL based on hostname to avoid Vercel env var issues
 const isProduction = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('dentacrm.uz');
@@ -674,6 +674,19 @@ export const api = {
             if (isDemoMode()) return Promise.resolve([] as CashAuditLog[]);
             const q = date ? `&date=${date}` : '';
             return fetchJson<CashAuditLog[]>(`/cash-audit?clinicId=${clinicId}${q}`);
+        },
+    },
+    // O'zgarishlar jurnali — faqat klinika egasi uchun (backend ham tekshiradi)
+    auditLogs: {
+        list: (clinicId: string, query: AuditLogQuery = {}) => {
+            if (isDemoMode()) return Promise.resolve(demoAuditLogs(query));
+            const params = new URLSearchParams({ clinicId });
+            Object.entries(query).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
+            return fetchJson<{ items: AuditLogEntry[]; nextBefore: string | null }>(`/audit-logs?${params.toString()}`);
+        },
+        actors: (clinicId: string) => {
+            if (isDemoMode()) return Promise.resolve(DEMO_AUDIT_ACTORS);
+            return fetchJson<{ name: string; role: string }[]>(`/audit-logs/actors?clinicId=${clinicId}`);
         },
     },
     doctors: {

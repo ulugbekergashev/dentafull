@@ -13,6 +13,8 @@
         "botManager.ts",
         "smsService.ts",
         "triggers.ts",
+        "audit.ts",
+        "botReports.ts",
         "segments.ts",
         "segmentFields.ts",
         "segmentAggregates.ts",

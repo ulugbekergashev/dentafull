@@ -102,6 +102,9 @@ const notif = require('./notifications');
 const cors = require('cors');
 const axios = require('axios');
 const { prisma } = require('./db');
+// O'zgarishlar jurnali: har bir qo'shish/o'zgartirish/o'chirish kim tomonidan qilinganini yozadi
+const { installAuditMiddleware, runWithActor, runWithoutActor, auditLogin, pruneAuditLog } = require('./audit');
+installAuditMiddleware();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -260,7 +263,8 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
         if (user?.role !== 'SUPER_ADMIN' && user?.clinicId && req.body && typeof req.body === 'object' && 'clinicId' in req.body) {
             (req.body as any).clinicId = user.clinicId;
         }
-        next();
+        // So'rov ichidagi barcha bazaga yozish shu xodim nomidan jurnalga tushadi (backend/audit.ts)
+        runWithActor(user, () => next());
     });
 };
 
@@ -1629,6 +1633,7 @@ app.post('/api/auth/login', async (req, res) => {
 
         if (userPayload && responseData) {
             const token = jwt.sign(userPayload, JWT_SECRET, { expiresIn: TOKEN_TTL });
+            auditLogin(userPayload);
             return res.json({ ...responseData, token });
         }
 
@@ -2871,6 +2876,75 @@ app.get('/api/cash-audit', authenticateToken, async (req, res) => {
     }
 });
 
+// --- O'zgarishlar jurnali (Sozlamalar → Jurnal). Yozuvlarni backend/audit.ts yozadi. ---
+// Faqat klinika egasi (va super admin) ko'radi: xodimlar bir-birining harakatini ko'rmasin.
+const AUDIT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const isAuditViewer = (req: any) => req.user?.role === 'CLINIC_ADMIN' || req.user?.role === 'SUPER_ADMIN';
+
+app.get('/api/audit-logs', authenticateToken, async (req, res) => {
+    try {
+        if (!isAuditViewer(req)) return denyPerm(res, "o'zgarishlar jurnali");
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const q = req.query as Record<string, string | undefined>;
+        const limit = Math.min(Math.max(parseInt(q.limit || '') || 50, 1), 200);
+
+        const where: any = { clinicId };
+        const createdAt: any = {};
+        // Sanalar Toshkent kuni bo'yicha
+        if (q.from && AUDIT_DATE_RE.test(q.from)) createdAt.gte = new Date(`${q.from}T00:00:00+05:00`);
+        if (q.to && AUDIT_DATE_RE.test(q.to)) createdAt.lt = new Date(new Date(`${q.to}T00:00:00+05:00`).getTime() + 86400000);
+        // "Yana yuklash" — oxirgi ko'rsatilgan yozuvdan oldingilar
+        if (q.before) {
+            const b = new Date(q.before);
+            if (!isNaN(b.getTime()) && (!createdAt.lt || b < createdAt.lt)) createdAt.lt = b;
+        }
+        if (Object.keys(createdAt).length) where.createdAt = createdAt;
+        if (q.actor) where.actorName = q.actor;
+        if (q.entity) where.entity = q.entity;
+        if (q.action) where.action = q.action;
+        if (q.q && q.q.trim()) {
+            const s = q.q.trim().slice(0, 100);
+            where.OR = [
+                { summary: { contains: s, mode: 'insensitive' } },
+                { actorName: { contains: s, mode: 'insensitive' } },
+                { changes: { contains: s, mode: 'insensitive' } },
+            ];
+        }
+
+        const rows = await prisma.auditLog.findMany({ where, orderBy: { createdAt: 'desc' }, take: limit + 1 });
+        const items = rows.slice(0, limit).map((r: any) => {
+            let changes = null;
+            try { changes = r.changes ? JSON.parse(r.changes) : null; } catch { /* buzilgan yozuv — o'zgarishsiz ko'rsatiladi */ }
+            return { ...r, changes };
+        });
+        res.json({ items, nextBefore: rows.length > limit ? items[items.length - 1].createdAt : null });
+    } catch (error: any) {
+        console.error('Audit log fetch error:', error);
+        res.status(500).json({ error: 'Jurnalni yuklashda xatolik' });
+    }
+});
+
+/** Filtr uchun: jurnalda uchragan xodimlar */
+app.get('/api/audit-logs/actors', authenticateToken, async (req, res) => {
+    try {
+        if (!isAuditViewer(req)) return denyPerm(res, "o'zgarishlar jurnali");
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const rows = await prisma.auditLog.findMany({
+            where: { clinicId },
+            distinct: ['actorName'],
+            select: { actorName: true, actorRole: true },
+            orderBy: { actorName: 'asc' },
+            take: 200,
+        });
+        res.json(rows.map((r: any) => ({ name: r.actorName, role: r.actorRole })));
+    } catch (error: any) {
+        console.error('Audit actors fetch error:', error);
+        res.status(500).json({ error: 'Jurnalni yuklashda xatolik' });
+    }
+});
+
 // --- Installments ---
 app.get('/api/installments', authenticateToken, async (req, res) => {
     try {
@@ -3885,7 +3959,8 @@ app.post('/api/recalls', authenticateToken, async (req, res) => {
                 status: 'planned',
             },
         });
-        await ensureRecallRule(clinicId);
+        // Standart qoida tizim tomonidan yaratiladi — jurnalda xodim nomidan ko'rinmasin
+        await runWithoutActor(() => ensureRecallRule(clinicId));
         res.json(recall);
     } catch (error: any) {
         console.error('Nazorat yaratish xatosi:', error);
@@ -6717,7 +6792,8 @@ function kickTrigger(id: string) {
     if (CRON_DISABLED) return;
     const def = getTrigger(id);
     if (!def) return;
-    runTrigger(def).catch((err: any) => console.error(`❌ [${id}] darhol yuborishda xatolik:`, err));
+    // Avtomatika xodim harakati emas — jurnalga uning nomidan yozilmasin
+    runWithoutActor(() => runTrigger(def)).catch((err: any) => console.error(`❌ [${id}] darhol yuborishda xatolik:`, err));
 }
 
 async function runTriggerRules(triggerDef: any) {
@@ -7058,6 +7134,7 @@ cron.schedule('0 9 * * *', () => {
     notifyRecallsDue(today);
     notifySubscriptionExpiry(today);
     notif.prune();
+    pruneAuditLog();
 }, { timezone: 'Asia/Tashkent' });
 
 // Kechqurun 20:00 — ish tugagach, lekin odamlar hali ishdaligida.
@@ -9018,6 +9095,26 @@ async function runStartupMigrations() {
     `);
     await migrationStep('StaffNotification createdAt index', `
         CREATE INDEX IF NOT EXISTS "StaffNotification_createdAt_idx" ON "StaffNotification" ("createdAt")
+    `);
+
+    // O'zgarishlar jurnali (backend/audit.ts). Yangi jadval — mavjud ma'lumotga tegmaydi.
+    await migrationStep('AuditLog table', `
+        CREATE TABLE IF NOT EXISTS "AuditLog" (
+            "id"        TEXT NOT NULL PRIMARY KEY,
+            "clinicId"  TEXT NOT NULL,
+            "actorId"   TEXT,
+            "actorName" TEXT NOT NULL,
+            "actorRole" TEXT NOT NULL,
+            "action"    TEXT NOT NULL,
+            "entity"    TEXT NOT NULL,
+            "entityId"  TEXT,
+            "summary"   TEXT NOT NULL,
+            "changes"   TEXT,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('AuditLog clinic+date index', `
+        CREATE INDEX IF NOT EXISTS "AuditLog_clinicId_createdAt_idx" ON "AuditLog" ("clinicId", "createdAt")
     `);
 
     console.log('✅ Startup migrations applied');

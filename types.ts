@@ -246,6 +246,34 @@ export interface CashAuditLog {
   createdAt: string;
 }
 
+/** O'zgarishlar jurnali (Sozlamalar → Jurnal) — kim, qachon, nimani o'zgartirdi */
+export type AuditAction = 'create' | 'update' | 'delete' | 'bulk_delete' | 'login';
+export interface AuditLogEntry {
+  id: string;
+  clinicId: string;
+  actorId?: string | null;
+  actorName: string;
+  actorRole: string;
+  action: AuditAction;
+  /** Jadval: Patient, Appointment, Transaction... ('Session' — tizimga kirish) */
+  entity: string;
+  entityId?: string | null;
+  /** Yozuvni tanituvchi qisqa matn; bulk_delete da — nechta o'chirilgani */
+  summary: string;
+  /** { maydon: [eski, yangi] } — qo'shish/o'chirishda eski qiymat null */
+  changes?: Record<string, [any, any]> | null;
+  createdAt: string;
+}
+export interface AuditLogQuery {
+  from?: string;
+  to?: string;
+  actor?: string;
+  entity?: string;
+  action?: string;
+  q?: string;
+  before?: string;
+}
+
 // ─── Xabarlar (yagona xabarlar tizimi) ───
 // 'both' — ikkalasiga ham yuboradi (SMS uchun alohida pul ketadi).
 // 'telegram_first' — Telegram bo'lsa faqat Telegram, bo'lmasa/xato bo'lsa SMS.

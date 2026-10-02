@@ -12,7 +12,8 @@ import { tPlanFeature } from '../i18n/labels';
 
 
 import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus, VisitRequirements } from '../types';
-import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal } from 'lucide-react';
+import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal, History } from 'lucide-react';
+import { AuditLogPanel } from '../components/AuditLogPanel';
 import { api, API_URL, isDemoMode } from '../services/api';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -71,7 +72,7 @@ export const Settings: React.FC<SettingsProps> = ({
    const canEditService = perms.can('settings', 'services', 'edit');
    const canDeleteService = perms.can('settings', 'services', 'delete');
    const canEditClinic = perms.can('settings', 'clinic', 'edit');
-   type SettingsTab = 'clinic' | 'branches' | 'services' | 'features' | 'integrations' | 'plan';
+   type SettingsTab = 'clinic' | 'branches' | 'services' | 'features' | 'integrations' | 'plan' | 'journal';
    type IntegrationTab = 'messaging' | 'dmed' | 'ai' | 'leadApi';
    // Boshqa sahifadan aniq bo'limga yo'naltirish uchun: /settings?tab=leadApi.
    // Eski bo'lim nomlari (general, branches, messaging, dmed...) ham ishlaydi.
@@ -81,6 +82,7 @@ export const Settings: React.FC<SettingsProps> = ({
          if (!canEditClinic && tab !== 'services' && tab !== 'plan') return ['services', 'messaging'];
          if (tab === 'clinic' || tab === 'general') return ['clinic', 'messaging'];
          if (tab === 'branches' && isAdmin) return ['branches', 'messaging'];
+         if (tab === 'journal' && isAdmin) return ['journal', 'messaging'];
          if (tab === 'features') return ['features', 'messaging'];
          if (tab === 'services' || tab === 'integrations' || tab === 'plan') return [tab, 'messaging'];
          if (tab === 'messaging' || tab === 'dmed') return ['integrations', tab];
@@ -786,6 +788,8 @@ export const Settings: React.FC<SettingsProps> = ({
          { id: 'integrations' as const, name: t('settings.tabs.integrations'), icon: Plug },
       ] : []),
       { id: 'plan', name: t('settings.tabs.plan'), icon: CreditCard },
+      // Kim nima qilganini faqat klinika egasi ko'radi — backend ham shu rolni talab qiladi
+      ...(isAdmin ? [{ id: 'journal' as const, name: t('settings.tabs.journal'), icon: History }] : []),
    ];
 
    const integrationTabs: { id: IntegrationTab; name: string; icon: React.ElementType }[] = [
@@ -1788,6 +1792,10 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                )}
 
                {/* Tarif — ilgari "Xizmatlar" ichida, narxnoma ostida turardi */}
+               {activeTab === 'journal' && isAdmin && currentClinic?.id && (
+                  <AuditLogPanel clinicId={currentClinic.id} doctors={doctors} branches={branches} />
+               )}
+
                {activeTab === 'plan' && (() => {
                   const plan = plans?.find(p => p.id === currentClinic?.planId);
                   const maxDoctors = plan?.maxDoctors || 10;

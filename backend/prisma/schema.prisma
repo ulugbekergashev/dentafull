@@ -905,3 +905,26 @@ model StaffNotification {
   @@index([clinicId, recipientKey, read])
   @@index([createdAt])
 }
+
+/// O'zgarishlar jurnali (Sozlamalar → Jurnal): kim, qachon, nimani qo'shdi,
+/// o'zgartirdi yoki o'chirdi. backend/audit.ts dagi Prisma middleware yozadi.
+/// FK yo'q — yozuv o'chirilsa ham jurnalda qoladi.
+model AuditLog {
+  id        String   @id @default(uuid())
+  clinicId  String
+  actorId   String?
+  actorName String
+  actorRole String
+  /// create | update | delete | bulk_delete | login
+  action    String
+  /// Prisma model nomi: Patient, Appointment, Transaction...
+  entity    String
+  entityId  String?
+  /// Yozuvni tanituvchi qisqa matn ("Karimov Ali · 02.10 10:00")
+  summary   String
+  /// JSON: { maydon: [eski, yangi] }
+  changes   String?
+  createdAt DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+}

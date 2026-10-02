@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor, SegmentFieldDescriptor, Recall, FlowLog, TicketLog, UserRole } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor, SegmentFieldDescriptor, Recall, FlowLog, TicketLog, UserRole, AuditLogEntry, AuditLogQuery } from '../types';
 import { formatDateToISO } from '../utils/dateUtils';
 import { advanceDemoDay, buildDemoSeed, DEMO_SEED_VERSION, DemoDayState } from './demoSeed';
 
@@ -374,6 +374,38 @@ function migrateDemoLogin(): void {
             }
         } catch { /* xotira yopiq — o'tkazib yuboriladi */ }
     }
+}
+
+// ─── O'zgarishlar jurnali (demo) ───
+// Haqiqiy jurnal serverdagi har bir o'zgarishdan yig'iladi; demoda — namunaviy yozuvlar.
+export const DEMO_AUDIT_ACTORS = [
+    { name: 'Demo Admin', role: 'CLINIC_ADMIN' },
+    { name: 'Malika Resepshn', role: 'RECEPTIONIST' },
+    { name: 'Akmal Ahmedov', role: 'DOCTOR' },
+];
+
+export function demoAuditLogs(query: AuditLogQuery = {}): { items: AuditLogEntry[]; nextBefore: string | null } {
+    const now = Date.now();
+    const at = (minAgo: number) => new Date(now - minAgo * 60000).toISOString();
+    const today = formatDateToISO(new Date());
+    const base = { clinicId: 'demo-clinic-1', actorId: null };
+    const all: AuditLogEntry[] = [
+        { ...base, id: 'da1', actorName: 'Malika Resepshn', actorRole: 'RECEPTIONIST', action: 'update', entity: 'Appointment', summary: `Karimov Aziz · ${today.split('-').reverse().join('.')} 10:30`, changes: { status: ['Pending', 'Confirmed'] }, createdAt: at(12) },
+        { ...base, id: 'da2', actorName: 'Akmal Ahmedov', actorRole: 'DOCTOR', action: 'create', entity: 'TreatmentProcedure', summary: "Plomba qo'yish · 36-tish", changes: { procedureName: [null, "Plomba qo'yish"], toothNumber: [null, 36], finalPrice: [null, 350000] }, createdAt: at(40) },
+        { ...base, id: 'da3', actorName: 'Malika Resepshn', actorRole: 'RECEPTIONIST', action: 'create', entity: 'Transaction', summary: "Karimov Aziz · 350 000 so'm", changes: { amount: [null, 350000], type: [null, 'Cash'], status: [null, 'Paid'], service: [null, "Plomba qo'yish"] }, createdAt: at(55) },
+        { ...base, id: 'da4', actorName: 'Demo Admin', actorRole: 'CLINIC_ADMIN', action: 'update', entity: 'Service', summary: 'Tish tozalash', changes: { price: [250000, 300000] }, createdAt: at(130) },
+        { ...base, id: 'da5', actorName: 'Malika Resepshn', actorRole: 'RECEPTIONIST', action: 'delete', entity: 'Transaction', summary: "Yusupova Dilnoza · 120 000 so'm", changes: { amount: [null, 120000], type: [null, 'Card'], status: [null, 'Paid'] }, createdAt: at(200) },
+        { ...base, id: 'da6', actorName: 'Malika Resepshn', actorRole: 'RECEPTIONIST', action: 'create', entity: 'Patient', summary: 'Rahimova Shahnoza', changes: { lastName: [null, 'Rahimova'], firstName: [null, 'Shahnoza'], phone: [null, '+998 90 123 45 67'] }, createdAt: at(260) },
+        { ...base, id: 'da7', actorName: 'Akmal Ahmedov', actorRole: 'DOCTOR', action: 'login', entity: 'Session', summary: '', changes: null, createdAt: at(300) },
+        { ...base, id: 'da8', actorName: 'Demo Admin', actorRole: 'CLINIC_ADMIN', action: 'update', entity: 'Doctor', summary: 'Dr. Ahmedov Akmal', changes: { percentage: [30, 35], password: ['••••••', '••••••'] }, createdAt: at(1500) },
+    ];
+    const q = (query.q || '').toLowerCase();
+    const items = all.filter(e =>
+        (!query.actor || e.actorName === query.actor)
+        && (!query.entity || e.entity === query.entity)
+        && (!query.action || e.action === query.action)
+        && (!q || `${e.summary} ${e.actorName}`.toLowerCase().includes(q)));
+    return { items, nextBefore: null };
 }
 
 // Ilova sessiyani o'qishidan oldin: eski demo sessiyasi — brauzer demosiga
