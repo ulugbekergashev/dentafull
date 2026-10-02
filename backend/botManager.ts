@@ -2,6 +2,29 @@ import { Telegraf } from 'telegraf';
 import { message } from 'telegraf/filters';
 import { prisma } from './db';
 import * as notif from './notifications';
+import { buildReportScreen, parseReportCallback, reportCallback } from './botReports';
+import { tashkentDateStr } from './triggers';
+
+/**
+ * Menyu tugmalari. Menyu har doim pastda turadi (is_persistent) va har bir
+ * rolga o'ziniki: rahbar — hisobot, shifokor — o'z jadvali, resepshn —
+ * klinika jadvali va kassa, bemor — yozilish va hisobi. Bir odam bir nechta
+ * rolda bo'lsa, tugmalar birlashadi.
+ */
+const BTN = {
+    report: '📊 Hisobot',
+    clinicToday: '📋 Bugungi qabullar',
+    clinicTomorrow: '📆 Ertangi qabullar',
+    cash: '💰 Bugungi kassa holati',
+    myToday: '📅 Bugungi qabullarim',
+    myTomorrow: '📆 Ertangi qabullarim',
+    book: '📅 Qabulga yozilish',
+    nextAppt: '⏰ Keyingi qabulim',
+    history: '📋 Davolanish tarixim',
+    account: '💳 Mening hisobim',
+} as const;
+/** Eski menyudagi tugma — foydalanuvchilarda hali turgan bo'lishi mumkin */
+const LEGACY_REPORT_BTN = '📊 Kunlik hisobot';
 
 class BotManager {
     private bots: Map<string, Telegraf> = new Map(); // token -> Telegraf
@@ -53,6 +76,49 @@ class BotManager {
         }
     }
 
+    /** Shu chatdagi odam shu botda kim: rahbar, shifokor, resepshn, bemor (bir nechtasi bo'lishi mumkin) */
+    private async rolesFor(chatId: string, token: string) {
+        const [owner, doctor, receptionist, patient] = await Promise.all([
+            prisma.clinic.findFirst({ where: { telegramChatId: chatId, botToken: token } }),
+            prisma.doctor.findFirst({ where: { telegramChatId: chatId, clinic: { botToken: token } }, include: { clinic: true } }),
+            prisma.receptionist.findFirst({ where: { telegramChatId: chatId, clinic: { botToken: token } }, include: { clinic: true } }),
+            prisma.patient.findFirst({ where: { telegramChatId: chatId, clinic: { botToken: token } }, include: { clinic: true } }),
+        ]);
+        return { owner, doctor, receptionist, patient };
+    }
+
+    /** Rolga mos doimiy menyu. Hech kim bo'lmasa — telefon raqam so'raladi */
+    private menuMarkup(r: { owner: any; doctor: any; receptionist: any; patient: any }) {
+        const rows: string[][] = [];
+        if (r.owner) rows.push([BTN.report], [BTN.clinicToday, BTN.clinicTomorrow], [BTN.cash]);
+        else if (r.receptionist) rows.push([BTN.clinicToday, BTN.clinicTomorrow], [BTN.cash]);
+        if (r.doctor) rows.push([BTN.myToday, BTN.myTomorrow]);
+        if (r.patient) rows.push([BTN.book, BTN.nextAppt], [BTN.history, BTN.account]);
+        if (!rows.length) {
+            return {
+                keyboard: [[{ text: '📱 Telefon raqamni yuborish', request_contact: true }]],
+                resize_keyboard: true,
+                is_persistent: true,
+            };
+        }
+        return { keyboard: rows.map(row => row.map(text => ({ text }))), resize_keyboard: true, is_persistent: true };
+    }
+
+    /** Rahbar uchun hisobot ekrani (yangi xabar yoki tugma bosilganda o'sha xabarni almashtirish) */
+    private async showReport(ctx: any, clinic: { id: string; name: string }, data: string, edit: boolean) {
+        const parsed = parseReportCallback(data) || { p: 'd0' as const, s: 'sum' as const, b: '' };
+        const screen = await buildReportScreen(clinic, parsed.p, parsed.s, parsed.b);
+        const extra = { parse_mode: 'HTML' as const, reply_markup: { inline_keyboard: screen.keyboard } };
+        if (edit) {
+            // Bir xil ekranni qayta bosish — Telegram "not modified" xatosi beradi, bu normal
+            await ctx.editMessageText(screen.text, extra).catch((e: any) => {
+                if (!String(e?.message || '').includes('not modified')) throw e;
+            });
+        } else {
+            await ctx.reply(screen.text, extra);
+        }
+    }
+
     public async startBot(clinicId: string, token: string) {
         // Increment usage count
         const currentCount = this.usageCount.get(token) || 0;
@@ -94,24 +160,8 @@ class BotManager {
                                 data: { telegramChatId: chatId }
                             });
 
-                            // Check if also owner
-                            const ownerClinic = await prisma.clinic.findFirst({
-                                where: { telegramChatId: chatId, botToken: token }
-                            });
-
-                            const patientMenu = [
-                                [{ text: "📅 Qabulga yozilish" }, { text: "⏰ Keyingi qabulim" }],
-                                [{ text: "📋 Davolanish tarixim" }, { text: "💳 Mening hisobim" }]
-                            ];
-                            const keyboard = ownerClinic
-                                ? [[{ text: "📊 Kunlik hisobot" }], ...patientMenu]
-                                : patientMenu;
-
                             ctx.reply(`✅ Assalomu alaykum, ${patient.firstName}!\n\nSizning profilingiz muvaffaqiyatli ulandi.\n\nEndi siz ${patient.clinic.name}dan eslatmalar va xabarlar olasiz.`, {
-                                reply_markup: {
-                                    keyboard,
-                                    resize_keyboard: true
-                                }
+                                reply_markup: this.menuMarkup(await this.rolesFor(chatId, token))
                             });
                         } else {
                             ctx.reply("❌ Bemor topilmadi.");
@@ -121,124 +171,90 @@ class BotManager {
                         ctx.reply("❌ Xatolik.");
                     }
                 } else {
-                    // Check if user is already linked as owner
-                    const clinicAsOwner = await prisma.clinic.findFirst({
-                        where: { telegramChatId: chatId, botToken: token }
-                    });
-
-                    if (clinicAsOwner) {
-                        return ctx.reply(`👋 Assalomu alaykum, ${clinicAsOwner.adminName}!\n\nSiz ${clinicAsOwner.name} egasi sifatida ulandingiz. Hisobot olish uchun quyidagi tugmani bosing yoki /report komandasini yuboring.`, {
-                            reply_markup: {
-                                keyboard: [[{ text: "📊 Kunlik hisobot" }]],
-                                resize_keyboard: true
-                            }
-                        });
-                    }
-
-                    // Check if already linked as a doctor
-                    const doctorLinked = await prisma.doctor.findFirst({
-                        where: { telegramChatId: chatId, clinic: { botToken: token } },
-                        include: { clinic: true }
-                    });
-
-                    if (doctorLinked) {
-                        return ctx.reply(`👋 Assalomu alaykum, Dr. ${doctorLinked.firstName} ${doctorLinked.lastName}!\n\nSiz ${doctorLinked.clinic.name} klinikasiga ulangansiz. Bugungi qabullaringizni ko'rish uchun quyidagi tugmani bosing.`, {
-                            reply_markup: {
-                                keyboard: [[{ text: "📅 Bugungi qabullarim" }]],
-                                resize_keyboard: true
-                            }
+                    const roles = await this.rolesFor(chatId, token);
+                    const name = roles.owner?.adminName
+                        || (roles.doctor ? `Dr. ${roles.doctor.firstName} ${roles.doctor.lastName}` : '')
+                        || roles.receptionist?.firstName || roles.patient?.firstName;
+                    if (name) {
+                        return ctx.reply(`👋 Assalomu alaykum, ${name}!\n\nKerakli bo'limni pastdagi menyudan tanlang.`, {
+                            reply_markup: this.menuMarkup(roles)
                         });
                     }
 
                     ctx.reply("👋 Assalomu alaykum!\n\nKlinika botiga xush kelibsiz.\n\nIltimos, telefon raqamingizni yuboring:", {
-                        reply_markup: {
-                            keyboard: [[{ text: "📱 Telefon raqamni yuborish", request_contact: true }]],
-                            resize_keyboard: true,
-                            one_time_keyboard: false
-                        }
+                        reply_markup: this.menuMarkup(roles)
                     });
                 }
             });
 
-            // 2. Report Command (for clinic owner)
-            bot.command('report', async (ctx) => {
-                const chatId = String(ctx.chat.id);
-                const clinic = await prisma.clinic.findFirst({
-                    where: { telegramChatId: chatId, botToken: token }
-                });
+            // 2. Menyu — har doim qaytarib beriladi (kimdir yopib qo'ygan bo'lsa ham)
+            bot.command('menu', async (ctx) => {
+                const roles = await this.rolesFor(String(ctx.chat.id), token);
+                ctx.reply('📋 Menyu', { reply_markup: this.menuMarkup(roles) });
+            });
 
+            // 3. Hisobot — faqat rahbar (klinika egasi) uchun.
+            // "📊 Kunlik hisobot" — eski menyudagi tugma, foydalanuvchilarda hali turgan bo'lishi mumkin.
+            const openReport = async (ctx: any) => {
+                const chatId = String(ctx.chat.id);
+                const clinic = await prisma.clinic.findFirst({ where: { telegramChatId: chatId, botToken: token } });
                 if (!clinic) {
-                    return ctx.reply("❌ Siz klinika egasi sifatida ulanmagansiz. Iltimos, avval ro'yxatdan o'ting.");
-                }
-
-                const report = await this.generateDailyReport(clinic.id);
-                ctx.reply(report, { parse_mode: 'Markdown' });
-            });
-
-            // 3. Listen for "📊 Kunlik hisobot" button (clinic owner)
-            bot.hears('📊 Kunlik hisobot', async (ctx) => {
-                const chatId = String(ctx.chat.id);
-                const clinic = await prisma.clinic.findFirst({
-                    where: { telegramChatId: chatId, botToken: token }
-                });
-
-                if (clinic) {
-                    const report = await this.generateDailyReport(clinic.id);
-                    ctx.reply(report, { parse_mode: 'Markdown' });
-                }
-            });
-
-            // 4. Listen for "📅 Bugungi qabullarim" button (doctor)
-            bot.hears('📅 Bugungi qabullarim', async (ctx) => {
-                const chatId = String(ctx.chat.id);
-
-                const doctor = await prisma.doctor.findFirst({
-                    where: {
-                        telegramChatId: chatId,
-                        clinic: { botToken: token }
-                    },
-                    include: { clinic: true }
-                });
-
-                if (doctor) {
-                    const schedule = await this.generateDoctorSchedule(doctor.id, doctor.clinic.id);
-                    ctx.reply(schedule, { parse_mode: 'Markdown' });
-                } else {
-                    ctx.reply("❌ Siz shifokor sifatida ulanmagansiz. Iltimos, telefon raqamingizni yuboring.", {
-                        reply_markup: {
-                            keyboard: [[{ text: "📱 Telefon raqamni yuborish", request_contact: true }]],
-                            resize_keyboard: true
-                        }
+                    return ctx.reply("📊 Hisobot faqat klinika rahbari uchun.", {
+                        reply_markup: this.menuMarkup(await this.rolesFor(chatId, token))
                     });
                 }
-            });
+                await this.showReport(ctx, clinic, reportCallback('d0', 'sum'), false);
+            };
+            bot.command(['hisobot', 'report'], openReport);
+            bot.hears([BTN.report, LEGACY_REPORT_BTN], openReport);
 
-            // 4.1 Listen for "📋 Bugungi qabullar" button (receptionist)
-            bot.hears('📋 Bugungi qabullar', async (ctx) => {
-                const chatId = String(ctx.chat.id);
-                const rec = await prisma.receptionist.findFirst({
-                    where: { telegramChatId: chatId, clinic: { botToken: token } }
-                });
-                if (rec) {
-                    const schedule = await this.generateClinicSchedule(rec.clinicId);
-                    ctx.reply(schedule, { parse_mode: 'Markdown' });
-                } else {
-                    ctx.reply("❌ Kechirasiz, huquqingiz yo'q.");
+            // Hisobot ichidagi tugmalar: davr, bo'lim, filial. Har safar rahbar ekani qayta tekshiriladi.
+            bot.action(/^rp:/, async (ctx: any) => {
+                const chatId = String(ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id || '');
+                const clinic = chatId ? await prisma.clinic.findFirst({ where: { telegramChatId: chatId, botToken: token } }) : null;
+                if (!clinic) return ctx.answerCbQuery("Hisobot faqat klinika rahbari uchun.");
+                await ctx.answerCbQuery().catch(() => { });
+                try {
+                    await this.showReport(ctx, clinic, ctx.callbackQuery.data, true);
+                } catch (e: any) {
+                    console.error('Bot hisobot xatosi:', e?.message || e);
                 }
             });
 
-            // 4.2 Listen for "💰 Bugungi kassa holati" button (receptionist)
-            bot.hears('💰 Bugungi kassa holati', async (ctx) => {
+            // 4. Shifokor: bugungi / ertangi jadvali
+            const doctorSchedule = (offsetDays: number) => async (ctx: any) => {
                 const chatId = String(ctx.chat.id);
-                const rec = await prisma.receptionist.findFirst({
-                    where: { telegramChatId: chatId, clinic: { botToken: token } }
-                });
-                if (rec) {
-                    const cashReport = await this.generateClinicCashReport(rec.clinicId);
-                    ctx.reply(cashReport, { parse_mode: 'Markdown' });
-                } else {
-                    ctx.reply("❌ Kechirasiz, huquqingiz yo'q.");
+                const roles = await this.rolesFor(chatId, token);
+                if (!roles.doctor) {
+                    return ctx.reply("❌ Siz shifokor sifatida ulanmagansiz. Iltimos, telefon raqamingizni yuboring.", {
+                        reply_markup: this.menuMarkup(roles)
+                    });
                 }
+                const schedule = await this.generateDoctorSchedule(roles.doctor.id, roles.doctor.clinic.id, tashkentDateStr(offsetDays));
+                ctx.reply(schedule, { parse_mode: 'Markdown', reply_markup: this.menuMarkup(roles) });
+            };
+            bot.hears(BTN.myToday, doctorSchedule(0));
+            bot.hears(BTN.myTomorrow, doctorSchedule(1));
+
+            // 4.1 Klinika jadvali va kassa — resepshn va rahbar
+            const staffClinicId = async (chatId: string) => {
+                const roles = await this.rolesFor(chatId, token);
+                return { roles, clinicId: roles.owner?.id || roles.receptionist?.clinicId || null };
+            };
+            const clinicSchedule = (offsetDays: number) => async (ctx: any) => {
+                const { roles, clinicId } = await staffClinicId(String(ctx.chat.id));
+                if (!clinicId) return ctx.reply("❌ Kechirasiz, huquqingiz yo'q.", { reply_markup: this.menuMarkup(roles) });
+                const schedule = await this.generateClinicSchedule(clinicId, tashkentDateStr(offsetDays));
+                ctx.reply(schedule, { parse_mode: 'Markdown', reply_markup: this.menuMarkup(roles) });
+            };
+            bot.hears(BTN.clinicToday, clinicSchedule(0));
+            bot.hears(BTN.clinicTomorrow, clinicSchedule(1));
+
+            bot.hears(BTN.cash, async (ctx) => {
+                const { roles, clinicId } = await staffClinicId(String(ctx.chat.id));
+                if (!clinicId) return ctx.reply("❌ Kechirasiz, huquqingiz yo'q.", { reply_markup: this.menuMarkup(roles) });
+                const cashReport = await this.generateClinicCashReport(clinicId);
+                ctx.reply(cashReport, { parse_mode: 'HTML', reply_markup: this.menuMarkup(roles) });
             });
 
             // 5. Contact Listener
@@ -266,11 +282,8 @@ class BotManager {
                                     where: { id: clinic.id },
                                     data: { telegramChatId: chatId }
                                 } as any);
-                                ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz ${clinic.name} egasi sifatida muvaffaqiyatli ulandingiz. Endi siz har kuni hisobotlarni olasiz.`, {
-                                    reply_markup: {
-                                        keyboard: [[{ text: "📊 Kunlik hisobot" }]],
-                                        resize_keyboard: true
-                                    }
+                                ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz ${clinic.name} egasi sifatida muvaffaqiyatli ulandingiz. Har kuni kechqurun kunlik hisobot keladi, istalgan payt esa "📊 Hisobot" tugmasini bosing.`, {
+                                    reply_markup: this.menuMarkup(await this.rolesFor(chatId, token))
                                 });
                                 foundAny = true;
                             }
@@ -309,11 +322,8 @@ class BotManager {
 
                             const schedule = await this.generateDoctorSchedule(doctor.id, doctor.clinicId);
 
-                            ctx.reply(`✅ Xush kelibsiz, Dr. ${doctor.firstName} ${doctor.lastName}!\n\nSiz ${doctor.clinic.name} klinikasiga muvaffaqiyatli ulandi. Endi har kuni ertalab soat 8:00 da bugungi qabullaringiz haqida xabar olasiz. 🏥`, {
-                                reply_markup: {
-                                    keyboard: [[{ text: "📅 Bugungi qabullarim" }]],
-                                    resize_keyboard: true
-                                }
+                            await ctx.reply(`✅ Xush kelibsiz, Dr. ${doctor.firstName} ${doctor.lastName}!\n\nSiz ${doctor.clinic.name} klinikasiga muvaffaqiyatli ulandi. Endi har kuni ertalab soat 8:00 da bugungi qabullaringiz haqida xabar olasiz. 🏥`, {
+                                reply_markup: this.menuMarkup(await this.rolesFor(chatId, token))
                             });
 
                             // Send today's schedule immediately
@@ -354,13 +364,7 @@ class BotManager {
                             });
 
                             ctx.reply(`✅ Xush kelibsiz, ${rec.firstName}!\n\nSiz ${rec.clinic.name} qabulxona xodimi sifatida muvaffaqiyatli ulandingiz.`, {
-                                reply_markup: {
-                                    keyboard: [
-                                        [{ text: "📋 Bugungi qabullar" }],
-                                        [{ text: "💰 Bugungi kassa holati" }]
-                                    ],
-                                    resize_keyboard: true
-                                }
+                                reply_markup: this.menuMarkup(await this.rolesFor(chatId, token))
                             });
                             foundAny = true;
                             break;
@@ -384,13 +388,7 @@ class BotManager {
                             data: { telegramChatId: chatId }
                         });
                         ctx.reply(`✅ Assalomu alaykum, ${patient.firstName}!\n\nSiz ${patient.clinic.name} bemori sifatida muvaffaqiyatli ulandingiz.`, {
-                            reply_markup: {
-                                keyboard: [
-                                    [{ text: "📅 Qabulga yozilish" }, { text: "⏰ Keyingi qabulim" }],
-                                    [{ text: "📋 Davolanish tarixim" }, { text: "💳 Mening hisobim" }]
-                                ],
-                                resize_keyboard: true
-                            }
+                            reply_markup: this.menuMarkup(await this.rolesFor(chatId, token))
                         });
                         foundAny = true;
                     }
@@ -888,7 +886,23 @@ class BotManager {
                 }
             });
 
+            // Menyuda yo'q matn — menyuni qaytarib beramiz (yopilib qolgan bo'lsa ham).
+            // Faqat shaxsiy chatda: guruhga qo'shilgan bot har xabarga javob bermasin.
+            bot.on(message('text'), async (ctx) => {
+                if (ctx.chat.type !== 'private') return;
+                const roles = await this.rolesFor(String(ctx.chat.id), token);
+                const known = roles.owner || roles.doctor || roles.receptionist || roles.patient;
+                ctx.reply(known ? "Kerakli bo'limni pastdagi menyudan tanlang." : "Iltimos, telefon raqamingizni yuboring:", {
+                    reply_markup: this.menuMarkup(roles)
+                });
+            });
+
             bot.launch().catch(err => console.error(`Bot launch failed for token ${token.substring(0, 5)}:`, err.message));
+            // Telegram'ning "Menu" tugmasi — /menu har doim qo'l ostida
+            bot.telegram.setMyCommands([
+                { command: 'menu', description: 'Menyu' },
+                { command: 'hisobot', description: 'Hisobot (klinika rahbari uchun)' },
+            ]).catch((e: any) => console.error('setMyCommands xatosi:', e?.message));
             this.bots.set(token, bot);
             console.log(`✅ Bot instance started for token: ${token.substring(0, 10)}...`);
 
@@ -928,7 +942,8 @@ class BotManager {
         patientId?: string,
         type: string = 'Manual',
         replyMarkup?: any,
-        logExtra?: { source?: string; ruleId?: string; refId?: string }
+        logExtra?: { source?: string; ruleId?: string; refId?: string },
+        sendOpts?: { parseMode?: 'HTML' }
     ): Promise<{ success: boolean; error?: string }> {
         const extra = {
             channel: 'telegram',
@@ -954,7 +969,10 @@ class BotManager {
         const bot = this.bots.get(clinic.botToken);
         if (!bot) return await logFailure('Bot instance topilmadi (bot ishga tushmagan)');
         try {
-            await bot.telegram.sendMessage(chatId, message, replyMarkup ? { reply_markup: replyMarkup } : undefined);
+            const sendExtra: any = {};
+            if (replyMarkup) sendExtra.reply_markup = replyMarkup;
+            if (sendOpts?.parseMode) sendExtra.parse_mode = sendOpts.parseMode;
+            await bot.telegram.sendMessage(chatId, message, Object.keys(sendExtra).length ? sendExtra : undefined);
             await prisma.telegramLog.create({
                 data: { clinicId, patientId, type, status: 'Sent', message, ...extra }
             }).catch((err: any) => console.error('Telegram log error:', err));
@@ -1056,19 +1074,12 @@ class BotManager {
     /**
      * Generate today's appointment schedule for a clinic
      */
-    public async generateClinicSchedule(clinicId: string): Promise<string> {
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Tashkent',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        const todayDateString = formatter.format(new Date());
-
+    public async generateClinicSchedule(clinicId: string, date: string = tashkentDateStr(0)): Promise<string> {
+        const isToday = date === tashkentDateStr(0);
         const appointments = await prisma.appointment.findMany({
             where: {
                 clinicId: clinicId,
-                date: todayDateString,
+                date,
                 status: { notIn: ['Cancelled'] }
             },
             include: {
@@ -1079,10 +1090,10 @@ class BotManager {
         });
 
         if (appointments.length === 0) {
-            return `📅 *Bugun uchun qabullar yo'q.*`;
+            return isToday ? `📅 *Bugun uchun qabullar yo'q.*` : `📅 *${date} uchun qabullar yo'q.*`;
         }
 
-        let message = `📅 *Bugungi Qabullar (Klinika bo'yicha)*\nSana: ${todayDateString}\n\n`;
+        let message = `📅 *${isToday ? 'Bugungi' : 'Ertangi'} qabullar (klinika bo'yicha)*\nSana: ${date}\n\n`;
         appointments.forEach((app: any, index: number) => {
             const docName = app.doctor ? `Dr. ${app.doctor.lastName}` : "Noma'lum";
             message += `${index + 1}. ⏰ *${app.time}* - 👤 ${app.patient.firstName} ${app.patient.lastName}\n`;
@@ -1099,46 +1110,30 @@ class BotManager {
     /**
      * Generate today's cash report for a clinic
      */
+    /**
+     * Bugungi kassa (HTML). Ilgari bu yerda to'lanmagan (qarzga yozilgan) to'lovlar
+     * ham "tushum" ga qo'shilardi — endi Moliya va hisobot bilan bir xil hisob.
+     */
     public async generateClinicCashReport(clinicId: string): Promise<string> {
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Tashkent',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        const todayDateString = formatter.format(new Date());
-
-        const transactions = await prisma.transaction.findMany({
-            where: { clinicId: clinicId, date: todayDateString }
-        });
-
-        const expenses = await prisma.expense.findMany({
-            where: { clinicId: clinicId, date: todayDateString }
-        });
-
-        const totalIncome = transactions.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
-        const totalExpense = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
-
-        let message = `💰 *Bugungi Kassa Holati*\nSana: ${todayDateString}\n\n`;
-        message += `🟢 *Tushumlar:* ${totalIncome.toLocaleString()} so'm\n`;
-        message += `🔴 *Xarajatlar:* ${totalExpense.toLocaleString()} so'm\n`;
-        message += `━━━━━━━━━━━━━━━\n`;
-        message += `⚖️ *Qoldiq:* ${(totalIncome - totalExpense).toLocaleString()} so'm\n`;
-
-        return message;
+        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { id: true, name: true } });
+        if (!clinic) return "Klinika topilmadi.";
+        return (await buildReportScreen(clinic, 'd0', 'cash', '')).text;
     }
 
     /**
      * Generate today's appointment schedule for a specific doctor
      */
-    public async generateDoctorSchedule(doctorId: string, clinicId: string): Promise<string> {
+    public async generateDoctorSchedule(doctorId: string, clinicId: string, date?: string): Promise<string> {
         const formatter = new Intl.DateTimeFormat('en-CA', {
             timeZone: 'Asia/Tashkent',
             year: 'numeric',
             month: '2-digit',
             day: '2-digit'
         });
-        const todayDateString = formatter.format(new Date());
+        const realToday = formatter.format(new Date());
+        // Ertangi jadval so'ralganda — o'sha kun; nazorat ro'yxati esa doim bugungi holat
+        const todayDateString = date || realToday;
+        const dayWord = todayDateString === realToday ? 'BUGUNGI' : 'ERTANGI';
 
         const doctor = await prisma.doctor.findUnique({
             where: { id: doctorId },
@@ -1172,7 +1167,7 @@ class BotManager {
         if (dueRecalls.length > 0) {
             recallBlock = `\n🔁 *NAZORATGA CHAQIRISH* — ${dueRecalls.length} ta bemor\n`;
             dueRecalls.slice(0, 10).forEach((r: any) => {
-                const overdue = r.dueDate < todayDateString ? ' ⚠️' : '';
+                const overdue = r.dueDate < realToday ? ' ⚠️' : '';
                 const who = r.patient ? `${r.patient.lastName} ${r.patient.firstName}` : 'Bemor';
                 const reminded = (r.kind === 'treatment' ? ' · davolash davomi' : ' · nazorat') + (r.status === 'reminded' ? ', xabar yuborilgan' : '');
                 recallBlock += `• ${String(r.dueDate).split('-').reverse().join('.')}${overdue} — ${who}${r.reason ? ` (${r.reason})` : ''}${reminded}\n`;
@@ -1184,12 +1179,12 @@ class BotManager {
         const clinicName = doctor?.clinic?.name || 'Klinika';
 
         if (appointments.length === 0) {
-            return `📅 *BUGUNGI JADVALINGIZ* (${todayDateString})\n\n` +
+            return `📅 *${dayWord} JADVALINGIZ* (${todayDateString})\n\n` +
                 `👨‍⚕️ ${doctorName} — ${clinicName}\n\n` +
-                `✅ Bugun qabulingiz yo'q. Dam oling! 😊` + recallBlock;
+                (dayWord === 'BUGUNGI' ? `✅ Bugun qabulingiz yo'q. Dam oling! 😊` : `✅ Ertaga qabulingiz yo'q.`) + recallBlock;
         }
 
-        let message = `📅 *BUGUNGI JADVALINGIZ* (${todayDateString})\n\n` +
+        let message = `📅 *${dayWord} JADVALINGIZ* (${todayDateString})\n\n` +
             `👨‍⚕️ ${doctorName} — ${clinicName}\n` +
             `📊 Jami: *${appointments.length} ta qabul*\n\n`;
 
@@ -1205,74 +1200,8 @@ class BotManager {
             message += `\n`;
         });
 
-        message += recallBlock + `\nXayrli kun deb tilaymiz! 🌟`;
+        message += recallBlock + (dayWord === 'BUGUNGI' ? `\nXayrli kun deb tilaymiz! 🌟` : '');
         return message;
-    }
-
-    public async generateDailyReport(clinicId: string): Promise<string> {
-        // Use Tashkent timezone for date string
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Tashkent',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        const todayDateString = formatter.format(new Date());
-
-        // Start of today in Tashkent as a UTC Date for Prisma
-        const startOfTashkentToday = new Date(todayDateString + 'T00:00:00+05:00');
-
-        // 1. Count new patients created today
-        const newPatientsCount = await prisma.patient.count({
-            where: {
-                clinicId: clinicId,
-                createdAt: {
-                    gte: startOfTashkentToday
-                }
-            } as any
-        });
-
-        // 2. Sum revenue from paid transactions today
-        const dailyRevenue = await prisma.transaction.aggregate({
-            where: {
-                clinicId: clinicId,
-                status: 'Paid',
-                date: todayDateString
-            },
-            _sum: {
-                amount: true
-            }
-        });
-
-        // 3. Count total appointments today
-        const appointmentsCount = await prisma.appointment.count({
-            where: {
-                clinicId: clinicId,
-                date: todayDateString,
-                status: { not: 'Cancelled' }
-            }
-        });
-
-        const totalRevenue = dailyRevenue._sum.amount || 0;
-
-        // Nazorat: muddati kelgan / o'tgan chaqiruvlar — egasi resepshnga eslatib qo'yadi
-        const weekAhead = formatter.format(new Date(Date.now() + 7 * 86400000));
-        const recallDue = await prisma.recall.count({
-            where: { clinicId, status: { in: ['planned', 'reminded'] }, dueDate: { lte: weekAhead } }
-        });
-        const recallOverdue = await prisma.recall.count({
-            where: { clinicId, status: { in: ['planned', 'reminded'] }, dueDate: { lt: todayDateString } }
-        });
-        const recallLine = recallDue > 0
-            ? `🔁 *Nazoratga chaqirish:* ${recallDue} ta${recallOverdue > 0 ? ` (${recallOverdue} ta muddati o'tgan)` : ''}\n`
-            : '';
-
-        return `📊 *KUNLIK HISOBOT* (${todayDateString})\n\n` +
-            `👤 *Yangi bemorlar:* ${newPatientsCount}\n` +
-            `📅 *Qabullar soni:* ${appointmentsCount}\n` +
-            `💰 *Jami tushum:* ${totalRevenue.toLocaleString()} so'm\n` +
-            recallLine + `\n` +
-            `Xizmatingiz barakali bo'lsin! 😊`;
     }
     public async notifyReceptionists(clinicId: string, text: string) {
         try {

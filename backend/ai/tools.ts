@@ -48,7 +48,7 @@ const maskPhone = (phone?: string | null): string => {
 // (tsconfig chegarasi), shuning uchun ataylab takrorlangan.
 // 'Balance' — avansdan yechish: pul ilgari tushgan, kassaga yangi pul kirmaydi.
 const MONEY_IN_METHODS = new Set(['Cash', 'CashCollection', 'Card', 'UzcardTerminal', 'HumoTerminal', 'Click', 'P2P', 'QrBank', 'QrUzcard', 'QrHumo', 'Transfer', 'Insurance']);
-const isMoneyIn = (method?: string | null): boolean =>
+export const isMoneyIn = (method?: string | null): boolean =>
     !method ? true : MONEY_IN_METHODS.has(method);
 
 const fmt = (n: number): number => Math.round(n);

@@ -7068,35 +7068,38 @@ cron.schedule('0 20 * * *', () => {
 
 
 /**
- * Helper function: Send daily summary reports to clinic owners
+ * Klinika rahbariga bitta kunlik hisobot (22:00). Ilgari 21:00 da AI xulosa,
+ * 22:00 da "KUNLIK HISOBOT" — ikki xabar, raqamlari takrorlanardi. Endi
+ * bittasi: qabullar, kassa, filiallar, shifokorlar, nazorat, ogohlantirish va
+ * AI maslahati (backend/botReports.ts). Bo'sh kun (dam olish) — xabar yo'q.
  */
+const { buildDailyReport } = require('./botReports');
+
 async function sendDailyClinicReports() {
     try {
         console.log('📊 Running daily clinic report job...');
 
-        const today = new Date();
-        const todayDateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-        // Start of today for patient creation check
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-
-        // Get all clinics with Telegram connected
         const clinics = await prisma.clinic.findMany({
             where: {
                 telegramChatId: { not: null },
+                botToken: { not: null },
                 status: 'Active'
-            }
+            },
+            select: { id: true, name: true, adminName: true, telegramChatId: true }
         });
 
         console.log(`Processing reports for ${clinics.length} clinics...`);
 
         for (const clinic of clinics) {
-            const message = await botManager.generateDailyReport(clinic.id);
-
             try {
-                // Use botManager to notify clinical user (owner)
-                await botManager.notifyClinicUser(clinic.id, clinic.telegramChatId!, message);
+                const message = await buildDailyReport(clinic);
+                if (!message) continue;
+                await botManager.notifyClinicUser(
+                    clinic.id, clinic.telegramChatId!, message, undefined, 'DailyReport',
+                    { inline_keyboard: [[{ text: '📊 Batafsil hisobot', callback_data: 'rp:d0:sum:' }]] },
+                    { source: 'report' },
+                    { parseMode: 'HTML' }
+                );
                 console.log(`✅ Daily report sent to ${clinic.name} (${clinic.adminName})`);
             } catch (err) {
                 console.error(`Failed to send daily report to clinic ${clinic.id}:`, err);
@@ -8572,21 +8575,16 @@ app.post('/api/ai/insights', authenticateToken, async (req: any, res: any) => {
 // ─── Proaktiv AI ─────────────────────────────────────────────────────────────
 // Kunlik xulosa va anomaliya signali. Batafsil: ai/proactive.ts
 
-const { runDailyDigest, runAnomalyScan, detectAnomalies } = require('./ai/proactive');
+const { runAnomalyScan, detectAnomalies } = require('./ai/proactive');
 
 const proactiveDeps = {
     notifyClinic: (clinicId: string, chatId: string, text: string) =>
         botManager.notifyClinicUser(clinicId, chatId, text),
 };
 
-// Kunlik AI xulosasi — soat 21:00 da.
-// Mavjud 22:00 dagi hisobotdan bir soat oldin: ikkitasi ketma-ket kelib,
-// bittasi ikkinchisini "shovqin" ga aylantirmasligi uchun.
-cron.schedule('0 21 * * *', () => {
-    console.log('⏰ Cron: AI kunlik xulosa');
-    runDailyDigest(clinicToday(), proactiveDeps).catch((e: any) =>
-        console.error('[AI:digest] cron xatolik:', e?.message));
-}, { timezone: 'Asia/Tashkent' });
+// Kunlik AI xulosasi alohida xabar sifatida endi yuborilmaydi: uning raqamlari,
+// ogohlantirishlari va maslahati 22:00 dagi yagona hisobotga qo'shildi
+// (sendDailyClinicReports → botReports.buildDailyReport).
 
 // Anomaliya tekshiruvi — ish vaqtida har ikki soatda.
 // Kechasi tekshirishning ma'nosi yo'q: yangi ma'lumot kelmaydi, xabar esa
@@ -8602,7 +8600,9 @@ app.post('/api/ai/test/digest', authenticateToken, async (req: any, res: any) =>
         if (req.user?.role !== 'SUPER_ADMIN') {
             return res.status(403).json({ success: false, message: 'Ruxsat yo\'q.' });
         }
-        res.json({ success: true, ...await runDailyDigest(clinicToday(), proactiveDeps) });
+        // Yagona kunlik hisobotni hoziroq yuboradi (22:00 ni kutmasdan)
+        await sendDailyClinicReports();
+        res.json({ success: true });
     } catch (e: any) {
         res.status(500).json({ success: false, message: e.message });
     }

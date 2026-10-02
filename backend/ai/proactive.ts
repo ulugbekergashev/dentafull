@@ -6,9 +6,9 @@
 //
 // Bu fayl oqimni teskari qiladi. Ikki xil xabar:
 //
-//   1. KUNLIK XULOSA — kechqurun: bugun nima bo'ldi, nimaga e'tibor berish
-//      kerak. Raqamlar tayyor hisobotlardan olinadi, model faqat 2-3 gaplik
-//      izoh yozadi.
+//   1. KUNLIK XULOSA — endi alohida xabar emas: 22:00 dagi yagona
+//      hisobotning bir qismi (backend/botReports.ts). Bu yerdan faqat
+//      detectAnomalies ishlatiladi.
 //
 //   2. ANOMALIYA SIGNALI — kun davomida: ko'rsatkich odatdagidan keskin
 //      chetga chiqsa darhol xabar. "Bugungi tushum o'rtachadan 47% past" —
@@ -19,10 +19,7 @@
 // berardi va signalga ishonib bo'lmasdi.
 
 const { prisma } = require('../db');
-import { buildReport, ReportType } from './reports';
-import { chat } from '../aiService';
 import { logAi } from './log';
-import { getClinicKey } from './keys';
 
 // ─── Anomaliya aniqlash ──────────────────────────────────────────────────────
 
@@ -174,113 +171,12 @@ const alreadySent = (clinicId: string, today: string, metric: string): boolean =
     return false;
 };
 
-// ─── Kunlik xulosa ───────────────────────────────────────────────────────────
+// ─── Xabar yuborish ──────────────────────────────────────────────────────────
 
 export interface ProactiveDeps {
     /** Klinika egasiga Telegram orqali xabar yuboradi. */
     notifyClinic: (clinicId: string, chatId: string, text: string) => Promise<any>;
 }
-
-/**
- * Bir klinika uchun kunlik xulosa matni.
- *
- * Raqamlar tayyor hisobotlardan olinadi (ai/reports.ts), ya'ni ular
- * allaqachon grounding tekshiruvidan o'tgan. Model faqat izoh yozadi.
- */
-export const buildDigest = async (clinicId: string, today: string): Promise<string | null> => {
-    const ctx = { clinicId, role: 'CLINIC_ADMIN' };
-    const types: ReportType[] = ['today', 'finance'];
-
-    const reports = await Promise.all(
-        types.map(t => buildReport(t, ctx, today, 'uz').catch(() => null))
-    );
-    const ok = reports.filter(Boolean) as any[];
-    if (!ok.length) return null;
-
-    // Butunlay bo'sh kun — xabar yuborishning ma'nosi yo'q.
-    if (ok.every(r => r.empty)) return null;
-
-    const lines: string[] = [`📊 ${today} — kunlik xulosa`, ''];
-
-    for (const r of ok) {
-        lines.push(r.title.toUpperCase());
-        for (const m of r.metrics) {
-            lines.push(`  • ${m.label}: ${m.value}${m.unit ? ' ' + m.unit : ''}`);
-        }
-        lines.push('');
-    }
-
-    // Anomaliyalar xulosaga ham qo'shiladi — kun davomida signal ketgan
-    // bo'lsa ham, kechqurun umumiy manzarada ko'rinib turgani foydali.
-    const anomalies = await detectAnomalies(clinicId, today).catch(() => [] as Anomaly[]);
-    const bad = anomalies.filter(a => a.bad);
-    if (bad.length) {
-        lines.push('E\'TIBOR:');
-        for (const a of bad) lines.push(`  ⚠️ ${a.text}`);
-        lines.push('');
-    }
-
-    // Narrativ — modelning yagona vazifasi.
-    const facts = ok
-        .map(r => `${r.title}: ` + r.metrics.map((m: any) => `${m.label} ${m.value}${m.unit ? ' ' + m.unit : ''}`).join(', '))
-        .join('. ');
-
-    try {
-        const advice = await chat(
-            [
-                {
-                    role: 'system',
-                    content:
-                        'Sen stomatologiya klinikasi egasiga kunlik xulosa izohini yozasan. '
-                        + 'Senga TAYYOR raqamlar beriladi — ularni qayta hisoblama va yangi '
-                        + 'raqam qo\'shma. Vazifang: 2 gapda ertaga nimaga e\'tibor berish '
-                        + 'kerakligini ayt. Markdown va sarlavha ishlatma, faqat oddiy matn, '
-                        + 'o\'zbek tilida.',
-                },
-                { role: 'user', content: facts },
-            ],
-            { task: 'cheap', maxTokens: 180, label: 'digest', clinicKey: await getClinicKey(clinicId) }
-        );
-        if (advice) lines.push(advice);
-    } catch (e: any) {
-        // Izoh bo'lmasa ham raqamlar qimmatli — xabar baribir ketadi.
-        console.warn('[AI:digest] izoh yozilmadi:', e?.message);
-    }
-
-    return lines.join('\n').trim();
-};
-
-/**
- * Barcha klinikalarga kunlik xulosa yuboradi.
- * Telegram ulanmagan klinikalar o'tkazib yuboriladi.
- */
-export const runDailyDigest = async (today: string, deps: ProactiveDeps): Promise<{ sent: number; skipped: number }> => {
-    let sent = 0, skipped = 0;
-
-    const clinics = await prisma.clinic.findMany({
-        where: { telegramChatId: { not: null }, status: 'Active' },
-        select: { id: true, name: true, telegramChatId: true },
-    });
-
-    for (const c of clinics) {
-        try {
-            const text = await buildDigest(c.id, today);
-            if (!text) { skipped++; continue; }
-            await deps.notifyClinic(c.id, c.telegramChatId!, text);
-            sent++;
-            await logAi({
-                clinicId: c.id, endpoint: 'digest', lang: 'uz',
-                question: `kunlik xulosa ${today}`, reply: text,
-            });
-        } catch (e: any) {
-            console.error(`[AI:digest] ${c.name}: ${e?.message}`);
-            skipped++;
-        }
-    }
-
-    console.log(`[AI:digest] ${sent} ta yuborildi, ${skipped} ta o'tkazib yuborildi.`);
-    return { sent, skipped };
-};
 
 /**
  * Anomaliyalarni tekshiradi va faqat YOMON tomonga chetlanishda xabar beradi.
