@@ -372,7 +372,6 @@ export const Patients: React.FC<PatientsProps> = ({
           
           {canAdd && (
             <Button 
-              data-tour="pat-add"
               className="flex-1 lg:flex-none justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white shadow-lg shadow-primary-500/25 transition-all active:scale-95 py-2.5 border-none"
               onClick={() => {
                 setFormData((prev) => ({ ...prev, branchId: activeBranchId || '' }));
@@ -387,7 +386,7 @@ export const Patients: React.FC<PatientsProps> = ({
       </div>
 
       {/* Stats Cards Row */}
-      <div data-tour="pat-stats" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
           label={t('patients.stats.total')} value={stats.total} icon={UsersIcon} color="primary"
           active={activeStatFilter === null} subtitle={t('patients.stats.allTime')}
@@ -412,7 +411,7 @@ export const Patients: React.FC<PatientsProps> = ({
 
       {/* Search + Filter toggle row */}
       <Card className="p-4 space-y-3">
-        <div data-tour="pat-search" className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
             <input
@@ -574,8 +573,7 @@ export const Patients: React.FC<PatientsProps> = ({
                   className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer group"
                   onClick={() => onPatientClick(patient.id)}
                 >
-                  {/* Qo'llanma ism katagini ko'rsatadi: butun qator telefonda ekrandan keng — jadval yon tomonga siljib ketardi */}
-                  <td data-tour="pat-row" className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="h-9 w-9 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold text-sm group-hover:bg-primary-200 dark:group-hover:bg-primary-800 transition-colors overflow-hidden">
                         {patient.avatarUrl ? (
@@ -739,8 +737,8 @@ export const Patients: React.FC<PatientsProps> = ({
 
       {/* Add Patient Modal */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title={t('auto.Yangi Bemor Qo\'shish')}>
-        <form onSubmit={handleSubmit} className="space-y-4" data-tour="pat-form">
-          <div className="grid grid-cols-2 gap-4" data-tour="pat-form-name">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <Input label={t('auto.Familiya')} name="lastName" value={formData.lastName} onChange={handleInputChange} required />
             <Input label={t('auto.Ism')} name="firstName" value={formData.firstName} onChange={handleInputChange} required />
           </div>
@@ -772,11 +770,11 @@ export const Patients: React.FC<PatientsProps> = ({
             <p className="text-[10px] text-gray-500">{t('auto.Bemorning pasportidagi 14 raqamli shaxsiy identifikatsiya raqami.')}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4" data-tour="pat-form-phone">
+          <div className="grid grid-cols-2 gap-4">
             <Input label={t('auto.Asosiy Telefon')} name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" required />
             <Input label={t('auto.Qo\'shimcha Telefon')} name="secondaryPhone" value={formData.secondaryPhone} onChange={handleInputChange} placeholder="+998 XX XXX XX XX" />
           </div>
-          <div className="grid grid-cols-2 gap-4" data-tour="pat-form-dob">
+          <div className="grid grid-cols-2 gap-4">
             <Input label={t('auto.Tug\'ilgan sana')} type="date" name="dob" value={formData.dob} onChange={handleInputChange} required helperText={t("auto.Sanani qo'lda kiritish uchun maydonga bosing")} />
             <Input label={t('patients.modal.passport')} name="passport" value={formData.passport} onChange={handleInputChange} placeholder={t('auto.AA1234567')} />
           </div>
@@ -819,7 +817,7 @@ export const Patients: React.FC<PatientsProps> = ({
           </div>
 
           {userRole !== 'DOCTOR' && (
-            <div data-tour="pat-form-doctor">
+            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.doctor')}</label>
               <select
                 name="doctorId"
@@ -876,7 +874,7 @@ export const Patients: React.FC<PatientsProps> = ({
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)} disabled={isSubmitting}>{t('auto.Bekor qilish')}</Button>
-            <Button type="submit" disabled={isSubmitting} data-tour="pat-form-save">
+            <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('auto.Saqlanmoqda...')}</> : t('auto.Saqlash')}
             </Button>
           </div>

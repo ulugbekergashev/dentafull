@@ -93,7 +93,7 @@ export const DoctorQueueCard: React.FC<DoctorQueueCardProps> = ({ doctorId, appo
     ].filter(Boolean).join(' · ') : '';
 
     return (
-        <section data-tour="my-queue" className="flex flex-col gap-6 p-6 rounded-[2rem] bg-white dark:bg-gray-800 border border-primary-100 dark:border-primary-900/40 shadow-sm">
+        <section className="flex flex-col gap-6 p-6 rounded-[2rem] bg-white dark:bg-gray-800 border border-primary-100 dark:border-primary-900/40 shadow-sm">
             <div className="flex flex-col gap-4 min-w-0">
                 <div className="flex items-end justify-between gap-4">
                     <div>

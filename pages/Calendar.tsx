@@ -779,7 +779,7 @@ export const Calendar: React.FC<CalendarProps> = ({
         >
           {t('datefield.today')}
         </button>
-        <div data-tour="cal-date" className="flex items-center min-w-0">
+        <div className="flex items-center min-w-0">
           <button type="button" onClick={handlePrev} aria-label={t('calendar.prev')} title={t('calendar.prev')} className="p-1.5 rounded-lg shrink-0 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"><ChevronLeft className="w-5 h-5" /></button>
           <button type="button" onClick={handleNext} aria-label={t('calendar.next')} title={t('calendar.next')} className="p-1.5 rounded-lg shrink-0 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"><ChevronRight className="w-5 h-5" /></button>
           <button
@@ -805,13 +805,13 @@ export const Calendar: React.FC<CalendarProps> = ({
         </DatePopover>
         <div className="flex-1" />
         {/* Telefonda doim "Kun" — tanlov kerak emas */}
-        <div data-tour="cal-view" className="hidden md:flex items-center gap-0.5 p-1 rounded-lg shrink-0 bg-gray-100 dark:bg-gray-700/60">
+        <div className="hidden md:flex items-center gap-0.5 p-1 rounded-lg shrink-0 bg-gray-100 dark:bg-gray-700/60">
           {viewButton('day', t('calendar.day'))}
           {viewButton('week', t('calendar.week'))}
           {viewButton('month', t('calendar.month'))}
         </div>
         {canCreate && (
-          <Button onClick={() => openAddModal()} data-tour="cal-new" className="shrink-0" title={t('calendar.newAppointment')}>
+          <Button onClick={() => openAddModal()} className="shrink-0" title={t('calendar.newAppointment')}>
             <Plus className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">{t('calendar.newAppointment')}</span>
           </Button>
         )}
@@ -819,7 +819,7 @@ export const Calendar: React.FC<CalendarProps> = ({
 
       {/* Shifokorlar (keng ekranda — yon panelda): rang izohi va filtr bir joyda, blok rangi shifokor rangi */}
       {doctors.length > 1 && (
-        <div role="group" aria-label={t('calendar.doctorFilter')} data-tour="cal-doctors" className={`${sidebarOpen ? '2xl:hidden' : ''} flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-0.5`}>
+        <div role="group" aria-label={t('calendar.doctorFilter')} className={`${sidebarOpen ? '2xl:hidden' : ''} flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-0.5`}>
           <button
             type="button"
             onClick={() => setDoctorFilter(null)}
@@ -868,7 +868,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           onToggleDoctor={toggleDoctor}
           showBusy={restricted}
         />}
-        <div ref={scrollRef} data-tour="cal-grid" className="flex-1 min-w-0 overflow-auto">
+        <div ref={scrollRef} className="flex-1 min-w-0 overflow-auto">
           {view === 'month' ? (
             <CalendarMonthView
               month={currentDate}

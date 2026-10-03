@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -41,8 +41,6 @@ import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } fr
 import type { CashCloseInput } from './services/api';
 import { makePermChecker } from './utils/permissions';
 import { PermissionsProvider } from './context/PermissionsContext';
-import type { GuideContext } from './components/guide/guides';
-import type { GuideCenterProps } from './components/guide/GuideCenter';
 import { formatHeaderDate } from './utils/dateUtils';
 import { useTodaySync } from './hooks/useTodaySync';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
@@ -170,6 +168,8 @@ const AppContent: React.FC = () => {
   const [cashClosures, setCashClosures] = useState<CashRegisterDay[]>([]);
   const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
   const [currentClinic, setCurrentClinic] = useState<Clinic | undefined>();
+  /** Ro'yxatlar (bemor, qabul, xizmat...) qaysi klinika uchun to'liq yuklangan. currentClinic bunga yaramaydi — u alohida, oldinroq keladi */
+  const [loadedClinicId, setLoadedClinicId] = useState('');
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -314,6 +314,7 @@ const AppContent: React.FC = () => {
           // Demo har kuni shu kunga moslab quriladi (kun almashgan bo'lsa — shu yerda)
           demo.ensureDemoData();
           setCurrentClinic(demo.DEMO_CLINIC);
+          setLoadedClinicId(clinicId);
           // Nusxalar: ilova holati demo massivining o'zi bo'lsa, demo'ga qo'shilgan
           // bemor/to'lov holatda "allaqachon bor" ko'rinib, ekranda chiqmay qolardi
           setPatients([...demo.DEMO_PATIENTS]);
@@ -367,6 +368,7 @@ const AppContent: React.FC = () => {
             api.branches.getAll(clinicId).catch(() => [] as Branch[])
           ]);
           setCurrentClinic(clinicData);
+          setLoadedClinicId(clinicId);
           setPatients(pts);
           setAppointments(appts);
           setTransactions(txs);
@@ -1230,36 +1232,17 @@ const AppContent: React.FC = () => {
   // Bemorlar ro'yxatini backend o'zi filtrlaydi, kalendar va bosh sahifa esa
   // to'liq ro'yxatni oladi — shuning uchun ularga bu bayroq uzatiladi.
   const seeAllPatientsForRole = perms.scopeAll();
-  // O'quv markazi (Qo'llanma): kod faqat tugma birinchi bosilganda yuklanadi
-  const [GuideCenter, setGuideCenter] = useState<React.ComponentType<GuideCenterProps> | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
-  // Tugmadagi "yangi" nuqtasi — O'quv markazi bir marta ochilguncha
-  const [guideSeen, setGuideSeen] = useState(() => {
-    try { return localStorage.getItem('denta_guide_seen_v1') === '1'; } catch { return true; }
-  });
-  const navKey = allowedModuleIds.join(',');
-  const canPayForRole = canTakePaymentForRole && (userRole !== UserRole.RECEPTIONIST || showFinanceForRole);
-  const guideCtx = useMemo<GuideContext>(() => ({
-    role: userRole === UserRole.DOCTOR ? 'doctor' : userRole === UserRole.RECEPTIONIST ? 'receptionist' : 'admin',
-    perms,
-    nav: navKey ? navKey.split(',') : [],
-    canBook,
-    canPay: canPayForRole,
-    userKey: `${clinicId}:${userRole}:${doctorId || userName}`,
-  }), [userRole, perms, navKey, canBook, canPayForRole, clinicId, doctorId, userName]);
-  const openTour = () => {
-    setIsSidebarOpen(false);
-    if (!guideSeen) {
-      setGuideSeen(true);
-      try { localStorage.setItem('denta_guide_seen_v1', '1'); } catch { /* shaxsiy rejim */ }
-    }
-    if (GuideCenter) { setGuideOpen(true); return; }
-    // Yangi versiya chiqqach eski bo'lak topilmasa — sahifa yangilanadi, keyingi bosishda ochiladi
-    import('./components/guide/GuideCenter').then(
-      m => { setGuideCenter(() => m.default); setGuideOpen(true); },
-      () => window.location.reload(),
-    );
-  };
+  // "Ishni boshlash" ro'yxati (yangi klinika rahbariga). Sonlar butun klinika bo'yicha —
+  // bo'sh filial tanlangani uchun ishlab turgan klinika "yangi" bo'lib ko'rinmasin.
+  // Ma'lumot yuklangachgina beriladi: kirishdan keyingi birinchi chizishda ro'yxatlar
+  // hali bo'sh — har bir klinika "yangi" ko'rinardi.
+  const setupReady = userRole === UserRole.CLINIC_ADMIN && !!clinicId && loadedClinicId === clinicId;
+  const setupCounts = useMemo(() => (setupReady ? {
+    services: services.length,
+    doctors: doctors.length,
+    patients: patients.length,
+    appointments: appointments.length,
+  } : undefined), [setupReady, services.length, doctors.length, patients.length, appointments.length]);
 
   // --- Main Render ---
   // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
@@ -1389,23 +1372,9 @@ const AppContent: React.FC = () => {
             Boshqaruv panelidagi tab esa olib tashlandi. Bunisiz telefondan
             ishlaydigan shifokor AI ga umuman kira olmasdi. */}
         <div className="flex items-center gap-2">
-          {isStaffRole && (
-            <button
-              type="button"
-              onClick={openTour}
-              data-tour="tour"
-              title={t('tour.buttonHint')}
-              aria-label={t('tour.button')}
-              className="relative p-2 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
-            >
-              <GraduationCap className="w-4 h-4" />
-              {!guideSeen && <GuideDot />}
-            </button>
-          )}
           <button
             onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
             aria-label="DentaAI"
-            data-tour="ai"
             className="flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-xl
                        text-white font-bold text-[12.5px] tracking-wide
                        bg-gradient-to-br from-violet-500 to-indigo-600 shadow-sm active:scale-95 transition-transform"
@@ -1415,7 +1384,7 @@ const AppContent: React.FC = () => {
           </button>
           {/* Telefondan ishlaydigan shifokor/resepshn ham qo'ng'iroqni ko'rsin */}
           {isStaffRole && <NotificationBell allowedModules={allowedModuleIds} />}
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} data-tour="menu" className="p-2 text-gray-600 dark:text-gray-300">
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600 dark:text-gray-300">
             {isSidebarOpen ? <X /> : <Menu />}
           </button>
         </div>
@@ -1549,7 +1518,7 @@ const AppContent: React.FC = () => {
                 to'ldirib yuborgandi: sana ikki qatorga sinib, bo'limlar
                 qatori gorizontal siljib qolgandi. */}
             <div className="flex-1 min-w-0 flex justify-center">
-              <div className="relative group w-full max-w-[440px]" data-tour="search">
+              <div className="relative group w-full max-w-[440px]">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                 <input
                   type="text"
@@ -1646,21 +1615,6 @@ const AppContent: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 xl:gap-3 shrink-0">
-              {/* Qo'llanma — DentaAI oldida: joriy sahifani qadamma-qadam ko'rsatadi */}
-              {isStaffRole && (
-                <button
-                  type="button"
-                  onClick={openTour}
-                  data-tour="tour"
-                  title={t('tour.buttonHint')}
-                  aria-label={t('tour.button')}
-                  className="relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[13px] font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.97] transition-all"
-                >
-                  <GraduationCap className="w-4 h-4" />
-                  <span className="hidden xl:inline">{t('tour.button')}</span>
-                  {!guideSeen && <GuideDot />}
-                </button>
-              )}
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
                   Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
                   lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
@@ -1668,7 +1622,6 @@ const AppContent: React.FC = () => {
                 onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
                 title={t('auto.DentaAI — Ctrl+Shift+Space yoki F2 (ovoz bilan)')}
                 aria-label="DentaAI"
-                data-tour="ai"
                 className="group relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl
                            text-white font-bold text-[13px] tracking-wide
                            bg-gradient-to-br from-violet-500 to-indigo-600
@@ -1698,7 +1651,7 @@ const AppContent: React.FC = () => {
               {isStaffRole && <NotificationBell allowedModules={allowedModuleIds} />}
 
               {/* Language Switcher - Pill Toggle */}
-              <div data-tour="lang" className="flex items-center bg-gray-100 dark:bg-gray-700/60 rounded-full p-0.5 gap-0.5 border border-gray-200 dark:border-gray-600">
+              <div className="flex items-center bg-gray-100 dark:bg-gray-700/60 rounded-full p-0.5 gap-0.5 border border-gray-200 dark:border-gray-600">
                 {(['uz', 'ru'] as const).map((lang) => (
                   <button
                     key={lang}
@@ -1752,7 +1705,7 @@ const AppContent: React.FC = () => {
                 atigi 12–56px zapas bor — 1px shrift ~60px qo'shadi va sig'maydi.
                 Uni sig'dirish uchun oraliqni qisqartirish kerak bo'lardi, bu esa
                 "yopishib turgan" holatni qaytarardi. */}
-            <div data-tour="nav" className="h-12 flex items-center gap-0 min-[1520px]:gap-0.5 min-[1600px]:gap-1 min-[1700px]:gap-2 overflow-x-auto no-scrollbar">
+            <div className="h-12 flex items-center gap-0 min-[1520px]:gap-0.5 min-[1600px]:gap-1 min-[1700px]:gap-2 overflow-x-auto no-scrollbar">
               {visibleNavigation.map((item) => {
                 const to = (item as any).to || (item.id === 'dashboard' ? '/' : `/${item.id}`);
                 // `?tab=` li havolalarda NavLink faol holatni o'zi aniqlay
@@ -1889,6 +1842,7 @@ const AppContent: React.FC = () => {
                     onAddTransaction={addTransaction}
                     onAddAppointment={addAppointment}
                     onOpenBooking={canBook ? openBooking : undefined}
+                    setupCounts={setupCounts}
                     addToast={addToast}
                   />
                 } />
@@ -2165,20 +2119,10 @@ const AppContent: React.FC = () => {
 
       {/* Subscription Block Modal */}
       <SubscriptionBlockModal isOpen={isSubscriptionBlocked} />
-
-      {GuideCenter && guideOpen && <GuideCenter ctx={guideCtx} onClose={() => setGuideOpen(false)} />}
     </div>
     </PermissionsProvider>
   );
 };
-
-/** "Qo'llanma" tugmasidagi miltillovchi nuqta: O'quv markazi hali ochilmagan */
-const GuideDot: React.FC = () => (
-  <span className="absolute -top-1 -right-1 flex h-3 w-3" aria-hidden="true">
-    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-75" />
-    <span className="relative inline-flex h-3 w-3 rounded-full bg-violet-500 ring-2 ring-white dark:ring-gray-800" />
-  </span>
-);
 
 const App: React.FC = () => {
   return (

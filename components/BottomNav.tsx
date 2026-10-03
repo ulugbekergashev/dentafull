@@ -54,7 +54,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, items, isSidebar
     };
 
     return (
-        <nav data-tour="nav" className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 px-2 pb-safe-area-inset-bottom">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 px-2 pb-safe-area-inset-bottom">
             <div className="flex justify-around items-center h-16">
                 {visibleItems.map((item) => {
                     const Icon = item.icon;

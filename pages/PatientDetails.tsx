@@ -1370,7 +1370,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   ].filter(tab => tabAllowed(tab.id)).map(tab => (
                      <button
                         key={tab.id}
-                        data-tour={`pd-tab-${tab.id}`}
                         onClick={() => setActiveTab(tab.id as any)}
                         className={`group inline-flex items-center pt-0 pb-2.5 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === tab.id
                            ? 'border-primary-500 text-primary-600 dark:text-primary-400'

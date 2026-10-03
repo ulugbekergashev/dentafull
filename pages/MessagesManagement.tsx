@@ -659,11 +659,10 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             </div>
 
             {/* Tabs */}
-            <div data-tour="msg-tabs" className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1.5">
+            <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1.5">
                 {TABS.map(tab => (
                     <button
                         key={tab.id}
-                        data-tour={`msg-tab-${tab.id}`}
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id
                             ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
@@ -679,14 +678,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
             {activeTab === 'templates' && canAutomation && (
                 <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div data-tour="msg-vars" className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1.5">
                             {TEMPLATE_VARS.map(v => (
                                 <span key={v.token} className="px-2 py-0.5 text-xs font-mono text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-md bg-white dark:bg-gray-800">
                                     {v.token}
                                 </span>
                             ))}
                         </div>
-                        <Button onClick={() => openTemplateForm()} data-tour="msg-new">
+                        <Button onClick={() => openTemplateForm()}>
                             <Plus className="w-4 h-4 mr-1" /> {t('auto.Yangi shablon')}
                         </Button>
                     </div>
@@ -697,7 +696,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                     </div>
 
                     {isTemplateFormOpen && (
-                        <Card className="p-6 space-y-4" data-tour="msg-form">
+                        <Card className="p-6 space-y-4">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">
                                     {editingTemplate ? 'Shablonni tahrirlash' : 'Yangi shablon'}
@@ -708,13 +707,12 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             </div>
                             <input
                                 type="text"
-                                data-tour="msg-form-name"
                                 placeholder={t('auto.Shablon nomi')}
                                 value={templateForm.name}
                                 onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))}
                                 className={inputCls}
                             />
-                            <div className="space-y-4" data-tour="msg-form-text">
+                            <div className="space-y-4">
                                 <textarea
                                     placeholder="Xabar matni. Masalan: Hurmatli {bemor_ismi}, qabulingiz {sana} kuni {vaqt} da."
                                     value={templateForm.text}
@@ -726,14 +724,14 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                             </div>
                             <div className="flex justify-end gap-2 pt-2">
                                 <Button variant="secondary" onClick={() => { setIsTemplateFormOpen(false); setEditingTemplate(null); }}>{t('auto.Bekor')}</Button>
-                                <Button onClick={handleSaveTemplate} disabled={templateSaving || !templateForm.name.trim() || !templateForm.text.trim()} data-tour="msg-form-save">
+                                <Button onClick={handleSaveTemplate} disabled={templateSaving || !templateForm.name.trim() || !templateForm.text.trim()}>
                                     {templateSaving ? 'Saqlanmoqda...' : 'Saqlash'}
                                 </Button>
                             </div>
                         </Card>
                     )}
 
-                    <div className="space-y-3" data-tour={templates.length > 0 ? 'msg-templates' : undefined}>
+                    <div className="space-y-3">
                         {templates.map(tpl => {
                             const badge = eskizStatusBadge(tpl.eskizStatus);
                             return (

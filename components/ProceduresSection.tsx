@@ -187,7 +187,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <Activity className="w-5 h-5" /> {t('patients.details.procedures.todayVisit')}
                     </h3>
-                    <Button onClick={() => setIsModalOpen(true)} disabled={isSubmitting} className="px-5 py-2" data-tour="proc-add">
+                    <Button onClick={() => setIsModalOpen(true)} disabled={isSubmitting} className="px-5 py-2">
                         {t('patients.details.procedures.addProcedure')}
                     </Button>
                 </div>
@@ -270,7 +270,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                             </span>
                         </div>
                         {/* Keyingi tashrif — ikki qator: davolash davomi (kunlar) / nazorat ko'rigi (oylar) */}
-                        <div className="space-y-2" data-tour="visit-next">
+                        <div className="space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className="w-40 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.treatment')}</span>
                                 {[{ days: 3, label: `3 ${t('patients.details.recall.days')}` }, { days: 7, label: `1 ${t('patients.details.recall.week')}` }, { days: 14, label: `2 ${t('patients.details.recall.week')}` }].map(o => (
@@ -349,7 +349,6 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                     onClick={handleCompleteVisit}
                                     className="w-full"
                                     disabled={isSubmitting || blocked}
-                                    data-tour="visit-complete"
                                 >
                                     {isSubmitting ? t('patients.details.procedures.saving') : t('patients.details.procedures.completeVisit')}
                                 </Button>

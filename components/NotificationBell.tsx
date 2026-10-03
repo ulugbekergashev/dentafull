@@ -180,7 +180,7 @@ export const NotificationBell: React.FC<Props> = ({ allowedModules }) => {
   };
 
   return (
-    <div className="relative" ref={boxRef} data-tour="bell">
+    <div className="relative" ref={boxRef}>
       <button
         onClick={() => setOpen(o => !o)}
         aria-label={t('notif.title')}
