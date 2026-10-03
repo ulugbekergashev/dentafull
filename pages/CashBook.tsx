@@ -138,7 +138,11 @@ const Tile: React.FC<{
     );
 };
 
-const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
+/**
+ * `drawer` — "Kassada qoldi" qiymatini almashtiradi. Oylik ko'rinishda bu shu
+ * oyning naqd oqimi (o'tgan oydan o'tgan qoldiqsiz) — jadvaldagi kunlar yig'indisi.
+ */
+const SummaryTiles: React.FC<{ totals: CashBookTotals; drawer?: number }> = ({ totals, drawer }) => {
     const { t } = useLanguage();
     return (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -146,7 +150,7 @@ const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
             <Tile label={t(`auto.Naqd`)} value={totals.cashIn} icon={Banknote} tone="cash" />
             <Tile label={t(`auto.Naqdsiz`)} value={totals.nonCashIn} icon={CreditCard} tone="card" hint={t("auto.Karta / Click / o'tkazma")} />
             <Tile label={t(`auto.Xarajat`)} value={totals.expenseTotal} icon={TrendingDown} tone="expense" hint={t('auto.naqd: {n}').replace('{n}', num(totals.cashExpense))} />
-            <Tile label={t(`auto.Kassada qoldi`)} value={totals.drawer} icon={Wallet} tone="drawer" hint={t('auto.naqd yashik')} />
+            <Tile label={t(`auto.Kassada qoldi`)} value={drawer ?? totals.drawer} icon={Wallet} tone="drawer" hint={t('auto.naqd yashik')} />
             <Tile label={t(`auto.Qarzga yozildi`)} value={totals.unpaid} icon={AlertCircle} hint={t("auto.to'lanmagan")} />
         </div>
     );
@@ -155,8 +159,10 @@ const SummaryTiles: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
 // ── To'lov usullari qatori ───────────────────────────────────────────────────
 const MethodStrip: React.FC<{ totals: CashBookTotals }> = ({ totals }) => {
     const { t } = useLanguage();
-    const shown = PAYMENT_METHODS.filter(m => (totals.byMethod[m.key] || 0) !== 0);
-    if (shown.length === 0) return null;
+    // Faqat kassaga pul kiritgan usullar: "Avansdan yechilgan" pastda alohida turadi.
+    // Ilgari u shu yerda ham chiqardi va usullar yig'indisi "Jami tushum" dan oshib ketardi.
+    const shown = PAYMENT_METHODS.filter(m => m.isMoneyIn && (totals.byMethod[m.key] || 0) !== 0);
+    if (shown.length === 0 && totals.fromBalance <= 0) return null;
     return (
         <Card className="p-4">
             <div className="flex flex-wrap gap-x-8 gap-y-3">
@@ -199,14 +205,14 @@ const ClosureChip: React.FC<{
     if (status.changedAfterClose) {
         return (
             <span title={t(`auto.Yopilgandan keyin o'zgargan`)} className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                <AlertCircle className="w-3 h-3" /> o'zgardi
+                <AlertCircle className="w-3 h-3" /> {t(`auto.Yopilgandan keyin o'zgargan`)}
             </span>
         );
     }
     const exact = Math.abs(status.closure?.difference || 0) < 1;
     return exact ? (
         <span title={t(`auto.Kassa to'g'ri keldi`)} className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-            <Check className="w-3 h-3" /> yopildi
+            <Check className="w-3 h-3" /> {t('cashbook.dayClosed')}
         </span>
     ) : (
         <span title={t(`auto.Farq bilan yopilgan`)} className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400">
@@ -1045,7 +1051,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                 />
             )}
 
-            <SummaryTiles totals={totals} />
+            <SummaryTiles totals={totals} drawer={view === 'day' ? undefined : monthData.totals.netCashFlow} />
             <MethodStrip totals={totals} />
 
             {view === 'day' ? (
@@ -1532,11 +1538,14 @@ export const CashBook: React.FC<CashBookProps> = ({
                                     <td className="px-3 py-3 text-right font-black tabular-nums text-blue-600 dark:text-blue-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.nonCashIn)}</td>
                                     <td className="px-3 py-3 text-right font-black tabular-nums text-gray-900 dark:text-white sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.gross)}</td>
                                     <td className="px-3 py-3 text-right font-black tabular-nums text-red-600 dark:text-red-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">−{num(monthData.totals.expenseTotal)}</td>
-                                    <td className="px-3 py-3 text-right font-black tabular-nums text-amber-600 dark:text-amber-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.drawer)}</td>
-                                    <td className="px-3 py-3 text-center text-[11px] font-bold text-gray-500 whitespace-nowrap sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">
+                                    {/* Kunlar yig'indisi. Ilgari bu yerga oy boshidagi qoldiq (o'tgan oy yopilishidan) ham
+                                        qo'shilardi va yakun qatorlarga to'g'ri kelmasdi — klinikalar buni xato deb ko'rdi. */}
+                                    <td className="px-3 py-3 text-right font-black tabular-nums text-amber-600 dark:text-amber-400 sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">{num(monthData.totals.netCashFlow)}</td>
+                                    <td title={t('cashbook.dayClosed')} className="px-3 py-3 text-center text-[11px] font-bold text-gray-500 whitespace-nowrap sticky bottom-0 bg-gray-50 dark:bg-gray-700 z-20">
+                                        <Check className="inline w-3 h-3 mr-1 text-emerald-500" />
                                         {monthData.days.filter(d => closureByDate.get(d.date)?.closed).length}
                                         {' / '}
-                                        {monthData.days.filter(d => d.hasActivity).length} yopilgan
+                                        {monthData.days.filter(d => d.hasActivity).length}
                                     </td>
                                     {doctorCols.map(col => {
                                         const total = monthData.days.reduce((s, d) => s + (d.byDoctor[col.id] || 0), 0);
@@ -1944,6 +1953,26 @@ export const CashBook: React.FC<CashBookProps> = ({
                             <span>{t('cashbook.cashOut')}</span>
                             <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">−{num(day.totals.cashExpense)}</span>
                         </div>
+                        {/* Ilgari bu qatorlar yo'q edi: yuqoridagi uchta raqam yig'indisi pastdagi
+                            yakunga to'g'ri kelmasdi (inkassatsiya yoki qaytarish bo'lgan kunda) */}
+                        {day.totals.cashInManual > 0 && (
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300">
+                                <span>{t('auto.Kassaga solindi')}</span>
+                                <span className="font-semibold tabular-nums">+{num(day.totals.cashInManual)}</span>
+                            </div>
+                        )}
+                        {day.totals.refundCash > 0 && (
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300">
+                                <span>{t('auto.Qaytarildi')}</span>
+                                <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">−{num(day.totals.refundCash)}</span>
+                            </div>
+                        )}
+                        {day.totals.encashment > 0 && (
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300">
+                                <span>{t('auto.Inkassatsiya')}</span>
+                                <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">−{num(day.totals.encashment)}</span>
+                            </div>
+                        )}
                         <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700 text-base">
                             <span className="font-bold text-gray-900 dark:text-white">{t('cashbook.accountedCash')}</span>
                             <span className="font-black tabular-nums text-amber-600 dark:text-amber-400">{num(day.totals.drawer)}</span>

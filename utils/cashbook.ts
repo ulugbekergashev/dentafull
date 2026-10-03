@@ -456,7 +456,9 @@ export function buildCashBookMonth(
             day: i,
             totals,
             byDoctor,
-            hasActivity: dayTx.length > 0 || dayExp.length > 0,
+            // Faqat kassa harakati (masalan, inkassatsiya) bo'lgan kun ham faol —
+            // aks holda u oylik jadval va eksportda "bo'sh kun" bo'lib, harakati yo'qolardi
+            hasActivity: dayTx.length > 0 || dayExp.length > 0 || dayMov.length > 0,
         });
 
         // Oy yakuniga qo'shish

@@ -39,13 +39,19 @@ function sheetFrom(rows: Sheet, widths: number[], opts: { skipMoneyCols?: number
 }
 
 function methodBreakdownRows(totals: CashBookTotals): Sheet {
+    // Faqat kassaga pul kiritgan usullar — yig'indisi "Jami tushum" ga teng bo'lsin.
+    // "Avansdan yechilgan" pastda "Ma'lumot uchun" blokida alohida turadi.
     return PAYMENT_METHODS
-        .filter(m => (totals.byMethod[m.key] || 0) !== 0)
+        .filter(m => m.isMoneyIn && (totals.byMethod[m.key] || 0) !== 0)
         .map(m => [`  ${m.label}`, totals.byMethod[m.key] || 0] as Cell[]);
 }
 
-/** Har ikkala eksportda takrorlanadigan «kassa yakuni» bloki */
-function summaryBlock(totals: CashBookTotals): Sheet {
+/**
+ * Har ikkala eksportda takrorlanadigan «kassa yakuni» bloki.
+ * Oylik hisobotda (monthly) kun boshidagi qoldiq qo'shilmaydi: yakun — shu oyning naqd
+ * oqimi, ekrandagi oylik jadval va "Kunlik daftar" varag'idagi JAMI bilan bir xil raqam.
+ */
+function summaryBlock(totals: CashBookTotals, monthly = false): Sheet {
     const rows: Sheet = [
         ['KASSAGA TUSHDI'],
         ['Jami tushum', totals.gross],
@@ -57,7 +63,7 @@ function summaryBlock(totals: CashBookTotals): Sheet {
         ['  Naqdsiz (karta/hisob)', totals.nonCashExpense],
         [],
         ['NAQD YASHIK'],
-        ['Kun boshida qoldiq', totals.openingCash],
+        ...(monthly ? [] : [['Kun boshida qoldiq', totals.openingCash] as Cell[]]),
         ['+ Naqd tushum', totals.cashIn],
         ['− Naqd xarajat', -totals.cashExpense],
     ];
@@ -65,7 +71,9 @@ function summaryBlock(totals: CashBookTotals): Sheet {
     if (totals.cashInManual) rows.push(['+ Kassaga solindi', totals.cashInManual]);
     if (totals.refundCash) rows.push(['− Bemorga qaytarildi', -totals.refundCash]);
     if (totals.encashment) rows.push(['− Inkassatsiya', -totals.encashment]);
-    rows.push(['= YASHIKDA BO\'LISHI KERAK', totals.drawer]);
+    rows.push(monthly
+        ? ['= OY DAVOMIDA NAQD QOLDI', totals.netCashFlow]
+        : ['= YASHIKDA BO\'LISHI KERAK', totals.drawer]);
     rows.push([]);
     rows.push(['NAQDSIZ']);
     rows.push(['Karta / Click / O\'tkazma / Sug\'urta', totals.nonCashIn]);
@@ -214,7 +222,7 @@ export function exportCashBookDay(
         ['Jami tushum', day.totals.gross],
         ['Xarajat', day.totals.expenseTotal],
     ];
-    PAYMENT_METHODS.filter(m => m.key !== 'Cash' && (day.totals.byMethod[m.key] || 0) !== 0)
+    PAYMENT_METHODS.filter(m => m.key !== 'Cash' && m.isMoneyIn && (day.totals.byMethod[m.key] || 0) !== 0)
         .forEach(m => tail.push([m.label, day.totals.byMethod[m.key]]));
     tail.push(['KASSADA QOLDI (naqd)', day.totals.drawer]);
 
@@ -259,7 +267,13 @@ export function exportCashBookMonth(
     const wb = XLSX.utils.book_new();
     const monthLabel = formatMonthLabel(month.month);
     const doctorCols = month.doctorColumns;
-    const closureByDate = new Map(closures.map(c => [(c.date || '').split('T')[0], c]));
+    // Kuniga bir nechta smena bo'lsa — oxirgi smena yopilishi (ekrandagi oylik jadval kabi)
+    const closureByDate = new Map<string, CashRegisterDay>();
+    closures.forEach(c => {
+        const d = (c.date || '').split('T')[0];
+        const cur = closureByDate.get(d);
+        if (!cur || (c.shift || 1) >= (cur.shift || 1)) closureByDate.set(d, c);
+    });
 
     // --- 1. Yakun ---
     const doctorTotals = new Map<string, number>();
@@ -276,7 +290,7 @@ export function exportCashBookMonth(
         ['Oy', monthLabel],
         ['Tuzilgan', new Date().toLocaleString('uz-UZ')],
         [],
-        ...summaryBlock(month.totals),
+        ...summaryBlock(month.totals, true),
         [],
         ['KO\'RSATKICHLAR'],
         ['To\'lovlar soni', month.totals.paymentCount],
@@ -311,9 +325,14 @@ export function exportCashBookMonth(
             'Sanalgan', 'Farq', 'Holat',
         ],
     ];
+    // Oylik qatorda drawer — kunning o'z oqimi; yopilish esa kun boshidagi qoldiq bilan
+    // solishtirilgan. Shuning uchun "o'zgargan" va farq to'liq qoldiq bo'yicha hisoblanadi
+    // (aks holda qoldig'i bor har bir yopilgan kun "keyin o'zgargan" bo'lib chiqardi).
+    const fullDrawer = new Map(allDays.map(d => [d.date, d.totals.drawer]));
     month.days.forEach(d => {
         const c = closureByDate.get(d.date);
-        const changed = c ? Math.abs((c.expectedCash || 0) - d.totals.drawer) > 1 : false;
+        const full = fullDrawer.get(d.date) ?? d.totals.drawer;
+        const changed = c ? Math.abs((c.expectedCash || 0) - full) > 1 : false;
         ledger.push([
             d.day,
             formatDateLabel(d.date),
@@ -322,7 +341,7 @@ export function exportCashBookMonth(
             d.totals.expenseTotal,
             d.totals.drawer,
             c ? c.countedCash : null,
-            c ? (changed ? c.countedCash - d.totals.drawer : c.difference) : null,
+            c ? (changed ? c.countedCash - full : c.difference) : null,
             c ? (changed ? "Yopilgan (keyin o'zgargan)" : 'Yopilgan') : (d.hasActivity ? 'Ochiq' : null),
         ]);
     });
@@ -335,7 +354,8 @@ export function exportCashBookMonth(
         ...methodKeys.map(m => month.totals.byMethod[m.key] || 0),
         month.totals.gross,
         month.totals.expenseTotal,
-        month.totals.drawer,
+        // Ustun yig'indisi (kunlik oqimlar) — oy boshidagi qoldiqsiz
+        month.totals.netCashFlow,
         null,
         null,
         `${closedCount} / ${activeCount} yopilgan`,

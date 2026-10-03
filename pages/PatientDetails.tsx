@@ -176,7 +176,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [isApptModalOpen, setIsApptModalOpen] = useState(false);
    const [apptData, setApptData] = useState({
       doctorId: defaultDoctorId,
-      date: new Date().toISOString().split('T')[0],
+      date: formatDateToISO(new Date()),
       time: '09:00',
       type: 'Konsultatsiya',
       categoryId: '',
@@ -250,7 +250,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    }, [appointments, patientId, patient?.id]);
 
    const allProceduresHistory = React.useMemo(() => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDateToISO(new Date());
       const current = pendingProcedures.map((p: any) => ({
          id: p.id,
          serviceName: p.serviceName,
@@ -465,7 +465,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             code: selectedCode.code,
             name: selectedCode.name, // Send name for backend to create if missing
             description: selectedCode.description, // Send description
-            date: new Date().toISOString().split('T')[0],
+            date: formatDateToISO(new Date()),
             notes: matchingTemplate ? matchingTemplate.content : diagnosisNote,
             status: 'Active' as 'Active' | 'Resolved' | 'Chronic',
             clinicId: patient.clinicId
@@ -818,8 +818,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       // Check if current plan is individual
       const isIndividualPlan = currentClinic?.planId === 'individual';
 
-      // Validate doctor selection - required for multi-doctor plans, optional for individual with no doctors
-      if (!paymentData.doctorId) {
+      // Validate doctor selection - required for multi-doctor plans, optional for individual with no doctors.
+      // Avans — shifokorsiz: u hech kimning tushumi emas (shifokor tanlash maydoni ham yashirin).
+      if (!paymentData.doctorId && paymentData.service !== 'Avans') {
          if (!isIndividualPlan || (isIndividualPlan && doctors.length > 0)) {
             alert(t('patients.details.alerts.selectDoctorReq'));
             isSubmittingRef.current = false;
@@ -965,7 +966,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          categoryId: apptData.categoryId || null // Add categoryId
       });
       setIsApptModalOpen(false);
-      setApptData({ doctorId: defaultDoctorId, date: new Date().toISOString().split('T')[0], time: '09:00', type: 'Konsultatsiya', categoryId: '', duration: 60, notes: '' });
+      setApptData({ doctorId: defaultDoctorId, date: formatDateToISO(new Date()), time: '09:00', type: 'Konsultatsiya', categoryId: '', duration: 60, notes: '' });
    };
 
    const openApptModal = (presetDate?: unknown) => {
@@ -984,7 +985,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    const handleCompleteVisit = async (procedures: any[], total: number, { nextVisits, materials, skip }: VisitCompletion) => {
       // 1. Double-check if we are already processing or have processed this exact content recently
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDateToISO(new Date());
 
       // Generate a simple hash/signature for this batch of procedures
       const batchSignature = `${today}-${total}-${procedures.map(p => p.id).join(',')}`;
@@ -1678,9 +1679,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                              {(patient.balance || 0) > 0 && (
                                                 <Button size="sm" variant="secondary" className="bg-primary-50 text-primary-700 border-primary-100" onClick={async () => {
                                                    const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
+                                                   // Avans yetmasa — yechilmaydi (ilgari qoldiq manfiy bo'lib, farq hech qayerda qarz bo'lib ko'rinmasdi)
+                                                   if (total > (patient.balance || 0)) {
+                                                      alert(t('patients.details.alerts.insufficientBalance'));
+                                                      return;
+                                                   }
                                                    if (confirm(`Ushbu qabul uchun ${total.toLocaleString()} UZS miqdorini bemor avansidan yechishga ruxsatingiz bormi?`)) {
                                                       const doctor = doctors.find(d => d.id === app.doctorId);
-                                                      await onAddTransaction({
+                                                      const saved = await onAddTransaction({
                                                          patientId: patient.id,
                                                          patientName: `${patient.lastName} ${patient.firstName}`,
                                                          date: app.date,
@@ -1692,7 +1698,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                          doctorName: doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : '',
                                                          clinicId: patient.clinicId
                                                       });
-                                                      alert("To'lov avans hisobidan muvaffaqiyatli amalga oshirildi!");
+                                                      // Saqlanmagan bo'lsa (xato toast orqali ko'rsatiladi) — "muvaffaqiyatli" deyilmaydi
+                                                      if (saved) alert("To'lov avans hisobidan muvaffaqiyatli amalga oshirildi!");
                                                    }
                                                 }}>{t('auto.Hisobdan')}</Button>
                                              )}
@@ -1745,7 +1752,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           service: 'Avans',
                                           type: 'Cash',
                                           status: 'Paid',
-                                          doctorId: doctors.length > 0 ? doctors[0].id : '',
+                                          // Avans hech bir shifokorning tushumi emas. Ilgari ro'yxatdagi
+                                          // birinchi shifokorga yozilardi va unga ulush hisoblanardi.
+                                          doctorId: '',
                                           appointmentDate: formatDateToISO(new Date()),
                                           discountPercent: ''
                                        });

@@ -24,7 +24,7 @@ import { prisma } from './db';
 import { tashkentDateStr } from './triggers';
 import { chat } from './aiService';
 import { getClinicKey } from './ai/keys';
-const { findDebtors, isMoneyIn } = require('./ai/tools');
+const { findDebtors, isMoneyIn, isAdvanceDeposit } = require('./ai/tools');
 const { detectAnomalies } = require('./ai/proactive');
 
 // ─── Davrlar ─────────────────────────────────────────────────────────────────
@@ -73,13 +73,19 @@ const METHOD_LABEL: Record<string, string> = {
     QrHumo: 'QR Humo', Transfer: "O'tkazma", Insurance: "Sug'urta", Balance: 'Avansdan',
 };
 const CASH_DRAWER = new Set(['Cash', 'CashCollection']);
+// Xarajat turlari — types.ts dagi EXPENSE_CATEGORY_LABELS bilan bir xil (ilgari bazadagi
+// kalit ko'rinardi: "Other", "Lab", "DoctorShare")
+const CATEGORY_LABEL: Record<string, string> = {
+    DoctorShare: 'Shifokor ulushi', Salary: 'Oylik', Rent: 'Ijara', Utilities: 'Kommunal',
+    Inventory: 'Ombor', Lab: 'Laboratoriya', Other: 'Boshqa',
+};
 const UNPAID = new Set(['Pending', 'Overdue']);
 
 // ─── Ma'lumot va hisob ───────────────────────────────────────────────────────
 
 interface PeriodData {
     appts: { status: string; doctorId: string; branchId: string | null }[];
-    txs: { amount: number; type: string; status: string; doctorId: string | null; branchId: string | null }[];
+    txs: { amount: number; type: string; status: string; service: string | null; doctorId: string | null; branchId: string | null }[];
     exps: { amount: number; category: string; branchId: string | null }[];
     newPatients: { branchId: string | null }[];
     branches: { id: string; name: string }[];
@@ -96,7 +102,7 @@ async function loadPeriod(clinicId: string, from: string, to: string): Promise<P
     const created = { gte: new Date(`${from}T00:00:00+05:00`), lt: new Date(`${addDays(to, 1)}T00:00:00+05:00`) };
     const [appts, txs, exps, newPatients, branches, doctors] = await Promise.all([
         prisma.appointment.findMany({ where: { clinicId, date }, select: { status: true, doctorId: true, branchId: true } }),
-        prisma.transaction.findMany({ where: { clinicId, date }, select: { amount: true, type: true, status: true, doctorId: true, branchId: true } }),
+        prisma.transaction.findMany({ where: { clinicId, date }, select: { amount: true, type: true, status: true, service: true, doctorId: true, branchId: true } }),
         prisma.expense.findMany({ where: { clinicId, date }, select: { amount: true, category: true, branchId: true } }),
         prisma.patient.findMany({ where: { clinicId, createdAt: created }, select: { branchId: true } }),
         prisma.branch.findMany({ where: { clinicId, status: 'Active' }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }], select: { id: true, name: true } }),
@@ -167,9 +173,17 @@ function doctorRows(d: PeriodData, f: BranchFilter): DoctorRow[] {
         if (a.status === 'Completed') r.completed++;
         if (a.status === 'No-Show') r.noShow++;
     }
+    // Avans depoziti hech bir shifokorning tushumi emas (Kassadagi kabi alohida qator).
+    // Eski yozuvlarda u ro'yxatdagi birinchi shifokorga biriktirilgan — shuning uchun
+    // doctorId ga qaralmaydi. Qatorlar yig'indisi baribir "Kassaga tushdi" ga teng.
+    let advance = 0;
     for (const t of d.txs) {
         if (!inBranch(f, t.branchId) || t.status !== 'Paid' || !isMoneyIn(t.type)) continue;
+        if (isAdvanceDeposit(t.service)) { advance += t.amount || 0; continue; }
         row(t.doctorId).income += t.amount || 0;
+    }
+    if (advance > 0) {
+        rows.set('__advance__', { id: '__advance__', name: "Avans (oldindan to'lov)", appts: 0, completed: 0, noShow: 0, income: advance });
     }
     return [...rows.values()]
         .filter(r => r.appts > 0 || r.income > 0)
@@ -216,7 +230,9 @@ function branchBlock(rows: { name: string; stats: Stats }[]): string[] {
 
 function doctorBlock(rows: DoctorRow[], limit: number): string[] {
     const lines = rows.slice(0, limit).map((r, i) =>
-        `${i + 1}. <b>${esc(r.name)}</b> — 💰 ${money(r.income)}\n     👥 ${r.appts} qabul · ✅ ${r.completed} · ❌ ${r.noShow}`);
+        `${i + 1}. <b>${esc(r.name)}</b> — 💰 ${money(r.income)}`
+        // Avans qatorida qabul bo'lmaydi — ikkinchi satr kerak emas
+        + (r.id === '__advance__' ? '' : `\n     👥 ${r.appts} qabul · ✅ ${r.completed} · ❌ ${r.noShow}`));
     if (rows.length > limit) lines.push(`… yana ${rows.length - limit} ta shifokor`);
     return lines;
 }
@@ -373,13 +389,17 @@ export async function buildReportScreen(
             if (methods.length) body.push(...methods.map(([k, v]) => `• ${esc(METHOD_LABEL[k] || k)} — ${money(v)}`));
             if (st.fromBalance) body.push(`Avansdan yechildi: ${money(st.fromBalance)} (kassaga kirmaydi)`);
             body.push('', `💸 Xarajat: <b>${money(st.expense)}</b> so'm`);
-            if (cats.length) body.push(...cats.slice(0, 15).map(([k, v]) => `• ${esc(k)} — ${money(v)}`));
+            if (cats.length) body.push(...cats.slice(0, 15).map(([k, v]) => `• ${esc(CATEGORY_LABEL[k] || k)} — ${money(v)}`));
             body.push('', `📈 Sof: <b>${money(st.income - st.expense)}</b> so'm`);
             if (st.unpaid) body.push(`📌 To'lanmay qoldi (qarz): ${money(st.unpaid)} so'm`);
             break;
         }
         case 'debt': {
-            const list = await findDebtors({ clinicId: clinic.id, role: 'CLINIC_ADMIN' });
+            // Filial tanlangan bo'lsa — faqat shu filial bemorlari (sarlavhada filial nomi turadi)
+            const all = await findDebtors({ clinicId: clinic.id, role: 'CLINIC_ADMIN' });
+            const list = filter === undefined
+                ? all
+                : all.filter((x: any) => (filter === null ? !x.patient?.branchId : x.patient?.branchId === filter));
             const sum = list.reduce((acc: number, x: any) => acc + x.summa, 0);
             body = ['📌 <b>Qarzdorlar</b> — hozirgi holat (davrga bog\'liq emas)', `Jami: <b>${list.length}</b> ta · <b>${money(sum)}</b> so'm`, ''];
             body.push(...list.slice(0, 20).map((x: any, i: number) => {

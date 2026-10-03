@@ -1,7 +1,12 @@
 import { Transaction, Expense, Doctor, Service } from '../types';
 
 // Yangi moliya modeli (kassa usuli + shifokor ulushi hisobi):
-// - Kirim = status 'Paid' bo'lgan to'lovlar (Transaction).
+// - Kirim (hisoblangan daromad) = status 'Paid' bo'lgan to'lovlar, AVANS DEPOZITISIZ.
+//   Avans — bemor oldindan qo'ygan pul: xizmat hali ko'rsatilmagan, hech bir shifokor
+//   uni ishlab topmagan. U keyin 'Balance' usuli bilan sarflanganda daromad bo'ladi.
+//   Ilgari depozit ham, uning sarfi ham daromadga qo'shilardi (bitta pul ikki marta),
+//   depozit esa ro'yxatdagi birinchi shifokorga yozilib, unga ulush hisoblanardi.
+//   Kassaga tushgan pul = daromad − avansdan yechilgan + avans depozitlari (Kassa tabi).
 // - Shifokor ulushi AVTOMATIK hisoblanadi: to'lov summasi × foiz (hisoblangan ulush).
 // - Kassadan shifokorga pul berilganda 'DoctorShare' kategoriyali Expense yoziladi —
 //   bu hisoblangan ulushni "to'laydi", lekin sof foydadan QAYTA ayirilmaydi (double-count yo'q).
@@ -18,7 +23,9 @@ export interface DoctorShareSummary {
 }
 
 export interface TotalFinancials {
-    totalRevenue: number;       // barcha kirim (Paid to'lovlar)
+    totalRevenue: number;       // hisoblangan daromad (Paid to'lovlar, avans depozitisiz)
+    advanceDeposits: number;    // shu davrda qo'yilgan avanslar (daromad emas, kassaga tushgan)
+    balanceDrawdown: number;    // avansdan yechib to'langan (daromad, lekin kassaga yangi pul emas)
     doctorShareAccrued: number; // hisoblangan shifokor ulushlari jami
     doctorSharePaid: number;    // to'langan shifokor ulushlari jami
     totalExpenses: number;      // barcha xarajatlar (kassadan chiqqan pul, DoctorShare bilan)
@@ -27,6 +34,26 @@ export interface TotalFinancials {
     inventoryCosts: number;     // shundan: Ombor kategoriyasi
     netProfit: number;          // sof foyda
 }
+
+/** Avans depoziti — bemor oldindan qo'ygan pul (xizmat nomi 'Avans'). Kassa ham shu qoidani ishlatadi. */
+export const isAdvanceDeposit = (tx: Pick<Transaction, 'service'>): boolean =>
+    (tx.service || '').trim().toLowerCase() === 'avans';
+
+/** Hisoblangan daromadga kiradimi: to'langan va avans depoziti emas */
+export const isEarnedRevenue = (tx: Pick<Transaction, 'status' | 'service'>): boolean =>
+    tx.status === 'Paid' && !isAdvanceDeposit(tx);
+
+/**
+ * Shifokorga tushumdan foiz hisoblanadimi va qancha. Maosh turi 'Fix' bo'lsa — yo'q
+ * (forma foiz maydonini yashiradi, lekin eski qiymat bazada qoladi). Maosh turi
+ * kiritilmagan eski shifokorlarda foiz bo'lsa — avvalgidek foiz hisoblanadi.
+ * Moliya va Xodimlar sahifalari shu bitta qoidadan foydalanadi.
+ */
+export const doctorSharePercent = (doctor: Pick<Doctor, 'salaryType' | 'percentage'>): number => {
+    const type = doctor.salaryType || 'none';
+    if (type === 'fixed') return 0;
+    return doctor.percentage || 0;
+};
 
 // Shifokor ismini qat'iy solishtirish uchun normalizatsiya:
 // "Dr. Alisher Atajanov" === "Atajanov Alisher" (prefiks/tartib/punktuatsiyadan qat'i nazar),
@@ -76,7 +103,7 @@ export function calculateDoctorShares(
         summaries.set(d.id, {
             doctorId: d.id,
             doctorName: `${d.lastName} ${d.firstName}`,
-            percentage: d.percentage || 0,
+            percentage: doctorSharePercent(d),
             grossRevenue: 0,
             accrued: 0,
             paid: 0,
@@ -85,7 +112,7 @@ export function calculateDoctorShares(
     });
 
     transactions.forEach(tx => {
-        if (tx.status !== 'Paid') return;
+        if (!isEarnedRevenue(tx)) return;
         const doctor = findDoctorForTransaction(tx, doctors);
         if (!doctor) return;
         const s = summaries.get(doctor.id)!;
@@ -115,8 +142,13 @@ export function calculateTotalFinancials(
     doctors: Doctor[]
 ): TotalFinancials {
     let totalRevenue = 0;
+    let advanceDeposits = 0;
+    let balanceDrawdown = 0;
     transactions.forEach(tx => {
-        if (tx.status === 'Paid') totalRevenue += tx.amount;
+        if (tx.status !== 'Paid') return;
+        if (isAdvanceDeposit(tx)) { advanceDeposits += tx.amount; return; }
+        totalRevenue += tx.amount;
+        if (tx.type === 'Balance') balanceDrawdown += tx.amount;
     });
 
     const shares = calculateDoctorShares(transactions, expenses, doctors);
@@ -139,6 +171,8 @@ export function calculateTotalFinancials(
 
     return {
         totalRevenue,
+        advanceDeposits,
+        balanceDrawdown,
         doctorShareAccrued,
         doctorSharePaid,
         totalExpenses,

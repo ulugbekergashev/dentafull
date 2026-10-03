@@ -78,11 +78,12 @@ export const detectAnomalies = async (clinicId: string, today: string): Promise<
 
     const [txs, appts] = await Promise.all([
         prisma.transaction.findMany({
-            where: { clinicId, date: { gte: from, lte: today }, status: 'Paid' },
+            // lt ertasi: vaqtli sana ("2026-10-03T07:15...") bugungi kundan tushib qolmasin
+            where: { clinicId, date: { gte: from, lt: shiftDate(today, 1) }, status: 'Paid' },
             select: { date: true, amount: true, type: true },
         }),
         prisma.appointment.findMany({
-            where: { clinicId, date: { gte: from, lte: today } },
+            where: { clinicId, date: { gte: from, lt: shiftDate(today, 1) } },
             select: { date: true, status: true },
         }),
     ]);
@@ -94,12 +95,15 @@ export const detectAnomalies = async (clinicId: string, today: string): Promise<
     const revByDate = new Map<string, number>();
     for (const t of txs) {
         if (t.type && !MONEY_IN.has(t.type)) continue;
-        revByDate.set(t.date, (revByDate.get(t.date) || 0) + t.amount);
+        const day = String(t.date).slice(0, 10);
+        revByDate.set(day, (revByDate.get(day) || 0) + t.amount);
     }
 
     const apptByDate = new Map<string, number>();
     const noshowByDate = new Map<string, number>();
     for (const a of appts) {
+        // Bekor qilingan qabul sanalmaydi — Telegram hisobotidagi "Qabullar" bilan bir xil
+        if (a.status === 'Cancelled') continue;
         apptByDate.set(a.date, (apptByDate.get(a.date) || 0) + 1);
         if (a.status === 'No-Show') noshowByDate.set(a.date, (noshowByDate.get(a.date) || 0) + 1);
     }

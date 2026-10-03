@@ -225,7 +225,9 @@ const BUILDERS: Record<ReportType, Builder> = {
             table: Object.keys(usul).length
                 ? {
                     columns: ['To\'lov usuli', 'Summa'],
+                    // 'Balance' (avansdan yechilgan) kassaga kirmaydi — "Kassaga kirgan" bilan jadval yig'indisi mos bo'lsin
                     rows: Object.entries(usul)
+                        .filter(([k]) => k !== 'Balance')
                         .sort((a: any, b: any) => b[1] - a[1])
                         .map(([k, v]: any) => [k, Math.round(v).toLocaleString('ru-RU')]),
                 }

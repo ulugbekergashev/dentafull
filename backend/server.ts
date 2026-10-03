@@ -968,7 +968,7 @@ async function runBulkSend(clinicId: string, clinic: any, patients: any[], messa
     const job = bulkJobs.get(clinicId)!;
     try {
         const patientIds = patients.map(p => p.id);
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = todayTashkent();
 
         // {qarz} — segments.ts dagi yagona ta'rif bo'yicha (Pending tranzaksiyalar
         // + faol bo'lib to'lash qoldiqlari). "Qarzdorlar" filtri ham shu hisobdan.
@@ -1213,7 +1213,7 @@ app.post('/api/messages/test-send', authenticateToken, async (req, res) => {
         if (patientId) {
             sample = await prisma.patient.findFirst({ where: { id: patientId, clinicId: clinicId as string } });
         }
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = todayTashkent();
         const personalized = processTemplate(message, {
             patientName: sample ? `${sample.firstName} ${sample.lastName}` : 'Test Bemor',
             firstName: sample?.firstName || 'Test',
@@ -2307,7 +2307,8 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
         // Noto'g'ri qiymat e'tiborsiz qoladi — eski xatti-harakat (hamma yozuvlar).
         const day = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : undefined;
         const transactions = await prisma.transaction.findMany({
-            where: { clinicId: clinicId as string, ...(day ? { date: day } : {}) },
+            // startsWith: eski bo'lib to'lash to'lovlarida sana vaqt bilan saqlangan ("2026-10-03T07:15...")
+            where: { clinicId: clinicId as string, ...(day ? { date: { startsWith: day } } : {}) },
             orderBy: { date: 'desc' }
         });
         res.json(transactions);
@@ -2316,15 +2317,75 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
     }
 });
 
+// ─── To'lov yozuvini tekshirish ──────────────────────────────────────────────
+// Ilgari so'rov tanasi tekshirilmasdan bazaga yozilardi: manfiy summa, noma'lum
+// holat, vaqtli sana ("2026-10-03T07:15...Z" — hisobotlar davrning oxirgi kunida
+// bunday yozuvni yo'qotardi) va avansdan bor puldan ko'p yechish mumkin edi.
+const TX_STATUSES = new Set(['Paid', 'Pending', 'Overdue']);
+
+/** Sana "YYYY-MM-DD" ga keltiriladi; vaqtli sana — klinika (Toshkent) kuniga */
+function normalizeTxDate(value: any): string | null {
+    const s = String(value ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if (!s || isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' });
+}
+
+/** Tanani joyida tozalaydi. Xato bo'lsa matnini qaytaradi. partial — PUT (faqat kelgan maydonlar) */
+function sanitizeTransactionInput(body: any, partial: boolean): string | null {
+    if (!partial || body.amount !== undefined) {
+        const amount = typeof body.amount === 'string' && body.amount.trim() === '' ? NaN : Number(body.amount);
+        if (!isFinite(amount) || amount < 0) return "To'lov summasi noto'g'ri";
+        body.amount = amount;
+    }
+    if (!partial || body.status !== undefined) {
+        if (!TX_STATUSES.has(body.status)) return "To'lov holati noto'g'ri";
+    }
+    if (!partial || body.date !== undefined) {
+        const date = normalizeTxDate(body.date);
+        if (!date) return "To'lov sanasi noto'g'ri";
+        body.date = date;
+    }
+    return null;
+}
+
+/** Avans qoldig'iga ta'siri: depozit qo'shadi, 'Balance' to'lovi ayiradi */
+const balanceContribution = (tx: any): number => {
+    if (tx.service === 'Avans' && tx.status === 'Paid') return Number(tx.amount) || 0;
+    if (tx.type === 'Balance' && tx.status === 'Paid') return -(Number(tx.amount) || 0);
+    return 0;
+};
+
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     try {
         if (!(await allowPaymentCreate(req, res))) return;
         const actor = (req as any).user;
-        const txBranchId = await resolveBranchId(req, getScopedClinicId(req) || req.body?.clinicId || null);
+        // id va vaqt serverda beriladi (qarzni qisman to'lashda eski yozuv nusxalanib,
+        // eski createdAt bilan kelardi — to'lov kassada yopilgan smenaga tushib qolardi)
+        const { id: _id, createdAt: _createdAt, receivedById: _rbid, receivedByName: _rbn, ...body } = req.body || {};
+        const inputError = sanitizeTransactionInput(body, false);
+        if (inputError) return res.status(400).json({ error: inputError });
+
+        const scopedClinic = getScopedClinicId(req) || body.clinicId || null;
+        if (body.patientId) {
+            const patient = await prisma.patient.findUnique({ where: { id: body.patientId }, select: { clinicId: true, balance: true } });
+            if (!patient || (scopedClinic && patient.clinicId !== scopedClinic)) {
+                return res.status(400).json({ error: 'Bemor topilmadi' });
+            }
+            // Avansdan to'lash — hisobda bor puldan oshmasin (aks holda qoldiq manfiy bo'lib,
+            // farq hech bir qarz ro'yxatida ko'rinmasdi)
+            const spend = -balanceContribution(body);
+            if (spend > (patient.balance || 0) + 0.5) {
+                return res.status(400).json({ error: `Bemor hisobidagi avans yetarli emas: ${Math.round(patient.balance || 0).toLocaleString('ru-RU')} so'm bor` });
+            }
+        }
+
+        const txBranchId = await resolveBranchId(req, scopedClinic);
         const transaction = await prisma.transaction.create({
             // Pulni kim qabul qilgani serverdan yoziladi — mijoz o'zgartira olmaydi
             data: {
-                ...req.body,
+                ...body,
                 branchId: txBranchId,
                 receivedById: actor?.clinicId ? (actor?.id || actor?.receptionistId || null) : null,
                 receivedByName: actor?.name || null,
@@ -2332,22 +2393,11 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
         });
 
         // Only Avans deposits and Balance-type payments affect the advance balance
-        if (req.body.patientId) {
-            const amount = parseFloat(req.body.amount) || 0;
-            let balanceChange = 0;
-
-            if (req.body.service === 'Avans' && req.body.status === 'Paid') {
-                // Avans deposit: increase balance
-                balanceChange = amount;
-            } else if (req.body.type === 'Balance' && req.body.status === 'Paid') {
-                // Payment from balance: decrease balance
-                balanceChange = -amount;
-            }
-            // Regular Cash/Card payments do NOT affect the advance balance
-
+        if (transaction.patientId) {
+            const balanceChange = balanceContribution(transaction);
             if (balanceChange !== 0) {
                 await prisma.patient.update({
-                    where: { id: req.body.patientId },
+                    where: { id: transaction.patientId },
                     data: { balance: { increment: balanceChange } }
                 }).catch((err: any) => console.error('Failed to update patient balance:', err));
             }
@@ -2410,7 +2460,19 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
         }
 
         // createdAt va "kim qabul qildi" — tashqaridan o'zgartirilmaydi.
-        const { createdAt: _ignored, receivedById: _rid, receivedByName: _rn, ...updateData } = req.body || {};
+        const { id: _idIgnored, createdAt: _ignored, receivedById: _rid, receivedByName: _rn, ...updateData } = req.body || {};
+        const inputError = sanitizeTransactionInput(updateData, true);
+        if (inputError) return res.status(400).json({ error: inputError });
+        // Tahrir avans qoldig'ini manfiy qilmasin (masalan, usul "Hisobdan"ga o'zgartirilsa)
+        if (oldTx.patientId) {
+            const delta = balanceContribution({ ...oldTx, ...updateData }) - balanceContribution(oldTx);
+            if (delta < 0) {
+                const patient = await prisma.patient.findUnique({ where: { id: oldTx.patientId }, select: { balance: true } });
+                if (patient && (patient.balance || 0) + delta < -0.5) {
+                    return res.status(400).json({ error: `Bemor hisobidagi avans yetarli emas: ${Math.round(patient.balance || 0).toLocaleString('ru-RU')} so'm bor` });
+                }
+            }
+        }
         // Sana ko'chirilsa (masalan, qarz bugun to'landi) vaqt ham yangilanadi —
         // aks holda kassa kitobida bugungi kunda eski vaqt turib qolardi.
         if (updateData.date && updateData.date !== oldTx.date) {
@@ -2425,14 +2487,8 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
         // Update patient balance if patientId is linked
         // Only Avans deposits and Balance-type payments affect the advance balance
         if (transaction.patientId) {
-            const calculateBalanceContribution = (tx: any) => {
-                if (tx.service === 'Avans' && tx.status === 'Paid') return tx.amount;
-                if (tx.type === 'Balance' && tx.status === 'Paid') return -tx.amount;
-                return 0; // Regular payments don't affect balance
-            };
-
-            const oldContribution = calculateBalanceContribution(oldTx);
-            const newContribution = calculateBalanceContribution(transaction);
+            const oldContribution = balanceContribution(oldTx);
+            const newContribution = balanceContribution(transaction);
             const adjustment = newContribution - oldContribution;
 
             if (adjustment !== 0) {
@@ -2561,7 +2617,7 @@ app.post('/api/expenses', authenticateToken, async (req, res) => {
 
         const expense = await prisma.expense.create({
             data: {
-                date: date || new Date().toISOString().split('T')[0],
+                date: date || todayTashkent(),
                 amount: parsedAmount,
                 category,
                 title: title || 'Xarajat',
@@ -2998,8 +3054,13 @@ app.post('/api/installments/:id/pay', authenticateToken, async (req, res) => {
     try {
         if (!(await allow(req, res, p => p.flag('money', 'payCreate'), "to'lov qabul qilish"))) return;
         const itemId = req.params.id;
-        const { date, paymentMethod } = req.body;
-        
+        const { paymentMethod } = req.body;
+        // Sana — kun ("YYYY-MM-DD"), klinika vaqti bo'yicha. Ilgari mijoz yuborgan to'liq
+        // vaqt ("2026-10-03T07:15...Z") shundayligicha saqlanardi va Moliya hisoboti bu
+        // to'lovni davrning oxirgi kunida yo'qotardi.
+        const date = normalizeTxDate(req.body?.date) || todayTashkent();
+        const actor = (req as any).user;
+
         const item = await prisma.installmentItem.findUnique({ where: { id: itemId }, include: { plan: { include: { patient: true, doctor: true } } } });
         if (!item) return res.status(404).json({ error: 'Installment item not found' });
         // Egalik: bo'lib to'lash rejasi klinikasi tekshiriladi
@@ -3007,12 +3068,16 @@ app.post('/api/installments/:id/pay', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         }
         if (item.status === 'Paid') return res.status(400).json({ error: 'Already paid' });
-        
-        const updatedItem = await prisma.installmentItem.update({
-            where: { id: itemId },
+
+        // Tugma ikki marta bosilsa yoki ikki qurilmadan to'lansa — faqat bittasi o'tadi
+        const claimed = await prisma.installmentItem.updateMany({
+            where: { id: itemId, status: { not: 'Paid' } },
             data: { status: 'Paid', paidDate: date }
         });
-        
+        if (claimed.count === 0) return res.status(400).json({ error: 'Already paid' });
+        const { plan: _plan, ...itemFields } = item as any;
+        const updatedItem = { ...itemFields, status: 'Paid', paidDate: date };
+
         const updatedPlan = await prisma.installmentPlan.update({
             where: { id: item.planId },
             data: { totalPaid: { increment: item.amount } }
@@ -3035,6 +3100,11 @@ app.post('/api/installments/:id/pay', authenticateToken, async (req, res) => {
                 service: `Bo'lib to'lash (${item.plan.service})`,
                 type: paymentMethod || 'Cash',
                 status: 'Paid',
+                // Filial va "kim qabul qildi" — oddiy to'lovdagi kabi (aks holda filial
+                // tanlanganda bu to'lov Kassa va Moliyada ko'rinmasdi)
+                branchId: await resolveBranchId(req, item.plan.clinicId),
+                receivedById: actor?.clinicId ? (actor?.id || actor?.receptionistId || null) : null,
+                receivedByName: actor?.name || null,
             }
         });
         
@@ -3631,7 +3701,7 @@ const syncLabOrderExpense = async (order: any) => {
         const existing = await prisma.expense.findUnique({ where: { labOrderId: order.id } });
         if (order.status === 'Delivered' && (order.price || 0) > 0) {
             const title = `Lab: ${order.patientName} — ${order.orderType}`;
-            const date = (order.deliveredAt ? new Date(order.deliveredAt) : new Date()).toISOString().split('T')[0];
+            const date = (order.deliveredAt ? new Date(order.deliveredAt) : new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' });
             if (existing) {
                 if (existing.amount !== order.price || existing.title !== title) {
                     await prisma.expense.update({
@@ -6569,7 +6639,7 @@ app.post('/api/inventory', authenticateToken, async (req, res) => {
         if (cost > 0) {
             await prisma.expense.create({
                 data: {
-                    date: new Date().toISOString().split('T')[0],
+                    date: todayTashkent(),
                     amount: cost,
                     category: 'Inventory',
                     title: `Ombor: ${item.name}`,
@@ -6645,7 +6715,7 @@ app.put('/api/inventory/:id/stock', authenticateToken, async (req, res) => {
         if (type === 'IN' && parsedCost > 0) {
             await prisma.expense.create({
                 data: {
-                    date: new Date().toISOString().split('T')[0],
+                    date: todayTashkent(),
                     amount: parsedCost,
                     category: 'Inventory',
                     title: `Ombor: ${currentItem.name}`,

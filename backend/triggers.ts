@@ -16,7 +16,7 @@
  */
 
 import { prisma } from './db';
-import { resolveSegment } from './segments';
+import { resolveSegment, buildDebtMap } from './segments';
 import { schedulePeriodKey } from './ruleExtras';
 
 // Toshkent vaqti (UTC+5, DST yo'q)
@@ -471,11 +471,16 @@ export const TRIGGERS: TriggerDef[] = [
                 byPatient.set(t.patientId, entry);
             }
 
+            // Kimga yuborish — N kundan eski qarzi borlarga. Lekin xabardagi {qarz} — bemorning
+            // TO'LIQ qarzi (yangi qarzlari va bo'lib to'lash qoldig'i bilan), ommaviy xabar va
+            // Moliyadagi bilan bir xil. Ilgari faqat eski qismi aytilardi: bemorga bir kunda
+            // ikki xil summa ketishi mumkin edi.
+            const debtMap = await buildDebtMap(rule.clinicId, [...byPatient.keys()]);
             return [...byPatient.values()].map(({ patient, amount }) => ({
                 patient,
                 refId: `${patient.id}:${period}`, // oyiga bir marta
                 type: 'DebtReminder',
-                vars: { ...patientName(patient), date: tashkentDateStr(0), clinicName: clinic.name, amount },
+                vars: { ...patientName(patient), date: tashkentDateStr(0), clinicName: clinic.name, amount: debtMap.get(patient.id) || amount },
             }));
         },
     },

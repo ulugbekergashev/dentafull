@@ -8,7 +8,7 @@ import { Download, Filter, DollarSign, CreditCard, Wallet, X, TrendingDown, User
 import { api } from '../services/api';
 import { tLabel } from '../i18n/labels';
 import { useLanguage } from '../context/LanguageContext';
-import { calculateTotalFinancials, calculateDoctorShares, transactionBelongsToDoctor } from '../utils/financialCalculations';
+import { calculateTotalFinancials, calculateDoctorShares, transactionBelongsToDoctor, isEarnedRevenue } from '../utils/financialCalculations';
 import { usePerms } from '../context/PermissionsContext';
 import { exportFinanceToExcel } from '../utils/excelExport';
 import {
@@ -44,7 +44,7 @@ interface FinanceProps {
 }
 
 import { Doctor, InstallmentPlan } from '../types';
-import { getCurrentMonthRange } from '../utils/dateUtils';
+import { getCurrentMonthRange, formatDateToISO } from '../utils/dateUtils';
 
 // Xarajat kategoriyalari uchun badge ranglari
 const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
@@ -64,7 +64,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const isReceptionist = userRole === UserRole.RECEPTIONIST;
   // DOCTOR roli bilan kirilganda to'lov formasida o'zi defolt tanlanadi
   const defaultDoctorId = userRole === UserRole.DOCTOR && doctorId ? doctorId : '';
-  const today = new Date().toISOString().split('T')[0];
+  // Mahalliy sana: toISOString() UTC beradi va Toshkentda 00:00–05:00 oralig'ida kechagi kun chiqardi
+  const today = formatDateToISO(new Date());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDebtorModalOpen, setIsDebtorModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Barchasi');
@@ -265,14 +266,14 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     : transactions;
 
   // --- Filter Logic ---
+  // Kun bo'yicha, matn sifatida solishtiriladi (Kassa va bosh sahifa bilan bir xil).
+  // Ilgari Date sifatida solishtirilardi: "2026-10-03T07:15..." kabi vaqtli sana
+  // (bo'lib to'lash to'lovlari) davrning oxirgi kunida hisobotdan tushib qolardi.
   const isDateInRange = (dateStr: string) => {
     if (!startDate && !endDate) return true;
-    const itemDate = new Date(dateStr);
-    const start = startDate ? new Date(startDate) : null;
-    const end = endDate ? new Date(endDate) : null;
-
-    if (start && itemDate < start) return false;
-    if (end && itemDate > end) return false;
+    const day = String(dateStr || '').slice(0, 10);
+    if (startDate && day < startDate) return false;
+    if (endDate && day > endDate) return false;
     return true;
   };
 
@@ -295,7 +296,10 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const transactionDebt = debtTransactions.reduce((acc, t) => acc + t.amount, 0);
 
   // Installment debt
-  const installmentDebt = (installments || []).reduce((acc, plan) => acc + ((plan?.totalAmount || 0) - (plan?.totalPaid || 0)), 0);
+  // Faqat faol rejalar (bekor qilingan/yakunlangan rejaning qoldig'i qarz emas) — AI va
+  // xabarlar segmenti ham shunday hisoblaydi (backend findDebtors, buildDebtMap).
+  const activePlans = (installments || []).filter(plan => plan && (plan.status || 'Active') === 'Active');
+  const installmentDebt = activePlans.reduce((acc, plan) => acc + Math.max(0, (plan.totalAmount || 0) - (plan.totalPaid || 0)), 0);
   const totalDebt = transactionDebt + installmentDebt;
 
   // Create a map of patientName -> patientId from patients list
@@ -326,23 +330,26 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     }
   });
 
-  const installmentDebtMap = new Map<string, number>();
-  installments.forEach(plan => {
+  // Bo'lib to'lash qoldig'i. Ilgari u faqat to'lanmagan to'lovi ham bor bemorlarga
+  // qo'shilardi: faqat bo'lib to'lashi bor bemor jami summada bor, ro'yxatda yo'q edi
+  // (karta "2 200 000 / 1 ta qarzdor", ro'yxat esa 200 000 ko'rsatardi).
+  activePlans.forEach(plan => {
+    const remaining = (plan.totalAmount || 0) - (plan.totalPaid || 0);
+    if (remaining <= 0) return;
     const patient = patients.find(p => p.id === plan.patientId);
-    if (patient) {
-      const name = `${patient.lastName} ${patient.firstName}`;
-      installmentDebtMap.set(name, (installmentDebtMap.get(name) || 0) + (plan.totalAmount - plan.totalPaid));
-    }
+    const name = patient ? `${patient.lastName} ${patient.firstName}` : t("auto.Bo'lib to'lash");
+    const existing = debtorMap.get(name);
+    if (existing) existing.amount += remaining;
+    else debtorMap.set(name, { name, amount: remaining, date: plan.startDate || today, patientId: patient?.id });
   });
 
-  debtorMap.forEach((debtor, name) => {
-    debtor.amount += installmentDebtMap.get(name) || 0;
-  });
-
-  // Upcoming Installments for current month
-  const { startDate: monthStart, endDate: monthEnd } = getCurrentMonthRange();
+  // Shu oyda kutilayotgan bo'lib to'lash to'lovlari — oyning OXIRIGACHA.
+  // (getCurrentMonthRange bugungacha beradi: 20-sanaga belgilangan to'lov 3-sanada ko'rinmasdi.)
+  const { startDate: monthStart } = getCurrentMonthRange();
+  const monthEndDate = new Date();
+  const monthEnd = formatDateToISO(new Date(monthEndDate.getFullYear(), monthEndDate.getMonth() + 1, 0));
   const upcomingItems = installments.flatMap(p => p.items || [])
-    .filter(item => item.status === 'Pending' && item.expectedDate >= monthStart && item.expectedDate <= monthEnd);
+    .filter(item => item.status === 'Pending' && String(item.expectedDate).slice(0, 10) >= monthStart && String(item.expectedDate).slice(0, 10) <= monthEnd);
   const upcomingInstallmentAmount = upcomingItems.reduce((acc, item) => acc + item.amount, 0);
 
   const DEBTORS = Array.from(debtorMap.values())
@@ -397,10 +404,6 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
 
   // Kassa tabidagi "Jami tushum" bilan farqni ochiq ko'rsatish uchun:
   // avansdan yechilgan to'lovlar daromadga kiradi, lekin kassaga bugun pul kirmaydi.
-  const balanceDrawdown = dateFilteredTransactions
-    .filter(t => t.status === 'Paid' && t.type === 'Balance')
-    .reduce((sum, t) => sum + t.amount, 0);
-
   // --- Financial Breakdown Logic ---
   // Yagona manba: kirim (Paid), xarajatlar, shifokor ulushi, sof foyda
   const financials = calculateTotalFinancials(dateFilteredTransactions, filteredExpenses, doctors);
@@ -408,9 +411,12 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     .filter(s => s.percentage > 0 || s.accrued > 0 || s.paid > 0);
 
   const totalRevenue = financials.totalRevenue;
-  const cashRegisterTotal = totalRevenue - balanceDrawdown;
+  // Kassaga tushgan = daromad − avansdan yechilgan + shu davrda qo'yilgan avanslar
+  const balanceDrawdown = financials.balanceDrawdown;
+  const advanceDeposits = financials.advanceDeposits;
+  const cashRegisterTotal = totalRevenue - balanceDrawdown + advanceDeposits;
   const netProfit = financials.netProfit;
-  const paidTransactionCount = dateFilteredTransactions.filter(t => t.status === 'Paid').length;
+  const paidTransactionCount = dateFilteredTransactions.filter(isEarnedRevenue).length;
 
   // --- Lost Revenue Logic ---
   const noShowAppointments = filteredAppointments.filter(a => a.status === 'No-Show');
@@ -536,7 +542,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
       </div>
 
       {/* Kassa bilan moslashtirish — "nega raqamlar to'g'ri kelmayapti?" savolini yopadi */}
-      {!isReceptionist && balanceDrawdown > 0 && (
+      {!isReceptionist && (balanceDrawdown > 0 || advanceDeposits > 0) && (
         <Card className="p-5">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
             <span className="w-6 h-0.5 bg-gray-300 dark:bg-gray-600 rounded" />
@@ -547,12 +553,22 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               <span>{t('auto.Jami daromad (hisoblangan)')}</span>
               <span className="font-semibold tabular-nums">{totalRevenue.toLocaleString()}</span>
             </div>
-            <div className="flex justify-between text-gray-600 dark:text-gray-300">
-              <span>− Avansdan yechilgan</span>
-              <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
-                −{balanceDrawdown.toLocaleString()}
-              </span>
-            </div>
+            {balanceDrawdown > 0 && (
+              <div className="flex justify-between text-gray-600 dark:text-gray-300">
+                <span>− Avansdan yechilgan</span>
+                <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                  −{balanceDrawdown.toLocaleString()}
+                </span>
+              </div>
+            )}
+            {advanceDeposits > 0 && (
+              <div className="flex justify-between text-gray-600 dark:text-gray-300">
+                <span>+ Avans qo'yilgan</span>
+                <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  +{advanceDeposits.toLocaleString()}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-600 text-base">
               <span className="font-bold text-gray-900 dark:text-white">= Kassaga tushgan</span>
               <span className="font-black tabular-nums text-emerald-600 dark:text-emerald-400">
@@ -560,8 +576,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               </span>
             </div>
             <p className="text-[11px] text-gray-400 pt-2">
-              Avansdan yechilgan pul kassaga ilgari tushgan, shuning uchun Kassa tabida
-              qayta sanalmaydi. Kassa tabidagi "Jami tushum" aynan shu raqamni ko'rsatadi.
+              Avans — bemor oldindan qo'ygan pul: kassaga qo'yilgan kuni tushadi, daromadga esa
+              xizmat uchun sarflanganda kiradi. Kassa tabidagi "Jami tushum" aynan shu raqamni ko'rsatadi.
             </p>
           </div>
         </Card>

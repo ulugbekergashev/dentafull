@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import { InstallmentPlan, Doctor, Service, InstallmentItem } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { useLanguage } from '../context/LanguageContext';
+import { formatDateToISO } from '../utils/dateUtils';
 
 interface InstallmentsTabProps {
    patientId: string;
@@ -32,7 +33,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
       totalAmount: '',
       initialPayment: '',
       months: '3',
-      startDate: new Date().toISOString().split('T')[0]
+      startDate: formatDateToISO(new Date())
    });
 
    // Pay Modal
@@ -81,8 +82,15 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
             return;
          }
 
+         if (isNaN(initial) || initial < 0 || initial >= amount) {
+            alert("Boshlang'ich to'lov umumiy summadan kichik bo'lishi kerak");
+            return;
+         }
          const remainingAmount = amount - initial;
-         const monthlyAmount = remainingAmount / months;
+         // Butun so'mga yaxlitlanadi; yaxlitlash qoldig'i oxirgi to'lovga qo'shiladi —
+         // qismlar yig'indisi qoldiqqa aniq teng bo'lsin (ilgari 333 333,33... saqlanardi)
+         const monthlyAmount = Math.floor(remainingAmount / months);
+         const lastAmount = remainingAmount - monthlyAmount * (months - 1);
          const items = [];
          
          const start = new Date(createForm.startDate);
@@ -92,7 +100,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
             expected.setMonth(start.getMonth() + i + 1);
             items.push({
                expectedDate: expected.toISOString().split('T')[0],
-               amount: monthlyAmount,
+               amount: i === months - 1 ? lastAmount : monthlyAmount,
                status: 'Pending'
             });
          }
@@ -123,7 +131,8 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
    const handlePay = async () => {
       if (!paymentItem) return;
       try {
-         await api.installments.pay(paymentItem.id, new Date().toISOString(), paymentMethod);
+         // Sana — mahalliy kun. Ilgari to'liq UTC vaqt yuborilardi va Moliya hisoboti bu to'lovni yo'qotardi.
+         await api.installments.pay(paymentItem.id, formatDateToISO(new Date()), paymentMethod);
          setIsPayModalOpen(false);
          loadPlans();
       } catch (e: any) {

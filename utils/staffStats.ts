@@ -1,5 +1,5 @@
 import { Appointment, Clinic, Doctor, Expense, LabOrder, Receptionist, LabTechnician, Review, Transaction } from '../types';
-import { transactionBelongsToDoctor } from './financialCalculations';
+import { transactionBelongsToDoctor, isEarnedRevenue, doctorSharePercent } from './financialCalculations';
 
 // Xodimlar ro'yxati va xodim profili uchun umumiy hisoblar. Hammasi bazada
 // allaqachon bor ma'lumotdan: qabullar, to'lovlar, xarajatlar, lab buyurtmalari.
@@ -63,13 +63,23 @@ export const SALARY_TYPE_LABEL: Record<string, string> = {
     none: 'Kiritilmagan', fixed: 'Fix', fixed_kpi: 'Fix + KPI', kpi: 'KPI',
 };
 
+/**
+ * Amaldagi maosh turi. Maosh turi kiritilmagan, lekin foizi bor eski shifokor — KPI:
+ * Moliya → Hisobot unga foiz hisoblaydi, bu sahifa esa "maosh hisoblanmaydi" derdi.
+ */
+const effectiveSalaryType = (doctor: Doctor): string => {
+    const type = doctor.salaryType || 'none';
+    return type === 'none' && (doctor.percentage || 0) > 0 ? 'kpi' : type;
+};
+
 /** Shifokorning bir oylik maoshi: maosh turiga qarab fix va KPI, shu oyda to'langan xarajatlar */
 export const doctorPayroll = (doctor: Doctor, transactions: Transaction[], expenses: Expense[], month: string) => {
-    const type = doctor.salaryType || 'none';
-    const revenueTx = transactions.filter(tx => tx.status === 'Paid' && toMonth(tx.date) === month && transactionBelongsToDoctor(tx, doctor));
+    const type = effectiveSalaryType(doctor);
+    // Avans depoziti shifokor tushumi emas (Moliya bilan bir xil qoida)
+    const revenueTx = transactions.filter(tx => isEarnedRevenue(tx) && toMonth(tx.date) === month && transactionBelongsToDoctor(tx, doctor));
     const revenue = revenueTx.reduce((s, tx) => s + tx.amount, 0);
     const fixed = type === 'fixed' || type === 'fixed_kpi' ? (doctor.fixedSalary || 0) : 0;
-    const kpi = type === 'kpi' || type === 'fixed_kpi' ? Math.round((revenue * (doctor.percentage || 0)) / 100) : 0;
+    const kpi = Math.round((revenue * doctorSharePercent(doctor)) / 100);
     const payments = expenses
         .filter(e => e.doctorId === doctor.id && (e.category === 'Salary' || e.category === 'DoctorShare') && toMonth(e.date) === month)
         .sort((a, b) => b.date.localeCompare(a.date));
@@ -167,11 +177,11 @@ export const doctorPeriodStats = (
     const pastCount = appts.filter(a => toDay(a.date) <= today && a.status !== 'Cancelled').length;
     const bookedMinutes = appts.filter(countsAsBooked).reduce((s, a) => s + (a.duration || 30), 0);
     const capacityMinutes = doctorHours(doctor, clinic).perDay * 60 * workDaysInRange(start, end);
-    const revenueTx = transactions.filter(tx => tx.status === 'Paid' && inRange(toDay(tx.date), start, end) && transactionBelongsToDoctor(tx, doctor));
+    const revenueTx = transactions.filter(tx => isEarnedRevenue(tx) && inRange(toDay(tx.date), start, end) && transactionBelongsToDoctor(tx, doctor));
     const revenue = revenueTx.reduce((s, tx) => s + tx.amount, 0);
-    const type = doctor.salaryType || 'none';
+    const type = effectiveSalaryType(doctor);
     const fixed = type === 'fixed' || type === 'fixed_kpi' ? (doctor.fixedSalary || 0) * monthsInRange(start, end) : 0;
-    const kpi = type === 'kpi' || type === 'fixed_kpi' ? Math.round((revenue * (doctor.percentage || 0)) / 100) : 0;
+    const kpi = Math.round((revenue * doctorSharePercent(doctor)) / 100);
     const paid = expenses
         .filter(e => e.doctorId === doctor.id && (e.category === 'Salary' || e.category === 'DoctorShare') && inRange(toDay(e.date), start, end))
         .reduce((s, e) => s + e.amount, 0);

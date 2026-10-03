@@ -11,7 +11,7 @@ import { TrendCharts, IntensityChart } from '../components/AppointmentCharts';
 import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Clinic, Service, PaymentMethod, Recall } from '../types';
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { formatDateToISO, formatHeaderDate } from '../utils/dateUtils';
-import { transactionBelongsToDoctor, calculateAppointmentTotal } from '../utils/financialCalculations';
+import { transactionBelongsToDoctor, calculateAppointmentTotal, isEarnedRevenue } from '../utils/financialCalculations';
 import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from '../utils/unpaid';
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
@@ -110,7 +110,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // Shifokor o'z ma'lumotlari bilan cheklanadimi. Ruxsatlar → Ko'rish doirasi
   // ochilgan bo'lsa cheklov yo'q — bosh sahifa butun klinikani ko'rsatadi.
   const scopeToMyPatients = isDoctor && !!doctorId && !seeAllPatients;
-  const today = new Date().toISOString().split('T')[0];
+  // Mahalliy sana: toISOString() UTC beradi — Toshkentda 00:00–05:00 da qarz to'lovi kechagi kunga yozilardi
+  const today = formatDateToISO(new Date());
   // Davr: resepshn va adminda — bugun (bosh sahifa bugungi ish haqida), shifokorda —
   // shu oy (grafiklar oy bo'yicha ma'noli). Tayyor tanlov har safar qayta hisoblanadi:
   // sahifa yarim tundan keyin ham ochiq tursa, "Bugun" yangi kunni ko'rsatadi.
@@ -163,8 +164,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const periodAppointmentsCount = filteredAppointments.length;
   const pendingAppointments = filteredAppointments.filter(a => a.status === 'Pending').length;
 
-  // Daromad = to'langan to'lovlar (Finance sahifasi bilan izchil)
-  const totalRevenue = filteredTransactions.reduce((acc, t) => acc + (t.status === 'Paid' ? t.amount : 0), 0);
+  // Daromad = to'langan to'lovlar, avans depozitisiz (Moliya → Hisobot bilan bir xil qoida:
+  // avans xizmat uchun sarflanganda daromad bo'ladi, aks holda bitta pul ikki marta sanalardi)
+  const totalRevenue = filteredTransactions.reduce((acc, t) => acc + (isEarnedRevenue(t) ? t.amount : 0), 0);
 
 
   // New Stats Calculation

@@ -46,7 +46,8 @@ export interface Aggregates {
     lastRating?: Map<string, number>;
 }
 
-const todayStr = () => new Date().toISOString().split('T')[0];
+// Klinika (Toshkent) kuni — toISOString() UTC beradi va 00:00–05:00 da kechagi sana chiqardi
+const todayStr = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' });
 
 /**
  * Kerakli jamlanmalarni hisoblaydi. Kerak bo'lmaganiga so'rov ketmaydi.

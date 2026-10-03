@@ -53,6 +53,21 @@ export const isMoneyIn = (method?: string | null): boolean =>
 
 const fmt = (n: number): number => Math.round(n);
 
+/** Avans depoziti — bemor oldindan qo'ygan pul; hech bir shifokorning tushumi emas */
+export const isAdvanceDeposit = (service?: string | null): boolean =>
+    (service || '').trim().toLowerCase() === 'avans';
+
+/**
+ * Sana oralig'i (ikkala cheti kiradi). Sana satr; eski bo'lib to'lash to'lovlarida vaqt
+ * ham bor ("2026-10-03T07:15...") — `lte: '2026-10-03'` ularni oxirgi kunda tashlab
+ * yuborardi, shuning uchun yuqori chegara "ertasi kundan kichik".
+ */
+export const dayRange = (from: any, to: any) => {
+    const d = new Date(`${String(to).slice(0, 10)}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return { gte: String(from), lt: isNaN(d.getTime()) ? `${String(to)}~` : d.toISOString().slice(0, 10) };
+};
+
 /**
  * Xatolarga chidamli qidiruvda nechta bemor xotiraga olinadi.
  *
@@ -258,7 +273,7 @@ export const findDebtors = async (ctx: ToolContext): Promise<Debtor[]> => {
             where: { id: { in: ids }, clinicId: ctx.clinicId },
             select: {
                 id: true, firstName: true, lastName: true, phone: true,
-                lastVisit: true, telegramChatId: true,
+                lastVisit: true, telegramChatId: true, branchId: true,
             },
         })
         : [];
@@ -419,7 +434,7 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
     get_appointments: async (args, ctx) => {
         const where: any = {
             clinicId: ctx.clinicId,
-            date: { gte: String(args.dateFrom), lte: String(args.dateTo) },
+            date: dayRange(args.dateFrom, args.dateTo),
         };
         if (args.status) where.status = String(args.status);
         // DOCTOR faqat o'z qabullarini ko'radi.
@@ -433,11 +448,18 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
             select: { date: true, time: true, doctorName: true, type: true, status: true, patientName: true },
         });
 
+        // Jami va holatlar — BARCHA yozuvlar bo'yicha. Ilgari ular ro'yxatdagi birinchi
+        // 100 ta qatordan sanalardi: 100 tadan ko'p qabul bo'lgan davr doim "100 ta" chiqardi.
+        const grouped = await prisma.appointment.groupBy({ by: ['status'], where, _count: { _all: true } });
         const byStatus: Record<string, number> = {};
-        for (const r of rows) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
+        let total = 0;
+        for (const g of grouped as any[]) {
+            byStatus[g.status] = g._count._all;
+            total += g._count._all;
+        }
 
         return {
-            jami: rows.length,
+            jami: total,
             status_kesimida: byStatus,
             qabullar: rows.slice(0, 40).map((r: any) => ({
                 sana: r.date,
@@ -447,12 +469,12 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
                 turi: r.type,
                 status: r.status,
             })),
-            izoh: rows.length > 40 ? 'Faqat birinchi 40 tasi ko\'rsatildi.' : undefined,
+            izoh: total > 40 ? 'Faqat birinchi 40 tasi ko\'rsatildi.' : undefined,
         };
     },
 
     get_revenue: async (args, ctx) => {
-        const range = { gte: String(args.dateFrom), lte: String(args.dateTo) };
+        const range = dayRange(args.dateFrom, args.dateTo);
 
         const [txs, expenses] = await Promise.all([
             prisma.transaction.findMany({
@@ -531,7 +553,7 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
     },
 
     get_doctor_stats: async (args, ctx) => {
-        const range = { gte: String(args.dateFrom), lte: String(args.dateTo) };
+        const range = dayRange(args.dateFrom, args.dateTo);
         const [doctors, appts, txs] = await Promise.all([
             prisma.doctor.findMany({
                 where: { clinicId: ctx.clinicId },
@@ -543,7 +565,7 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
             }),
             prisma.transaction.findMany({
                 where: { clinicId: ctx.clinicId, date: range, status: 'Paid' },
-                select: { doctorId: true, amount: true, type: true },
+                select: { doctorId: true, amount: true, type: true, service: true },
             }),
         ]);
 
@@ -552,7 +574,8 @@ const IMPL: Record<string, (args: any, ctx: ToolContext) => Promise<any>> = {
             shifokorlar: doctors.map((d: any) => {
                 const mine = appts.filter((a: any) => a.doctorId === d.id);
                 const tushum = txs
-                    .filter((t: any) => t.doctorId === d.id && isMoneyIn(t.type))
+                    // Avans depoziti shifokor tushumi emas (eski yozuvlarda u birinchi shifokorga biriktirilgan)
+                    .filter((t: any) => t.doctorId === d.id && isMoneyIn(t.type) && !isAdvanceDeposit(t.service))
                     .reduce((s: number, t: any) => s + t.amount, 0);
                 return {
                     shifokor: maskName(d.firstName, d.lastName),
