@@ -2591,10 +2591,11 @@ export const translations = {
     'colleagues.referHint': '{doctor} qabuliga yozish',
     'colleagues.calendar': 'Batafsil',
     'colleagues.calendarHint': '{doctor} kalendarini ochish',
-    // "Ishni boshlash" — klinika rahbari uchun bosh sahifadagi ro'yxat (components/SetupChecklist)
+    // "Ishni boshlash" — sarlavhadagi "Qo'llanma" oynasi va yangi klinika uchun bosh sahifadagi karta (components/SetupChecklist)
+    'setup.guide': "Qo'llanma",
+    'setup.guideHint': "Qadamni bosing — kerakli joy ochiladi.",
     'setup.title': "Ishni boshlash",
     'setup.subtitle': "Shu qadamlardan keyin klinika ishga tayyor",
-    'setup.subtitleLast': "Yana bitta qadam qoldi",
     'setup.services.title': "Xizmat va narxlarni kiriting",
     'setup.services.hint': "Protsedura va to'lovda xizmat shu ro'yxatdan tanlanadi.",
     'setup.services.action': "Xizmat qo'shish",
@@ -4904,10 +4905,11 @@ export const translations = {
     'colleagues.referHint': 'Записать к {doctor}',
     'colleagues.calendar': 'Подробнее',
     'colleagues.calendarHint': 'Открыть календарь {doctor}',
-    // «Начало работы» — список на главной для руководителя клиники (components/SetupChecklist)
+    // «Начало работы» — окно «Руководство» в шапке и карточка на главной для новой клиники (components/SetupChecklist)
+    'setup.guide': 'Руководство',
+    'setup.guideHint': 'Нажмите на шаг — откроется нужное место.',
     'setup.title': 'Начало работы',
     'setup.subtitle': 'После этих шагов клиника готова к работе',
-    'setup.subtitleLast': 'Остался ещё один шаг',
     'setup.services.title': 'Добавьте услуги и цены',
     'setup.services.hint': 'Из этого списка выбирают услугу в процедуре и при оплате.',
     'setup.services.action': 'Добавить услугу',

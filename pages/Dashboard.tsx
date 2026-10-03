@@ -66,7 +66,7 @@ interface DashboardProps {
   onAddAppointment?: (appt: Omit<Appointment, 'id'>) => Promise<any>;
   /** "Qabul" yon panelini ochish (App darajasida, istalgan sahifadan ochiladi) */
   onOpenBooking?: (opts?: BookingRequest) => void;
-  /** "Ishni boshlash" ro'yxati uchun — faqat klinika rahbariga beriladi */
+  /** "Ishni boshlash" kartasi uchun — faqat klinika rahbariga beriladi (karta yangi klinikada chiqadi) */
   setupCounts?: SetupCounts;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
@@ -702,13 +702,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <SetupChecklist
           clinicId={clinicId}
           counts={setupCounts}
-          soloDoctor={currentClinic?.planId === 'individual'}
-          onAddPatient={() => {
-            if (!onAddPatient) return navigate('/patients');
-            setNewPatientPrefill({});
-            setIsAddPatientOpen(true);
+          actions={{
+            services: () => navigate('/settings?tab=services'),
+            // Yakka shifokor tarifida shifokor profili birinchi qabulda o'zi ochiladi
+            doctors: currentClinic?.planId === 'individual' ? undefined : () => navigate('/doctors'),
+            patient: () => {
+              if (!onAddPatient) return navigate('/patients');
+              setNewPatientPrefill({});
+              setIsAddPatientOpen(true);
+            },
+            appointment: () => (canBookHere ? onOpenBooking!() : navigate('/calendar')),
+            sms: () => navigate('/settings?tab=messaging'),
           }}
-          onBook={() => (canBookHere ? onOpenBooking!() : navigate('/calendar'))}
         />
       )}
 

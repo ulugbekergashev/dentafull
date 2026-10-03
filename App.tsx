@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -44,6 +44,7 @@ import { PermissionsProvider } from './context/PermissionsContext';
 import { formatHeaderDate } from './utils/dateUtils';
 import { useTodaySync } from './hooks/useTodaySync';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
+import { SetupGuide, SetupActions } from './components/SetupChecklist';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { Language } from './i18n/translations';
 
@@ -514,6 +515,7 @@ const AppContent: React.FC = () => {
           api.reviews.getAll(clinicId),
           api.leads.getAll(clinicId)
         ]);
+        setLoadedClinicId(clinicId);
         setPatients(pts);
         setAppointments(appts);
         setTransactions(txs);
@@ -1232,17 +1234,39 @@ const AppContent: React.FC = () => {
   // Bemorlar ro'yxatini backend o'zi filtrlaydi, kalendar va bosh sahifa esa
   // to'liq ro'yxatni oladi — shuning uchun ularga bu bayroq uzatiladi.
   const seeAllPatientsForRole = perms.scopeAll();
-  // "Ishni boshlash" ro'yxati (klinika rahbariga). Sonlar butun klinika bo'yicha —
-  // bo'sh filial tanlangani uchun bajarilgan qadamlar "bajarilmagan" ko'rinmasin.
-  // Ma'lumot yuklangachgina beriladi: kirishdan keyingi birinchi chizishda ro'yxatlar
-  // hali bo'sh — ishlab turgan klinikada ham "0 / 5" lip etib ko'rinardi.
-  const setupReady = userRole === UserRole.CLINIC_ADMIN && !!clinicId && loadedClinicId === clinicId;
-  const setupCounts = useMemo(() => (setupReady ? {
+  // "Ishni boshlash" qadamlari: sarlavhadagi "Qo'llanma" tugmasi (har bir xodimga) va bosh
+  // sahifadagi karta (yangi klinika rahbariga). Sonlar butun klinika bo'yicha — bo'sh filial
+  // tanlangani uchun bajarilgan qadamlar "bajarilmagan" ko'rinmasin. Ma'lumot yuklangachgina
+  // ishlatiladi: kirishdan keyingi birinchi chizishda ro'yxatlar hali bo'sh — ishlab turgan
+  // klinika ham "yangi" ko'rinardi.
+  const setupLoaded = !!clinicId && loadedClinicId === clinicId;
+  const setupCounts = useMemo(() => ({
     services: services.length,
     doctors: doctors.length,
     patients: patients.length,
     appointments: appointments.length,
-  } : undefined), [setupReady, services.length, doctors.length, patients.length, appointments.length]);
+  }), [services.length, doctors.length, patients.length, appointments.length]);
+  const [guideOpen, setGuideOpen] = useState(false);
+  // Xodim faqat o'zi qila oladigan qadamlarni ko'radi; Sozlamalar va Xodimlar faqat rahbar va resepshnda ochiladi
+  const isDeskRole = userRole === UserRole.CLINIC_ADMIN || userRole === UserRole.RECEPTIONIST;
+  const guideActions: SetupActions = {
+    services: isDeskRole && perms.menu('settings') && perms.can('settings', 'services', 'create')
+      ? () => navigate('/settings?tab=services') : undefined,
+    // Yakka shifokor tarifida shifokor profili birinchi qabulda o'zi ochiladi
+    doctors: isDeskRole && perms.menu('doctors') && currentClinic?.planId !== 'individual'
+      ? () => navigate('/doctors') : undefined,
+    patient: perms.menu('patients') && perms.can('patients', 'card', 'create')
+      ? () => navigate('/patients') : undefined,
+    appointment: canBook ? () => openBooking()
+      : perms.menu('calendar') && perms.can('calendar', 'appts', 'create') ? () => navigate('/calendar') : undefined,
+    sms: isDeskRole && perms.menu('settings') && perms.can('settings', 'clinic', 'edit')
+      ? () => navigate('/settings?tab=messaging') : undefined,
+  };
+  const showGuide = isStaffRole && setupLoaded && Object.values(guideActions).some(Boolean);
+  const openGuide = () => {
+    setIsSidebarOpen(false);
+    setGuideOpen(true);
+  };
 
   // --- Main Render ---
   // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
@@ -1372,6 +1396,17 @@ const AppContent: React.FC = () => {
             Boshqaruv panelidagi tab esa olib tashlandi. Bunisiz telefondan
             ishlaydigan shifokor AI ga umuman kira olmasdi. */}
         <div className="flex items-center gap-2">
+          {showGuide && (
+            <button
+              type="button"
+              onClick={openGuide}
+              title={t('setup.guide')}
+              aria-label={t('setup.guide')}
+              className="relative p-2 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
+            >
+              <GraduationCap className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
             aria-label="DentaAI"
@@ -1615,6 +1650,19 @@ const AppContent: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 xl:gap-3 shrink-0">
+              {/* Qo'llanma — DentaAI oldida: ishni boshlash qadamlari, istalgan sahifadan */}
+              {showGuide && (
+                <button
+                  type="button"
+                  onClick={openGuide}
+                  title={t('setup.guide')}
+                  aria-label={t('setup.guide')}
+                  className="relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[13px] font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.97] transition-all"
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  <span className="hidden xl:inline">{t('setup.guide')}</span>
+                </button>
+              )}
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
                   Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
                   lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
@@ -1842,7 +1890,7 @@ const AppContent: React.FC = () => {
                     onAddTransaction={addTransaction}
                     onAddAppointment={addAppointment}
                     onOpenBooking={canBook ? openBooking : undefined}
-                    setupCounts={setupCounts}
+                    setupCounts={setupLoaded && userRole === UserRole.CLINIC_ADMIN ? setupCounts : undefined}
                     addToast={addToast}
                   />
                 } />
@@ -2119,6 +2167,16 @@ const AppContent: React.FC = () => {
 
       {/* Subscription Block Modal */}
       <SubscriptionBlockModal isOpen={isSubscriptionBlocked} />
+
+      {showGuide && (
+        <SetupGuide
+          isOpen={guideOpen}
+          onClose={() => setGuideOpen(false)}
+          clinicId={clinicId}
+          counts={setupCounts}
+          actions={guideActions}
+        />
+      )}
     </div>
     </PermissionsProvider>
   );
