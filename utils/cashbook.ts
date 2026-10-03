@@ -203,7 +203,8 @@ function accumulate(totals: CashBookTotals, row: CashBookRow) {
         return;
     }
     totals.gross += row.amount;
-    totals.paymentCount += 1;
+    // 0 so'mlik yozuv (tashrif bo'lib to'lashga o'tkazilgani belgisi) to'lov emas
+    if (row.amount > 0) totals.paymentCount += 1;
     totals.byMethod[row.method] = (totals.byMethod[row.method] || 0) + row.amount;
     if (row.isCash) totals.cashIn += row.amount;
     else totals.nonCashIn += row.amount;
@@ -264,17 +265,28 @@ export function computeOpeningCash(
         return day > anchorDate && day < date;
     };
 
+    // Anker kunining o'zida, yopilgandan KEYIN kiritilgan yozuv: pul jismonan yashikda
+    // (yoki undan olingan), kassir uni sanamagan. Ilgari u tashlab ketilardi — kun
+    // yopilgandan keyin kelgan to'lov ertangi kun boshidagi qoldiqqa qo'shilmasdi.
+    // Vaqti yo'q eski yozuvlar yopilishdan oldin deb olinadi (ular sanalgan).
+    const closedAt = anchor.closedAt || '';
+    const afterCloseOnAnchorDay = (d: string | null | undefined, createdAt?: string | null) =>
+        dayOf(d) === anchorDate && !!createdAt && !!closedAt && createdAt >= closedAt;
+
+    const counts = (d: string | null | undefined, createdAt?: string | null) =>
+        between(d) || afterCloseOnAnchorDay(d, createdAt);
+
     transactions.forEach(t => {
-        if (t.status !== 'Paid' || !between(t.date)) return;
+        if (t.status !== 'Paid' || !counts(t.date, t.createdAt)) return;
         const method = (t.type || 'Cash') as PaymentMethod;
         if (isMoneyInMethod(method) && isCashDrawerMethod(method)) opening += t.amount || 0;
     });
     expenses.forEach(e => {
-        if (!between(e.date)) return;
+        if (!counts(e.date, e.createdAt)) return;
         if (isCashDrawerMethod(e.method)) opening -= e.amount || 0;
     });
     movements.forEach(m => {
-        if (!between(m.date) || !isCashDrawerMethod(m.method)) return;
+        if (!counts(m.date, m.createdAt) || !isCashDrawerMethod(m.method)) return;
         if (m.type === 'Encashment' || m.type === 'Refund') opening -= m.amount || 0;
         else if (m.type === 'CashIn') opening += m.amount || 0;
     });
@@ -459,7 +471,8 @@ export function buildCashBookMonth(
             byDoctor,
             // Faqat kassa harakati (masalan, inkassatsiya) bo'lgan kun ham faol —
             // aks holda u oylik jadval va eksportda "bo'sh kun" bo'lib, harakati yo'qolardi
-            hasActivity: dayTx.length > 0 || dayExp.length > 0 || dayMov.length > 0,
+            // 0 so'mlik belgi (bo'lib to'lashga o'tkazilgan tashrif) kunni "faol" qilmaydi
+            hasActivity: dayTx.some(t => (t.amount || 0) !== 0) || dayExp.length > 0 || dayMov.length > 0,
         });
 
         // Oy yakuniga qo'shish
@@ -597,6 +610,20 @@ export function getClosureStatus(
         changedAfterClose: drift > EPSILON,
         currentDifference: (closure.countedCash || 0) - currentDrawer,
     };
+}
+
+/**
+ * Yashikda HOZIR haqiqatan qolgan naqd.
+ *
+ * Kun yopilmagan bo'lsa — hisob bo'yicha qoldiq. Yopilgan bo'lsa — kassir sanagan puldan
+ * rahbarga topshirilgani ayiriladi va yopilgandan keyin qo'shilgan yozuvlar qo'shiladi.
+ * Ertangi kun aynan shu summadan boshlanadi (computeOpeningCash), shuning uchun kun
+ * yopilib, hamma pul topshirilganda bu 0 bo'ladi.
+ */
+export function cashLeftInDrawer(currentDrawer: number, status: CashClosureStatus): number {
+    const c = status.closed ? status.closure : undefined;
+    if (!c) return currentDrawer;
+    return (c.countedCash || 0) - (c.handedOver || 0) + (currentDrawer - (c.expectedCash || 0));
 }
 
 /** 'YYYY-MM-DD' → 'DD.MM.YYYY' */

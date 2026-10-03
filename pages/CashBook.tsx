@@ -19,6 +19,7 @@ import {
     buildCashBookMonth,
     computeOpeningCash,
     getClosureStatus,
+    cashLeftInDrawer,
     getShiftWindows,
     formatDateLabel,
     formatMonthLabel,
@@ -145,8 +146,10 @@ const Tile: React.FC<{
 /**
  * `drawer` — "Kassada qoldi" qiymatini almashtiradi. Oylik ko'rinishda bu shu
  * oyning naqd oqimi (o'tgan oydan o'tgan qoldiqsiz) — jadvaldagi kunlar yig'indisi.
+ * Kunlik ko'rinishda — yashikda hozir qolgan pul: kun yopilib, pul rahbarga
+ * topshirilgan bo'lsa, topshirilgani ayirilgan (`drawerHint` shuni aytadi).
  */
-const SummaryTiles: React.FC<{ totals: CashBookTotals; drawer?: number }> = ({ totals, drawer }) => {
+const SummaryTiles: React.FC<{ totals: CashBookTotals; drawer?: number; drawerHint?: string }> = ({ totals, drawer, drawerHint }) => {
     const { t } = useLanguage();
     return (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -154,7 +157,7 @@ const SummaryTiles: React.FC<{ totals: CashBookTotals; drawer?: number }> = ({ t
             <Tile label={t(`auto.Naqd`)} value={totals.cashIn} icon={Banknote} tone="cash" />
             <Tile label={t(`auto.Naqdsiz`)} value={totals.nonCashIn} icon={CreditCard} tone="card" hint={t("auto.Karta / Click / o'tkazma")} />
             <Tile label={t(`auto.Xarajat`)} value={totals.expenseTotal} icon={TrendingDown} tone="expense" hint={t('auto.naqd: {n}').replace('{n}', num(totals.cashExpense))} />
-            <Tile label={t(`auto.Kassada qoldi`)} value={drawer ?? totals.drawer} icon={Wallet} tone="drawer" hint={t('auto.naqd yashik')} />
+            <Tile label={t(`auto.Kassada qoldi`)} value={drawer ?? totals.drawer} icon={Wallet} tone="drawer" hint={drawerHint || t('auto.naqd yashik')} />
             <Tile label={t(`auto.Qarzga yozildi`)} value={totals.unpaid} icon={AlertCircle} hint={t("auto.to'lanmagan")} />
         </div>
     );
@@ -366,6 +369,21 @@ const CashFlowPanel: React.FC<{
                                         {diff > 0 ? '+' : ''}{num(diff)}
                                     </span>
                                 </div>
+                                {/* Topshirilgan pul yashikda yo'q — qolgani alohida ko'rsatiladi */}
+                                {(closure.closure.handedOver || 0) > 0 && (
+                                    <>
+                                        <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                                            <span>{t('cashbook.handedShort')}</span>
+                                            <span className="font-semibold tabular-nums">−{num(closure.closure.handedOver || 0)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="font-bold text-gray-700 dark:text-gray-200">{t('auto.Kassada qoldi')}</span>
+                                            <span className="font-black tabular-nums text-amber-600 dark:text-amber-400">
+                                                {num(cashLeftInDrawer(totals.drawer, closure))}
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
@@ -583,6 +601,12 @@ export const CashBook: React.FC<CashBookProps> = ({
         () => getClosureStatus(date, day.totals.drawer, closures, multiShift ? activeShift : undefined),
         [date, day.totals.drawer, closures, multiShift, activeShift]
     );
+
+    // Yashikda hozir qolgan naqd: kun yopilib, pul rahbarga topshirilgan bo'lsa — usiz.
+    // Ilgari karta yopilgandan keyin ham kun bo'yicha hisobni ko'rsatardi: hamma pul
+    // topshirilgan bo'lsa ham "Kassada qoldi 14 000 000" turardi.
+    const leftInDrawer = cashLeftInDrawer(day.totals.drawer, closureStatus);
+    const handedToday = closureStatus.closed ? (closureStatus.closure?.handedOver || 0) : 0;
 
     // Oylik ko'rinishda har bir kunning yopilish holati
     const closureByDate = useMemo(() => {
@@ -1052,7 +1076,11 @@ export const CashBook: React.FC<CashBookProps> = ({
                 />
             )}
 
-            <SummaryTiles totals={totals} drawer={view === 'day' ? undefined : monthData.totals.netCashFlow} />
+            <SummaryTiles
+                totals={totals}
+                drawer={view === 'day' ? leftInDrawer : monthData.totals.netCashFlow}
+                drawerHint={view === 'day' && handedToday > 0 ? `${t('cashbook.handedShort').toLowerCase()}: ${num(handedToday)}` : undefined}
+            />
             <MethodStrip totals={totals} />
 
             {view === 'day' ? (
@@ -1692,7 +1720,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                     <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4 flex justify-between text-sm">
                         <span className="text-gray-600 dark:text-gray-300">{t('cashbook.nowShouldBe')}</span>
                         <span className="font-black tabular-nums text-amber-600 dark:text-amber-400">
-                            {num(day.totals.drawer)}
+                            {num(leftInDrawer)}
                         </span>
                     </div>
 
@@ -1709,10 +1737,10 @@ export const CashBook: React.FC<CashBookProps> = ({
                     {movementType === 'Encashment' && (
                         <button
                             type="button"
-                            onClick={() => setMovementForm(f => ({ ...f, amount: String(Math.max(0, Math.round(day.totals.drawer))) }))}
+                            onClick={() => setMovementForm(f => ({ ...f, amount: String(Math.max(0, Math.round(leftInDrawer))) }))}
                             className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline"
                         >
-                            Hammasini olish ({num(day.totals.drawer)})
+                            Hammasini olish ({num(leftInDrawer)})
                         </button>
                     )}
 

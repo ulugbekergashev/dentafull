@@ -424,7 +424,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const advanceDeposits = financials.advanceDeposits;
   const cashRegisterTotal = financials.totalRevenue - balanceDrawdown + advanceDeposits;
   const netProfit = financials.netProfit - refunds;
-  const paidTransactionCount = dateFilteredTransactions.filter(isEarnedRevenue).length;
+  // O'rtacha chek uchun: 0 so'mlik yozuv (tashrif bo'lib to'lashga o'tkazilgani belgisi) to'lov emas
+  const paidTransactionCount = dateFilteredTransactions.filter(tx => isEarnedRevenue(tx) && tx.amount > 0).length;
 
   // --- Lost Revenue Logic ---
   const noShowAppointments = filteredAppointments.filter(a => a.status === 'No-Show');

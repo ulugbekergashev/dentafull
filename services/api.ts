@@ -1,11 +1,33 @@
 import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, AuditLogEntry, AuditLogQuery, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
 import { addDaysISO, applyCallChange } from '../utils/desk';
 import { formatDateToISO } from '../utils/dateUtils';
+import { DEMO_SEED_VERSION } from './demoSeed';
 import { applyClinicPaymentMethods } from '../utils/paymentMethods';
 
-// Demo rejimida kassa yopilishlari faqat sessiya davomida saqlanadi
-const DEMO_CASH_REGISTER: CashRegisterDay[] = [];
-const DEMO_CASH_MOVEMENTS: CashMovement[] = [];
+// Demo: kassa yopilishlari va harakatlari (inkassatsiya, qaytarish, kassaga solish) boshqa demo
+// ma'lumoti kabi shu kun davomida brauzerda saqlanadi; ertasi kuni demo yangidan boshlanadi
+// (services/demoData.ts bilan bir xil qoida). Ilgari ular faqat xotirada turardi: sahifa
+// yangilansa to'lovlar qolib, yopilish va inkassatsiya yo'qolardi — kassa "qaytib qolardi".
+const DEMO_CASH_KEY = 'dentalflow_demo_cash';
+const loadDemoCash = (): { closures: CashRegisterDay[]; movements: CashMovement[] } => {
+    try {
+        const s = JSON.parse(localStorage.getItem(DEMO_CASH_KEY) || 'null');
+        if (s && s.seed === DEMO_SEED_VERSION && s.day === formatDateToISO(new Date())) {
+            return { closures: Array.isArray(s.closures) ? s.closures : [], movements: Array.isArray(s.movements) ? s.movements : [] };
+        }
+    } catch { /* xotira yopiq yoki yozuv buzilgan — bo'sh boshlanadi */ }
+    return { closures: [], movements: [] };
+};
+const demoCash = loadDemoCash();
+const DEMO_CASH_REGISTER: CashRegisterDay[] = demoCash.closures;
+const DEMO_CASH_MOVEMENTS: CashMovement[] = demoCash.movements;
+const saveDemoCash = () => {
+    try {
+        localStorage.setItem(DEMO_CASH_KEY, JSON.stringify({
+            seed: DEMO_SEED_VERSION, day: formatDateToISO(new Date()), closures: DEMO_CASH_REGISTER, movements: DEMO_CASH_MOVEMENTS,
+        }));
+    } catch { /* xotira yopiq — sessiya davomida ishlayveradi */ }
+};
 // Demo: bugungi qo'ng'iroq natijalari ham faqat sessiya davomida
 let DEMO_CALLS: { date: string; entries: CallLog } = { date: '', entries: {} };
 // Demo: bosh sahifa xaritasidagi "kabinetda" belgilari demo ma'lumoti bilan birga saqlanadi (demoData)
@@ -657,6 +679,7 @@ export const api = {
                 };
                 const i = DEMO_CASH_REGISTER.findIndex(c => c.date === data.date && c.shift === shift);
                 if (i !== -1) DEMO_CASH_REGISTER[i] = closure; else DEMO_CASH_REGISTER.push(closure);
+                saveDemoCash();
                 return Promise.resolve(closure);
             }
             return fetchJson<CashRegisterDay>('/cash-register/close', {
@@ -669,6 +692,7 @@ export const api = {
             if (isDemoMode()) {
                 const i = DEMO_CASH_REGISTER.findIndex(c => c.date === date && (!shift || c.shift === shift));
                 if (i !== -1) DEMO_CASH_REGISTER.splice(i, 1);
+                saveDemoCash();
                 return Promise.resolve({ success: true as const });
             }
             const q = shift ? `?shift=${shift}` : '';
@@ -684,6 +708,7 @@ export const api = {
             if (isDemoMode()) {
                 const m = { ...data, id: `demo-mv-${Date.now()}`, createdAt: new Date().toISOString(), createdByName: 'Demo' } as CashMovement;
                 DEMO_CASH_MOVEMENTS.push(m);
+                saveDemoCash();
                 return Promise.resolve(m);
             }
             return fetchJson<CashMovement>('/cash-movements', {
@@ -696,6 +721,7 @@ export const api = {
             if (isDemoMode()) {
                 const i = DEMO_CASH_MOVEMENTS.findIndex(m => m.id === id);
                 if (i !== -1) DEMO_CASH_MOVEMENTS.splice(i, 1);
+                saveDemoCash();
                 return Promise.resolve({ success: true as const });
             }
             return fetchJson<{ success: true }>(`/cash-movements/${id}`, { method: 'DELETE' });

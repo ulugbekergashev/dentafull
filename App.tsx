@@ -333,6 +333,14 @@ const AppContent: React.FC = () => {
           setLabOrders([...demo.DEMO_LAB_ORDERS]);
           setReceptionists([...demo.DEMO_RECEPTIONISTS]);
           setLeads([...demo.DEMO_LEADS]);
+          // Kassa yopilishlari va harakatlari (inkassatsiya, qaytarish) ham demo xotirasidan olinadi.
+          // Ilgari demo ularni yuklamasdi: sahifa yangilansa kun "ochilib", inkassatsiya yo'qolardi.
+          const [demoClosures, demoMovements] = await Promise.all([
+            api.cashRegister.getAll(clinicId),
+            api.cashMovements.getAll(clinicId),
+          ]);
+          setCashClosures(demoClosures);
+          setCashMovements(demoMovements);
         } else if (userRole === UserRole.SALES_AGENT) {
           const [plns, clns] = await Promise.all([
             api.plans.getAll(),
