@@ -255,7 +255,8 @@ export function computeOpeningCash(
     if (!anchor) return { opening: 0, anchorDate: null };
 
     const anchorDate = dayOf(anchor.date);
-    let opening = anchor.countedCash || 0;
+    // Yopishda rahbarga topshirilgan pul keyingi kunga o'tmaydi
+    let opening = (anchor.countedCash || 0) - (anchor.handedOver || 0);
 
     // Anker kunidan KEYIN va so'ralgan kundan OLDIN bo'lgan naqd harakati
     const between = (d?: string | null) => {

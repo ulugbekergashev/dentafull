@@ -1,5 +1,5 @@
 import { Appointment, Transaction, Service } from '../types';
-import { calculateAppointmentTotal } from './financialCalculations';
+import { calculateAppointmentTotal, isAdvanceDeposit } from './financialCalculations';
 
 /**
  * Olinmagan pul — yagona manba.
@@ -14,12 +14,23 @@ import { calculateAppointmentTotal } from './financialCalculations';
  * o'sha yozuv qatori ko'rsatiladi, qabulning o'zi emas.
  */
 
-/** Tranzaksiya shu qabulga tegishlimi — sana + bemor (id ustuvor, aks holda ism) */
+/**
+ * To'lov qaysi kun tashrifi uchun. `date` — pul olingan kun: qarz boshqa kuni to'lansa u
+ * ko'chadi. Ilgari bog'lash faqat `date` bo'yicha edi — to'langan qarzning tashrifi yana
+ * "to'lov kutilmoqda" bo'lib chiqardi, eski qarzni bugun to'lash esa bugungi yangi
+ * tashrifni "to'langan" qilib yuborardi.
+ */
+export const visitDayOf = (tx: Pick<Transaction, 'date' | 'forDate'>): string =>
+    tx.forDate || String(tx.date || '').slice(0, 10);
+
+/** Tranzaksiya shu qabulga tegishlimi — tashrif kuni + bemor (id ustuvor, aks holda ism) */
 function txMatchesAppointment(
     tx: Transaction,
     app: { date: string; patientId?: string; patientName: string }
 ): boolean {
-    if (!tx || tx.date !== app.date) return false;
+    if (!tx || visitDayOf(tx) !== app.date) return false;
+    // Avans depoziti — tashrif to'lovi emas (shu kuni avans qo'yilgani qabulni "to'langan" qilmaydi)
+    if (isAdvanceDeposit(tx)) return false;
     if (app.patientId && tx.patientId) return tx.patientId === app.patientId;
     return tx.patientName === app.patientName;
 }

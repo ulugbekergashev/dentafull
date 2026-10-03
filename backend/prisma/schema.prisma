@@ -232,6 +232,10 @@ model Transaction {
   /// yozuvlar (masalan oldindan to'lov kutilayotgan qabul) false bo'lib qoladi —
   /// ular qarz emas, shunchaki hali to'lov kelmagan.
   isDebt          Boolean   @default(false)
+  /// Qaysi kun tashrifi uchun (YYYY-MM-DD). To'lov sanasi (date) — pul olingan kun va
+  /// u ko'chishi mumkin (qarz boshqa kuni to'landi); tashrifga bog'lash esa shu maydon
+  /// bo'yicha. Bo'sh bo'lsa — date ning o'zi (eski yozuvlar).
+  forDate         String?
   createdAt       DateTime? @default(now())
   /// Pulni kim qabul qildi. Rollar har xil jadvalda (Receptionist/Doctor/Clinic admin)
   /// bo'lgani uchun FK emas — id va ism nusxasi saqlanadi.
@@ -433,6 +437,10 @@ model CashRegisterDay {
   openingCash   Float    @default(0)
   /// Kassir haqiqatda sanagan naqd
   countedCash   Float
+  /// Yopishda rahbarga topshirilgan naqd. Keyingi smena/kun (countedCash − handedOver) dan
+  /// boshlanadi. Ilgari sanalgan pulning hammasi ertaga o'tardi — pul topshirilganini
+  /// dastur bilmasdi va "Kassada qoldi" kundan-kunga o'sib borardi.
+  handedOver    Float    @default(0)
   /// Yopilgan daqiqadagi hisob bo'yicha naqd qoldiq (snapshot)
   expectedCash  Float
   /// countedCash − expectedCash (kam/ortiq)

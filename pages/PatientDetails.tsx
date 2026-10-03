@@ -47,6 +47,8 @@ interface PatientDetailsProps {
    onUpdatePatient: (id: string, data: Partial<Patient>) => void;
    onAddTransaction: (data: Omit<Transaction, 'id'>) => Promise<Transaction | void>;
    onUpdateTransaction: (id: string, data: Partial<Transaction>) => void;
+   /** Qarzni to'lash (qisman/to'liq) — serverda bitta amal */
+   onPayDebt?: (debtId: string, input: { amount: number; method: string; date: string }) => Promise<void>;
    /** To'lovni o'chirish (Kassa sahifasidagi bilan bir xil) — shifokorga ko'rsatilmaydi */
    onDeleteTransaction?: (id: string) => Promise<void>;
    onAddAppointment: (appt: Omit<Appointment, 'id'>) => Promise<void>;
@@ -66,7 +68,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    userRole,
    doctorId: loggedDoctorId,
    showPatientPhone = true,
-   onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onDeleteTransaction, onAddAppointment, onUpdateAppointment
+   onBack, onUpdatePatient, onAddTransaction, onUpdateTransaction, onPayDebt, onDeleteTransaction, onAddAppointment, onUpdateAppointment
 }) => {
    const { patientId: patientIdParam } = useParams<{ patientId: string }>();
    const patientId = patientIdProp || patientIdParam || null;
@@ -529,30 +531,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       // Repayment logic: if marking a pending debt as paid
       if (editingTransaction.status === 'Pending' && isNowPaid) {
-         // Case 1: Partial Repayment
-         if (newAmount < originalAmount) {
-            // 1. Create a new Paid transaction for the partial amount
-            await onAddTransaction({
-               ...editingTransaction,
-               id: undefined as any,
-               amount: newAmount,
-               status: 'Paid',
-               type: editPaymentMethod as any,
-               service: `${editingTransaction.service} (Qarzdorlik yopildi)`,
-               date: formatDateToISO(new Date()),
-               // Chegirma asl qarz yozuvida qoladi — bu yerda takrorlansa hisobotda ikki marta
-               // sanalardi (Kassa va bosh sahifadagi qarz to'lovi ham chegirmasiz yozadi)
-               discountPercent: 0,
-               discountAmount: 0,
-               isDebt: false,
-            });
-
-            // 2. Reduce the original Pending amount
-            await onUpdateTransaction(editingTransaction.id, {
-               amount: originalAmount - newAmount
-            });
+         // Qarzni to'lash (qisman yoki to'liq) — serverda bitta amal: qoldiq u yerda
+         // hisoblanadi, tashrif kuni saqlanadi (Kassa va bosh sahifadagi bilan bir xil yo'l)
+         if (onPayDebt && newAmount > 0 && newAmount <= originalAmount) {
+            try {
+               await onPayDebt(editingTransaction.id, { amount: newAmount, method: editPaymentMethod, date: formatDateToISO(new Date()) });
+            } catch {
+               return; // xatolik toast orqali ko'rsatiladi; oyna ochiq qoladi
+            }
          }
-         // Case 2: Full Repayment
+         // Summa oshirib kiritilgan (qarzdan ko'p) — avvalgidek to'liq yopiladi
          else {
             await onUpdateTransaction(editingTransaction.id, {
                status: 'Paid',

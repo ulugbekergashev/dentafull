@@ -274,7 +274,7 @@ export function isAppointmentPaid(
     transactions: Transaction[]
 ): boolean {
     return transactions.some(t => {
-        if (!t || t.date !== appointment.date || t.status !== 'Paid') return false;
+        if (!t || (t.forDate || String(t.date || '').slice(0, 10)) !== appointment.date || t.status !== 'Paid' || isAdvanceDeposit(t)) return false;
         if (appointment.patientId && t.patientId) return t.patientId === appointment.patientId;
         return t.patientName === appointment.patientName;
     });

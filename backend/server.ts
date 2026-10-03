@@ -2347,6 +2347,8 @@ function sanitizeTransactionInput(body: any, partial: boolean): string | null {
         if (!date) return "To'lov sanasi noto'g'ri";
         body.date = date;
     }
+    // Tashrif kuni — ixtiyoriy; noto'g'ri qiymat bo'sh deb olinadi
+    if (body.forDate !== undefined) body.forDate = body.forDate ? normalizeTxDate(body.forDate) : null;
     return null;
 }
 
@@ -2477,6 +2479,10 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
         // aks holda kassa kitobida bugungi kunda eski vaqt turib qolardi.
         if (updateData.date && updateData.date !== oldTx.date) {
             updateData.createdAt = new Date();
+            // Tashrif kuni yo'qolmasin: to'lov sanasi ko'chdi, lekin u o'sha kungi tashrif uchun
+            if (!oldTx.forDate && updateData.forDate === undefined) {
+                updateData.forDate = String(oldTx.date).slice(0, 10);
+            }
         }
 
         const transaction = await prisma.transaction.update({
@@ -2530,6 +2536,99 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Transaction update error:', error);
         res.status(500).json({ error: 'Failed to update transaction' });
+    }
+});
+
+/**
+ * Qarzni to'lash — qisman yoki to'liq, bitta amal.
+ *
+ * Ilgari mijoz ikki so'rov yuborardi (yangi "to'landi" yozuvi + qarzni kamaytirish) va
+ * qoldiqni O'ZIDAGI eski summadan hisoblardi: ikki qurilmadan bir vaqtda to'lansa yoki
+ * ikkinchi so'rov o'tmasa, to'langan + qolgan summa asl qarzdan oshib ketardi.
+ * Bu yerda qarz summasi o'zgarmagan bo'lsagina yoziladi (aks holda 409).
+ * Tashrif kuni (forDate) saqlanadi — to'langan tashrif "to'lov kutilmoqda"ga qaytmaydi.
+ */
+app.post('/api/transactions/:id/pay', authenticateToken, async (req, res) => {
+    try {
+        if (!(await allow(req, res, p => p.flag('money', 'payCreate'), "to'lov qabul qilish"))) return;
+        if (!(await assertOwnership(req, res, 'transaction', req.params.id))) return;
+        const actor = (req as any).user;
+        const debt = await prisma.transaction.findUnique({ where: { id: req.params.id } });
+        if (!debt) return res.status(404).json({ error: 'Transaction not found' });
+        if (debt.status === 'Paid') return res.status(400).json({ error: "Bu qarz allaqachon to'langan" });
+
+        const amount = Number(req.body?.amount);
+        if (!isFinite(amount) || amount <= 0) return res.status(400).json({ error: "To'lov summasi noto'g'ri" });
+        const paid = Math.min(amount, debt.amount);
+        const method = String(req.body?.method || 'Cash');
+        const date = normalizeTxDate(req.body?.date) || todayTashkent();
+        const visitDay = debt.forDate || String(debt.date).slice(0, 10);
+        const receivedBy = {
+            receivedById: actor?.clinicId ? (actor?.id || actor?.receptionistId || null) : null,
+            receivedByName: actor?.name || null,
+        };
+
+        // Avansdan to'lash — hisobda yetarli bo'lsa
+        if (method === 'Balance' && debt.patientId) {
+            const patient = await prisma.patient.findUnique({ where: { id: debt.patientId }, select: { balance: true } });
+            if (paid > (patient?.balance || 0) + 0.5) {
+                return res.status(400).json({ error: `Bemor hisobidagi avans yetarli emas: ${Math.round(patient?.balance || 0).toLocaleString('ru-RU')} so'm bor` });
+            }
+        }
+
+        // Faqat qarz hali shu summada va to'lanmagan bo'lsa (boshqa qurilma o'zgartirmagan bo'lsa)
+        const guard = { id: debt.id, amount: debt.amount, status: { not: 'Paid' } };
+        const full = paid >= debt.amount - 0.5;
+        let paidTx: any;
+        let remaining: any = null;
+        try {
+            if (full) {
+                paidTx = await prisma.transaction.update({
+                    where: guard,
+                    data: { status: 'Paid', type: method, date, forDate: visitDay, createdAt: new Date(), ...receivedBy },
+                });
+            } else {
+                remaining = await prisma.transaction.update({ where: guard, data: { amount: { decrement: paid } } });
+                paidTx = await prisma.transaction.create({
+                    data: {
+                        patientId: debt.patientId, patientName: debt.patientName,
+                        doctorId: debt.doctorId, doctorName: debt.doctorName,
+                        clinicId: debt.clinicId, branchId: debt.branchId,
+                        amount: paid, status: 'Paid', type: method,
+                        service: `${debt.service} (Qarzdorlik yopildi)`,
+                        date, forDate: visitDay,
+                        // Chegirma asl qarz yozuvida qoladi — bu yerda takrorlansa ikki marta sanalardi
+                        discountPercent: 0, discountAmount: 0, isDebt: false,
+                        ...receivedBy,
+                    },
+                });
+            }
+        } catch (e: any) {
+            if (e?.code === 'P2025') {
+                return res.status(409).json({ error: "Bu qarz hozirgina boshqa joyda o'zgardi. Sahifani yangilab, qayta urinib ko'ring." });
+            }
+            throw e;
+        }
+
+        if (paidTx.patientId) {
+            const change = balanceContribution(paidTx) - (full ? balanceContribution(debt) : 0);
+            if (change !== 0) {
+                await prisma.patient.update({ where: { id: paidTx.patientId }, data: { balance: { increment: change } } })
+                    .catch((err: any) => console.error('Failed to update patient balance:', err));
+            }
+        }
+        if (full) await notif.resolve(notif.TYPES.DEBT_CREATED, debt.id);
+
+        await writeCashAudit({
+            clinicId: debt.clinicId, date, action: full ? 'Update' : 'Create', entityType: 'Transaction', entityId: paidTx.id,
+            summary: `${debt.patientName}: qarz to'landi ${Math.round(paid).toLocaleString('ru-RU')} so'm${full ? '' : ` (qoldi ${Math.round(remaining.amount).toLocaleString('ru-RU')})`}`,
+            user: actor,
+        });
+
+        res.json({ paid: paidTx, remaining });
+    } catch (error) {
+        console.error('Debt payment error:', error);
+        res.status(500).json({ error: "Qarz to'lovini saqlashda xatolik" });
     }
 });
 
@@ -2758,7 +2857,7 @@ app.post('/api/cash-register/close', authenticateToken, async (req, res) => {
             date, shift, shiftStart, shiftEnd, openingCash,
             countedCash, expectedCash,
             countedCard, expectedCard, countedClick, expectedClick,
-            note,
+            note, handedOver,
         } = req.body || {};
 
         if (!date || typeof date !== 'string') {
@@ -2770,12 +2869,15 @@ app.post('/api/cash-register/close', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Summa noto\'g\'ri' });
         }
         const shiftNo = Number(shift) > 0 ? Math.floor(Number(shift)) : 1;
+        // Topshirilgan pul sanalgan puldan oshmaydi va manfiy bo'lmaydi
+        const handed = Math.min(Math.max(Number(handedOver) || 0, 0), Math.max(counted, 0));
 
         const data = {
             shiftStart: shiftStart ? String(shiftStart) : null,
             shiftEnd: shiftEnd ? String(shiftEnd) : null,
             openingCash: Number(openingCash) || 0,
             countedCash: counted,
+            handedOver: handed,
             expectedCash: expected,
             difference: counted - expected,
             countedCard: optionalAmount(countedCard),
@@ -7128,10 +7230,12 @@ async function notifyUncollectedMoney(date: string) {
 
             // Kassada yozuvi bor qabul bu ro'yxatga kirmaydi — statusi qanday
             // bo'lishidan qat'i nazar: yozuv bor ekan, pul ko'rinib turibdi.
-            const txs = await prisma.transaction.findMany({
-                where: { clinicId: clinic.id, date },
-                select: { patientId: true, patientName: true },
-            });
+            // Tashrif kuni bo'yicha (forDate): qarz boshqa kuni to'langan bo'lsa ham yozuv bor.
+            // Avans depoziti tashrif to'lovi emas — u qabulni "yozilgan" qilmaydi.
+            const txs = (await prisma.transaction.findMany({
+                where: { clinicId: clinic.id, OR: [{ forDate: date }, { forDate: null, date: { startsWith: date } }] },
+                select: { patientId: true, patientName: true, service: true },
+            })).filter((t: any) => String(t.service || '').trim().toLowerCase() !== 'avans');
             const recordedIds = new Set(txs.map((t: any) => t.patientId).filter(Boolean));
             const recordedNames = new Set(txs.map((t: any) => t.patientName));
 
@@ -9121,6 +9225,14 @@ async function runStartupMigrations() {
     await migrationStep('Appointment.bookedAt', `ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "bookedAt" TIMESTAMP(3)`);
     await migrationStep('Appointment.bookedAt default', `ALTER TABLE "Appointment" ALTER COLUMN "bookedAt" SET DEFAULT CURRENT_TIMESTAMP`);
 
+    // To'lov qaysi kun tashrifi uchun ekani. Ilgari tashrif va to'lov faqat "shu bemor +
+    // shu sana" bo'yicha bog'lanardi: qarz boshqa kuni to'langanda sana ko'chardi va
+    // tashrif yana "to'lov kutilmoqda" bo'lib chiqardi (ikki marta pul so'rash xavfi).
+    await migrationStep('Transaction.forDate', `ALTER TABLE "Transaction" ADD COLUMN IF NOT EXISTS "forDate" TEXT`);
+
+    // Kassani yopishda rahbarga topshirilgan naqd (eski yopilishlarda 0 — avvalgidek hisob)
+    await migrationStep('CashRegisterDay.handedOver', `ALTER TABLE "CashRegisterDay" ADD COLUMN IF NOT EXISTS "handedOver" DOUBLE PRECISION NOT NULL DEFAULT 0`);
+
     // Resepshnni Telegram botiga ulash. botManager bu ustunni allaqachon o'qiydi
     // (kontakt ulash oqimi, notifyReceptionists), lekin migratsiyasi yo'q edi —
     // shuning uchun prodda ustun bo'lmagan va o'sha kod jimgina xato berardi.
@@ -9201,6 +9313,8 @@ const CRITICAL_COLUMNS: ReadonlyArray<{ table: string; column: string; type: str
     { table: 'Transaction', column: 'isDebt', type: 'BOOLEAN NOT NULL DEFAULT false' },
     { table: 'Appointment', column: 'sentToCashierAt', type: 'TIMESTAMP(3)' },
     { table: 'Appointment', column: 'bookedAt', type: 'TIMESTAMP(3)' },
+    { table: 'Transaction', column: 'forDate', type: 'TEXT' },
+    { table: 'CashRegisterDay', column: 'handedOver', type: 'DOUBLE PRECISION NOT NULL DEFAULT 0' },
 ];
 
 async function verifyCriticalSchema(): Promise<boolean> {

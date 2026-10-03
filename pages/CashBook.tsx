@@ -43,6 +43,8 @@ export interface CashCloseArgs {
     shift?: number;
     openingCash?: number;
     countedCash: number;
+    /** Shundan rahbarga topshirildi — keyingi kun (sanalgan − topshirilgan) dan boshlanadi */
+    handedOver?: number;
     expectedCash: number;
     countedCard?: number | null;
     expectedCard?: number | null;
@@ -89,6 +91,8 @@ interface CashBookProps {
     onAddCashMovement?: (data: Omit<CashMovement, 'id' | 'clinicId' | 'createdAt' | 'createdByName'>) => Promise<any>;
     onDeleteCashMovement?: (id: string) => Promise<void>;
     onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
+    /** Qarzni to'lash (qisman/to'liq) — serverda bitta amal */
+    onPayDebt?: (debtId: string, input: { amount: number; method: string; date: string }) => Promise<void>;
     onDeleteTransaction?: (id: string) => Promise<void>;
 }
 
@@ -459,6 +463,13 @@ const ClosureBanner: React.FC<{
                                 {diff > 0 ? '+' : ''}{num(diff)}
                             </b>
                         </p>
+                        {(c.handedOver || 0) > 0 && (
+                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                                {t('cashbook.handedShort')} <b>{num(c.handedOver || 0)}</b>
+                                <span className="mx-1.5">·</span>
+                                {t('cashbook.leftInDrawer')} <b>{num((c.countedCash || 0) - (c.handedOver || 0))}</b>
+                            </p>
+                        )}
                         {status.changedAfterClose && (
                             <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
                                 {t("auto.Yopilgandan keyin bu kunga to'lov yoki xarajat qo'shilgan. Naqdni qayta sanab, kunni yangilang.")}
@@ -491,7 +502,7 @@ export const CashBook: React.FC<CashBookProps> = ({
     canCollect = true, canEditPayment = true, canBackdate = true, showExpenses = true, canExport = true, maxDiscountPercent = 100,
     patients = [], appointments = [], services = [], clinicId = '', onAddTransaction, onAddExpense,
     movements = [], onAddCashMovement, onDeleteCashMovement,
-    onUpdateTransaction, onDeleteTransaction,
+    onUpdateTransaction, onPayDebt, onDeleteTransaction,
 }) => {
     const { t, language } = useLanguage();
     const today = formatDateToISO(new Date());
@@ -501,6 +512,7 @@ export const CashBook: React.FC<CashBookProps> = ({
     const [selectedShift, setSelectedShift] = useState<number | null>(null);
     const [isCloseOpen, setIsCloseOpen] = useState(false);
     const [countedInput, setCountedInput] = useState('');
+    const [handedInput, setHandedInput] = useState('');
     const [closeNote, setCloseNote] = useState('');
     const [closeSaving, setCloseSaving] = useState(false);
 
@@ -610,6 +622,7 @@ export const CashBook: React.FC<CashBookProps> = ({
         // Qayta yopishda avvalgi sanalgan summalar boshlang'ich qiymat bo'ladi
         const c = closureStatus.closure;
         setCountedInput(c ? String(c.countedCash) : '');
+        setHandedInput(c && c.handedOver ? String(c.handedOver) : '');
         setCountedCardInput(c?.countedCard != null ? String(c.countedCard) : '');
         setCountedClickInput(c?.countedClick != null ? String(c.countedClick) : '');
         setCloseNote(c?.note || '');
@@ -628,6 +641,9 @@ export const CashBook: React.FC<CashBookProps> = ({
     const countedClickValue = parseOptional(countedClickInput);
 
     const countedValue = Number(countedInput.replace(/\s/g, ''));
+    // Rahbarga topshirilgan: bo'sh — 0; sanalgandan oshmaydi
+    const handedRaw = Number(handedInput.replace(/\s/g, ''));
+    const handedValue = isFinite(handedRaw) && handedRaw > 0 ? Math.min(handedRaw, isFinite(countedValue) ? Math.max(countedValue, 0) : 0) : 0;
     const previewDifference = isFinite(countedValue) ? countedValue - day.totals.drawer : 0;
 
     const handleCloseDay = async () => {
@@ -639,6 +655,7 @@ export const CashBook: React.FC<CashBookProps> = ({
                 shift: activeShift,
                 openingCash: day.totals.openingCash,
                 countedCash: countedValue,
+                handedOver: handedValue,
                 expectedCash: day.totals.drawer,
                 countedCard: countedCardValue,
                 expectedCard: countedCardValue === null ? null : expectedCard,
@@ -804,29 +821,13 @@ export const CashBook: React.FC<CashBookProps> = ({
     };
 
     const handlePayDebt = async () => {
-        if (!payingDebt || !onUpdateTransaction) return;
+        if (!payingDebt || !onPayDebt) return;
         const paid = Math.min(Number(debtAmount) || 0, payingDebt.amount);
         if (paid <= 0) return;
         setDebtSaving(true);
         try {
-            if (paid < payingDebt.amount) {
-                if (!onAddTransaction) return;
-                await onAddTransaction({
-                    patientName: payingDebt.patientName,
-                    patientId: payingDebt.patientId,
-                    doctorId: payingDebt.doctorId,
-                    doctorName: payingDebt.doctorName,
-                    clinicId: payingDebt.clinicId,
-                    amount: paid,
-                    status: 'Paid',
-                    type: debtMethod,
-                    service: `${payingDebt.service} (Qarzdorlik yopildi)`,
-                    date,
-                } as Omit<Transaction, 'id'>);
-                await onUpdateTransaction(payingDebt.id, { amount: payingDebt.amount - paid });
-            } else {
-                await onUpdateTransaction(payingDebt.id, { status: 'Paid', type: debtMethod, date });
-            }
+            // Qisman ham, to'liq ham — serverda bitta amal (qoldiq u yerda hisoblanadi)
+            await onPayDebt(payingDebt.id, { amount: paid, method: debtMethod, date });
             setPayingDebt(null);
         } catch {
             // xatolik toast orqali
@@ -2019,6 +2020,31 @@ export const CashBook: React.FC<CashBookProps> = ({
                             </p>
                         </div>
                     )}
+
+                    {/* Rahbarga topshirildi — ertangi kun qoldiqdan boshlanadi (yopilgan kassa ertaga o'tib ketmasin) */}
+                    <div>
+                        <Input
+                            label={t('cashbook.handedOver')}
+                            type="number"
+                            value={handedInput}
+                            onChange={e => setHandedInput(e.target.value)}
+                            onWheel={e => e.currentTarget.blur()}
+                            placeholder="0"
+                        />
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setHandedInput(isFinite(countedValue) && countedValue > 0 ? String(Math.round(countedValue)) : '')}
+                                className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline"
+                            >
+                                {t('cashbook.handAll')}
+                            </button>
+                            <span className="text-xs text-gray-600 dark:text-gray-300">
+                                {t('cashbook.leftInDrawer')}: <b className="tabular-nums">{num((isFinite(countedValue) ? countedValue : 0) - handedValue)}</b>
+                            </span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">{t('cashbook.handedOverHint')}</p>
+                    </div>
 
                     {/* Terminal va Click — ixtiyoriy, kiritilsa solishtiriladi */}
                     {(expectedCard > 0 || expectedClick > 0) && (

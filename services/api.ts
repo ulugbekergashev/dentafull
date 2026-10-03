@@ -28,6 +28,8 @@ export interface CashCloseInput {
     shiftEnd?: string;
     openingCash?: number;
     countedCash: number;
+    /** Shundan rahbarga topshirildi */
+    handedOver?: number;
     expectedCash: number;
     countedCard?: number | null;
     expectedCard?: number | null;
@@ -519,6 +521,35 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+        /** Qarzni to'lash (qisman yoki to'liq) — serverda bitta atomar amal */
+        payDebt: (id: string, input: { amount: number; method: string; date: string }) => {
+            if (isDemoMode()) {
+                const index = DEMO_TRANSACTIONS.findIndex(t => t.id === id);
+                if (index === -1) return Promise.reject('Transaction not found');
+                const debt = DEMO_TRANSACTIONS[index];
+                const paid = Math.min(input.amount, debt.amount);
+                const forDate = debt.forDate || String(debt.date).slice(0, 10);
+                if (paid >= debt.amount) {
+                    DEMO_TRANSACTIONS[index] = { ...debt, status: 'Paid', type: input.method as any, date: input.date, forDate };
+                    saveDemoData();
+                    return Promise.resolve({ paid: DEMO_TRANSACTIONS[index], remaining: null as Transaction | null });
+                }
+                DEMO_TRANSACTIONS[index] = { ...debt, amount: debt.amount - paid };
+                const paidTx = {
+                    ...debt, id: `demo-tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`, amount: paid, status: 'Paid',
+                    type: input.method, service: `${debt.service} (Qarzdorlik yopildi)`, date: input.date, forDate,
+                    discountPercent: 0, discountAmount: 0, isDebt: false,
+                } as Transaction;
+                DEMO_TRANSACTIONS.push(paidTx);
+                saveDemoData();
+                return Promise.resolve({ paid: paidTx, remaining: DEMO_TRANSACTIONS[index] as Transaction | null });
+            }
+            return fetchJson<{ paid: Transaction; remaining: Transaction | null }>(`/transactions/${id}/pay`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(input),
+            });
+        },
         update: (id: string, data: Partial<Transaction>) => {
             if (isDemoMode()) {
                 const index = DEMO_TRANSACTIONS.findIndex(t => t.id === id);
@@ -612,6 +643,7 @@ export const api = {
                     shiftEnd: data.shiftEnd || null,
                     openingCash: data.openingCash || 0,
                     countedCash: data.countedCash,
+                    handedOver: data.handedOver || 0,
                     expectedCash: data.expectedCash,
                     difference: data.countedCash - data.expectedCash,
                     countedCard: data.countedCard ?? null,

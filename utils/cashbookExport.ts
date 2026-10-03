@@ -103,6 +103,8 @@ function closureBlock(status?: CashClosureStatus): Sheet {
         ['Kassir sanagan naqd', c.countedCash],
         ['Hisob bo\'yicha naqd', c.expectedCash],
         ['Naqd farqi', c.difference],
+        ['Rahbarga topshirildi', c.handedOver || 0],
+        ['Kassada qoldirildi (ertangi kun boshi)', (c.countedCash || 0) - (c.handedOver || 0)],
     ];
     if (c.countedCard != null) {
         rows.push(['Terminal — sanalgan', c.countedCard]);

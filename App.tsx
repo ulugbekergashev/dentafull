@@ -788,6 +788,32 @@ const AppContent: React.FC = () => {
     }
   };
 
+  /**
+   * Qarzni to'lash — qisman yoki to'liq, serverda bitta amal. Ilgari har bir sahifa ikki
+   * so'rov yuborardi va qoldiqni o'zidagi eski summadan hisoblardi (ikki qurilmada summa buzilardi).
+   */
+  const payDebt = async (debtId: string, input: { amount: number; method: string; date: string }) => {
+    todaySync.markTransactionWrite();
+    try {
+      const { paid, remaining } = await api.transactions.payDebt(debtId, input);
+      todaySync.markTransactionWrite();
+      setTransactions(prev => {
+        const next = prev.map(t => t.id === debtId ? (remaining || paid) : t);
+        return remaining && !next.find(t => t.id === paid.id) ? [paid, ...next] : next;
+      });
+      if (paid.patientId) {
+        api.patients.getById(paid.patientId).then(p => {
+          setPatients(prev => prev.map(x => x.id === paid.patientId ? p : x));
+        }).catch(() => { });
+      }
+      addToast('success', 'To\'lov qabul qilindi.');
+    } catch (e: any) {
+      console.error('Debt payment error:', e);
+      addToast('error', e.message || 'To\'lovni saqlashda xatolik yuz berdi');
+      throw e;
+    }
+  };
+
   // Expense Actions (Xarajatlar)
   const refreshExpenses = async () => {
     try {
@@ -1940,6 +1966,7 @@ const AppContent: React.FC = () => {
                     showPatientPhone={showPatientPhoneForRole}
                     onUpdateAppointment={updateAppointment}
                     onUpdateTransaction={updateTransaction}
+                    onPayDebt={payDebt}
                     onUpdateLead={updateLead}
                     onAddPatient={addPatient}
                     onAddTransaction={addTransaction}
@@ -2004,6 +2031,7 @@ const AppContent: React.FC = () => {
                     onUpdatePatient={updatePatient}
                     onAddTransaction={addTransaction}
                     onUpdateTransaction={updateTransaction}
+                    onPayDebt={payDebt}
                     onDeleteTransaction={deleteTransaction}
                     onAddAppointment={addAppointment}
                     onUpdateAppointment={updateAppointment}
@@ -2064,6 +2092,7 @@ const AppContent: React.FC = () => {
                     onAddCashMovement={addCashMovement}
                     onDeleteCashMovement={deleteCashMovement}
                     onUpdateTransaction={updateTransaction}
+                    onPayDebt={payDebt}
                     onDeleteTransaction={deleteTransaction}
                   />
                 } />

@@ -59,6 +59,7 @@ interface FinanceHubProps {
     onAddCashMovement?: (data: Omit<CashMovement, 'id' | 'clinicId' | 'createdAt' | 'createdByName'>) => Promise<any>;
     onDeleteCashMovement?: (id: string) => Promise<void>;
     onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
+    onPayDebt?: (debtId: string, input: { amount: number; method: string; date: string }) => Promise<void>;
     onDeleteTransaction?: (id: string) => Promise<void>;
 }
 
@@ -154,6 +155,7 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
                     onDeleteCashMovement={encash ? props.onDeleteCashMovement : undefined}
                     // Qarzni yopish ham to'lovni yangilaydi — shuning uchun olish yoki tahrirlashdan biri yetarli
                     onUpdateTransaction={payCreate || payEdit ? props.onUpdateTransaction : undefined}
+                    onPayDebt={payCreate ? props.onPayDebt : undefined}
                     onDeleteTransaction={payDelete ? props.onDeleteTransaction : undefined}
                 />
             ) : (

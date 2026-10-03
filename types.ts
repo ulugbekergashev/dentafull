@@ -140,6 +140,8 @@ export interface Transaction {
   doctorName?: string;    // Optional - for backward compatibility
   patientId?: string;     // Optional - for backward compatibility
   createdAt?: string | null; // to'lov qabul qilingan aniq vaqt (eski yozuvlarda yo'q)
+  /** Qaysi kun tashrifi uchun (YYYY-MM-DD). Bo'sh bo'lsa — `date`. Qarz boshqa kuni to'lansa `date` ko'chadi, bu qoladi */
+  forDate?: string | null;
   receivedById?: string | null;   // pulni kim qabul qildi (server yozadi)
   receivedByName?: string | null;
   branchId?: string | null;
@@ -192,6 +194,7 @@ export interface CashRegisterDay {
   shiftEnd?: string | null;
   openingCash: number;     // smena boshidagi naqd qoldiq
   countedCash: number;     // kassir sanagan naqd
+  handedOver?: number;     // shundan rahbarga topshirilgan — keyingi kun (sanalgan − topshirilgan) dan boshlanadi
   expectedCash: number;    // yopilgan daqiqadagi hisob bo'yicha naqd
   difference: number;      // countedCash − expectedCash
   countedCard?: number | null;   // terminal Z-hisoboti (kiritilmasa solishtirilmaydi)

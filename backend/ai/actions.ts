@@ -1695,7 +1695,8 @@ export const executeAction = async (
                 if (qoldiq >= t.amount) {
                     await prisma.transaction.update({
                         where: { id: t.id },
-                        data: { status: 'Paid', type: args.method, date: args.date },
+                        // forDate — tashrif kuni: to'lov sanasi ko'chsa ham tashrif "to'langan" bo'lib qoladi
+                        data: { status: 'Paid', type: args.method, date: args.date, forDate: t.forDate || String(t.date).slice(0, 10) },
                     });
                     qoldiq -= t.amount;
                     yopilgan++;
@@ -1712,11 +1713,12 @@ export const executeAction = async (
                             type: args.method,
                             service: `${t.service} (Qarzdorlik yopildi)`,
                             date: args.date,
+                            forDate: t.forDate || String(t.date).slice(0, 10),
                         },
                     });
                     await prisma.transaction.update({
                         where: { id: t.id },
-                        data: { amount: t.amount - qoldiq },
+                        data: { amount: { decrement: qoldiq } },
                     });
                     qoldiq = 0;
                 }

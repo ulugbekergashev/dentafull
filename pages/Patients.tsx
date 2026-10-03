@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { isAppointmentRecorded } from '../utils/unpaid';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
 import { StatCard } from '../components/StatCard';
 import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
@@ -148,7 +149,7 @@ export const Patients: React.FC<PatientsProps> = ({
         const patientAppts = appointments.filter(a => a.patientId === p.id || a.patientName === `${p.lastName} ${p.firstName}`);
         const patientTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
         const hasUnpaid = patientAppts.some(app => {
-          const hasTransaction = patientTxs.some(t => t.date === app.date);
+          const hasTransaction = isAppointmentRecorded(app, patientTxs);
           // Bugun "Keldi" qilingan qabul hali davom etyapti — pul yakunlangandan keyin kutiladi
           return (app.status === 'Completed' || (app.status === 'Checked-In' && app.date < formatDateToISO(new Date()))) && !hasTransaction;
         });
@@ -184,7 +185,7 @@ export const Patients: React.FC<PatientsProps> = ({
       const pAppts = appointments.filter(a => a.patientId === p.id || a.patientName === `${p.lastName} ${p.firstName}`);
       const pTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
       return pAppts.some(app => {
-        const hasTransaction = pTxs.some(t => t.date === app.date);
+        const hasTransaction = isAppointmentRecorded(app, pTxs);
         return (app.status === 'Completed' || (app.status === 'Checked-In' && app.date < formatDateToISO(new Date()))) && !hasTransaction;
       });
     }).length;

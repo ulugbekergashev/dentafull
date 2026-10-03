@@ -56,6 +56,8 @@ interface DashboardProps {
   /** silent — "Uchrashuv yangilandi" chiqmaydi (natijani qo'ng'iroq kartasi o'zi ko'rsatadi) */
   onUpdateAppointment?: (id: string, data: Partial<Appointment>, opts?: { silent?: boolean }) => Promise<void>;
   onUpdateTransaction?: (id: string, data: Partial<Transaction>) => Promise<void>;
+  /** Qarzni to'lash (qisman/to'liq) — serverda bitta amal */
+  onPayDebt?: (debtId: string, input: { amount: number; method: string; date: string }) => Promise<void>;
   /** true — saqlandi; xatoni ilova o'zi ko'rsatadi */
   onUpdateLead?: (id: string, data: Partial<Lead>) => Promise<boolean>;
   onAddPatient?: (data: Omit<Patient, 'id' | 'clinicId'>, options?: { allowDuplicateName?: boolean }) => Promise<Patient | void>;
@@ -72,7 +74,7 @@ interface DashboardProps {
 // dashboard umumiy holatni ko'rsatadi, to'liq ro'yxat o'z sahifasida.
 const DASH_ROW_LIMIT = 4;
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onUpdateLead, onAddPatient, onAddTransaction, onAddAppointment, onOpenBooking, addToast }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onPayDebt, onUpdateLead, onAddPatient, onAddTransaction, onAddAppointment, onOpenBooking, addToast }) => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -462,30 +464,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   // PatientDetails'dagi qarz yopish mantig'i bilan bir xil:
   // qisman — yangi Paid tranzaksiya + qoldiq Pending'da qoladi; to'liq — Paid, sana bugungi
   const handleDebtPayment = async () => {
-    if (!payingDebt || !onUpdateTransaction) return;
+    if (!payingDebt || !onPayDebt) return;
     const paid = Math.min(Number(debtPayAmount) || 0, payingDebt.amount);
     if (paid <= 0) return;
     setDebtSaving(true);
     try {
-      if (paid < payingDebt.amount) {
-        if (!onAddTransaction) return;
-        await onAddTransaction({
-          patientName: payingDebt.patientName,
-          patientId: payingDebt.patientId,
-          doctorId: payingDebt.doctorId,
-          doctorName: payingDebt.doctorName,
-          clinicId: payingDebt.clinicId,
-          amount: paid,
-          status: 'Paid',
-          type: debtPayMethod,
-          service: `${payingDebt.service} (Qarzdorlik yopildi)`,
-          date: today,
-        });
-        await onUpdateTransaction(payingDebt.id, { amount: payingDebt.amount - paid });
-      } else {
-        await onUpdateTransaction(payingDebt.id, { status: 'Paid', type: debtPayMethod, date: today });
-      }
+      // Qisman ham, to'liq ham — serverda bitta amal (qoldiq u yerda hisoblanadi)
+      await onPayDebt(payingDebt.id, { amount: paid, method: debtPayMethod, date: today });
       setPayingDebt(null);
+    } catch {
+      // xatolik toast orqali ko'rsatiladi; oyna ochiq qoladi
     } finally {
       setDebtSaving(false);
     }
