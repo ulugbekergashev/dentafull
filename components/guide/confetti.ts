@@ -3,7 +3,8 @@
  * yuqoriga otadi, bo'laklar aylanib, sekin tushadi va 3 soniyada yo'qoladi.
  * Harakatni kamaytirish yoqilgan bo'lsa (prefers-reduced-motion) — hech narsa qilmaydi.
  */
-const COLORS = ['#2563eb', '#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#facc15'];
+// Ilova ranglari: ko'k tuslar, yashil va bir oz sariq
+const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#38bdf8', '#93c5fd', '#10b981', '#34d399', '#fbbf24'];
 
 interface Piece {
     x: number; y: number; vx: number; vy: number;

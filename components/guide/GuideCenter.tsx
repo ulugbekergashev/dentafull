@@ -1,9 +1,11 @@
 /**
  * O'quv markazi — sarlavhadagi "Qo'llanma" tugmasi ochadi.
  *
- * Bosh oyna: to'liq tanishuv, "Qanday qilinadi?" (murakkab ishlar qadamma-qadam) va
- * sahifa qo'llanmalari. Qo'llanma tugagach — konfetti va natija; o'rganilganlar
- * shu brauzerda, har bir xodimga alohida saqlanadi.
+ * Tepada — tanishuvning jonli namunasi (yoritish va kursor bloklar orasida yuradi) va uni
+ * boshlash tugmasi. Pastda — "Qanday qilinadi?" (murakkab ishlar qadamma-qadam) va sahifa
+ * qo'llanmalari. Yangi klinika rahbariga eng tepada "Ishni boshlash" qadamlari chiqadi.
+ * Qo'llanma tugagach — konfetti, natija va keyingi qo'llanma taklifi; o'rganilganlar shu
+ * brauzerda, har bir xodimga alohida saqlanadi.
  *
  * Bu modul faqat tugma bosilganda yuklanadi (App — dinamik import).
  */
@@ -11,14 +13,17 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'motion/react';
-import { ArrowRight, CheckCircle2, GraduationCap, Play, RotateCcw, Sparkles, Trophy, X } from 'lucide-react';
+import { ArrowRight, CheckCircle2, GraduationCap, Play, RotateCcw, X } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { availableGuides, pageGuideFor, stepsFor, type Guide, type GuideContext } from './guides';
 import { GuideRunner } from './GuideRunner';
+import { SetupSection, isNewClinic, type SetupInfo } from './SetupSteps';
 import { burstConfetti } from './confetti';
 
 export interface GuideCenterProps {
     ctx: GuideContext;
+    /** "Ishni boshlash" qadamlari — faqat klinika rahbariga beriladi; yangi klinikada markaz tepasida chiqadi */
+    setup?: SetupInfo;
     onClose: () => void;
 }
 
@@ -39,31 +44,131 @@ function saveDone(userKey: string, ids: string[]): void {
     try { localStorage.setItem(storageKey(userKey), JSON.stringify(ids)); } catch { /* shaxsiy rejim — saqlanmasa ham ishlaydi */ }
 }
 
-// ── Kichik bezaklar ─────────────────────────────────────────────────────────
+// ── Tanishuvning jonli namunasi ─────────────────────────────────────────────
 
-const ProgressRing: React.FC<{ done: number; total: number; reduced: boolean }> = ({ done, total, reduced }) => {
-    const r = 19;
-    const c = 2 * Math.PI * r;
-    const p = total > 0 ? done / total : 0;
+/** Bekatlar: yoritish shu bloklar orasida yuradi (joy va o'lcham — oynaning foizida) */
+const STOPS = [
+    { x: 5, y: 22, w: 43, h: 25 },
+    { x: 52, y: 22, w: 43, h: 47 },
+    { x: 5, y: 51, w: 43, h: 18 },
+    { x: 27, y: 6, w: 46, h: 10 },
+];
+/** Har bekatda to'xtab turadi, keyin keyingisiga uchadi; oxirida boshiga qaytadi */
+const ORDER = [0, 0, 1, 1, 2, 2, 3, 3, 0];
+const TIMES = [0, 0.2, 0.25, 0.45, 0.5, 0.7, 0.75, 0.95, 1];
+const LOOP = { duration: 11, times: TIMES, repeat: Infinity, ease: 'easeInOut' } as const;
+const pct = (f: (s: typeof STOPS[number]) => number) => ORDER.map(i => `${f(STOPS[i])}%`);
+/** Kursor yetib kelganda bir marta "uradi" — to'rt bekatda to'rt to'lqin */
+const TAP_TIMES = [0, 0.03, 0.12, 0.26, 0.29, 0.38, 0.51, 0.54, 0.63, 0.76, 0.79, 0.88, 1];
+const TAP_OPACITY = [0, 0.9, 0, 0, 0.9, 0, 0, 0.9, 0, 0, 0.9, 0, 0];
+const TAP_SCALE = [0.3, 0.3, 1.6, 0.3, 0.3, 1.6, 0.3, 0.3, 1.6, 0.3, 0.3, 1.6, 0.3];
+
+const TourPreview: React.FC<{ reduced: boolean }> = ({ reduced }) => {
+    const move = (v: string[]) => (reduced ? v[0] : v);
+    const block = 'absolute rounded-md bg-white/[0.09] ring-1 ring-white/10';
+    const bar = 'rounded-full bg-white/25';
     return (
-        <div className="relative h-14 w-14 shrink-0" aria-hidden="true">
-            <svg viewBox="0 0 48 48" className="h-14 w-14 -rotate-90">
-                <circle cx="24" cy="24" r={r} fill="none" strokeWidth="4" className="stroke-white/20" />
-                <motion.circle
-                    cx="24" cy="24" r={r} fill="none" strokeWidth="4" strokeLinecap="round"
-                    className="stroke-white"
-                    strokeDasharray={c}
-                    initial={{ strokeDashoffset: c }}
-                    animate={{ strokeDashoffset: c * (1 - p) }}
-                    transition={{ duration: reduced ? 0 : 1, ease: 'easeOut', delay: reduced ? 0 : 0.2 }}
-                />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-[13px] font-black tabular-nums">
-                {done}/{total}
-            </span>
+        <div aria-hidden="true" className="relative mx-auto aspect-[300/186] w-full max-w-[300px] overflow-hidden rounded-2xl bg-white/[0.06] shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] ring-1 ring-white/15">
+            {/* Ilova maketi: sarlavha, qidiruv, uch blok */}
+            <div className="absolute left-[5%] top-[8.5%] flex gap-[3px]">
+                <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+                <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
+                <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
+            </div>
+            <div className="absolute rounded-full bg-white/[0.12]" style={{ left: '27%', top: '6%', width: '46%', height: '10%' }} />
+            <div className={block} style={{ left: '5%', top: '22%', width: '43%', height: '25%' }}>
+                <div className="flex h-full items-center gap-1.5 px-2">
+                    {[0, 1, 2, 3].map(i => <span key={i} className={`h-4 w-4 rounded-full ${i === 1 ? 'bg-sky-300/70' : 'bg-white/20'}`} />)}
+                </div>
+            </div>
+            <div className={block} style={{ left: '52%', top: '22%', width: '43%', height: '47%' }}>
+                <div className="flex h-full flex-col justify-center gap-[7px] px-2.5">
+                    {[70, 90, 55, 80].map((w, i) => <span key={i} className={`h-1.5 ${bar}`} style={{ width: `${w}%` }} />)}
+                </div>
+            </div>
+            <div className={block} style={{ left: '5%', top: '51%', width: '43%', height: '18%' }}>
+                <div className="flex h-full items-end gap-1 px-2.5 pb-1.5">
+                    {[40, 75, 55, 90, 65].map((h, i) => <span key={i} className="flex-1 rounded-sm bg-emerald-300/50" style={{ height: `${h}%` }} />)}
+                </div>
+            </div>
+
+            {/* Yoritish: atrofni qorong'ilatadi — haqiqiy turdagidek */}
+            <motion.div
+                className="absolute rounded-lg"
+                style={{ boxShadow: '0 0 0 1.5px rgba(191,219,254,0.95), 0 0 22px 3px rgba(59,130,246,0.6), 0 0 0 400px rgba(3,9,28,0.55)' }}
+                initial={false}
+                animate={{
+                    left: move(pct(s => s.x - 1.5)), top: move(pct(s => s.y - 2)),
+                    width: move(pct(s => s.w + 3)), height: move(pct(s => s.h + 4)),
+                }}
+                transition={LOOP}
+            />
+
+            {/* Izoh kartasi */}
+            <div className="absolute bottom-[6%] left-[30%] right-[5%] flex h-[19%] items-center gap-2 rounded-lg bg-white px-2.5 shadow-lg">
+                <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex gap-[3px]">
+                        {[0, 1, 2, 3].map(i => (
+                            <span key={i} className="h-[3px] flex-1 overflow-hidden rounded-full bg-slate-200">
+                                <motion.span
+                                    className="block h-full w-full rounded-full bg-blue-600"
+                                    initial={false}
+                                    animate={{ opacity: reduced ? (i === 0 ? 1 : 0) : ORDER.map(s => (s >= i ? 1 : 0)) }}
+                                    transition={{ ...LOOP, ease: 'linear' }}
+                                />
+                            </span>
+                        ))}
+                    </div>
+                    <motion.span
+                        className="block h-[5px] rounded-full bg-slate-800"
+                        initial={false}
+                        animate={{ width: reduced ? '60%' : ['60%', '60%', '42%', '42%', '72%', '72%', '50%', '50%', '60%'] }}
+                        transition={LOOP}
+                    />
+                    <span className="mt-1 block h-1 w-4/5 rounded-full bg-slate-300" />
+                </div>
+                <span className="h-3.5 w-7 shrink-0 rounded-[5px] bg-blue-600" />
+            </div>
+
+            {/* Kursor */}
+            <motion.div
+                className="absolute"
+                initial={false}
+                animate={{ left: move(pct(s => s.x + s.w * 0.36)), top: move(pct(s => s.y + s.h * 0.5)) }}
+                transition={LOOP}
+            >
+                {!reduced && (
+                    <motion.span
+                        className="absolute -left-2.5 -top-2.5 h-5 w-5 rounded-full border-[1.5px] border-sky-200"
+                        animate={{ opacity: TAP_OPACITY, scale: TAP_SCALE }}
+                        transition={{ duration: LOOP.duration, times: TAP_TIMES, repeat: Infinity, ease: 'easeOut' }}
+                    />
+                )}
+                <svg width="16" height="16" viewBox="0 0 24 24" className="relative -left-[3px] -top-[2px]" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))' }}>
+                    <path d="M5 3l14.5 7.6-6.4 1.7-2.7 6.4L5 3z" fill="#fff" stroke="#0f172a" strokeWidth="1.5" strokeLinejoin="round" />
+                </svg>
+            </motion.div>
         </div>
     );
 };
+
+// ── Kichik bezaklar ─────────────────────────────────────────────────────────
+
+/** Har bir qo'llanma — bitta bo'lak; o'rganilgani to'ladi */
+const Segments: React.FC<{ done: number; total: number; reduced: boolean; fill: string; track: string }> = ({ done, total, reduced, fill, track }) => (
+    <div className="flex flex-1 gap-1" aria-hidden="true">
+        {Array.from({ length: total }, (_, i) => (
+            <span key={i} className={`h-1.5 flex-1 overflow-hidden rounded-full ${track}`}>
+                <motion.span
+                    className={`block h-full rounded-full ${fill}`}
+                    initial={{ width: '0%' }}
+                    animate={{ width: i < done ? '100%' : '0%' }}
+                    transition={{ duration: reduced ? 0 : 0.45, ease: 'easeOut', delay: reduced ? 0 : 0.25 + i * 0.04 }}
+                />
+            </span>
+        ))}
+    </div>
+);
 
 const AnimatedCheck: React.FC<{ reduced: boolean }> = ({ reduced }) => (
     <div className="relative mx-auto h-20 w-20">
@@ -92,7 +197,7 @@ const AnimatedCheck: React.FC<{ reduced: boolean }> = ({ reduced }) => (
 
 type View = 'home' | 'run' | 'done';
 
-const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
+const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, setup, onClose }) => {
     const { t } = useLanguage();
     const navigate = useNavigate();
     const location = useLocation();
@@ -104,9 +209,7 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
     const [active, setActive] = useState<Guide | null>(null);
     const [run, setRun] = useState(0);
     const [done, setDone] = useState<string[]>(() => loadDone(ctx.userKey));
-    /** Oxirgi qo'llanma birinchi marta o'rganildimi (natija chizig'i shunda o'sadi) */
-    const [gained, setGained] = useState(false);
-    // Klaviatura bilan: oyna ochilganda Enter — to'liq tanishuvni boshlaydi
+    // Klaviatura bilan: oyna ochilganda Enter — tanishuvni boshlaydi
     const heroRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
         if (view === 'home') heroRef.current?.focus({ preventScroll: true });
@@ -117,6 +220,9 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
     const current = pageGuideFor(pages, location.pathname);
     // Joriy sahifaning qo'llanmasi birinchi turadi
     const pageList = current ? [current, ...pages.filter(p => p !== current)] : pages;
+    // Tugagandan keyin taklif: hali o'rganilmagan birinchi ish (bo'lmasa — sahifa)
+    const nextGuide = active ? [...tasks, ...pages].find(g => g.id !== active.id && !done.includes(g.id)) ?? null : null;
+    const showSetup = !!setup && isNewClinic(setup);
 
     const start = (g: Guide) => {
         setActive(g);
@@ -124,13 +230,11 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
         setView('run');
     };
     const finish = () => {
-        const isNew = !!active && !done.includes(active.id);
-        if (active && isNew) {
+        if (active && !done.includes(active.id)) {
             const next = [...done, active.id];
             setDone(next);
             saveDone(ctx.userKey, next);
         }
-        setGained(isNew);
         burstConfetti();
         setView('done');
     };
@@ -151,19 +255,27 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
     const meta = (g: Guide) => t('guide.center.meta')
         .replace('{steps}', String(stepsFor(g, ctx).length))
         .replace('{min}', String(g.minutes));
+    const progressText = allDone ? t('guide.done.all')
+        : t('guide.center.progress').replace('{done}', String(doneCount)).replace('{total}', String(all.length));
 
     const list: Variants = {
         hidden: {},
-        show: { transition: { staggerChildren: reduced ? 0 : 0.05, delayChildren: reduced ? 0 : 0.12 } },
+        show: { transition: { staggerChildren: reduced ? 0 : 0.045, delayChildren: reduced ? 0 : 0.1 } },
     };
     const item: Variants = {
         hidden: { opacity: 0, y: reduced ? 0 : 14 },
         show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 30 } },
     };
-    const lift = reduced ? undefined : { y: -3 };
+    /** Kartadagi qadam nuqtalari: ustiga borilganda ketma-ket yonadi */
+    const dot = (i: number): Variants => ({
+        hidden: { opacity: 0.3 },
+        show: { opacity: 0.3 },
+        hover: { opacity: 1, transition: { delay: reduced ? 0 : i * 0.05, duration: 0.15 } },
+    });
     const press = reduced ? undefined : { scale: 0.98 };
-    const TourIcon = tour.icon;
     const tourDone = done.includes(tour.id);
+    const shell = 'bg-white dark:bg-[#0B1220] ring-1 ring-gray-900/5 dark:ring-white/10';
+    const card = 'border border-gray-200 bg-white hover:border-primary-300 hover:shadow-lg hover:shadow-primary-600/10 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-primary-400/60 dark:hover:bg-white/[0.07]';
 
     return createPortal(
         <>
@@ -177,120 +289,88 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
                         exit={{ opacity: 0 }}
                         transition={{ duration: reduced ? 0 : 0.2 }}
                     >
-                        <div className="absolute inset-0 bg-gray-950/60 backdrop-blur-sm" onClick={onClose} />
+                        <div className="absolute inset-0 bg-gray-950/70 backdrop-blur-sm" onClick={onClose} />
                         <motion.div
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="guide-center-title"
-                            className="relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[760px] sm:rounded-3xl"
+                            className={`relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl shadow-2xl sm:max-h-[90vh] sm:max-w-[840px] sm:rounded-3xl ${shell}`}
                             initial={{ y: reduced ? 0 : 40, scale: reduced ? 1 : 0.97 }}
                             animate={{ y: 0, scale: 1 }}
                             exit={{ y: reduced ? 0 : 30, scale: reduced ? 1 : 0.97 }}
                             transition={{ type: 'spring', stiffness: 340, damping: 32 }}
                         >
-                            {/* Sarlavha */}
-                            <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-primary-600 via-indigo-600 to-violet-600 px-5 pb-6 pt-5 text-white sm:px-7 sm:pt-6">
-                                {!reduced && (
-                                    <>
-                                        <motion.span
-                                            aria-hidden="true"
-                                            className="absolute -right-12 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl"
-                                            animate={{ x: [0, -24, 0], y: [0, 14, 0] }}
-                                            transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-                                        />
-                                        <motion.span
-                                            aria-hidden="true"
-                                            className="absolute -bottom-24 -left-10 h-64 w-64 rounded-full bg-fuchsia-400/25 blur-3xl"
-                                            animate={{ x: [0, 28, 0], y: [0, -12, 0] }}
-                                            transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
-                                        />
-                                    </>
-                                )}
-                                <div className="relative flex items-center gap-4">
-                                    <motion.div
-                                        className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/30 backdrop-blur"
-                                        animate={reduced ? undefined : { y: [0, -4, 0], rotate: [0, -5, 0] }}
-                                        transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
-                                    >
-                                        {allDone ? <Trophy className="h-7 w-7" /> : <GraduationCap className="h-7 w-7" />}
-                                        {!reduced && (
-                                            <motion.span
-                                                aria-hidden="true"
-                                                className="absolute -right-2 -top-2 text-amber-200"
-                                                animate={{ opacity: [0.35, 1, 0.35], scale: [0.85, 1.15, 0.85], rotate: [0, 18, 0] }}
-                                                transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                            {/* Tepa: tanishuv va uning jonli namunasi */}
+                            <div className="relative shrink-0 overflow-hidden text-white" style={{ background: 'radial-gradient(120% 140% at 0% 0%, #1D4ED8 0%, #0B1E4F 46%, #050B1F 100%)' }}>
+                                <div
+                                    aria-hidden="true"
+                                    className="absolute inset-0 opacity-60"
+                                    style={{
+                                        backgroundImage: 'linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)',
+                                        backgroundSize: '28px 28px',
+                                        maskImage: 'radial-gradient(90% 90% at 80% 20%, #000 0%, transparent 75%)',
+                                        WebkitMaskImage: 'radial-gradient(90% 90% at 80% 20%, #000 0%, transparent 75%)',
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    aria-label={t('guide.close')}
+                                    className="absolute right-3 top-3 z-10 rounded-xl p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                                <div className="relative grid gap-5 px-5 pb-5 pt-6 sm:grid-cols-[minmax(0,1fr)_300px] sm:items-center sm:gap-7 sm:px-8 sm:pb-6 sm:pt-8">
+                                    <div className="min-w-0">
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-blue-100 ring-1 ring-white/15">
+                                            <GraduationCap className="h-3.5 w-3.5" /> {t('guide.center.title')}
+                                        </span>
+                                        <h2 id="guide-center-title" className="mt-3 text-[26px] font-black leading-[1.1] tracking-tight sm:text-[32px]">{t('guide.hero.title')}</h2>
+                                        <p className="mt-2 max-w-md text-sm leading-relaxed text-blue-100/80 sm:text-[15px]">{t('guide.hero.sub')}</p>
+                                        <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+                                            <motion.button
+                                                ref={heroRef}
+                                                type="button"
+                                                onClick={() => start(tour)}
+                                                whileHover={reduced ? undefined : { y: -2 }}
+                                                whileTap={press}
+                                                className="group inline-flex h-12 items-center gap-2.5 rounded-2xl bg-white pl-2 pr-5 text-[15px] font-extrabold text-primary-700 shadow-[0_12px_30px_-8px_rgba(59,130,246,0.7)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-primary-900"
                                             >
-                                                <Sparkles className="h-4 w-4" />
-                                            </motion.span>
-                                        )}
-                                    </motion.div>
-                                    <div className="min-w-0 flex-1">
-                                        <h2 id="guide-center-title" className="text-xl font-black tracking-tight sm:text-2xl">{t('guide.center.title')}</h2>
-                                        <p className="mt-0.5 text-sm text-white/80">
-                                            {allDone ? t('guide.done.all') : t('guide.center.subtitle')}
-                                        </p>
+                                                <span className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-primary-600 text-white">
+                                                    {!reduced && !tourDone && (
+                                                        <motion.span
+                                                            aria-hidden="true"
+                                                            className="absolute inset-0 rounded-xl ring-2 ring-primary-400"
+                                                            animate={{ scale: [1, 1.5], opacity: [0.8, 0] }}
+                                                            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+                                                        />
+                                                    )}
+                                                    {tourDone ? <RotateCcw className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4 fill-current" />}
+                                                </span>
+                                                {tourDone ? t('guide.center.again') : t('guide.hero.cta')}
+                                            </motion.button>
+                                            <span className="text-xs font-semibold text-blue-100/70">
+                                                {t('guide.hero.meta').replace('{steps}', String(stepsFor(tour, ctx).length)).replace('{min}', String(tour.minutes))}
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="hidden sm:block">
-                                        <ProgressRing done={doneCount} total={all.length} reduced={reduced} />
+                                        <TourPreview reduced={reduced} />
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={onClose}
-                                        aria-label={t('guide.close')}
-                                        className="-mr-2 -mt-6 self-start rounded-xl p-2 text-white/80 transition-colors hover:bg-white/15 hover:text-white sm:-mt-2"
-                                    >
-                                        <X className="h-5 w-5" />
-                                    </button>
                                 </div>
-                                <p className="relative mt-3 text-xs font-semibold text-white/75 sm:hidden">
-                                    {t('guide.center.progress').replace('{done}', String(doneCount)).replace('{total}', String(all.length))}
-                                </p>
+                                <div className="relative flex items-center gap-3 border-t border-white/10 px-5 py-3 sm:px-8">
+                                    <Segments done={doneCount} total={all.length} reduced={reduced} fill="bg-white" track="bg-white/15" />
+                                    <span className="shrink-0 text-xs font-bold tabular-nums text-blue-100/80">{progressText}</span>
+                                </div>
                             </div>
 
                             {/* Ro'yxatlar */}
-                            <motion.div className="flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6" variants={list} initial="hidden" animate="show">
-                                {/* To'liq tanishuv */}
-                                <motion.button
-                                    ref={heroRef}
-                                    type="button"
-                                    variants={item}
-                                    whileHover={lift}
-                                    whileTap={press}
-                                    onClick={() => start(tour)}
-                                    className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-primary-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 bg-gradient-to-br from-primary-50 via-white to-violet-50 p-4 text-left shadow-sm transition-shadow hover:shadow-xl hover:shadow-primary-600/10 dark:border-primary-900/50 dark:from-primary-900/30 dark:via-gray-900 dark:to-violet-900/20 sm:p-5"
-                                >
-                                    <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-600 to-violet-600 text-white shadow-lg shadow-primary-600/30">
-                                        {!reduced && (
-                                            <motion.span
-                                                aria-hidden="true"
-                                                className="absolute inset-0 rounded-2xl ring-2 ring-primary-400"
-                                                animate={{ scale: [1, 1.25], opacity: [0.7, 0] }}
-                                                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
-                                            />
-                                        )}
-                                        {tourDone ? <RotateCcw className="h-6 w-6" /> : <Play className="ml-0.5 h-6 w-6 fill-current" />}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="flex items-center gap-2">
-                                            {tourDone ? (
-                                                <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                                                    <CheckCircle2 className="h-3.5 w-3.5" /> {t('guide.center.doneBadge')}
-                                                </span>
-                                            ) : (
-                                                <span className="text-[11px] font-black uppercase tracking-widest text-primary-600 dark:text-primary-300">{t('guide.center.recommended')}</span>
-                                            )}
-                                        </span>
-                                        <span className="mt-0.5 flex items-center gap-2 text-lg font-extrabold text-gray-900 dark:text-white">
-                                            <TourIcon className="h-4 w-4 text-primary-500" /> {t(tour.title)}
-                                        </span>
-                                        <span className="mt-0.5 block text-sm leading-snug text-gray-600 dark:text-gray-300">{t(tour.desc)}</span>
-                                        <span className="mt-1.5 block text-xs font-semibold text-gray-400">{meta(tour)}</span>
-                                    </span>
-                                    <span className="hidden shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary-600 to-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary-600/25 sm:inline-flex">
-                                        {tourDone ? t('guide.center.again') : t('guide.center.start')}
-                                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                                    </span>
-                                </motion.button>
+                            <motion.div className="flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-8 sm:py-6" variants={list} initial="hidden" animate="show">
+                                {showSetup && (
+                                    <motion.div variants={item}>
+                                        <SetupSection {...setup!} onGo={onClose} />
+                                    </motion.div>
+                                )}
 
                                 {/* Qanday qilinadi? */}
                                 {tasks.length > 0 && (
@@ -303,17 +383,18 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
                                             {tasks.map(g => {
                                                 const TaskIcon = g.icon;
                                                 const isDone = done.includes(g.id);
+                                                const count = stepsFor(g, ctx).length;
                                                 return (
                                                     <motion.button
                                                         key={g.id}
                                                         type="button"
                                                         variants={item}
-                                                        whileHover={lift}
+                                                        whileHover="hover"
                                                         whileTap={press}
                                                         onClick={() => start(g)}
-                                                        className="group flex items-start gap-3 rounded-2xl border border-gray-200 bg-white p-4 text-left transition-[border-color,box-shadow] hover:border-primary-300 hover:shadow-lg hover:shadow-primary-600/5 dark:border-gray-700 dark:bg-gray-800/60 dark:hover:border-primary-700"
+                                                        className={`group flex items-start gap-3.5 rounded-2xl p-4 text-left transition-[border-color,box-shadow,background-color] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${card}`}
                                                     >
-                                                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${g.tone} text-white shadow-md`}>
+                                                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600 transition-colors group-hover:bg-primary-600 group-hover:text-white dark:bg-primary-500/15 dark:text-primary-300">
                                                             <TaskIcon className="h-5 w-5" />
                                                         </span>
                                                         <span className="min-w-0 flex-1">
@@ -322,9 +403,16 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
                                                                 {isDone && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" aria-label={t('guide.center.doneBadge')} />}
                                                             </span>
                                                             <span className="mt-0.5 block text-[13px] leading-snug text-gray-500 dark:text-gray-400">{t(g.desc)}</span>
-                                                            <span className="mt-1.5 block text-[11px] font-semibold text-gray-400">{meta(g)}</span>
+                                                            <span className="mt-2.5 flex items-center gap-2">
+                                                                <span className="flex gap-1" aria-hidden="true">
+                                                                    {Array.from({ length: count }, (_, i) => (
+                                                                        <motion.span key={i} variants={dot(i)} className="h-1.5 w-1.5 rounded-full bg-primary-500 opacity-30" />
+                                                                    ))}
+                                                                </span>
+                                                                <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500">{meta(g)}</span>
+                                                            </span>
                                                         </span>
-                                                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-gray-300 transition-transform group-hover:translate-x-0.5 group-hover:text-primary-500 dark:text-gray-600" />
+                                                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-gray-300 transition-[transform,color] group-hover:translate-x-0.5 group-hover:text-primary-500 dark:text-gray-600" />
                                                     </motion.button>
                                                 );
                                             })}
@@ -336,7 +424,7 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
                                 {pageList.length > 0 && (
                                     <section>
                                         <motion.h3 variants={item} className="mb-3 text-base font-extrabold text-gray-900 dark:text-white">{t('guide.center.pages')}</motion.h3>
-                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                        <div className="flex flex-wrap gap-2">
                                             {pageList.map(g => {
                                                 const PageIcon = g.icon;
                                                 const isDone = done.includes(g.id);
@@ -346,23 +434,18 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
                                                         key={g.id}
                                                         type="button"
                                                         variants={item}
-                                                        whileHover={lift}
                                                         whileTap={press}
                                                         onClick={() => start(g)}
-                                                        className={`relative flex flex-col items-start gap-2 rounded-2xl border p-3.5 text-left transition-[border-color,box-shadow] hover:shadow-lg hover:shadow-primary-600/5 ${here
-                                                            ? 'border-primary-300 bg-primary-50/60 dark:border-primary-700 dark:bg-primary-900/20'
-                                                            : 'border-gray-200 bg-white hover:border-primary-300 dark:border-gray-700 dark:bg-gray-800/60 dark:hover:border-primary-700'}`}
+                                                        title={t(g.desc)}
+                                                        className={`inline-flex h-11 items-center gap-2 rounded-xl px-3.5 text-sm font-bold transition-[border-color,box-shadow,background-color] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${here
+                                                            ? 'border border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-400/60 dark:bg-primary-500/15 dark:text-primary-200'
+                                                            : `text-gray-800 dark:text-gray-100 ${card}`}`}
                                                     >
-                                                        <span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${g.tone} text-white`}>
-                                                            <PageIcon className="h-4 w-4" />
-                                                        </span>
-                                                        <span className="flex items-center gap-1 text-sm font-bold text-gray-900 dark:text-white">
-                                                            {t(g.title)}
-                                                            {isDone && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" aria-label={t('guide.center.doneBadge')} />}
-                                                        </span>
-                                                        <span className="text-[12px] leading-snug text-gray-500 dark:text-gray-400">{t(g.desc)}</span>
+                                                        <PageIcon className="h-4 w-4 text-primary-500 dark:text-primary-300" />
+                                                        {t(g.title)}
+                                                        {isDone && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" aria-label={t('guide.center.doneBadge')} />}
                                                         {here && (
-                                                            <span className="absolute right-2.5 top-2.5 rounded-full bg-primary-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+                                                            <span className="rounded-full bg-primary-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
                                                                 {t('guide.center.thisPage')}
                                                             </span>
                                                         )}
@@ -372,10 +455,6 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
                                         </div>
                                     </section>
                                 )}
-
-                                <motion.p variants={item} className="flex items-center gap-2 border-t border-gray-100 pt-4 text-[12px] text-gray-400 dark:border-gray-800">
-                                    <GraduationCap className="h-4 w-4 shrink-0" /> {t('guide.center.footer')}
-                                </motion.p>
                             </motion.div>
                         </motion.div>
                     </motion.div>
@@ -403,12 +482,12 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
                         exit={{ opacity: 0 }}
                         transition={{ duration: reduced ? 0 : 0.2 }}
                     >
-                        <div className="absolute inset-0 bg-gray-950/50 backdrop-blur-sm" onClick={onClose} />
+                        <div className="absolute inset-0 bg-gray-950/60 backdrop-blur-sm" onClick={onClose} />
                         <motion.div
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="guide-done-title"
-                            className="relative w-full max-w-sm rounded-3xl bg-white p-7 text-center shadow-2xl ring-1 ring-gray-900/5 dark:bg-gray-900 dark:ring-white/10"
+                            className={`relative w-full max-w-sm rounded-3xl p-7 text-center shadow-2xl ${shell}`}
                             initial={{ scale: reduced ? 1 : 0.85, y: reduced ? 0 : 24 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: reduced ? 1 : 0.95, opacity: 0 }}
@@ -419,34 +498,39 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, onClose }) => {
                             <p className="mt-1.5 text-[15px] text-gray-600 dark:text-gray-300">
                                 {t('guide.done.body').replace('{name}', t(active.title))}
                             </p>
-                            <div className="mt-5">
-                                <div className="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-                                    <motion.div
-                                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-primary-500 to-violet-500"
-                                        initial={{ width: `${Math.max(0, doneCount - (gained ? 1 : 0)) / all.length * 100}%` }}
-                                        animate={{ width: `${doneCount / all.length * 100}%` }}
-                                        transition={{ duration: reduced ? 0 : 0.9, ease: 'easeOut', delay: reduced ? 0 : 0.35 }}
-                                    />
-                                </div>
-                                <p className="mt-2 text-xs font-bold text-gray-500 dark:text-gray-400">
-                                    {allDone ? t('guide.done.all') : t('guide.center.progress').replace('{done}', String(doneCount)).replace('{total}', String(all.length))}
-                                </p>
+                            <div className="mt-5 flex items-center gap-3">
+                                <Segments done={doneCount} total={all.length} reduced={reduced} fill="bg-primary-500" track="bg-gray-100 dark:bg-white/10" />
+                                <span className="shrink-0 text-xs font-bold tabular-nums text-gray-500 dark:text-gray-400">{doneCount} / {all.length}</span>
                             </div>
-                            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-                                <button
-                                    type="button"
-                                    onClick={() => setView('home')}
-                                    className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-primary-600 to-violet-600 px-4 text-sm font-bold text-white shadow-md shadow-primary-600/25 transition-[filter] hover:brightness-110"
-                                >
-                                    <GraduationCap className="h-4 w-4" /> {t('guide.done.more')}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                                >
-                                    {t('guide.close')}
-                                </button>
+                            <div className="mt-6 flex flex-col gap-2">
+                                {nextGuide && (
+                                    <button
+                                        type="button"
+                                        onClick={() => start(nextGuide)}
+                                        className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-primary-600 px-4 text-sm font-bold text-white shadow-md shadow-primary-600/25 transition-colors hover:bg-primary-700"
+                                    >
+                                        <span className="truncate">{t('guide.done.next').replace('{name}', t(nextGuide.title))}</span>
+                                        <ArrowRight className="h-4 w-4 shrink-0" />
+                                    </button>
+                                )}
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setView('home')}
+                                        className={`inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-bold transition-colors ${nextGuide
+                                            ? 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-white/10'
+                                            : 'bg-primary-600 text-white shadow-md shadow-primary-600/25 hover:bg-primary-700'}`}
+                                    >
+                                        <GraduationCap className="h-4 w-4" /> {t('guide.done.more')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={onClose}
+                                        className="inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/10"
+                                    >
+                                        {t('guide.close')}
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     </motion.div>

@@ -9,21 +9,27 @@
  *    (oyna ichidagi formalar: ro'yxat ochiladi, maydonga yoziladi).
  *
  * Yoritish bir joydan ikkinchisiga prujina bilan "uchib" o'tadi; sahifa aylantirilganda
- * esa elementga kechikmasdan yopishib turadi.
+ * esa elementga kechikmasdan yopishib turadi. Kursor yoritilgan joyni ko'rsatadi, bosish
+ * qadamida esa "shu yerni bosing" deb uradi.
+ *
+ * Tanishuv va sahifa qo'llanmalari o'zi yuradi: har bir izoh o'qishga yetarli vaqt turadi
+ * (kartadagi chiziq to'ladi), keyin keyingisiga o'tadi. Pauza tugmasi, sichqoncha karta
+ * ustida turishi yoki boshqa oynaga o'tish vaqtni to'xtatadi. "Qanday qilinadi?" o'zi
+ * yurmaydi — u foydalanuvchining ishini kutadi.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useAnimate, useReducedMotion } from 'motion/react';
-import { ArrowLeft, ArrowRight, Check, Loader2, MousePointerClick, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Loader2, Pause, Play, X } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
-import { stepsFor, type Guide, type GuideContext } from './guides';
+import { stepsFor, type Guide, type GuideContext, type GuideStep } from './guides';
 import { type Box, boxOf, bringIntoView, findTarget, isTyping, isVisible, rawBoxOf, sameBox } from './dom';
 
 /** Majburiy qadam elementi shuncha kutiladi (oyna ochilishi, ma'lumot yuklanishi) */
 const WAIT_REQUIRED = 7000;
 /** Ixtiyoriy qadam: shu sahifada bo'lsa tez, yangi sahifaga o'tilgan bo'lsa uzoqroq kutiladi */
 const WAIT_OPTIONAL = 1200;
-const WAIT_AFTER_NAV = 3500;
+const WAIT_AFTER_NAV = 6000;
 /** Element shuncha vaqt ko'rinmasa — yo'qolgan hisoblanadi */
 const LOST_AFTER = 700;
 /** Yoritish chetidan bo'shliq */
@@ -34,11 +40,36 @@ const GAP = 14;
 const CARD_W = 372;
 
 const SPRING = { type: 'spring', stiffness: 260, damping: 30, mass: 0.9 } as const;
+/** Kursor yoritishdan biroz kechroq yetib keladi — qo'l bilan ko'rsatilgandek */
+const CURSOR_SPRING = { type: 'spring', stiffness: 190, damping: 24, mass: 1 } as const;
+/** Yoritish va kursor shuncha vaqt prujina bilan harakatlanadi, keyin elementga yopishadi */
+const MOVE_MS = 850;
 const INSTANT = { duration: 0 } as const;
 const DIM = 'rgba(2, 6, 23, 0.62)';
 
 const norm = (p: string) => p.replace(/\/+$/, '') || '/';
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+/** O'zi yuradigan qadam shuncha turadi — matn uzunligiga qarab, o'qishga yetarli */
+const autoMs = (chars: number) => clamp(2600 + chars * 55, 5000, 11000);
+/** Kursor uchi: tugmada — pastki-o'ng qismi (yozuvni to'smasin), katta blokda — yuqori-chap burchagi yaqini */
+const pointAt = (b: Box) => ({ x: b.x + Math.min(b.w * 0.72, 120), y: b.y + Math.min(b.h * 0.72, 56) });
+const canHover = () => window.matchMedia('(hover: hover)').matches;
+
+type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+/** Qadam talabi (`ready`) bajarilganmi. Talabi yo'q qadam — har doim tayyor */
+function isReady(step: GuideStep, el: HTMLElement | null): boolean {
+    if (!step.ready) return true;
+    if (typeof step.ready === 'string') {
+        const mark = findTarget(step.ready);
+        return !!mark && !(mark as HTMLButtonElement).disabled;
+    }
+    if (!el) return false;
+    const all: Control[] = el.matches('input, select, textarea') ? [el as Control] : Array.from(el.querySelectorAll<Control>('input, select, textarea'));
+    const usable = all.filter(c => !c.disabled && !['hidden', 'file', 'checkbox', 'radio'].includes(c.type));
+    const required = usable.filter(c => c.required);
+    const filled = (c: Control) => c.value.trim() !== '';
+    return required.length ? required.every(filled) : usable.some(filled);
+}
 
 type Side = 'top' | 'bottom' | 'left' | 'right' | 'over' | 'center' | 'dock';
 
@@ -65,6 +96,45 @@ function placeCard(box: Box | null, cw: number, ch: number, vw: number, vh: numb
     if (left - GAP - EDGE >= cw) return { x: left - GAP - cw, y: cy, side: 'left' };
     // Element ekrandek katta — karta uning ustida, bo'shroq tomonda
     return { x: cx, y: box.y + box.h / 2 > vh / 2 ? EDGE : vh - ch - EDGE, side: 'over' };
+}
+
+const overlap = (a: Box, b: Box) =>
+    Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+/**
+ * Formadagi qadam (foydalanuvchi yozadi yoki tanlaydi, keyin pastdagi maydonga o'tadi): karta
+ * maydonlarni to'smasligi kerak. Nomzod joylar — forma yoni, maydon usti/osti, ekran burchaklari;
+ * forma tugma va maydonlarini eng kam to'sadigani tanlanadi (teng bo'lsa — maydonga yaqinrog'i).
+ */
+function placeBesideForm(el: HTMLElement, box: Box, cw: number, ch: number, vw: number, vh: number): { x: number; y: number; side: Side } {
+    const host = el.parentElement?.closest<HTMLElement>('[data-tour]') ?? el.closest<HTMLElement>('form, [role="dialog"]');
+    const hb = host ? rawBoxOf(host) : box;
+    const controls = host
+        ? Array.from(host.querySelectorAll<HTMLElement>('input, select, textarea, button')).filter(isVisible).map(rawBoxOf)
+        : [];
+    const right = vw - cw - EDGE;
+    const bottom = vh - ch - EDGE;
+    const cx = clamp(box.x + box.w / 2 - cw / 2, EDGE, right);
+    const cy = clamp(box.y + box.h / 2 - ch / 2, EDGE, bottom);
+    const spots: [number, number][] = vw < 640
+        ? [[EDGE, EDGE], [EDGE, bottom]]
+        : [
+            [hb.x + hb.w + GAP, cy], [hb.x - GAP - cw, cy],
+            [cx, box.y - PAD - GAP - ch], [cx, box.y + box.h + PAD + GAP],
+            [right, EDGE], [EDGE, EDGE], [right, bottom], [EDGE, bottom],
+        ];
+    const target = { x: box.x - PAD, y: box.y - PAD, w: box.w + PAD * 2, h: box.h + PAD * 2 };
+    let best: [number, number] = [right, EDGE];
+    let bestCost = Infinity;
+    for (const [x, y] of spots) {
+        if (x < EDGE - 1 || y < EDGE - 1 || x > right + 1 || y > bottom + 1) continue; // ekranga sig'maydi
+        const card = { x, y, w: cw, h: ch };
+        const cost = overlap(card, target) * 50
+            + controls.reduce((sum, b) => sum + overlap(card, b), 0)
+            + Math.hypot(x + cw / 2 - (box.x + box.w / 2), y + ch / 2 - (box.y + box.h / 2)) * 0.5;
+        if (cost < bestCost) { bestCost = cost; best = [x, y]; }
+    }
+    return { x: clamp(best[0], EDGE, Math.max(EDGE, right)), y: clamp(best[1], EDGE, Math.max(EDGE, bottom)), side: 'dock' };
 }
 
 interface Seek { index: number; dir: 1 | -1; n: number }
@@ -113,10 +183,27 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
     const [skipped, setSkipped] = useState<Set<number>>(() => new Set());
     const [vp, setVp] = useState({ w: window.innerWidth, h: window.innerHeight });
     const [cardH, setCardH] = useState(200);
+    /** Foydalanuvchi o'zi yurishni to'xtatdi */
+    const [userPaused, setUserPaused] = useState(false);
+    /**
+     * Ko'rsatilgan joy ekrandan yo'qoldi (boshqa sahifaga o'tildi, oyna yopildi): yoritish va karta
+     * yashiriladi — eski joyda osilib qolmasin. Keyingi qadam topilganda yana ko'rinadi.
+     */
+    const [gone, setGone] = useState(false);
+    /** Joy sahifada bor, lekin scroll ortida (oyna ichida aylantirib yuborilgan) — yoritilmaydi */
+    const [clipped, setClipped] = useState(false);
+    /** Qadam talabi bajarildimi (`ready`) — bajarilmaguncha "Keyingi" yopiq */
+    const [ready, setReady] = useState(true);
 
     const elRef = useRef<HTMLElement | null>(null);
     /** Bosish qadamida: qachon bosildi (0 — hali bosilmagan) */
     const clickedAt = useRef(0);
+    /** Shu qadamda foydalanuvchi belgilangan joyda biror narsa qildimi (yozdi, tanladi) */
+    const interacted = useRef(false);
+    /** Oxirgi qadam qaysi manzilda ko'rsatilgan — keyin manzil o'zgargan bo'lsa, yangi sahifa chizilishini uzoqroq kutamiz */
+    const pathAtReveal = useRef('');
+    /** Ko'rsatilgan qadam bajarildi (bosildi, saqlandi): keyingisi topilguncha eski karta "bosing" deb turmasin */
+    const completed = useRef(false);
     /** Har bir qadam almashganda oshadi — eski taymer va kuzatuvlar o'zini to'xtatadi */
     const token = useRef(0);
     const counter = useRef(0);
@@ -136,6 +223,10 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
 
     const cardRef = useRef<HTMLDivElement | null>(null);
     const nextBtn = useRef<HTMLButtonElement | null>(null);
+    /** Joriy qadamning vaqt chizig'i — har kadrda to'g'ridan-to'g'ri yangilanadi (qayta chizishsiz) */
+    const barRef = useRef<HTMLSpanElement | null>(null);
+    const nextRef = useRef<() => void>(() => { /* pastda */ });
+    const pausedRef = useRef(false);
     const [scope, animate] = useAnimate();
 
     // ── Qadamlar orasida yurish ──────────────────────────────────────────────
@@ -150,6 +241,7 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         const s = shownRef.current;
         if (!s) return;
         backFrom.current = null;
+        completed.current = true;
         go(s.index + 1, 1);
     }, [go]);
 
@@ -165,7 +257,7 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         elRef.current = el;
         clickedAt.current = 0;
         if (el) bringIntoView(el, !reduced);
-        moveUntil.current = performance.now() + 700;
+        moveUntil.current = performance.now() + MOVE_MS;
         // Hali scroll ortida bo'lsa — to'liq o'lchamidan boshlaymiz, kuzatuv ko'rinadigan qismga toraytiradi
         setBox(el ? boxOf(el) ?? rawBoxOf(el) : null);
         setSkipped(prev => {
@@ -174,6 +266,12 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
             next.delete(index);
             return next;
         });
+        interacted.current = false;
+        completed.current = false;
+        pathAtReveal.current = window.location.pathname;
+        setGone(false);
+        setClipped(false);
+        setReady(isReady(steps[index], el));
         setShown({ index, n: counter.current, missing });
         seekingRef.current = false;
         setSeeking(false);
@@ -199,8 +297,11 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         // Orqaga faqat izoh qadamlariga qaytiladi: bosish va kutish qadamlari allaqachon bajarilgan
         if (dir === -1 && (step.action || step.doneWhen)) { go(index - 1, -1); return; }
         if (step.skip?.path?.test(window.location.pathname)) { skipTo(); return; }
+        // Qadam boshqa sahifaniki (foydalanuvchi u yerdan chiqib ketgan) — kutmasdan qaytamiz
+        if (step.on && step.recover && !step.on.test(window.location.pathname)) { recover(step.recover); return; }
 
-        let navigated = false;
+        // Sahifani foydalanuvchining o'zi almashtirgan bo'lsa ham (menyuni bosdi) — bu yangi sahifa
+        let navigated = !!pathAtReveal.current && pathAtReveal.current !== window.location.pathname;
         if (step.route && norm(window.location.pathname) !== step.route) {
             navigate(step.route);
             navigated = true;
@@ -211,6 +312,11 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         const slowTimer = window.setTimeout(() => { if (token.current === myToken && seekingRef.current) setSlow(true); }, 400);
         const tick = () => {
             if (token.current !== myToken) return;
+            // Oldingi qadamning joyi yo'qolgan (sahifa almashdi) — yoritish eski joyda qolmasin
+            const prev = elRef.current;
+            if (prev && (!prev.isConnected || !isVisible(prev))) setGone(g => g || true);
+            // Bajarilgan qadamning kartasi ham yashiriladi (keyingisi darhol topilsa — ulgurmaydi, miltillamaydi)
+            if (completed.current && performance.now() - started > 200) setGone(g => g || true);
             if (step.skip?.visible && findTarget(step.skip.visible)) { skipTo(); return; }
             const el = step.target ? findTarget(step.target) : null;
             if (!step.target || el) { reveal(index, el, false); return; }
@@ -235,8 +341,15 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         let raf = 0;
         let lostAt = 0;
         let lastCheck = 0;
+        let readySince = 0;
         const loop = (now: number) => {
             if (token.current !== myToken) return;
+            // Foydalanuvchi bu qadam turgan sahifadan chiqib ketdi — kutmasdan to'g'ri qadamga qaytamiz
+            if (step.on && step.recover && !step.on.test(window.location.pathname)) {
+                setGone(true);
+                recover(step.recover);
+                return;
+            }
             if (step.target && !shown.missing) {
                 let el = elRef.current;
                 if (!el || !el.isConnected || !isVisible(el)) {
@@ -245,14 +358,26 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                     if (el) elRef.current = el;
                 }
                 if (el) {
+                    if (lostAt) setGone(false);
                     lostAt = 0;
-                    // Butunlay scroll ortiga o'tib ketgan bo'lsa — oxirgi ko'ringan joyida qoladi
+                    // Butunlay scroll ortiga o'tib ketgan bo'lsa — yoritilmaydi (karta joyida qoladi)
                     const b = boxOf(el);
                     if (b) setBox(prev => (sameBox(prev, b) ? prev : b));
+                    setClipped(c => (c === !b ? c : !b));
                 } else if (!lostAt) {
                     lostAt = now;
-                } else if (now - lostAt > LOST_AFTER) {
-                    if (step.action === 'click' && clickedAt.current && !step.doneWhen) advance();
+                } else if (now - lostAt <= LOST_AFTER) {
+                    // Hali qaytishi mumkin (React qayta chizyapti), lekin eski joyni yoritib turmaymiz
+                    if (now - lostAt > 150) setGone(g => g || true);
+                } else {
+                    // Avval "bajarildi"ni tekshiramiz: saqlashda sahifa bir zum qotsa, pastdagi tekshiruv
+                    // ulgurmaydi — tayyor ish "yo'qoldi" deb hisoblanib, qo'llanma boshiga qaytardi
+                    const d = step.doneWhen;
+                    const finished = (!!d?.path && d.path.test(window.location.pathname))
+                        || (!!d?.appear && !!findTarget(d.appear))
+                        || (!!d?.gone && !!clickedAt.current && !findTarget(d.gone))
+                        || (step.action === 'click' && !!clickedAt.current && !d);
+                    if (finished) advance();
                     else if (step.recover) recover(step.recover);
                     else go(shown.index, 1);
                     return;
@@ -268,8 +393,26 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                     if (clickedAt.current) { advance(); return; }
                     if (step.recover) { recover(step.recover); return; }
                 }
-                // Bosildi, lekin oyna yopilmadi (masalan, majburiy maydon bo'sh) — yana bosilishini kutamiz
+                // Bosildi, lekin oyna yopilmadi: to'ldirilmagan majburiy maydon bo'lsa — o'sha maydon qadamiga qaytamiz
+                if (clickedAt.current && d?.gone && now - clickedAt.current > 600) {
+                    const bad = findTarget(d.gone)?.querySelector<HTMLElement>('input:invalid, select:invalid, textarea:invalid');
+                    const j = bad ? steps.findIndex((s, k) => k < shown.index && !!s.target && !!findTarget(s.target)?.contains(bad)) : -1;
+                    if (j >= 0) { clickedAt.current = 0; go(j, 1); return; }
+                }
+                // Boshqa sabab bilan yopilmadi — yana bosilishini kutamiz
                 if (clickedAt.current && d?.gone && now - clickedAt.current > 8000) clickedAt.current = 0;
+                if (step.ready) {
+                    const el = elRef.current;
+                    const r = isReady(step, el);
+                    setReady(prev => (prev === r ? prev : r));
+                    // Bajarib, boshqa maydonga o'tdi — qo'llanma ham ergashadi
+                    if (r && interacted.current && el && !el.contains(document.activeElement)) {
+                        if (!readySince) readySince = now;
+                        else if (now - readySince > 350) { advance(); return; }
+                    } else {
+                        readySince = 0;
+                    }
+                }
             }
             raf = requestAnimationFrame(loop);
         };
@@ -294,6 +437,23 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         document.addEventListener('click', onClick, true);
         return () => document.removeEventListener('click', onClick, true);
     }, [shown, steps, advance]);
+
+    // ── Talabli qadam: foydalanuvchi belgilangan joyda yozgani yoki tanlaganini ushlaymiz ──
+    useEffect(() => {
+        if (!shown || !steps[shown.index].ready) return;
+        const onAct = (e: Event) => {
+            const el = elRef.current;
+            if (el && e.target instanceof Node && el.contains(e.target)) interacted.current = true;
+        };
+        document.addEventListener('input', onAct, true);
+        document.addEventListener('change', onAct, true);
+        document.addEventListener('click', onAct, true);
+        return () => {
+            document.removeEventListener('input', onAct, true);
+            document.removeEventListener('change', onAct, true);
+            document.removeEventListener('click', onAct, true);
+        };
+    }, [shown, steps]);
 
     // ── Ekran o'lchami va karta balandligi ───────────────────────────────────
     useEffect(() => {
@@ -328,8 +488,11 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         return -1;
     }, [shown, steps, skipped]);
 
+    /** Qadam talabi hali bajarilmagan — "Keyingi" yopiq */
+    const locked = !!step?.ready && !ready && !shown?.missing;
     const next = () => {
         if (!shown || seeking) return;
+        if (locked) { nudge(); return; }
         backFrom.current = null;
         go(shown.index + 1, 1);
     };
@@ -338,6 +501,32 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
         backFrom.current = shown.index;
         go(backIndex, -1);
     };
+    // ── O'zi yurish: faqat izoh qadamlari (bosish yoki bajarish kutilmaydi) ──
+    const auto = guide.kind !== 'task' && !!shown && !!step && !waiting && !shown.missing && !reduced;
+    const duration = step ? autoMs((t(step.title) + t(step.body)).length) : 0;
+    nextRef.current = next;
+    pausedRef.current = userPaused || seeking;
+    const shownN = shown?.n;
+    useEffect(() => {
+        if (!auto) return;
+        let raf = 0;
+        let last = performance.now();
+        let elapsed = 0;
+        const hover = canHover();
+        const loop = (now: number) => {
+            const dt = now - last;
+            last = now;
+            const held = pausedRef.current || document.hidden || (hover && !!cardRef.current?.matches(':hover'));
+            if (!held) elapsed += Math.min(dt, 120);
+            const p = Math.min(1, elapsed / duration);
+            if (barRef.current) barRef.current.style.transform = `scaleX(${p})`;
+            if (p >= 1) { nextRef.current(); return; }
+            raf = requestAnimationFrame(loop);
+        };
+        raf = requestAnimationFrame(loop);
+        return () => cancelAnimationFrame(raf);
+    }, [auto, shownN, duration]);
+
     // Qorong'i joy bosilsa — karta "silkinadi": tugmalar shu yerda
     const nudge = () => {
         if (reduced || !scope.current) return;
@@ -354,6 +543,7 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                 return;
             }
             if (isTyping(e.target) || e.altKey || e.ctrlKey || e.metaKey) return;
+            if (e.key === ' ' && auto && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); e.stopImmediatePropagation(); setUserPaused(p => !p); return; }
             if (e.key === 'ArrowRight' && !waiting) { e.preventDefault(); e.stopImmediatePropagation(); next(); }
             else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopImmediatePropagation(); back(); }
         };
@@ -368,16 +558,26 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
     }, [shown]);
 
     // ── Chizish ──────────────────────────────────────────────────────────────
-    const target = shown && !shown.missing ? box : null;
-    const hole = target ? { x: target.x - PAD, y: target.y - PAD, w: target.w + PAD * 2, h: target.h + PAD * 2 } : null;
+    // target — karta shunga nisbatan joylashadi; lit — yoritish, halqa va kursor (scroll ortidagi joy yoritilmaydi)
+    const target = shown && !shown.missing && !gone ? box : null;
+    const lit = clipped ? null : target;
+    const hole = lit ? { x: lit.x - PAD, y: lit.y - PAD, w: lit.w + PAD * 2, h: lit.h + PAD * 2 } : null;
     const spot = !shown || mode === 'spot';
     const trans = reduced ? INSTANT : performance.now() < moveUntil.current ? SPRING : INSTANT;
     const cardW = vp.w < 640 ? vp.w - EDGE * 2 : CARD_W;
-    const pos = placeCard(target, cardW, cardH, vp.w, vp.h);
+    // Formadagi qadam (ring, bosish emas) — karta maydonlarni to'smaydigan joyda; qolganlarida — joy yonida
+    const formStep = mode === 'ring' && !step?.action;
+    const pos = formStep && target && elRef.current
+        ? placeBesideForm(elRef.current, target, cardW, cardH, vp.w, vp.h)
+        : placeCard(target, cardW, cardH, vp.w, vp.h);
 
     let arrow: { side: 'top' | 'bottom' | 'left' | 'right'; offset: number } | null = null;
-    if (target && (pos.side === 'top' || pos.side === 'bottom')) arrow = { side: pos.side, offset: clamp(target.x + target.w / 2 - pos.x, 24, cardW - 24) };
-    if (target && (pos.side === 'left' || pos.side === 'right')) arrow = { side: pos.side, offset: clamp(target.y + target.h / 2 - pos.y, 24, cardH - 24) };
+    if (lit && (pos.side === 'top' || pos.side === 'bottom')) arrow = { side: pos.side, offset: clamp(lit.x + lit.w / 2 - pos.x, 24, cardW - 24) };
+    if (lit && (pos.side === 'left' || pos.side === 'right')) arrow = { side: pos.side, offset: clamp(lit.y + lit.h / 2 - pos.y, 24, cardH - 24) };
+
+    // Kursor: yoritilgan joyni ko'rsatadi; oyna ichidagi formada (ring) foydalanuvchi o'zi ishlaydi — faqat bosish qadamida
+    const clickStep = step?.action === 'click';
+    const cursor = lit && (mode === 'spot' || clickStep) ? pointAt(lit) : null;
 
     const total = Math.max(1, steps.length - skipped.size);
     const number = shown ? shown.index + 1 - Array.from(skipped).filter(i => i < shown.index).length : 1;
@@ -438,23 +638,42 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                 </motion.div>
             )}
 
-            {/* "Shu yerni bosing" — bosish qadamida tugma burchagida */}
-            {hole && step?.action === 'click' && (
-                <motion.div
-                    className="fixed left-0 top-0 z-[1002] pointer-events-none"
-                    initial={false}
-                    animate={{ x: hole.x + hole.w - 22, y: hole.y + hole.h - 18 }}
-                    transition={trans}
-                >
-                    <motion.span
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-violet-600 text-white shadow-lg ring-2 ring-white dark:ring-gray-900"
-                        animate={reduced ? undefined : { y: [0, -6, 0], scale: [1, 0.9, 1] }}
-                        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+            {/* Kursor: joyga "uchib" boradi va bir marta uradi; bosish qadamida — urib turadi */}
+            <AnimatePresence>
+                {cursor && shown && (
+                    <motion.div
+                        key="cursor"
+                        className="fixed left-0 top-0 z-[1002] pointer-events-none"
+                        initial={{ opacity: 0, x: vp.w / 2, y: vp.h / 2 }}
+                        animate={{ opacity: 1, x: cursor.x - 5, y: cursor.y - 3 }}
+                        exit={{ opacity: 0 }}
+                        transition={reduced ? INSTANT : trans === INSTANT ? { opacity: { duration: 0.2 }, default: INSTANT } : CURSOR_SPRING}
                     >
-                        <MousePointerClick className="h-4 w-4" />
-                    </motion.span>
-                </motion.div>
-            )}
+                        {!reduced && (
+                            <motion.span
+                                key={`ripple-${shown.n}`}
+                                className="absolute -left-[11px] -top-[13px] h-8 w-8 rounded-full border-2 border-primary-400"
+                                initial={{ scale: 0.3, opacity: 0 }}
+                                animate={{ scale: [0.3, 1.5], opacity: [0.9, 0] }}
+                                transition={clickStep
+                                    ? { duration: 1, delay: 0.8, repeat: Infinity, repeatDelay: 0.6, ease: 'easeOut' }
+                                    : { duration: 0.7, delay: 0.8, ease: 'easeOut' }}
+                            />
+                        )}
+                        <motion.svg
+                            key={`tip-${shown.n}`}
+                            width="26" height="26" viewBox="0 0 24 24"
+                            style={{ transformOrigin: '5px 3px', filter: 'drop-shadow(0 3px 5px rgba(2,6,23,0.45))' }}
+                            animate={reduced ? undefined : { scale: [1, 0.84, 1] }}
+                            transition={clickStep
+                                ? { duration: 0.4, delay: 0.75, repeat: Infinity, repeatDelay: 1.2 }
+                                : { duration: 0.4, delay: 0.75 }}
+                        >
+                            <path d="M5 3l14.5 7.6-6.4 1.7-2.7 6.4L5 3z" fill="#fff" stroke="#0f172a" strokeWidth="1.5" strokeLinejoin="round" />
+                        </motion.svg>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Izoh kartasi */}
             {shown && step && (
@@ -465,10 +684,10 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                     className="fixed left-0 top-0 z-[1003]"
                     style={{ width: cardW }}
                     initial={{ opacity: 0, scale: 0.94, x: pos.x, y: pos.y + 12 }}
-                    animate={{ opacity: seeking ? 0.6 : 1, scale: 1, x: pos.x, y: pos.y }}
+                    animate={{ opacity: gone ? 0 : seeking ? 0.6 : 1, scale: 1, x: pos.x, y: pos.y }}
                     transition={reduced ? INSTANT : trans === INSTANT ? { opacity: { duration: 0.15 }, default: INSTANT } : SPRING}
                 >
-                    <div ref={scope} className={`relative ${seeking ? 'pointer-events-none' : ''}`}>
+                    <div ref={scope} className={`relative ${seeking || gone ? 'pointer-events-none' : ''}`}>
                         {arrow && (
                             <span
                                 aria-hidden="true"
@@ -484,31 +703,49 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                             <div className="flex gap-1 px-5 pt-4" aria-hidden="true">
                                 {Array.from({ length: total }, (_, i) => (
                                     <span key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-                                        <motion.span
-                                            className="block h-full rounded-full bg-gradient-to-r from-primary-500 to-violet-500"
-                                            initial={false}
-                                            animate={{ width: i < number ? '100%' : '0%' }}
-                                            transition={{ duration: reduced ? 0 : 0.35, ease: 'easeOut' }}
-                                        />
+                                        {auto && i === number - 1 ? (
+                                            // Joriy qadam: vaqt o'tgan sari to'ladi
+                                            <span key={shown.n} ref={barRef} className="block h-full w-full origin-left rounded-full bg-primary-500" style={{ transform: 'scaleX(0)' }} />
+                                        ) : (
+                                            <motion.span
+                                                className="block h-full rounded-full bg-primary-500"
+                                                initial={false}
+                                                animate={{ width: i < number ? '100%' : '0%' }}
+                                                transition={{ duration: reduced ? 0 : 0.35, ease: 'easeOut' }}
+                                            />
+                                        )}
                                     </span>
                                 ))}
                             </div>
 
                             <div className="flex items-center gap-2 px-5 pt-3">
-                                <span className={`inline-flex min-w-0 items-center gap-1.5 rounded-full bg-gradient-to-r ${guide.tone} px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white`}>
+                                <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-primary-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
                                     <Icon className="h-3 w-3 shrink-0" />
                                     <span className="truncate">{label}</span>
                                 </span>
                                 <span className="shrink-0 text-[11px] font-bold tabular-nums text-gray-400">{number} / {total}</span>
-                                <button
-                                    type="button"
-                                    onClick={() => exitRef.current()}
-                                    aria-label={t('guide.close')}
-                                    title={t('guide.close')}
-                                    className="ml-auto -mr-1.5 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
+                                <span className="ml-auto -mr-1.5 flex items-center">
+                                    {auto && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setUserPaused(p => !p)}
+                                            aria-label={t(userPaused ? 'guide.play' : 'guide.pause')}
+                                            title={t(userPaused ? 'guide.play' : 'guide.pause')}
+                                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                        >
+                                            {userPaused ? <Play className="h-3.5 w-3.5 fill-current" /> : <Pause className="h-3.5 w-3.5 fill-current" />}
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => exitRef.current()}
+                                        aria-label={t('guide.close')}
+                                        title={t('guide.close')}
+                                        className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </span>
                             </div>
 
                             <div className="px-5 pb-4 pt-2" aria-live="polite">
@@ -529,6 +766,15 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                                                     <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary-500" />
                                                 </span>
                                                 {t(step.action ? 'guide.waitClick' : 'guide.waitDo')}
+                                            </div>
+                                        )}
+                                        {locked && (
+                                            <div className="mt-3 flex items-start gap-2.5 rounded-xl bg-amber-50 px-3 py-2.5 text-[13px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                                                <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
+                                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                                                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+                                                </span>
+                                                {t(step.ready === true ? 'guide.needFill' : 'guide.needDo')}
                                             </div>
                                         )}
                                         {shown.missing && (
@@ -555,8 +801,11 @@ export const GuideRunner: React.FC<GuideRunnerProps> = ({ guide, ctx, navigate, 
                                         ref={nextBtn}
                                         type="button"
                                         onClick={next}
-                                        whileTap={reduced ? undefined : { scale: 0.96 }}
-                                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary-600 to-violet-600 px-4 text-sm font-bold text-white shadow-md shadow-primary-600/25 transition-[filter] hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800"
+                                        whileTap={reduced || locked ? undefined : { scale: 0.96 }}
+                                        aria-disabled={locked}
+                                        className={`inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800 ${locked
+                                            ? 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+                                            : 'bg-primary-600 text-white shadow-md shadow-primary-600/25 hover:bg-primary-700'}`}
                                     >
                                         {isLast ? t('guide.finish') : t('guide.next')}
                                         {isLast ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}

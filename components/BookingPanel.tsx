@@ -467,7 +467,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     <div className="space-y-2" data-tour="bk-patient">
                         <span className={sectionLabel}>{t('booking.patient')}</span>
                         {selected ? (
-                            <div className="flex items-center gap-3 p-3 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+                            <div data-tour="bk-patient-ok" className="flex items-center gap-3 p-3 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
                                 <span className="w-10 h-10 shrink-0 rounded-full bg-primary text-white text-sm font-black flex items-center justify-center">{initialsOf(`${selected.lastName} ${selected.firstName}`)}</span>
                                 <span className="flex-1 min-w-0">
                                     <span className="block text-[15px] font-bold text-gray-900 dark:text-white truncate">{selected.lastName} {selected.firstName}</span>
@@ -480,7 +480,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                 {!moving && <button type="button" onClick={clearPatient} className="text-xs font-bold text-primary-700 dark:text-primary-300 hover:underline shrink-0">{t('booking.change')}</button>}
                             </div>
                         ) : newMode ? (
-                            <div className="flex flex-col gap-2 p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+                            <div data-tour={newForm.lastName.trim() && newForm.firstName.trim() && newForm.phone.trim() ? 'bk-patient-ok' : undefined} className="flex flex-col gap-2 p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
                                 <div className="flex items-center justify-between">
                                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('patientSearch.addNew')}</span>
                                     <button type="button" onClick={clearPatient} aria-label={t('common.cancel')} className="p-1 rounded-md text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
@@ -704,6 +704,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                                     disabled={s.busy}
                                                     onClick={() => { setTime(s.time); setError(null); }}
                                                     aria-pressed={sel}
+                                                    data-tour={sel ? 'bk-time-ok' : undefined}
                                                     className={`h-9 rounded-lg text-[13px] font-bold tabular-nums transition-colors ${sel
                                                         ? 'bg-primary text-white border-2 border-primary-600'
                                                         : s.busy
@@ -721,6 +722,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                     <input
                                         type="time"
                                         value={TIME_RE.test(time) ? time : ''}
+                                        data-tour={TIME_RE.test(time) ? 'bk-time-ok' : undefined}
                                         onChange={e => { setTime(e.target.value); setError(null); }}
                                         className="h-8 px-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
                                     />

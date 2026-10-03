@@ -43,6 +43,7 @@ import { makePermChecker } from './utils/permissions';
 import { PermissionsProvider } from './context/PermissionsContext';
 import type { GuideContext } from './components/guide/guides';
 import type { GuideCenterProps } from './components/guide/GuideCenter';
+import type { SetupInfo } from './components/guide/SetupSteps';
 import { formatHeaderDate } from './utils/dateUtils';
 import { useTodaySync } from './hooks/useTodaySync';
 import { SubscriptionBlockModal } from './components/SubscriptionBlockModal';
@@ -170,6 +171,8 @@ const AppContent: React.FC = () => {
   const [cashClosures, setCashClosures] = useState<CashRegisterDay[]>([]);
   const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
   const [currentClinic, setCurrentClinic] = useState<Clinic | undefined>();
+  /** Ro'yxatlar (bemor, qabul, xizmat...) qaysi klinika uchun to'liq yuklangan. currentClinic bunga yaramaydi — u alohida, oldinroq keladi */
+  const [loadedClinicId, setLoadedClinicId] = useState('');
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -314,6 +317,7 @@ const AppContent: React.FC = () => {
           // Demo har kuni shu kunga moslab quriladi (kun almashgan bo'lsa — shu yerda)
           demo.ensureDemoData();
           setCurrentClinic(demo.DEMO_CLINIC);
+          setLoadedClinicId(clinicId);
           // Nusxalar: ilova holati demo massivining o'zi bo'lsa, demo'ga qo'shilgan
           // bemor/to'lov holatda "allaqachon bor" ko'rinib, ekranda chiqmay qolardi
           setPatients([...demo.DEMO_PATIENTS]);
@@ -367,6 +371,7 @@ const AppContent: React.FC = () => {
             api.branches.getAll(clinicId).catch(() => [] as Branch[])
           ]);
           setCurrentClinic(clinicData);
+          setLoadedClinicId(clinicId);
           setPatients(pts);
           setAppointments(appts);
           setTransactions(txs);
@@ -512,6 +517,7 @@ const AppContent: React.FC = () => {
           api.reviews.getAll(clinicId),
           api.leads.getAll(clinicId)
         ]);
+        setLoadedClinicId(clinicId);
         setPatients(pts);
         setAppointments(appts);
         setTransactions(txs);
@@ -1247,8 +1253,44 @@ const AppContent: React.FC = () => {
     canPay: canPayForRole,
     userKey: `${clinicId}:${userRole}:${doctorId || userName}`,
   }), [userRole, perms, navKey, canBook, canPayForRole, clinicId, doctorId, userName]);
+  // "Ishni boshlash" (klinika rahbariga): sonlar butun klinika bo'yicha va faqat ma'lumot yuklangach —
+  // kirishdan keyingi birinchi chizishda ro'yxatlar hali bo'sh, ishlab turgan klinika "yangi" ko'rinardi.
+  // Amallar ref orqali: navigate va openBooking har chizishda yangilanadi, setup esa o'zgarmasin.
+  const setupLoaded = !!clinicId && loadedClinicId === clinicId;
+  const soloDoctor = currentClinic?.planId === 'individual';
+  const setupGo = useRef({ to: (_path: string) => { /* pastda */ }, book: () => { /* pastda */ } });
+  setupGo.current = {
+    to: path => navigate(path),
+    book: () => (canBook ? openBooking() : navigate('/calendar')),
+  };
+  const servicesCount = services.length, doctorsCount = doctors.length, patientsCount = patients.length, appointmentsCount = appointments.length;
+  const guideSetup = useMemo<SetupInfo | undefined>(() => (
+    userRole === UserRole.CLINIC_ADMIN && setupLoaded ? {
+      clinicId,
+      counts: { services: servicesCount, doctors: doctorsCount, patients: patientsCount, appointments: appointmentsCount },
+      actions: {
+        services: () => setupGo.current.to('/settings?tab=services'),
+        // Yakka shifokor tarifida shifokor profili birinchi qabulda o'zi ochiladi
+        doctors: soloDoctor ? undefined : () => setupGo.current.to('/doctors'),
+        patient: () => setupGo.current.to('/patients'),
+        appointment: () => setupGo.current.book(),
+        sms: () => setupGo.current.to('/settings?tab=messaging'),
+      },
+    } : undefined
+  ), [userRole, setupLoaded, clinicId, soloDoctor, servicesCount, doctorsCount, patientsCount, appointmentsCount]);
+  const isNewClinic = !!guideSetup && (servicesCount === 0 || (!soloDoctor && doctorsCount === 0) || patientsCount === 0 || appointmentsCount === 0);
+  /** Tugma yonidagi bir martalik eslatma */
+  const [guideNudge, setGuideNudge] = useState(false);
+  const markGuideSeen = () => {
+    setGuideNudge(false);
+    if (!guideSeen) {
+      setGuideSeen(true);
+      try { localStorage.setItem('denta_guide_seen_v1', '1'); } catch { /* shaxsiy rejim */ }
+    }
+  };
   const openTour = () => {
     setIsSidebarOpen(false);
+    setGuideNudge(false);
     if (!guideSeen) {
       setGuideSeen(true);
       try { localStorage.setItem('denta_guide_seen_v1', '1'); } catch { /* shaxsiy rejim */ }
@@ -1260,6 +1302,14 @@ const AppContent: React.FC = () => {
       () => window.location.reload(),
     );
   };
+  // Qo'llanma hali ochilmagan bo'lsa: yangi klinika rahbariga O'quv markazi o'zi ochiladi (tepada
+  // "Ishni boshlash"), qolganlarga tugma yonida eslatma chiqadi. Ikkalasi ham bir marta.
+  useEffect(() => {
+    if (guideSeen || !setupLoaded || !isStaffRole) return;
+    const timer = window.setTimeout(() => (isNewClinic ? openTour() : setGuideNudge(true)), isNewClinic ? 700 : 1500);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideSeen, setupLoaded, isStaffRole, isNewClinic]);
 
   // --- Main Render ---
   // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
@@ -1402,6 +1452,7 @@ const AppContent: React.FC = () => {
               {!guideSeen && <GuideDot />}
             </button>
           )}
+          {isStaffRole && guideNudge && <GuideNudge mobile onOpen={openTour} onClose={markGuideSeen} />}
           <button
             onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
             aria-label="DentaAI"
@@ -1456,6 +1507,7 @@ const AppContent: React.FC = () => {
               return (
                 <NavLink
                   key={item.id}
+                  data-tour={`nav-${item.id}`}
                   to={to}
                   end={item.id === 'dashboard'}
                   onClick={() => setIsSidebarOpen(false)}
@@ -1648,18 +1700,21 @@ const AppContent: React.FC = () => {
             <div className="flex items-center gap-2 xl:gap-3 shrink-0">
               {/* Qo'llanma — DentaAI oldida: joriy sahifani qadamma-qadam ko'rsatadi */}
               {isStaffRole && (
-                <button
-                  type="button"
-                  onClick={openTour}
-                  data-tour="tour"
-                  title={t('tour.buttonHint')}
-                  aria-label={t('tour.button')}
-                  className="relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[13px] font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.97] transition-all"
-                >
-                  <GraduationCap className="w-4 h-4" />
-                  <span className="hidden xl:inline">{t('tour.button')}</span>
-                  {!guideSeen && <GuideDot />}
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={openTour}
+                    data-tour="tour"
+                    title={t('tour.buttonHint')}
+                    aria-label={t('tour.button')}
+                    className="relative flex items-center gap-2 px-2.5 xl:pr-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[13px] font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.97] transition-all"
+                  >
+                    <GraduationCap className="w-4 h-4" />
+                    <span className="hidden xl:inline">{t('tour.button')}</span>
+                    {!guideSeen && <GuideDot />}
+                  </button>
+                  {guideNudge && <GuideNudge onOpen={openTour} onClose={markGuideSeen} />}
+                </div>
               )}
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
                   Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
@@ -1765,6 +1820,7 @@ const AppContent: React.FC = () => {
                 return (
                   <NavLink
                     key={item.id}
+                    data-tour={`nav-${item.id}`}
                     to={to}
                     end={item.id === 'dashboard'}
                     className={({ isActive }) => {
@@ -2166,7 +2222,7 @@ const AppContent: React.FC = () => {
       {/* Subscription Block Modal */}
       <SubscriptionBlockModal isOpen={isSubscriptionBlocked} />
 
-      {GuideCenter && guideOpen && <GuideCenter ctx={guideCtx} onClose={() => setGuideOpen(false)} />}
+      {GuideCenter && guideOpen && <GuideCenter ctx={guideCtx} setup={guideSetup} onClose={() => setGuideOpen(false)} />}
     </div>
     </PermissionsProvider>
   );
@@ -2175,10 +2231,37 @@ const AppContent: React.FC = () => {
 /** "Qo'llanma" tugmasidagi miltillovchi nuqta: O'quv markazi hali ochilmagan */
 const GuideDot: React.FC = () => (
   <span className="absolute -top-1 -right-1 flex h-3 w-3" aria-hidden="true">
-    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-75" />
-    <span className="relative inline-flex h-3 w-3 rounded-full bg-violet-500 ring-2 ring-white dark:ring-gray-800" />
+    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-400 opacity-75" />
+    <span className="relative inline-flex h-3 w-3 rounded-full bg-primary-500 ring-2 ring-white dark:ring-gray-800" />
   </span>
 );
+
+/** "Qo'llanma" tugmasi yonidagi bir martalik eslatma (O'quv markazi hali ochilmagan xodimga) */
+const GuideNudge: React.FC<{ mobile?: boolean; onOpen: () => void; onClose: () => void }> = ({ mobile, onOpen, onClose }) => {
+  const { t } = useLanguage();
+  return (
+    <div
+      role="status"
+      className={`z-40 rounded-2xl bg-gray-900 p-4 text-left text-white shadow-2xl ring-1 ring-white/10 animate-fade-in dark:bg-gray-700 ${mobile
+        ? 'fixed left-3 right-3 top-[76px]'
+        : 'absolute right-0 top-full mt-3 w-[280px]'}`}
+    >
+      {!mobile && <span aria-hidden="true" className="absolute -top-1.5 right-7 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-700" />}
+      <p className="flex items-center gap-2 text-sm font-extrabold">
+        <GraduationCap className="h-4 w-4 text-primary-300" /> {t('guide.nudge.title')}
+      </p>
+      <p className="mt-1 text-[13px] leading-snug text-white/75">{t('guide.nudge.body')}</p>
+      <div className="mt-3 flex items-center gap-1.5">
+        <button type="button" onClick={onOpen} className="h-8 rounded-lg bg-white px-3.5 text-xs font-extrabold text-gray-900 transition-colors hover:bg-primary-50">
+          {t('guide.nudge.cta')}
+        </button>
+        <button type="button" onClick={onClose} className="h-8 rounded-lg px-2.5 text-xs font-bold text-white/70 transition-colors hover:bg-white/10 hover:text-white">
+          {t('guide.close')}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   return (

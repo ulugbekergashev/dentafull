@@ -1,7 +1,8 @@
 /**
  * O'quv markazi ssenariylari.
  *
- *  - "To'liq tanishuv" — asosiy imkoniyatlar, kerakli sahifalarni qo'llanma o'zi ochadi;
+ *  - "Tanishuv" — asosiy bo'limlar va tugmalar: bo'limni foydalanuvchi menyudan o'zi ochadi
+ *    (qayerdan kirilishini bilsin), sahifada esa aniq tugma ko'rsatiladi va u nima qilishi aytiladi;
  *  - sahifa qo'llanmalari — shu sahifadagi tugma va bloklar;
  *  - "Qanday qilinadi?" — murakkabroq ishlar (protsedura qo'shish, to'lov...). Bunda
  *    foydalanuvchi ishni o'zi bajaradi: qo'llanma keyingi joyni ko'rsatib, u bosilganini
@@ -61,6 +62,18 @@ export interface GuideStep {
     skip?: { path?: RegExp; visible?: string };
     /** Belgilangan joy yo'qolsa (oyna yopildi, boshqa sahifaga o'tildi) — shu qadamga qaytiladi */
     recover?: string;
+    /**
+     * Foydalanuvchi shu qadamni bajarishi shart — bajarilmaguncha "Keyingi" yopiq turadi:
+     *  - true — belgilangan joydagi majburiy maydonlar to'ldirilgan (majburiysi bo'lmasa — kamida bittasi);
+     *  - nom — shu `data-tour` belgili element ekranda va yoqilgan (masalan, tanlangan bemor yoki ochilgan tugma).
+     * Bajarib, boshqa maydonga o'tilsa — qo'llanma o'zi keyingi qadamga o'tadi.
+     */
+    ready?: true | string;
+    /**
+     * Qadam faqat shu manzilda bor (masalan, bemor kartasi). Foydalanuvchi u yerdan chiqib ketsa,
+     * element kutib o'tirilmaydi — darhol `recover` qadamiga qaytiladi
+     */
+    on?: RegExp;
     /** Topilmasa jimgina tashlab ketiladi */
     optional?: boolean;
     when?: (ctx: GuideContext) => boolean;
@@ -76,8 +89,6 @@ export interface Guide {
     title: TranslationKey;
     desc: TranslationKey;
     icon: LucideIcon;
-    /** Belgi foni — Tailwind gradient ranglari */
-    tone: string;
     minutes: number;
     /** Sahifa qo'llanmasi qaysi manzilniki */
     page?: string;
@@ -91,25 +102,41 @@ const PATIENT_CARD = /^\/patients\/[^/]+\/?$/;
 
 // ── To'liq tanishuv ─────────────────────────────────────────────────────────
 
+/**
+ * Bo'limga kirish: menyudagi bandni foydalanuvchi o'zi bosadi. Band ekranda bo'lmasa (telefonda
+ * "Barchasi" ortida) yoki allaqachon shu bo'limda bo'lsak — tashlab ketiladi; keyingi qadamning
+ * `route`i sahifani o'zi ochadi.
+ */
+const openSection = (id: string, path: RegExp, chapter: TranslationKey): GuideStep => ({
+    target: `nav-${id}`, action: 'click', doneWhen: { path }, skip: { path }, optional: true, when: hasNav(id), chapter,
+    title: `guide.tour.${id}.open.title` as TranslationKey,
+    body: `guide.tour.${id}.open.desc` as TranslationKey,
+});
+
+// Har bir matn — "nimani bosasiz va nima bo'ladi". Bloklarning batafsil tavsifi sahifa qo'llanmalarida.
 const TOUR: Guide = {
-    id: 'tour', kind: 'tour', icon: Compass, tone: 'from-primary-600 to-violet-600', minutes: 2,
+    id: 'tour', kind: 'tour', icon: Compass, minutes: 2,
     title: 'guide.tour.title', desc: 'guide.tour.desc',
     steps: [
-        { title: 'guide.tour.welcome.title', body: 'guide.tour.welcome.desc' },
-        { route: '/', target: 'nav', chapter: 'guide.ch.start', title: 'tour.nav.title', body: 'tour.nav.desc', optional: true },
-        { route: '/', target: 'menu', chapter: 'guide.ch.start', title: 'tour.menu.title', body: 'tour.menu.desc', optional: true, screen: 'mobile' },
-        { route: '/', target: 'search', chapter: 'guide.ch.start', title: 'tour.search.title', body: 'tour.search.desc', optional: true, screen: 'desktop' },
         // Resepshn va admin — "Bugun klinikada", shifokor — "Mening navbatim": qaysi biri ekranda bo'lsa
-        { route: '/', target: 'clinic-map', chapter: 'guide.ch.dashboard', title: 'tour.map.title', body: 'tour.map.desc', optional: true, roles: DESK },
-        { route: '/', target: 'my-queue', chapter: 'guide.ch.dashboard', title: 'tour.myQueue.title', body: 'tour.myQueue.desc', optional: true, roles: ['doctor'] },
-        { route: '/', target: 'quick', chapter: 'guide.ch.dashboard', title: 'tour.quick.title', body: 'tour.quick.desc', optional: true },
-        { route: '/patients', target: 'pat-search', chapter: 'guide.ch.patients', title: 'guide.tour.patients.title', body: 'guide.tour.patients.desc', optional: true, when: hasNav('patients') },
-        { route: '/calendar', target: 'cal-grid', chapter: 'guide.ch.calendar', title: 'guide.tour.calendar.title', body: 'guide.tour.calendar.desc', optional: true, when: hasNav('calendar') },
+        { route: '/', target: 'clinic-map', chapter: 'guide.ch.dashboard', title: 'tour.map.title', body: 'guide.tour.map.desc', optional: true, roles: DESK },
+        { route: '/', target: 'my-queue', chapter: 'guide.ch.dashboard', title: 'tour.myQueue.title', body: 'guide.tour.queue.desc', optional: true, roles: ['doctor'] },
+        { route: '/', target: 'quick-book', chapter: 'guide.ch.dashboard', title: 'guide.tour.book.title', body: 'guide.tour.book.desc', optional: true },
+        { route: '/', target: 'quick-pay', chapter: 'guide.ch.dashboard', title: 'guide.tour.pay.title', body: 'guide.tour.pay.desc', optional: true },
+
+        openSection('patients', /^\/patients\/?$/, 'guide.ch.patients'),
+        // Tugmasi yo'q xodimda (ruxsat berilmagan) qadam umuman bo'lmaydi — yangi sahifada uni kutib o'tirilmasin
+        { route: '/patients', target: 'pat-add', chapter: 'guide.ch.patients', title: 'guide.tour.patAdd.title', body: 'guide.tour.patAdd.desc', optional: true, when: c => c.nav.includes('patients') && c.perms.can('patients', 'card', 'create') },
+        { route: '/patients', target: 'pat-row', chapter: 'guide.ch.patients', title: 'guide.tour.patRow.title', body: 'guide.tour.patRow.desc', optional: true, when: hasNav('patients') },
+
+        openSection('calendar', /^\/calendar\/?$/, 'guide.ch.calendar'),
+        { route: '/calendar', target: 'cal-new', chapter: 'guide.ch.calendar', title: 'guide.tour.calNew.title', body: 'guide.tour.calNew.desc', optional: true, when: c => c.nav.includes('calendar') && c.perms.can('calendar', 'appts', 'create') },
+
+        openSection('finance', /^\/finance\/?$/, 'guide.ch.finance'),
         { route: '/finance', target: 'fin-head', chapter: 'guide.ch.finance', title: 'guide.tour.finance.title', body: 'guide.tour.finance.desc', optional: true, when: hasNav('finance') },
-        { route: '/messages', target: 'msg-tabs', chapter: 'guide.ch.messages', title: 'guide.tour.messages.title', body: 'guide.tour.messages.desc', optional: true, when: hasNav('messages') },
-        { route: '/', target: 'ai', chapter: 'guide.ch.helpers', title: 'tour.ai.title', body: 'tour.ai.desc', optional: true },
-        { route: '/', target: 'bell', chapter: 'guide.ch.helpers', title: 'tour.bell.title', body: 'tour.bell.desc', optional: true },
-        { route: '/', target: 'tour', chapter: 'guide.ch.helpers', title: 'guide.tour.end.title', body: 'guide.tour.end.desc', optional: true },
+
+        { target: 'ai', chapter: 'guide.ch.helpers', title: 'tour.ai.title', body: 'guide.tour.ai.desc', optional: true },
+        { target: 'tour', chapter: 'guide.ch.helpers', title: 'guide.tour.end.title', body: 'guide.tour.end.desc', optional: true },
     ],
 };
 
@@ -124,7 +151,7 @@ const page = (route: string, steps: ([string, string] | [string, string, GuideRo
 
 const PAGES: Guide[] = [
     {
-        id: 'page-dashboard', kind: 'page', page: '/', icon: LayoutDashboard, tone: 'from-sky-500 to-primary-600', minutes: 1,
+        id: 'page-dashboard', kind: 'page', page: '/', icon: LayoutDashboard, minutes: 1,
         title: 'guide.page.dashboard', desc: 'guide.page.dashboard.desc',
         steps: page('/', [
             ['period', 'period'], ['quick', 'quick'], ['clinic-map', 'map', DESK], ['money', 'money', DESK],
@@ -132,17 +159,17 @@ const PAGES: Guide[] = [
         ]),
     },
     {
-        id: 'page-patients', kind: 'page', page: '/patients', icon: Users, tone: 'from-indigo-500 to-primary-600', minutes: 1,
+        id: 'page-patients', kind: 'page', page: '/patients', icon: Users, minutes: 1,
         title: 'guide.page.patients', desc: 'guide.page.patients.desc', when: hasNav('patients'),
         steps: page('/patients', [['pat-add', 'patAdd'], ['pat-stats', 'patStats'], ['pat-search', 'patSearch'], ['pat-row', 'patList']]),
     },
     {
-        id: 'page-calendar', kind: 'page', page: '/calendar', icon: CalendarDays, tone: 'from-cyan-500 to-sky-600', minutes: 1,
+        id: 'page-calendar', kind: 'page', page: '/calendar', icon: CalendarDays, minutes: 1,
         title: 'guide.page.calendar', desc: 'guide.page.calendar.desc', when: hasNav('calendar'),
         steps: page('/calendar', [['cal-date', 'calDate'], ['cal-view', 'calView'], ['cal-new', 'calNew'], ['cal-doctors', 'calDoctors'], ['cal-grid', 'calGrid']]),
     },
     {
-        id: 'page-messages', kind: 'page', page: '/messages', icon: MessageSquare, tone: 'from-fuchsia-500 to-violet-600', minutes: 1,
+        id: 'page-messages', kind: 'page', page: '/messages', icon: MessageSquare, minutes: 1,
         title: 'guide.page.messages', desc: 'guide.page.messages.desc', when: hasNav('messages'),
         steps: page('/messages', [['msg-tabs', 'msgTabs'], ['msg-vars', 'msgVars'], ['msg-new', 'msgNew'], ['msg-templates', 'msgTemplate']]),
     },
@@ -152,86 +179,87 @@ const PAGES: Guide[] = [
 
 const TASKS: Guide[] = [
     {
-        id: 'task-procedure', kind: 'task', icon: Stethoscope, tone: 'from-emerald-500 to-teal-600', minutes: 2,
+        id: 'task-procedure', kind: 'task', icon: Stethoscope, minutes: 2,
         title: 'guide.proc.title', desc: 'guide.proc.desc', when: hasNav('patients'),
         steps: [
             // Karta allaqachon ochiq bo'lsa — to'g'ri protsedura qo'shishga o'tiladi
-            { id: 'find', route: '/patients', target: 'pat-search', mode: 'ring', title: 'guide.proc.find.title', body: 'guide.proc.find.desc', doneWhen: { path: PATIENT_CARD }, skip: { path: PATIENT_CARD } },
+            // Ro'yxatdagi bemor ko'rsatiladi (ring: boshqa bemorni tanlash yoki qidirish ham mumkin)
+            { id: 'find', route: '/patients', target: 'pat-row', mode: 'ring', action: 'click', title: 'guide.proc.find.title', body: 'guide.proc.find.desc', doneWhen: { path: PATIENT_CARD }, skip: { path: PATIENT_CARD } },
             // "Bugungi qabul" faqat "Umumiy" bo'limida — boshqa bo'lim ochiq bo'lsa, avval shunga
-            { id: 'tab', target: 'pd-tab-overview', action: 'click', title: 'guide.proc.tab.title', body: 'guide.proc.tab.desc', skip: { visible: 'proc-add' }, recover: 'find' },
-            { id: 'add', target: 'proc-add', action: 'click', title: 'guide.proc.add.title', body: 'guide.proc.add.desc', skip: { visible: 'proc-teeth' }, recover: 'tab' },
-            { target: 'proc-teeth', mode: 'ring', title: 'guide.proc.teeth.title', body: 'guide.proc.teeth.desc', recover: 'add' },
-            { target: 'proc-service', mode: 'ring', title: 'guide.proc.service.title', body: 'guide.proc.service.desc', recover: 'add' },
+            { id: 'tab', on: PATIENT_CARD, target: 'pd-tab-overview', action: 'click', title: 'guide.proc.tab.title', body: 'guide.proc.tab.desc', skip: { visible: 'proc-add' }, recover: 'find' },
+            { id: 'add', on: PATIENT_CARD, target: 'proc-add', action: 'click', title: 'guide.proc.add.title', body: 'guide.proc.add.desc', skip: { visible: 'proc-teeth' }, recover: 'tab' },
+            { on: PATIENT_CARD, target: 'proc-teeth', mode: 'ring', title: 'guide.proc.teeth.title', body: 'guide.proc.teeth.desc', recover: 'add' },
+            { on: PATIENT_CARD, target: 'proc-service', mode: 'ring', ready: 'proc-add-list', title: 'guide.proc.service.title', body: 'guide.proc.service.desc', recover: 'add' },
             // Tugma xizmat tanlanmaguncha yopiq — ro'yxatga birinchi qator tushganda davom etamiz
-            { target: 'proc-add-list', mode: 'ring', title: 'guide.proc.list.title', body: 'guide.proc.list.desc', doneWhen: { appear: 'proc-queue-item' }, recover: 'add' },
-            { target: 'proc-save', mode: 'ring', action: 'click', doneWhen: { gone: 'proc-modal' }, title: 'guide.proc.save.title', body: 'guide.proc.save.desc', recover: 'add' },
-            { target: 'visit-next', mode: 'ring', title: 'guide.proc.next.title', body: 'guide.proc.next.desc', recover: 'add' },
+            { on: PATIENT_CARD, target: 'proc-add-list', mode: 'ring', title: 'guide.proc.list.title', body: 'guide.proc.list.desc', doneWhen: { appear: 'proc-queue-item' }, recover: 'add' },
+            { on: PATIENT_CARD, target: 'proc-save', mode: 'ring', action: 'click', doneWhen: { gone: 'proc-modal' }, title: 'guide.proc.save.title', body: 'guide.proc.save.desc', recover: 'add' },
+            { on: PATIENT_CARD, target: 'visit-next', mode: 'ring', title: 'guide.proc.next.title', body: 'guide.proc.next.desc', recover: 'add' },
             // Yakunlash haqiqiy amal (to'lov oynasi ochiladi) — faqat tushuntiramiz, bosishni o'ziga qoldiramiz
-            { target: 'visit-complete', title: 'guide.proc.complete.title', body: 'guide.proc.complete.desc', recover: 'add' },
+            { on: PATIENT_CARD, target: 'visit-complete', title: 'guide.proc.complete.title', body: 'guide.proc.complete.desc', recover: 'add' },
         ],
     },
     {
-        id: 'task-patient', kind: 'task', icon: UserPlus, tone: 'from-primary-500 to-indigo-600', minutes: 1,
+        id: 'task-patient', kind: 'task', icon: UserPlus, minutes: 1,
         title: 'guide.pat.title', desc: 'guide.pat.desc',
         when: c => c.nav.includes('patients') && c.perms.can('patients', 'card', 'create'),
         steps: [
             { id: 'open', route: '/patients', target: 'pat-add', action: 'click', title: 'guide.pat.open.title', body: 'guide.pat.open.desc', skip: { visible: 'pat-form' } },
-            { target: 'pat-form-name', mode: 'ring', title: 'guide.pat.name.title', body: 'guide.pat.name.desc', recover: 'open' },
-            { target: 'pat-form-phone', mode: 'ring', title: 'guide.pat.phone.title', body: 'guide.pat.phone.desc', recover: 'open' },
-            { target: 'pat-form-dob', mode: 'ring', title: 'guide.pat.dob.title', body: 'guide.pat.dob.desc', recover: 'open' },
+            { target: 'pat-form-name', mode: 'ring', ready: true, title: 'guide.pat.name.title', body: 'guide.pat.name.desc', recover: 'open' },
+            { target: 'pat-form-phone', mode: 'ring', ready: true, title: 'guide.pat.phone.title', body: 'guide.pat.phone.desc', recover: 'open' },
+            { target: 'pat-form-dob', mode: 'ring', ready: true, title: 'guide.pat.dob.title', body: 'guide.pat.dob.desc', recover: 'open' },
             { target: 'pat-form-doctor', mode: 'ring', optional: true, title: 'guide.pat.doctor.title', body: 'guide.pat.doctor.desc', recover: 'open' },
             { target: 'pat-form-save', mode: 'ring', action: 'click', doneWhen: { gone: 'pat-form' }, title: 'guide.pat.save.title', body: 'guide.pat.save.desc', recover: 'open' },
         ],
     },
     {
-        id: 'task-booking', kind: 'task', icon: CalendarPlus, tone: 'from-sky-500 to-blue-600', minutes: 1,
+        id: 'task-booking', kind: 'task', icon: CalendarPlus, minutes: 1,
         title: 'guide.book.title', desc: 'guide.book.desc', when: c => c.canBook,
         steps: [
             { id: 'open', route: '/', target: 'quick-book', action: 'click', title: 'guide.book.open.title', body: 'guide.book.open.desc', skip: { visible: 'bk-panel' } },
-            { target: 'bk-patient', mode: 'ring', title: 'guide.book.patient.title', body: 'guide.book.patient.desc', recover: 'open' },
+            { target: 'bk-patient', mode: 'ring', ready: 'bk-patient-ok', title: 'guide.book.patient.title', body: 'guide.book.patient.desc', recover: 'open' },
             { target: 'bk-when', mode: 'ring', title: 'guide.book.when.title', body: 'guide.book.when.desc', recover: 'open' },
             { target: 'bk-doctor', mode: 'ring', optional: true, title: 'guide.book.doctor.title', body: 'guide.book.doctor.desc', recover: 'open' },
             // Vaqt jadvali faqat "Bugun" va "Boshqa kun"da — "Hozir"da tashlab ketiladi
-            { target: 'bk-time', mode: 'ring', optional: true, title: 'guide.book.time.title', body: 'guide.book.time.desc', recover: 'open' },
+            { target: 'bk-time', mode: 'ring', optional: true, ready: 'bk-time-ok', title: 'guide.book.time.title', body: 'guide.book.time.desc', recover: 'open' },
             { target: 'bk-service', mode: 'ring', title: 'guide.book.service.title', body: 'guide.book.service.desc', recover: 'open' },
             { target: 'bk-submit', mode: 'ring', action: 'click', doneWhen: { gone: 'bk-panel' }, title: 'guide.book.submit.title', body: 'guide.book.submit.desc', recover: 'open' },
         ],
     },
     {
-        id: 'task-payment', kind: 'task', icon: Wallet, tone: 'from-green-500 to-emerald-600', minutes: 1,
+        id: 'task-payment', kind: 'task', icon: Wallet, minutes: 1,
         title: 'guide.pay.title', desc: 'guide.pay.desc', when: c => c.canPay,
         steps: [
             { id: 'open', route: '/', target: 'quick-pay', action: 'click', title: 'guide.pay.open.title', body: 'guide.pay.open.desc', skip: { visible: 'pay-modal' } },
-            { target: 'pay-patient', mode: 'ring', title: 'guide.pay.patient.title', body: 'guide.pay.patient.desc', recover: 'open' },
+            { target: 'pay-patient', mode: 'ring', ready: true, title: 'guide.pay.patient.title', body: 'guide.pay.patient.desc', recover: 'open' },
             { target: 'pay-services', mode: 'ring', optional: true, title: 'guide.pay.services.title', body: 'guide.pay.services.desc', recover: 'open' },
-            { target: 'pay-split', mode: 'ring', title: 'guide.pay.split.title', body: 'guide.pay.split.desc', recover: 'open' },
+            { target: 'pay-split', mode: 'ring', ready: 'pay-save', title: 'guide.pay.split.title', body: 'guide.pay.split.desc', recover: 'open' },
             { target: 'pay-method', mode: 'ring', title: 'guide.pay.method.title', body: 'guide.pay.method.desc', recover: 'open' },
             { target: 'pay-save', mode: 'ring', action: 'click', doneWhen: { gone: 'pay-modal' }, title: 'guide.pay.save.title', body: 'guide.pay.save.desc', recover: 'open' },
         ],
     },
     {
-        id: 'task-service', kind: 'task', icon: Tags, tone: 'from-amber-500 to-orange-600', minutes: 1,
+        id: 'task-service', kind: 'task', icon: Tags, minutes: 1,
         title: 'guide.svc.title', desc: 'guide.svc.desc',
         when: c => c.role !== 'doctor' && c.nav.includes('settings') && c.perms.can('settings', 'services', 'create'),
         steps: [
             { id: 'tab', route: '/settings', target: 'set-tab-services', action: 'click', title: 'guide.svc.tab.title', body: 'guide.svc.tab.desc', skip: { visible: 'svc-add' } },
             { id: 'open', route: '/settings', target: 'svc-add', action: 'click', title: 'guide.svc.open.title', body: 'guide.svc.open.desc', skip: { visible: 'svc-form' }, recover: 'tab' },
-            { target: 'svc-name', mode: 'ring', title: 'guide.svc.name.title', body: 'guide.svc.name.desc', recover: 'open' },
-            { target: 'svc-price', mode: 'ring', title: 'guide.svc.price.title', body: 'guide.svc.price.desc', recover: 'open' },
+            { target: 'svc-name', mode: 'ring', ready: true, title: 'guide.svc.name.title', body: 'guide.svc.name.desc', recover: 'open' },
+            { target: 'svc-price', mode: 'ring', ready: true, title: 'guide.svc.price.title', body: 'guide.svc.price.desc', recover: 'open' },
             { target: 'svc-recall', mode: 'ring', title: 'guide.svc.recall.title', body: 'guide.svc.recall.desc', recover: 'open' },
             { target: 'svc-req', mode: 'ring', title: 'guide.svc.req.title', body: 'guide.svc.req.desc', recover: 'open' },
             { target: 'svc-save', mode: 'ring', action: 'click', doneWhen: { gone: 'svc-form' }, title: 'guide.svc.save.title', body: 'guide.svc.save.desc', recover: 'open' },
         ],
     },
     {
-        id: 'task-sms', kind: 'task', icon: MessageSquareText, tone: 'from-violet-500 to-fuchsia-600', minutes: 1,
+        id: 'task-sms', kind: 'task', icon: MessageSquareText, minutes: 1,
         title: 'guide.sms.title', desc: 'guide.sms.desc',
         when: c => c.role !== 'doctor' && c.nav.includes('messages') && c.perms.flag('messages', 'automation'),
         steps: [
             { id: 'tab', route: '/messages', target: 'msg-tab-templates', action: 'click', title: 'guide.sms.tab.title', body: 'guide.sms.tab.desc', skip: { visible: 'msg-new' } },
             { id: 'open', route: '/messages', target: 'msg-new', action: 'click', title: 'guide.sms.open.title', body: 'guide.sms.open.desc', skip: { visible: 'msg-form' }, recover: 'tab' },
-            { target: 'msg-form-name', mode: 'ring', title: 'guide.sms.name.title', body: 'guide.sms.name.desc', recover: 'open' },
-            { target: 'msg-form-text', mode: 'ring', title: 'guide.sms.text.title', body: 'guide.sms.text.desc', recover: 'open' },
+            { target: 'msg-form-name', mode: 'ring', ready: true, title: 'guide.sms.name.title', body: 'guide.sms.name.desc', recover: 'open' },
+            { target: 'msg-form-text', mode: 'ring', ready: true, title: 'guide.sms.text.title', body: 'guide.sms.text.desc', recover: 'open' },
             { target: 'msg-form-save', mode: 'ring', action: 'click', doneWhen: { gone: 'msg-form' }, title: 'guide.sms.save.title', body: 'guide.sms.save.desc', recover: 'open' },
             { route: '/messages', target: 'msg-tab-auto', optional: true, title: 'guide.sms.auto.title', body: 'guide.sms.auto.desc' },
         ],

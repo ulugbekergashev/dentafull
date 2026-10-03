@@ -237,7 +237,7 @@ export const QuickPaymentModal: React.FC<QuickPaymentModalProps> = ({
                 <div className="space-y-4" data-tour="pay-patient">
                     <div>
                         <label className={labelCls}>{t('auto.Bemor *')}</label>
-                        <select value={form.patientId} onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))} className={inputCls}>
+                        <select value={form.patientId} onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))} className={inputCls} required>
                             <option value="">{t('auto.Bemorni tanlang...')}</option>
                             {patients.map(p => <option key={p.id} value={p.id}>{p.lastName} {p.firstName} — {p.phone}</option>)}
                         </select>

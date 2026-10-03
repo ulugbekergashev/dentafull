@@ -63,6 +63,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ userRole, items, isSidebar
                     return (
                         <button
                             key={item.id}
+                            data-tour={`nav-${item.id}`}
                             onClick={() => navigate(pathOf(item.id))}
                             className={`flex flex-col items-center justify-center w-full h-full transition-all duration-200 relative ${active
                                 ? 'text-primary-600 dark:text-primary-400'
