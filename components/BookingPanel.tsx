@@ -454,7 +454,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
     return (
         <div className="fixed inset-0 z-[55] flex justify-end" role="dialog" aria-modal="true" aria-labelledby="booking-title">
             <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-[1px] animate-in" onClick={onClose} />
-            <form onSubmit={submit} className="relative w-full max-w-[480px] h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl animate-in">
+            <form onSubmit={submit} data-tour="bk-panel" className="relative w-full max-w-[480px] h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl animate-in">
                 <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 dark:border-gray-800">
                     <h2 id="booking-title" className="text-lg font-black text-gray-900 dark:text-white">{moving ? t('booking.rescheduleTitle') : t('booking.title')}</h2>
                     <button type="button" onClick={onClose} aria-label={t('common.close')} className="p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">
@@ -464,7 +464,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
 
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
                     {/* Bemor */}
-                    <div className="space-y-2">
+                    <div className="space-y-2" data-tour="bk-patient">
                         <span className={sectionLabel}>{t('booking.patient')}</span>
                         {selected ? (
                             <div className="flex items-center gap-3 p-3 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
@@ -577,7 +577,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     </div>
 
                     {/* Qachon */}
-                    <div className="space-y-2">
+                    <div className="space-y-2" data-tour="bk-when">
                         <span className={sectionLabel}>{t('booking.when')}</span>
                         <div className={`grid ${modes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2`} role="radiogroup" aria-label={t('booking.when')}>
                             {modes.map(([m, title, sub]) => (
@@ -600,7 +600,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
 
                     {/* Shifokor */}
                     {!isIndividualPlan && mode === 'now' && (
-                        <div className="space-y-2">
+                        <div className="space-y-2" data-tour="bk-doctor">
                             <span className={sectionLabel}>{t('booking.doctorQueue')}</span>
                             {queues.length === 0 ? (
                                 <p className="text-sm text-gray-500">{t('booking.noDoctors')}</p>
@@ -672,7 +672,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     {mode !== 'now' && (
                         <>
                             {!isIndividualPlan && (
-                                <div className="space-y-2">
+                                <div className="space-y-2" data-tour="bk-doctor">
                                     <span className={sectionLabel}>{t('booking.doctor')}</span>
                                     <select
                                         value={doctorId}
@@ -686,7 +686,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                     </select>
                                 </div>
                             )}
-                            <div className="space-y-2">
+                            <div className="space-y-2" data-tour="bk-time">
                                 <div className="flex items-center justify-between gap-2">
                                     <span className={sectionLabel}>{t('booking.time').replace('{date}', dateLabel(targetDate))}</span>
                                     <span className="text-[11px] text-gray-400">{t('booking.busyLegend')}</span>
@@ -731,7 +731,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                     )}
 
                     {/* Xizmat va izoh */}
-                    <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2" data-tour="bk-service">
                         <div className="space-y-2 min-w-0">
                             <span className={sectionLabel}>{t('booking.service')}</span>
                             <select
@@ -776,6 +776,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                 <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
                     <button
                         type="submit"
+                        data-tour="bk-submit"
                         disabled={saving || !!blocked}
                         className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl bg-primary hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[15px] font-extrabold shadow-lg shadow-primary-500/20 transition-colors"
                     >

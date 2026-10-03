@@ -85,6 +85,7 @@ export const PeriodPicker: React.FC<PeriodPickerProps> = ({ value, onChange, cou
         <div
             role="radiogroup"
             aria-label={t('dashboard.period')}
+            data-tour="period"
             className="flex items-center gap-1 p-1 max-w-full overflow-x-auto bg-gray-100 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 [scrollbar-width:none]"
         >
             {(['today', 'yesterday', 'month'] as const).map(k => (

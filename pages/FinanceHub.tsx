@@ -95,7 +95,7 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
 
     return (
         <div className="space-y-5 animate-fade-in">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div data-tour="fin-head" className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('auto.Moliya')}</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{t(current.subtitle)}</p>

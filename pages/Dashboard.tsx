@@ -34,7 +34,6 @@ import { useNavigate } from 'react-router-dom';
 import { AddPatientModal } from '../components/AddPatientModal';
 import { QuickPaymentModal } from '../components/QuickPaymentModal';
 import { CollapseToggle, useCollapsed } from '../components/CollapseToggle';
-import { SetupChecklist, SetupCounts } from '../components/SetupChecklist';
 import { api } from '../services/api';
 
 interface DashboardProps {
@@ -66,8 +65,6 @@ interface DashboardProps {
   onAddAppointment?: (appt: Omit<Appointment, 'id'>) => Promise<any>;
   /** "Qabul" yon panelini ochish (App darajasida, istalgan sahifadan ochiladi) */
   onOpenBooking?: (opts?: BookingRequest) => void;
-  /** "Ishni boshlash" kartasi uchun — faqat klinika rahbariga beriladi (karta yangi klinikada chiqadi) */
-  setupCounts?: SetupCounts;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -75,7 +72,7 @@ interface DashboardProps {
 // dashboard umumiy holatni ko'rsatadi, to'liq ro'yxat o'z sahifasida.
 const DASH_ROW_LIMIT = 4;
 
-export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onUpdateLead, onAddPatient, onAddTransaction, onAddAppointment, onOpenBooking, setupCounts, addToast }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, transactions, reviews, userRole, doctorId, doctors, leads, labOrders = [], services = [], currentClinic, clinicId = '', showFinance = true, canTakePayment = true, seeAllPatients = false, showPatientPhone = true, onPatientClick, onUpdateAppointment, onUpdateTransaction, onUpdateLead, onAddPatient, onAddTransaction, onAddAppointment, onOpenBooking, addToast }) => {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
@@ -657,7 +654,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         <PeriodPicker value={period} onChange={changePeriod} counts={apptCountsByDay} />
 
           {/* Quick Actions — dashboarddan turib bajariladi. Tor ekranda keyingi qatorga o'tadi */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div data-tour="quick" className="flex flex-wrap items-center gap-2">
             {perms.menu('patients') && (
               <PatientQuickSearch
                 patients={patients}
@@ -673,6 +670,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             )}
             {perms.menu('calendar') && (
               <button
+                data-tour="quick-book"
                 onClick={() => (canBookHere ? onOpenBooking!() : navigate('/calendar'))}
                 className="flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
               >
@@ -682,6 +680,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             )}
             {canTakePayment && (!isReceptionist || showFinance) && (
               <button
+                data-tour="quick-pay"
                 onClick={() => {
                   if (!onAddTransaction) return navigate('/finance');
                   setPayingAppointment(null);
@@ -698,52 +697,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         </div>
       </div>
 
-      {setupCounts && (
-        <SetupChecklist
-          clinicId={clinicId}
-          counts={setupCounts}
-          actions={{
-            services: () => navigate('/settings?tab=services'),
-            // Yakka shifokor tarifida shifokor profili birinchi qabulda o'zi ochiladi
-            doctors: currentClinic?.planId === 'individual' ? undefined : () => navigate('/doctors'),
-            patient: () => {
-              if (!onAddPatient) return navigate('/patients');
-              setNewPatientPrefill({});
-              setIsAddPatientOpen(true);
-            },
-            appointment: () => (canBookHere ? onOpenBooking!() : navigate('/calendar')),
-            sms: () => navigate('/settings?tab=messaging'),
-          }}
-        />
-      )}
-
       {isDesk && (
         <>
-          <ClinicMap
-            appointments={appointments}
-            doctors={doctors}
-            flowLog={deskFlow.entries}
-            onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
-            onArrived={canMoveAppt ? arriveNow : undefined}
-            onEnter={a => deskFlow.set(a.id, true)}
-            onUndoEnter={a => deskFlow.set(a.id, false)}
-            onNoShow={canMoveAppt ? a => onUpdateAppointment!(a.id, { status: 'No-Show' }) : undefined}
-            onFinish={canMoveAppt ? finishAppointment : undefined}
-            onOpenBooking={canBookHere ? () => onOpenBooking!() : undefined}
-            onSeeAll={perms.menu('calendar') ? () => navigate('/calendar') : undefined}
-          />
+          <div data-tour="clinic-map">
+            <ClinicMap
+              appointments={appointments}
+              doctors={doctors}
+              flowLog={deskFlow.entries}
+              onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+              onArrived={canMoveAppt ? arriveNow : undefined}
+              onEnter={a => deskFlow.set(a.id, true)}
+              onUndoEnter={a => deskFlow.set(a.id, false)}
+              onNoShow={canMoveAppt ? a => onUpdateAppointment!(a.id, { status: 'No-Show' }) : undefined}
+              onFinish={canMoveAppt ? finishAppointment : undefined}
+              onOpenBooking={canBookHere ? () => onOpenBooking!() : undefined}
+              onSeeAll={perms.menu('calendar') ? () => navigate('/calendar') : undefined}
+            />
+          </div>
           {/* Kutilayotgan to'lovlar — alohida blok, butun kenglikda */}
-          <DeskMoneyCard
-            awaiting={awaitingRows}
-            debts={debtRows}
-            today={localToday}
-            showAmounts={showFinance}
-            renderRow={renderUnpaidRow}
-            onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
-            onSeeAll={perms.menu('finance') ? () => navigate('/finance') : undefined}
-          />
+          <div data-tour="money">
+            <DeskMoneyCard
+              awaiting={awaitingRows}
+              debts={debtRows}
+              today={localToday}
+              showAmounts={showFinance}
+              renderRow={renderUnpaidRow}
+              onPatientClick={perms.menu('patients') ? onPatientClick : undefined}
+              onSeeAll={perms.menu('finance') ? () => navigate('/finance') : undefined}
+            />
+          </div>
           <div className={`grid grid-cols-1 gap-6 items-start ${perms.menu('lab') ? 'lg:grid-cols-5' : ''}`}>
-            <div className={`min-w-0 ${perms.menu('lab') ? 'lg:col-span-3' : ''}`}>
+            <div data-tour="calls" className={`min-w-0 ${perms.menu('lab') ? 'lg:col-span-3' : ''}`}>
               <DeskCallsCard
                 items={calls}
                 today={localToday}

@@ -49,7 +49,7 @@ export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
             <MonthGrid value={dateKey} onPick={onPickDate} counts={dayCounts} rangeFrom={rangeFrom} rangeTo={rangeTo} />
 
             {doctors.length > 1 && (
-                <section role="group" aria-label={t('calendar.doctorFilter')}>
+                <section role="group" aria-label={t('calendar.doctorFilter')} data-tour="cal-doctors">
                     <h3 className="px-2 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">{t('calendar.sidebar.doctors')}</h3>
                     <button
                         type="button"
