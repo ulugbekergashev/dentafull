@@ -12,7 +12,8 @@ interface InstallmentsTabProps {
    clinicId: string;
    doctors: Doctor[];
    services: Service[];
-   initialCreateData?: { service: string; amount: number; doctorId: string };
+   /** visitDate — reja tashrifdan ochilgan bo'lsa: tashrif "to'lov kutilmoqda"dan chiqadi */
+   initialCreateData?: { service: string; amount: number; doctorId: string; visitDate?: string };
    onInitialDataConsumed?: () => void;
    /** Ruxsatlar: shartnoma tuzish va qismni to'lash — to'lov qabul qilish ruxsati */
    canCreate?: boolean;
@@ -32,6 +33,8 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
       service: '',
       totalAmount: '',
       initialPayment: '',
+      initialMethod: 'Cash',
+      visitDate: '',
       months: '3',
       startDate: formatDateToISO(new Date())
    });
@@ -65,7 +68,8 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
             service: initialCreateData.service,
             totalAmount: initialCreateData.amount.toString(),
             doctorId: initialCreateData.doctorId || '',
-            initialPayment: ''
+            initialPayment: '',
+            visitDate: initialCreateData.visitDate || ''
          }));
          setIsCreateModalOpen(true);
          onInitialDataConsumed?.();
@@ -111,7 +115,10 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
             doctorId: createForm.doctorId || undefined,
             service: createForm.service,
             totalAmount: amount,
-            totalPaid: initial, // Assume initial is paid directly into clinic, or wait, we just set totalPaid right now
+            totalPaid: initial,
+            // Boshlang'ich to'lov serverda kassaga to'lov bo'lib yoziladi (ilgari hech qayerda ko'rinmasdi)
+            initialMethod: createForm.initialMethod,
+            visitDate: createForm.visitDate || undefined,
             startDate: createForm.startDate,
             endDate: items[items.length - 1].expectedDate,
             status: 'Active',
@@ -120,9 +127,7 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
          
          setIsCreateModalOpen(false);
          loadPlans();
-         
-         // If initial payment > 0, we can create a regular transaction for it via the Transaction API separately,
-         // but since it's just a demo level integration right now, we trust the user.
+         setCreateForm(prev => ({ ...prev, visitDate: '', initialPayment: '' }));
       } catch (e: any) {
          alert(e?.message || 'Xatolik yuz berdi');
       }
@@ -292,6 +297,17 @@ export const InstallmentsTab: React.FC<InstallmentsTabProps> = ({ patientId, cli
                   value={createForm.initialPayment}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, initialPayment: e.target.value }))}
                />
+               {parseFloat(createForm.initialPayment || '0') > 0 && (
+                  <div>
+                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Boshlang'ich to'lov usuli</label>
+                     <Select
+                        value={createForm.initialMethod}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, initialMethod: e.target.value }))}
+                        options={INCOMING_PAYMENT_METHODS.map(m => ({ value: m, label: getPaymentMethodLabel(m) }))}
+                     />
+                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Bu summa kassaga bugungi to'lov bo'lib yoziladi — alohida to'lov kiritish shart emas.</p>
+                  </div>
+               )}
                <div className="grid grid-cols-2 gap-4">
                   <Input
                      label="Boshlanish sanasi"

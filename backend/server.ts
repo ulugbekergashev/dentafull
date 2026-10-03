@@ -2654,6 +2654,14 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
             }
         }
 
+        // Bo'lib to'lash qismining to'lovi o'chirilsa — qism "to'lanmagan"ga qaytadi.
+        // Ilgari reja "to'langan" bo'lib qolaverardi va qarz kam ko'rsatilardi.
+        const paidItem = await prisma.installmentItem.findFirst({ where: { transactionId: transaction.id } });
+        if (paidItem) {
+            await prisma.installmentItem.update({ where: { id: paidItem.id }, data: { status: 'Pending', paidDate: null, transactionId: null } });
+            await prisma.installmentPlan.update({ where: { id: paidItem.planId }, data: { totalPaid: { decrement: paidItem.amount }, status: 'Active' } });
+        }
+
         await prisma.transaction.delete({ where: { id: req.params.id } });
 
         // O'chirilgan to'lov kassadan yo'qoladi — nima o'chirilgani izda qolishi shart
@@ -3129,8 +3137,16 @@ app.get('/api/installments', authenticateToken, async (req, res) => {
 app.post('/api/installments', authenticateToken, async (req, res) => {
     try {
         if (!(await allow(req, res, p => p.flag('money', 'payCreate'), "bo'lib to'lash shartnomasi"))) return;
-        const { patientId, clinicId, doctorId, service, totalAmount, totalPaid, startDate, endDate, status, items } = req.body;
-        
+        const { patientId, clinicId, doctorId, service, startDate, endDate, status, items } = req.body;
+        const actor = (req as any).user;
+        const totalAmount = Number(req.body.totalAmount);
+        const totalPaid = Number(req.body.totalPaid) || 0;
+        if (!isFinite(totalAmount) || totalAmount <= 0 || totalPaid < 0 || totalPaid >= totalAmount || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ error: "Bo'lib to'lash summalari noto'g'ri" });
+        }
+        const visitDate = req.body.visitDate ? normalizeTxDate(req.body.visitDate) : null;
+        const initialMethod = String(req.body.initialMethod || 'Cash');
+
         const plan = await prisma.installmentPlan.create({
             data: {
                 patientId, clinicId, doctorId, service, totalAmount, totalPaid, startDate, endDate, status,
@@ -3144,8 +3160,35 @@ app.post('/api/installments', authenticateToken, async (req, res) => {
             },
             include: { items: true, patient: true, doctor: true }
         });
-        
-        res.json(plan);
+
+        // Boshlang'ich to'lov — haqiqiy pul: kassaga to'lov bo'lib yoziladi. Ilgari u faqat
+        // rejaning "to'langan" summasiga qo'shilardi va hech bir hisobotda ko'rinmasdi.
+        // Boshlang'ich to'lov bo'lmasa-yu, reja tashrifdan ochilgan bo'lsa — tashrif kuniga
+        // 0 so'mlik belgi yoziladi: tashrif "to'lov kutilmoqda"dan chiqadi (qarzni reja yuritadi).
+        let transaction = null;
+        if (totalPaid > 0 || visitDate) {
+            const paying = totalPaid > 0;
+            transaction = await prisma.transaction.create({
+                data: {
+                    patientId: plan.patientId,
+                    patientName: `${plan.patient.lastName} ${plan.patient.firstName}`,
+                    clinicId: plan.clinicId,
+                    doctorId: plan.doctorId,
+                    doctorName: plan.doctor ? `${plan.doctor.lastName} ${plan.doctor.firstName}` : '',
+                    amount: paying ? totalPaid : 0,
+                    date: paying ? todayTashkent() : visitDate,
+                    forDate: visitDate,
+                    service: paying ? `Bo'lib to'lash (${plan.service}) — boshlang'ich to'lov` : `${plan.service} (Bo'lib to'lashga o'tkazildi)`,
+                    type: paying ? initialMethod : 'Cash',
+                    status: 'Paid',
+                    branchId: await resolveBranchId(req, plan.clinicId),
+                    receivedById: actor?.clinicId ? (actor?.id || actor?.receptionistId || null) : null,
+                    receivedByName: actor?.name || null,
+                }
+            });
+        }
+
+        res.json({ ...plan, transaction });
     } catch (error) {
         console.error('Create installment error:', error);
         res.status(500).json({ error: 'Failed to create installment' });

@@ -33,6 +33,8 @@ interface FinanceProps {
   receptionists?: Receptionist[];
   currentClinic?: Clinic;
   labOrders?: LabOrder[];
+  /** Kassa harakatlari — bemorga qaytarilgan pul (Refund) daromaddan ayiriladi */
+  movements?: CashMovement[];
   onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<any>;
   onAddExpense?: (expense: Omit<Expense, 'id'>) => Promise<any>;
   onUpdateExpense?: (id: string, data: Partial<Expense>) => Promise<void>;
@@ -43,7 +45,7 @@ interface FinanceProps {
   canExport?: boolean;
 }
 
-import { Doctor, InstallmentPlan } from '../types';
+import { Doctor, InstallmentPlan, CashMovement } from '../types';
 import { getCurrentMonthRange, formatDateToISO } from '../utils/dateUtils';
 
 // Xarajat kategoriyalari uchun badge ranglari
@@ -57,7 +59,7 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   Other: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
 };
 
-export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, receptionists = [], currentClinic, labOrders, onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense, embedded = false, canExport = true }) => {
+export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expenses, appointments, services, patients, onPatientClick, doctorId, doctors, receptionists = [], currentClinic, labOrders, movements = [], onAddTransaction, onAddExpense, onUpdateExpense, onDeleteExpense, embedded = false, canExport = true }) => {
   const perms = usePerms();
   const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
   const { t } = useLanguage();
@@ -410,12 +412,18 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   const doctorShares = calculateDoctorShares(dateFilteredTransactions, filteredExpenses, doctors)
     .filter(s => s.percentage > 0 || s.accrued > 0 || s.paid > 0);
 
-  const totalRevenue = financials.totalRevenue;
-  // Kassaga tushgan = daromad − avansdan yechilgan + shu davrda qo'yilgan avanslar
+  // Bemorga qaytarilgan pul (Kassa → "Qaytarish"). Ilgari Moliya uni umuman ko'rmasdi:
+  // 500 000 to'lab, 500 000 qaytarilgan bemor hisobotda baribir 500 000 daromad edi.
+  const refunds = movements
+    .filter(m => m && m.type === 'Refund' && isDateInRange(m.date))
+    .reduce((sum, m) => sum + (m.amount || 0), 0);
+  const totalRevenue = financials.totalRevenue - refunds;
+  // Kassaga tushgan = daromad + qaytarilgan (u kassada alohida chiqim) − avansdan yechilgan
+  // + shu davrda qo'yilgan avanslar. Kassa tabidagi "Jami tushum" bilan bir xil raqam.
   const balanceDrawdown = financials.balanceDrawdown;
   const advanceDeposits = financials.advanceDeposits;
-  const cashRegisterTotal = totalRevenue - balanceDrawdown + advanceDeposits;
-  const netProfit = financials.netProfit;
+  const cashRegisterTotal = financials.totalRevenue - balanceDrawdown + advanceDeposits;
+  const netProfit = financials.netProfit - refunds;
   const paidTransactionCount = dateFilteredTransactions.filter(isEarnedRevenue).length;
 
   // --- Lost Revenue Logic ---
@@ -542,7 +550,7 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
       </div>
 
       {/* Kassa bilan moslashtirish — "nega raqamlar to'g'ri kelmayapti?" savolini yopadi */}
-      {!isReceptionist && (balanceDrawdown > 0 || advanceDeposits > 0) && (
+      {!isReceptionist && (balanceDrawdown > 0 || advanceDeposits > 0 || refunds > 0) && (
         <Card className="p-5">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
             <span className="w-6 h-0.5 bg-gray-300 dark:bg-gray-600 rounded" />
@@ -553,6 +561,12 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
               <span>{t('auto.Jami daromad (hisoblangan)')}</span>
               <span className="font-semibold tabular-nums">{totalRevenue.toLocaleString()}</span>
             </div>
+            {refunds > 0 && (
+              <div className="flex justify-between text-gray-600 dark:text-gray-300">
+                <span>+ Bemorga qaytarilgan (kassada alohida chiqim)</span>
+                <span className="font-semibold tabular-nums">+{refunds.toLocaleString()}</span>
+              </div>
+            )}
             {balanceDrawdown > 0 && (
               <div className="flex justify-between text-gray-600 dark:text-gray-300">
                 <span>− Avansdan yechilgan</span>

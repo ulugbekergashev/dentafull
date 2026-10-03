@@ -173,6 +173,7 @@ export const FinanceHub: React.FC<FinanceHubProps> = (props) => {
                     receptionists={props.receptionists}
                     currentClinic={props.currentClinic}
                     labOrders={props.labOrders}
+                    movements={props.movements}
                     onAddTransaction={payCreate ? props.onAddTransaction : undefined}
                     onAddExpense={expCreate ? props.onAddExpense : undefined}
                     onUpdateExpense={expEdit ? props.onUpdateExpense : undefined}

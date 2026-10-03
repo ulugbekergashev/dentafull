@@ -148,7 +148,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [pendingMaterials, setPendingMaterials] = useState<PendingMaterial[]>([]);
 
    // Installment quick-open state (from appointment row)
-   const [installmentQuickOpen, setInstallmentQuickOpen] = useState<{ service: string; amount: number; doctorId: string } | null>(null);
+   const [installmentQuickOpen, setInstallmentQuickOpen] = useState<{ service: string; amount: number; doctorId: string; visitDate?: string } | null>(null);
 
    // Medical History State
    const [historyText, setHistoryText] = useState('');
@@ -1661,7 +1661,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                              }}>{t('auto.To\'lov')}</Button>
                                              <Button size="sm" variant="secondary" className="bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800" onClick={() => {
                                                 const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
-                                                setInstallmentQuickOpen({ service: breakdown || app.type, amount: total, doctorId: app.doctorId });
+                                                setInstallmentQuickOpen({ service: breakdown || app.type, amount: total, doctorId: app.doctorId, visitDate: app.date });
                                                 setActiveTab('installments');
                                              }}>{t('auto.Bo\'lib to\'lash')}</Button>
                                              {(patient.balance || 0) > 0 && (
