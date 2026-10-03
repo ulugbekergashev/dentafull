@@ -1232,10 +1232,10 @@ const AppContent: React.FC = () => {
   // Bemorlar ro'yxatini backend o'zi filtrlaydi, kalendar va bosh sahifa esa
   // to'liq ro'yxatni oladi — shuning uchun ularga bu bayroq uzatiladi.
   const seeAllPatientsForRole = perms.scopeAll();
-  // "Ishni boshlash" ro'yxati (yangi klinika rahbariga). Sonlar butun klinika bo'yicha —
-  // bo'sh filial tanlangani uchun ishlab turgan klinika "yangi" bo'lib ko'rinmasin.
+  // "Ishni boshlash" ro'yxati (klinika rahbariga). Sonlar butun klinika bo'yicha —
+  // bo'sh filial tanlangani uchun bajarilgan qadamlar "bajarilmagan" ko'rinmasin.
   // Ma'lumot yuklangachgina beriladi: kirishdan keyingi birinchi chizishda ro'yxatlar
-  // hali bo'sh — har bir klinika "yangi" ko'rinardi.
+  // hali bo'sh — ishlab turgan klinikada ham "0 / 5" lip etib ko'rinardi.
   const setupReady = userRole === UserRole.CLINIC_ADMIN && !!clinicId && loadedClinicId === clinicId;
   const setupCounts = useMemo(() => (setupReady ? {
     services: services.length,

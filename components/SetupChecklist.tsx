@@ -8,16 +8,15 @@ import type { TranslationKey } from '../i18n/translations';
 import { api } from '../services/api';
 
 /**
- * "Ishni boshlash" — yangi klinika rahbari uchun bosh sahifadagi ro'yxat.
+ * "Ishni boshlash" — klinika rahbari uchun bosh sahifadagi ro'yxat.
  *
  * Yangi klinika bo'sh ochiladi: xizmat ham, shifokor ham yo'q. Ro'yxat nimadan
  * boshlashni ko'rsatadi va har bir qadamni kerakli joyga olib boradi. Qadam
  * "o'rganildi" deb emas, ma'lumot haqiqatan kiritilganda belgilanadi.
  *
- * Kimga chiqadi: asosiy qadamlari (xizmat, shifokor, bemor, qabul) hali
- * tugamagan klinikaga. Ishlab turgan klinikada ro'yxat umuman boshlanmaydi —
- * SMS ulanmagan bo'lsa ham. Boshlangan ro'yxat hammasi bajarilguncha yoki
- * "Yopish" bosilguncha turadi (shu brauzerda eslab qolinadi).
+ * Kimga chiqadi: bajarilmagan qadami bor har bir klinikaga — ishlab turganiga ham
+ * (unda odatda faqat SMS qoladi). Hammasi bajarilgan bo'lsa yoki "Yopish"
+ * bosilgan bo'lsa chiqmaydi (shu brauzerda eslab qolinadi).
  */
 
 export interface SetupCounts {
@@ -37,24 +36,26 @@ interface SetupChecklistProps {
     onBook: () => void;
 }
 
-type SetupState = 'open' | 'closed' | null;
+const closedKey = (clinicId: string) => `dentacrm:setup:${clinicId}`;
+/** SMS ulanganmi — oxirgi ma'lum holat: karta har ochilishda so'rov javobini kutib, kechikib chiqmasin */
+const smsKey = (clinicId: string) => `dentacrm:setup-sms:${clinicId}`;
 
-const storageKey = (clinicId: string) => `dentacrm:setup:${clinicId}`;
-
-function readState(clinicId: string): SetupState {
-    try {
-        const v = localStorage.getItem(storageKey(clinicId));
-        return v === 'open' || v === 'closed' ? v : null;
-    } catch {
-        return null;
-    }
-}
+const read = (key: string): string | null => {
+    try { return localStorage.getItem(key); } catch { return null; }
+};
+const write = (key: string, value: string) => {
+    try { localStorage.setItem(key, value); } catch { /* saqlanmasa — shu ochilishda ishlaydi */ }
+};
 
 export const SetupChecklist: React.FC<SetupChecklistProps> = ({ clinicId, counts, soloDoctor, onAddPatient, onBook }) => {
     const { t } = useLanguage();
     const navigate = useNavigate();
-    const [state, setState] = useState<SetupState>(() => readState(clinicId));
-    const [smsConnected, setSmsConnected] = useState(false);
+    const [closed, setClosed] = useState(() => read(closedKey(clinicId)) === 'closed');
+    /** null — hali noma'lum */
+    const [smsConnected, setSmsConnected] = useState<boolean | null>(() => {
+        const v = read(smsKey(clinicId));
+        return v === null ? null : v === '1';
+    });
     const [collapsedState, toggleCollapsed] = useCollapsed(`setup.${clinicId}`, false);
 
     const steps = [
@@ -62,34 +63,42 @@ export const SetupChecklist: React.FC<SetupChecklistProps> = ({ clinicId, counts
         ...(soloDoctor ? [] : [{ id: 'doctors', done: counts.doctors > 0, n: counts.doctors, go: () => navigate('/doctors') }]),
         { id: 'patient', done: counts.patients > 0, n: counts.patients, go: onAddPatient },
         { id: 'appointment', done: counts.appointments > 0, n: counts.appointments, go: onBook },
-        { id: 'sms', done: smsConnected, n: 0, go: () => navigate('/settings?tab=messaging') },
+        { id: 'sms', done: smsConnected === true, n: 0, go: () => navigate('/settings?tab=messaging') },
     ];
     // SMS — ixtiyoriy qadam: usiz ham klinika ishlaydi
     const coreDone = steps.every(s => s.done || s.id === 'sms');
-    const allDone = coreDone && smsConnected;
-    const started = state === 'open' || (state === null && !coreDone);
+    const allDone = coreDone && smsConnected === true;
 
-    const save = (next: 'open' | 'closed') => {
-        try { localStorage.setItem(storageKey(clinicId), next); } catch { /* saqlanmasa — shu ochilishda ishlaydi */ }
-        setState(next);
+    const close = () => {
+        write(closedKey(clinicId), 'closed');
+        setClosed(true);
     };
 
     useEffect(() => {
-        if (state === null && !coreDone) save('open');
-        else if (state === 'open' && allDone) save('closed');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [state, coreDone, allDone]);
-
-    useEffect(() => {
-        if (!started) return;
+        if (closed) return;
         let cancelled = false;
         api.sms.getSettings(clinicId)
-            .then(s => { if (!cancelled) setSmsConnected(!!s?.isConnected); })
-            .catch(() => { /* aniqlab bo'lmasa — ulanmagan deb ko'rsatiladi */ });
+            .then(s => {
+                if (cancelled) return;
+                const connected = !!s?.isConnected;
+                write(smsKey(clinicId), connected ? '1' : '0');
+                setSmsConnected(connected);
+            })
+            // Aniqlab bo'lmasa — ulanmagan deb ko'rsatiladi
+            .catch(() => { if (!cancelled) setSmsConnected(prev => prev ?? false); });
         return () => { cancelled = true; };
-    }, [started, clinicId]);
+    }, [closed, clinicId]);
 
-    if (!started || allDone) return null;
+    // Hammasi bajarilgan klinikada ro'yxat kerak emas — qayta so'ralmaydi ham
+    useEffect(() => {
+        if (!closed && allDone) close();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [closed, allDone]);
+
+    if (closed || allDone) return null;
+    // Ishlab turgan klinikada faqat SMS qoladi: holati ma'lum bo'lguncha kutamiz —
+    // SMS ulangan klinikada karta lip etib chiqib, yo'qolmasin
+    if (coreDone && smsConnected === null) return null;
 
     // Asosiy qadamlar tugagach yig'ish o'rniga "Yopish" chiqadi — yig'ilgan holda qolib ketmasin
     const collapsed = !coreDone && collapsedState;
@@ -104,7 +113,9 @@ export const SetupChecklist: React.FC<SetupChecklistProps> = ({ clinicId, counts
                 </span>
                 <div className="flex-1 min-w-0">
                     <h3 className="text-base font-black text-gray-900 dark:text-white truncate">{t('setup.title')}</h3>
-                    {!collapsed && <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('setup.subtitle')}</p>}
+                    {!collapsed && (
+                        <p className="text-[13px] text-gray-500 dark:text-gray-400">{t(coreDone ? 'setup.subtitleLast' : 'setup.subtitle')}</p>
+                    )}
                 </div>
                 <span className="shrink-0 px-2.5 py-1 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-xs font-black tabular-nums">
                     {doneCount} / {steps.length}
@@ -112,7 +123,7 @@ export const SetupChecklist: React.FC<SetupChecklistProps> = ({ clinicId, counts
                 {coreDone ? (
                     <button
                         type="button"
-                        onClick={() => save('closed')}
+                        onClick={close}
                         className="shrink-0 inline-flex items-center h-7 px-2.5 rounded-lg text-xs font-bold text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:text-gray-400 dark:hover:text-primary-400 dark:hover:bg-primary-900/20 transition-colors"
                     >
                         {t('common.close')}

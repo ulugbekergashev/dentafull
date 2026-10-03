@@ -2591,9 +2591,10 @@ export const translations = {
     'colleagues.referHint': '{doctor} qabuliga yozish',
     'colleagues.calendar': 'Batafsil',
     'colleagues.calendarHint': '{doctor} kalendarini ochish',
-    // "Ishni boshlash" — yangi klinika rahbari uchun bosh sahifadagi ro'yxat (components/SetupChecklist)
+    // "Ishni boshlash" — klinika rahbari uchun bosh sahifadagi ro'yxat (components/SetupChecklist)
     'setup.title': "Ishni boshlash",
     'setup.subtitle': "Shu qadamlardan keyin klinika ishga tayyor",
+    'setup.subtitleLast': "Yana bitta qadam qoldi",
     'setup.services.title': "Xizmat va narxlarni kiriting",
     'setup.services.hint': "Protsedura va to'lovda xizmat shu ro'yxatdan tanlanadi.",
     'setup.services.action': "Xizmat qo'shish",
@@ -4903,9 +4904,10 @@ export const translations = {
     'colleagues.referHint': 'Записать к {doctor}',
     'colleagues.calendar': 'Подробнее',
     'colleagues.calendarHint': 'Открыть календарь {doctor}',
-    // «Начало работы» — список на главной для руководителя новой клиники (components/SetupChecklist)
+    // «Начало работы» — список на главной для руководителя клиники (components/SetupChecklist)
     'setup.title': 'Начало работы',
     'setup.subtitle': 'После этих шагов клиника готова к работе',
+    'setup.subtitleLast': 'Остался ещё один шаг',
     'setup.services.title': 'Добавьте услуги и цены',
     'setup.services.hint': 'Из этого списка выбирают услугу в процедуре и при оплате.',
     'setup.services.action': 'Добавить услугу',
