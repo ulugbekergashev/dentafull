@@ -82,8 +82,8 @@ function phoneOf(i: number): string {
 // ── Xizmatlar va shifokorlar ────────────────────────────────────────────────
 
 export const DEMO_SERVICE_LIST: Service[] = [
-    { id: 1, name: 'Konsultatsiya', price: 50000, duration: 30, categoryId: 'cat-1', clinicId: CLINIC },
-    { id: 2, name: 'Tish tozalash', price: 200000, duration: 45, categoryId: 'cat-2', recallMonths: 6, clinicId: CLINIC },
+    { id: 1, name: 'Konsultatsiya', price: 50000, duration: 30, categoryId: 'cat-1', onePrice: true, clinicId: CLINIC },
+    { id: 2, name: 'Tish tozalash', price: 200000, duration: 45, categoryId: 'cat-2', recallMonths: 6, onePrice: true, clinicId: CLINIC },
     { id: 3, name: 'Tish plombalash', price: 300000, duration: 60, categoryId: 'cat-3', recallMonths: 6, clinicId: CLINIC },
     { id: 4, name: 'Tish olib tashlash', price: 150000, duration: 30, categoryId: 'cat-4', clinicId: CLINIC },
     { id: 5, name: 'Tish oqartirish', price: 800000, duration: 90, categoryId: 'cat-2', clinicId: CLINIC },
@@ -93,7 +93,7 @@ export const DEMO_SERVICE_LIST: Service[] = [
     { id: 9, name: "Implant o'rnatish", price: 4500000, duration: 90, categoryId: 'cat-4', clinicId: CLINIC },
     { id: 10, name: 'Breket nazorati', price: 250000, duration: 30, categoryId: 'cat-5', recallMonths: 1, clinicId: CLINIC },
     { id: 11, name: 'Sut tishini plombalash', price: 180000, duration: 45, categoryId: 'cat-3', clinicId: CLINIC },
-    { id: 12, name: 'Ftorlash', price: 120000, duration: 30, categoryId: 'cat-2', recallMonths: 6, clinicId: CLINIC },
+    { id: 12, name: 'Ftorlash', price: 120000, duration: 30, categoryId: 'cat-2', recallMonths: 6, onePrice: true, clinicId: CLINIC },
     { id: 13, name: 'Dental rentgen', price: 40000, duration: 15, categoryId: 'cat-1', clinicId: CLINIC },
 ];
 const SERVICE_BY_ID = new Map(DEMO_SERVICE_LIST.map(s => [s.id!, s]));

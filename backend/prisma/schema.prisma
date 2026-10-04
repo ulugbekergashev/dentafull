@@ -286,6 +286,9 @@ model Service {
   cost         Float            @default(0)
   /// Necha oydan keyin nazoratga chaqirish (null — kerak emas)
   recallMonths Int?
+  /// Bir nechta tishga qilinsa ham narx BIR MARTA olinadi (konsultatsiya, tozalash).
+  /// false — har bir tishga alohida narx (implant, plomba).
+  onePrice     Boolean          @default(false)
   /// DHP Procedure.code uchun SNOMED CT kodi (null — moslashtirilmagan)
   snomedCode   String?
   categoryId   String?

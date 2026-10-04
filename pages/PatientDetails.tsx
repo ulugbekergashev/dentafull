@@ -159,6 +159,29 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const [isRecallModalOpen, setIsRecallModalOpen] = useState(false);
    const [recallForm, setRecallForm] = useState<{ dueDate: string; reason: string; kind: 'checkup' | 'treatment' }>({ dueDate: '', reason: '', kind: 'checkup' });
    const [recallSaving, setRecallSaving] = useState(false);
+   // "Boshqa: N kun" — tayyor tugmalardan tashqari kunni qo'lda yozish
+   const [recallCustom, setRecallCustom] = useState<{ treatment: string; checkup: string }>({ treatment: '', checkup: '' });
+   const typeRecallDays = (kind: 'treatment' | 'checkup', value: string) => {
+      const clean = value.replace(/\D/g, '').slice(0, 4);
+      setRecallCustom({ treatment: '', checkup: '', [kind]: clean } as { treatment: string; checkup: string });
+      const n = Math.min(Math.floor(Number(clean)), 1095);
+      if (clean && n >= 1) setRecallForm(f => ({ ...f, kind, dueDate: addDaysStr(n) }));
+   };
+   const recallDaysInput = (kind: 'treatment' | 'checkup') => (
+      <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+         <input
+            type="text"
+            inputMode="numeric"
+            value={recallCustom[kind]}
+            onChange={e => typeRecallDays(kind, e.target.value)}
+            placeholder={t('patients.details.recall.other')}
+            className={`w-20 h-8 px-2 text-sm text-center rounded-lg border bg-white dark:bg-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-primary-500/30 ${recallCustom[kind]
+               ? 'border-primary-500 text-primary-700 dark:text-primary-300 font-semibold'
+               : 'border-gray-300 dark:border-gray-600'}`}
+         />
+         {t('patients.details.recall.days')}
+      </label>
+   );
    /** Kasallik tarixi: tayyor ro'yxat (chiplar) ochiqmi. Standart: yopiq. */
    const [showQuickSelect, setShowQuickSelect] = useState(false);
 
@@ -233,19 +256,23 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    // Parse procedures from appointment notes
    const pastProcedures = React.useMemo(() => {
       const results: { id: string; serviceName: string; date: string; toothNumber?: number }[] = [];
-      const regex = /- ([^\n(]+) \((?:Tish #(\d+)|Umumiy)\)/g;
+      // "(Tish #11)" yoki bitta narxli ish uchun "(Tish #11, #12, #13)" — har bir tish tarixiga alohida tushadi
+      const regex = /- ([^\n(]+) \((?:Tish ((?:#\d+(?:, )?)+)|Umumiy)\)/g;
 
       appointments.forEach(appt => {
          if (appt.patientId !== (patientId || patient?.id) || !appt.notes) return;
          regex.lastIndex = 0;
          let match;
          while ((match = regex.exec(appt.notes)) !== null) {
-            results.push({
-               id: `past-${appt.id}-${results.length}`,
-               serviceName: match[1].trim(),
-               date: appt.date,
-               toothNumber: match[2] ? parseInt(match[2]) : undefined
-            });
+            const teeth: (number | undefined)[] = match[2] ? (match[2].match(/\d+/g) || []).map(Number) : [undefined];
+            for (const toothNumber of teeth) {
+               results.push({
+                  id: `past-${appt.id}-${results.length}`,
+                  serviceName: match[1].trim(),
+                  date: appt.date,
+                  toothNumber
+               });
+            }
          }
       });
       return results;
@@ -253,12 +280,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    const allProceduresHistory = React.useMemo(() => {
       const today = formatDateToISO(new Date());
-      const current = pendingProcedures.map((p: any) => ({
-         id: p.id,
-         serviceName: p.serviceName,
-         date: today,
-         toothNumber: p.toothNumber
-      }));
+      const current = pendingProcedures.flatMap((p: any) =>
+         (p.teeth && p.teeth.length > 1 ? p.teeth : [p.toothNumber]).map((toothNumber: number | undefined, i: number) => ({
+            id: `${p.id}-${i}`,
+            serviceName: p.serviceName,
+            date: today,
+            toothNumber
+         })));
       return [...pastProcedures, ...current];
    }, [pastProcedures, pendingProcedures]);
 
@@ -671,6 +699,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    };
    const openRecallModal = () => {
       setRecallForm({ dueDate: addMonthsStr(6), reason: '', kind: 'checkup' });
+      setRecallCustom({ treatment: '', checkup: '' });
       setIsRecallModalOpen(true);
    };
    const saveRecall = async () => {
@@ -998,7 +1027,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       let finalDoctorName = chosenDoctor ? `Dr. ${chosenDoctor.lastName}` : (doctors.length > 0 ? `Dr. ${doctors[0].lastName}` : 'Doctor');
 
       // Create a text summary of procedures for the appointment notes with explicit prices
-      const proceduresText = procedures.map(p => `- ${p.serviceName} (${p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy'}) [${p.price.toLocaleString().replace(/,/g, ' ')} UZS]`).join('\n');
+      const toothLabel = (p: { toothNumber?: number; teeth?: number[] }) =>
+         p.teeth && p.teeth.length > 1 ? `Tish ${p.teeth.map(n => `#${n}`).join(', ')}` : p.toothNumber ? `Tish #${p.toothNumber}` : 'Umumiy';
+      const proceduresText = procedures.map(p => `- ${p.serviceName} (${toothLabel(p)}) [${p.price.toLocaleString().replace(/,/g, ' ')} UZS]`).join('\n');
       // Majburiy talab bajarilmay yakunlandi — izohda qoladi. "⚠️" bilan boshlanadi:
       // summa hisobi (calculateAppointmentTotal) bu qatorni o'tkazib yuboradi.
       const skipText = skip
@@ -1106,7 +1137,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          // (yoki xizmat taklif qilgan). Har biri alohida eslatma bo'lib saqlanadi.
          if (nextVisits.length > 0) {
             const reason = procedures
-               .map(p => p.toothNumber ? `${p.serviceName} #${p.toothNumber}` : p.serviceName)
+               .map(p => p.teeth && p.teeth.length > 1 ? `${p.serviceName} ${p.teeth.map(n => `#${n}`).join(', ')}` : p.toothNumber ? `${p.serviceName} #${p.toothNumber}` : p.serviceName)
                .join(', ')
                .slice(0, 200);
             for (const next of nextVisits) {
@@ -1905,7 +1936,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            <button
                               key={o.days}
                               type="button"
-                              onClick={() => setRecallForm(f => ({ ...f, kind: 'treatment', dueDate: addDaysStr(o.days) }))}
+                              onClick={() => { setRecallCustom({ treatment: '', checkup: '' }); setRecallForm(f => ({ ...f, kind: 'treatment', dueDate: addDaysStr(o.days) })); }}
                               className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallForm.kind === 'treatment' && recallForm.dueDate === addDaysStr(o.days)
                                  ? 'bg-primary-600 text-white'
                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
@@ -1913,6 +1944,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               {o.label}
                            </button>
                         ))}
+                        {recallDaysInput('treatment')}
                      </div>
                   </div>
                   <div>
@@ -1922,7 +1954,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            <button
                               key={m}
                               type="button"
-                              onClick={() => setRecallForm(f => ({ ...f, kind: 'checkup', dueDate: addMonthsStr(m) }))}
+                              onClick={() => { setRecallCustom({ treatment: '', checkup: '' }); setRecallForm(f => ({ ...f, kind: 'checkup', dueDate: addMonthsStr(m) })); }}
                               className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${recallForm.kind === 'checkup' && recallForm.dueDate === addMonthsStr(m)
                                  ? 'bg-primary-600 text-white'
                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}`}
@@ -1930,9 +1962,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               {m} {t('patients.details.recall.months')}
                            </button>
                         ))}
+                        {recallDaysInput('checkup')}
                      </div>
                   </div>
-                  <Input label={t('patients.details.recall.date')} type="date" value={recallForm.dueDate} onChange={e => setRecallForm(f => ({ ...f, dueDate: e.target.value }))} />
+                  <Input label={t('patients.details.recall.date')} type="date" value={recallForm.dueDate} onChange={e => { setRecallCustom({ treatment: '', checkup: '' }); setRecallForm(f => ({ ...f, dueDate: e.target.value })); }} />
                   <Input label={t('patients.details.recall.reason')} value={recallForm.reason} onChange={e => setRecallForm(f => ({ ...f, reason: e.target.value }))} placeholder={t('patients.details.recall.reasonPlaceholder')} />
                   <div className="flex justify-end gap-2 pt-2">
                      <Button variant="secondary" onClick={() => setIsRecallModalOpen(false)} disabled={recallSaving}>{t('common.cancel')}</Button>

@@ -240,7 +240,7 @@ export const Settings: React.FC<SettingsProps> = ({
    // Service Modal State
    const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
    const [editingServiceId, setEditingServiceId] = useState<number | null>(null);
-   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '', recallMonths: '', reqPhoto: false, reqMaterials: false });
+   const [serviceForm, setServiceForm] = useState({ name: '', price: '', cost: '', categoryId: '', recallMonths: '', onePrice: false, reqPhoto: false, reqMaterials: false });
    // Qabulni yakunlash talablari: xizmat id → rasm/material majburiy
    const [visitReqs, setVisitReqs] = useState<VisitRequirements>({});
    React.useEffect(() => {
@@ -509,18 +509,20 @@ export const Settings: React.FC<SettingsProps> = ({
             cost: (service.cost || 0).toString(),
             categoryId: service.categoryId || '',
             recallMonths: service.recallMonths ? String(service.recallMonths) : '',
+            onePrice: !!service.onePrice,
             reqPhoto: !!visitReqs[String(service.id)]?.photo,
             reqMaterials: !!visitReqs[String(service.id)]?.materials,
          });
       } else {
          setEditingServiceId(null);
-         setServiceForm({ name: '', price: '', cost: '', categoryId: selectedCategory || '', recallMonths: '', reqPhoto: false, reqMaterials: false });
+         setServiceForm({ name: '', price: '', cost: '', categoryId: selectedCategory || '', recallMonths: '', onePrice: false, reqPhoto: false, reqMaterials: false });
       }
       setIsServiceModalOpen(true);
    };
 
    const handleServiceSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
+      const editedService = editingServiceId !== null ? services.find(s => s.id === editingServiceId) : undefined;
       const data = {
          name: serviceForm.name,
          price: Number(serviceForm.price),
@@ -528,7 +530,9 @@ export const Settings: React.FC<SettingsProps> = ({
          duration: 60,
          categoryId: serviceForm.categoryId || undefined,
          // Nazorat: necha oydan keyin bemorni qayta chaqirish (bo'sh — kerak emas)
-         recallMonths: serviceForm.recallMonths === '' ? null : Number(serviceForm.recallMonths)
+         recallMonths: serviceForm.recallMonths === '' ? null : Number(serviceForm.recallMonths),
+         // Faqat o'zgargan bo'lsa yuboriladi (belgilanmagan xizmat uchun maydon umuman ketmaydi)
+         ...(serviceForm.onePrice !== !!editedService?.onePrice ? { onePrice: serviceForm.onePrice } : {}),
       };
 
       const { reqPhoto, reqMaterials } = serviceForm;
@@ -1163,6 +1167,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                              <td className="px-4 py-3 text-gray-500">{s.price.toLocaleString()} UZS</td>
                                              <td className="px-4 py-3 text-gray-500">
                                                 {s.recallMonths ? `${s.recallMonths} ${t('patients.details.recall.months')}` : '—'}
+                                                {s.onePrice && <span className="ml-2 rounded bg-primary-50 px-1.5 py-0.5 text-[11px] font-semibold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 align-middle">{t('settings.services.onePriceShort')}</span>}
                                                 {(visitReqs[String(s.id)]?.photo || visitReqs[String(s.id)]?.materials) && (
                                                    <span className="ml-2 inline-flex flex-wrap gap-1 align-middle" title={t('settings.services.requirements')}>
                                                       {visitReqs[String(s.id)]?.photo && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{t('settings.services.reqPhotoShort')}</span>}
@@ -1921,6 +1926,17 @@ X-API-Key: ${leadKeyVisible && leadApiInfo?.apiKey ? leadApiInfo.apiKey : '<sizg
                      <option value="">{t('settings.services.recallNone')}</option>
                      {[1, 3, 6, 12].map(m => <option key={m} value={m}>{m} {t('patients.details.recall.months')}</option>)}
                   </select>
+               </div>
+               {/* Bir nechta tish tanlanganda narx: har tishga alohida (implant) yoki bir marta (tozalash).
+                   Shifokor protsedura qo'shishda shu tanlovni tayyor holda ko'radi va o'zgartira oladi. */}
+               <div>
+                  <label className="flex items-start gap-2 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+                     <input type="checkbox" checked={serviceForm.onePrice} onChange={e => setServiceForm({ ...serviceForm, onePrice: e.target.checked })} className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                     <span>
+                        {t('settings.services.onePrice')}
+                        <span className="block text-xs text-gray-500 dark:text-gray-400">{t('settings.services.onePriceHint')}</span>
+                     </span>
+                  </label>
                </div>
                {/* Qabulni yakunlash talablari: belgilansa shifokor shu xizmat bilan
                    qabulni rasm/material kiritmaguncha yakunlay olmaydi */}

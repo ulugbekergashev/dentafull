@@ -11,6 +11,8 @@ interface ProcedureItem {
     serviceId: number;
     serviceName: string;
     toothNumber?: number;
+    /** Bitta narxli ish bir nechta tishga qilingan bo'lsa — hamma tishlar (toothNumber — birinchisi) */
+    teeth?: number[];
     price: number;
     notes?: string;
 }
@@ -105,11 +107,33 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
             .reduce((max, m) => Math.max(max, m), 0);
         setCheckupDays(suggested > 0 ? suggested * 30 : null);
     }, [procedures, services, checkupTouched]);
+    // Tayyor tugmalardan tashqari kunni qo'lda yozish mumkin (klinika so'rovi): "10 kundan keyin",
+    // "45 kundan keyin". Maydondagi matn alohida saqlanadi — tugma bosilsa tozalanadi.
+    const [treatmentCustom, setTreatmentCustom] = useState('');
+    const [checkupCustom, setCheckupCustom] = useState('');
+    const parseDays = (value: string, max: number): number | null => {
+        const n = Math.floor(Number(value));
+        return isFinite(n) && n >= 1 ? Math.min(n, max) : null;
+    };
     // Davolash davomi: tanlangan tugmani qayta bosish — bekor qiladi
-    const toggleTreatment = (days: number) => setTreatmentDays(cur => (cur === days ? null : days));
-    const chooseCheckup = (days: number | null) => { setCheckupTouched(true); setCheckupDays(days); };
-    // Xizmat 1 oyni taklif qilgan bo'lsa, u ham tugma bo'lib ko'rinsin
-    const checkupMonths = Array.from(new Set([3, 6, 12, ...(checkupDays ? [Math.round(checkupDays / 30)] : [])])).sort((a, b) => a - b);
+    const toggleTreatment = (days: number) => { setTreatmentCustom(''); setTreatmentDays(cur => (cur === days ? null : days)); };
+    const typeTreatment = (value: string) => {
+        const clean = value.replace(/\D/g, '').slice(0, 3);
+        setTreatmentCustom(clean);
+        setTreatmentDays(parseDays(clean, 365));
+    };
+    const chooseCheckup = (days: number | null) => { setCheckupTouched(true); setCheckupCustom(''); setCheckupDays(days); };
+    const typeCheckup = (value: string) => {
+        const clean = value.replace(/\D/g, '').slice(0, 4);
+        setCheckupTouched(true);
+        setCheckupCustom(clean);
+        setCheckupDays(parseDays(clean, 1095));
+    };
+    // Xizmat 1 oyni taklif qilgan bo'lsa, u ham tugma bo'lib ko'rinsin (faqat to'liq oy bo'lsa)
+    const checkupMonths = Array.from(new Set([3, 6, 12, ...(checkupDays && checkupDays % 30 === 0 ? [checkupDays / 30] : [])])).sort((a, b) => a - b);
+    const customDaysCls = (active: boolean) => `w-20 h-8 px-2 text-sm text-center rounded-lg border bg-white dark:bg-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-primary-500/30 ${active
+        ? 'border-primary-500 text-primary-700 dark:text-primary-300 font-semibold'
+        : 'border-gray-300 dark:border-gray-600'}`;
     const nextVisits: NextVisitChoice[] = [
         ...(treatmentDays ? [{ kind: 'treatment' as const, days: treatmentDays }] : []),
         ...(checkupDays ? [{ kind: 'checkup' as const, days: checkupDays }] : []),
@@ -204,7 +228,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                 <div className="flex items-center gap-2">
                                     {proc.toothNumber && (
                                         <span className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 text-xs font-bold rounded">
-                                            #{proc.toothNumber}
+                                            {proc.teeth && proc.teeth.length > 1 ? proc.teeth.map(n => `#${n}`).join(', ') : `#${proc.toothNumber}`}
                                         </span>
                                     )}
                                     <span className="font-medium text-gray-900 dark:text-white">
@@ -271,21 +295,48 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                         </div>
                         {/* Keyingi tashrif — ikki qator: davolash davomi (kunlar) / nazorat ko'rigi (oylar) */}
                         <div className="space-y-2" data-tour="visit-next">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="w-40 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.treatment')}</span>
+                            <div className="flex flex-col sm:flex-row sm:items-start gap-2">
+                                <span className="sm:w-40 shrink-0 sm:pt-1.5 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.treatment')}</span>
+                              <div className="flex flex-1 min-w-0 flex-wrap items-center gap-2">
                                 {[{ days: 3, label: `3 ${t('patients.details.recall.days')}` }, { days: 7, label: `1 ${t('patients.details.recall.week')}` }, { days: 14, label: `2 ${t('patients.details.recall.week')}` }].map(o => (
                                     <button key={o.days} type="button" onClick={() => toggleTreatment(o.days)} aria-pressed={treatmentDays === o.days} className={chipCls(treatmentDays === o.days)}>
                                         {o.label}
                                     </button>
                                 ))}
+                                <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={treatmentCustom}
+                                        onChange={e => typeTreatment(e.target.value)}
+                                        placeholder={t('patients.details.recall.other')}
+                                        aria-label={`${t('patients.details.recall.treatment')} ${t('patients.details.recall.days')}`}
+                                        className={customDaysCls(!!treatmentCustom)}
+                                    />
+                                    {t('patients.details.recall.days')}
+                                </label>
+                              </div>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="w-40 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.checkup')}</span>
+                            <div className="flex flex-col sm:flex-row sm:items-start gap-2">
+                                <span className="sm:w-40 shrink-0 sm:pt-1.5 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.checkup')}</span>
+                              <div className="flex flex-1 min-w-0 flex-wrap items-center gap-2">
                                 {checkupMonths.map(m => (
                                     <button key={m} type="button" onClick={() => chooseCheckup(m * 30)} aria-pressed={checkupDays === m * 30} className={chipCls(checkupDays === m * 30)}>
                                         {m} {t('patients.details.recall.months')}
                                     </button>
                                 ))}
+                                <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={checkupCustom}
+                                        onChange={e => typeCheckup(e.target.value)}
+                                        placeholder={t('patients.details.recall.other')}
+                                        aria-label={`${t('patients.details.recall.checkup')} ${t('patients.details.recall.days')}`}
+                                        className={customDaysCls(!!checkupCustom)}
+                                    />
+                                    {t('patients.details.recall.days')}
+                                </label>
                                 <button
                                     type="button"
                                     onClick={() => chooseCheckup(null)}
@@ -296,6 +347,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                 >
                                     {t('patients.details.recall.none')}
                                 </button>
+                              </div>
                             </div>
                         </div>
                         {reqRows.length > 0 && (

@@ -9112,6 +9112,8 @@ async function runStartupMigrations() {
     // --- Nazorat (qayta tashrif) ---
     // Xizmatga "necha oydan keyin chaqirish" va rejalashtirilgan tashriflar jadvali.
     await migrationStep('Service.recallMonths', `ALTER TABLE "Service" ADD COLUMN IF NOT EXISTS "recallMonths" INTEGER`);
+    // Xizmat bir nechta tishga qilinsa ham narx bir marta olinadimi (konsultatsiya, tozalash)
+    await migrationStep('Service.onePrice', `ALTER TABLE "Service" ADD COLUMN IF NOT EXISTS "onePrice" BOOLEAN NOT NULL DEFAULT false`);
     await migrationStep('Recall table', `
         CREATE TABLE IF NOT EXISTS "Recall" (
             "id"            TEXT NOT NULL PRIMARY KEY,
@@ -9358,6 +9360,7 @@ const CRITICAL_COLUMNS: ReadonlyArray<{ table: string; column: string; type: str
     { table: 'Appointment', column: 'bookedAt', type: 'TIMESTAMP(3)' },
     { table: 'Transaction', column: 'forDate', type: 'TEXT' },
     { table: 'CashRegisterDay', column: 'handedOver', type: 'DOUBLE PRECISION NOT NULL DEFAULT 0' },
+    { table: 'Service', column: 'onePrice', type: 'BOOLEAN NOT NULL DEFAULT false' },
 ];
 
 async function verifyCriticalSchema(): Promise<boolean> {

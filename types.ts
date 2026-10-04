@@ -500,6 +500,8 @@ export interface Service {
   cost?: number; // Service cost (e.g., technician fee)
   duration?: number; // Optional, defaults to 60 minutes
   recallMonths?: number | null; // Necha oydan keyin nazoratga chaqirish (null — kerak emas)
+  /** Bir nechta tishga qilinsa ham narx bir marta olinadi (konsultatsiya, tozalash); aks holda har tishga alohida */
+  onePrice?: boolean;
   snomedCode?: string | null; // DHP Procedure.code uchun SNOMED CT kodi
 
   clinicId: string;
