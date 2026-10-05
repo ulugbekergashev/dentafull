@@ -5526,6 +5526,16 @@ app.put('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN', 'SALES
             updateData = { status, expiryDate, planId, subscriptionType, customPrice };
         }
 
+        if (updateData.username !== undefined) {
+            const cleanUsername = String(updateData.username).trim();
+            if (!cleanUsername) {
+                delete updateData.username;
+            } else {
+                const taken = await prisma.clinic.findFirst({ where: { username: cleanUsername, NOT: { id: req.params.id } }, select: { id: true } });
+                if (taken) return res.status(400).json({ error: 'Bu login band, boshqasini tanlang' });
+                updateData.username = cleanUsername;
+            }
+        }
         if (updateData.password !== undefined) {
             // Login paytida parol trim qilinadi, shuning uchun saqlashda ham trim qilamiz
             const cleanPassword = String(updateData.password).trim();
@@ -5544,7 +5554,8 @@ app.put('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN', 'SALES
             where: { id: req.params.id },
             data: updateData
         });
-        res.json(clinic);
+        const { password: _pw, ...clinicSafe } = clinic as any;
+        res.json(clinicSafe);
     } catch (error: any) {
         console.error('Clinic update error:', error);
         res.status(500).json({ error: error.message || 'Failed to update clinic' });

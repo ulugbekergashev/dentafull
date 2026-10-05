@@ -17,6 +17,7 @@ const getAdLeadPlan = (source?: string | null) => {
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 import { tLabel, tPlanFeature } from '../i18n/labels';
+import { isDemoUsername } from '../services/demoData';
 
 // Kunlik yangi klinikalar diagrammasi (oxirgi 12 oy)
 const UZ_MONTHS_SHORT = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
@@ -890,7 +891,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
    // Detail/Edit Modal State
    const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
-   const [editClinicData, setEditClinicData] = useState<{ status: string; expiryDate: string; planId: string; subscriptionType: 'Paid' | 'Trial'; customPrice: number; useCustomPrice: boolean; salesAgentId: string } | null>(null);
+   const [editClinicData, setEditClinicData] = useState<{ status: string; expiryDate: string; planId: string; subscriptionType: 'Paid' | 'Trial'; customPrice: number; useCustomPrice: boolean; salesAgentId: string; username: string; newPassword: string } | null>(null);
 
    // Delete Confirmation Modal
    const [deleteConfirmClinic, setDeleteConfirmClinic] = useState<Clinic | null>(null);
@@ -934,7 +935,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             subscriptionType: selectedClinic.subscriptionType,
             customPrice: selectedClinic.customPrice || 0,
             useCustomPrice: selectedClinic.customPrice !== undefined && selectedClinic.customPrice !== null,
-            salesAgentId: selectedClinic.salesAgentId || ''
+            salesAgentId: selectedClinic.salesAgentId || '',
+            username: selectedClinic.username || '',
+            newPassword: ''
          });
       } else {
          setEditClinicData(null);
@@ -1138,7 +1141,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             planId: editClinicData.planId,
             subscriptionType: editClinicData.subscriptionType,
             customPrice: editClinicData.useCustomPrice ? editClinicData.customPrice : null,
-            salesAgentId: editClinicData.salesAgentId || null
+            salesAgentId: editClinicData.salesAgentId || null,
+            // Login/parol faqat super admin uchun; bo'sh parol — eskisi qoladi
+            ...(!salesAgentMode && editClinicData.username.trim() && editClinicData.username.trim() !== selectedClinic.username
+               ? { username: editClinicData.username.trim() } : {}),
+            ...(!salesAgentMode && editClinicData.newPassword.trim() ? { password: editClinicData.newPassword.trim() } : {})
          });
          setSelectedClinic(null);
       }
@@ -2730,6 +2737,26 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            <p className="text-xs text-gray-500">
                               {t('auto.Biriktirilgan sotuvchi ushbu klinikani o\'z panelida ko\'radi va obunasini boshqara oladi.')}
                            </p>
+                           {/* Kirish ma'lumotlari: login va yangi parol (bo'sh qolsa — o'zgarmaydi) */}
+                           <div className="grid grid-cols-2 gap-3 pt-2">
+                              <Input
+                                 label="Login"
+                                 value={editClinicData.username}
+                                 onChange={(e) => setEditClinicData({ ...editClinicData, username: e.target.value })}
+                              />
+                              <Input
+                                 label="Yangi parol"
+                                 type="text"
+                                 placeholder="O'zgarmaydi"
+                                 value={editClinicData.newPassword}
+                                 onChange={(e) => setEditClinicData({ ...editClinicData, newPassword: e.target.value })}
+                              />
+                           </div>
+                           {isDemoUsername(editClinicData.username) && (
+                              <p className="text-xs text-amber-600">
+                                 Bu login saytdagi brauzer demosiga band — u bilan serverdagi klinikaga kirib bo'lmaydi. Boshqa login qo'ying.
+                              </p>
+                           )}
                         </>
                      )}
                   </div>
