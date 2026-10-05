@@ -99,6 +99,7 @@ const { smsService, normalizeUzPhone } = require('./smsService');
 const dhp = require('./dhp');
 import { makePermChecker, PermChecker } from './permissions';
 const notif = require('./notifications');
+const doctorAlerts = require('./doctorAlerts');
 const cors = require('cors');
 const axios = require('axios');
 const { prisma } = require('./db');
@@ -1755,6 +1756,8 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
             }
         });
         dhp.enqueueSafe(clinicId, 'Patient', patient.id);
+        // Shifokorga Telegram: sizga yangi bemor biriktirildi (javobni kutdirmaydi)
+        void doctorAlerts.patientAssigned(patient, user?.doctorId);
         res.json(patient);
     } catch (error: any) {
         console.error('Patient creation error:', error);
@@ -1878,11 +1881,19 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
                 : null;
         }
 
+        // Shifokor almashdimi — yangi shifokorga xabar uchun eski qiymat kerak
+        const prevDoctorId = updateData.doctorId !== undefined
+            ? (await prisma.patient.findUnique({ where: { id: req.params.id }, select: { doctorId: true } }))?.doctorId ?? null
+            : undefined;
+
         const patient = await prisma.patient.update({
             where: { id: req.params.id },
             data: updateData
         });
         dhp.enqueueSafe(patient.clinicId, 'Patient', patient.id);
+        if (prevDoctorId !== undefined && patient.doctorId && patient.doctorId !== prevDoctorId) {
+            void doctorAlerts.patientAssigned(patient, (req as any).user?.doctorId);
+        }
         res.json(patient);
     } catch (error) {
         res.status(500).json({ error: 'Failed to update patient' });
@@ -2001,6 +2012,7 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
             }
             await linkRecallToAppointment(revived);
             kickTrigger('appointment_booked');
+            void doctorAlerts.newAppointment(revived, (req as any).user?.doctorId);
             return res.json(revived);
         }
 
@@ -2025,6 +2037,8 @@ app.post('/api/appointments', authenticateToken, async (req, res) => {
         await linkRecallToAppointment(appointment);
         // "Qabulga yozilganda" xabari 10 daqiqalik aylanishni kutmasin
         kickTrigger('appointment_booked');
+        // Shifokorga Telegram: sizga yangi qabul yozildi
+        void doctorAlerts.newAppointment(appointment, (req as any).user?.doctorId);
         res.json(appointment);
     } catch (error) {
         console.error('Failed to create appointment:', error);
@@ -2071,7 +2085,7 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
         // (vaqt ko'chdimi, kassaga endi uzatildimi) — yangi qiymatning o'zi buni aytmaydi.
         const before = await prisma.appointment.findUnique({
             where: { id: req.params.id },
-            select: { date: true, time: true, sentToCashierAt: true },
+            select: { date: true, time: true, sentToCashierAt: true, doctorId: true },
         });
 
         // Update appointment and fetch necessary data for notification
@@ -2098,6 +2112,11 @@ app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
             } else if (!isSent && wasSent) {
                 await notif.paymentToCashierCancelled(appointment.id);
             }
+        }
+
+        // Qabul boshqa shifokorga o'tkazildi — yangi shifokorga Telegram
+        if (before && doctorId !== undefined && appointment.doctorId && appointment.doctorId !== before.doctorId) {
+            void doctorAlerts.appointmentReassigned(appointment, (req as any).user?.doctorId);
         }
 
         // Qabul vaqti ko'chirildi — shifokor kunini eski jadval bo'yicha rejalashtirmasin

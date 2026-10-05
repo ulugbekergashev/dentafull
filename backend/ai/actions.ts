@@ -1408,6 +1408,11 @@ export const executeAction = async (
             });
 
             invalidateToolCache(ctx.clinicId);
+            // Shifokorga Telegram: sizga yangi qabul yozildi
+            void require('../doctorAlerts').newAppointment({
+                id: created.id, patientId: patient.id, patientName: `${patient.firstName} ${patient.lastName || ''}`.trim(),
+                doctorId: doctor.id, date: args.date, time: args.time, type: args.type, status: 'Pending',
+            }, ctx.doctorId);
             return {
                 ok: true,
                 message: `Qabul yozildi: ${args.date} ${args.time}.`,
