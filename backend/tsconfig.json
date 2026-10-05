@@ -15,6 +15,7 @@
         "triggers.ts",
         "audit.ts",
         "botReports.ts",
+        "doctorAlerts.ts",
         "segments.ts",
         "segmentFields.ts",
         "segmentAggregates.ts",
