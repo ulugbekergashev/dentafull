@@ -263,20 +263,26 @@ function fitTelegram(lines: string[], limit = 3900): string {
     return out.join('\n');
 }
 
-// ─── Kechki hisobot (22:00) ──────────────────────────────────────────────────
+// ─── Kunlik hisobot (vaqti sozlamada, standart 22:00) ────────────────────────
+
+/**
+ * Hisobot qaysi kun uchun: rahbar vaqtni tushdan oldinga qo'ygan bo'lsa (masalan
+ * 08:00) — bugun hali boshlanmagan, shuning uchun kechagi kun; aks holda bugun.
+ */
+export const reportDayOffset = (time: string): 0 | -1 => (parseInt(time, 10) < 12 ? -1 : 0);
 
 /**
  * Bitta to'liq kunlik hisobot. Kun butunlay bo'sh bo'lsa (dam olish kuni) —
  * null: bo'sh xabar yuborilmaydi.
  */
-export async function buildDailyReport(clinic: { id: string; name: string }): Promise<string | null> {
-    const today = tashkentDateStr(0);
+export async function buildDailyReport(clinic: { id: string; name: string }, dayOffset: 0 | -1 = 0): Promise<string | null> {
+    const today = tashkentDateStr(dayOffset);
     const data = await loadPeriod(clinic.id, today, today);
     const total = computeStats(data, undefined);
     if (isEmpty(total)) return null;
 
     const lines: string[] = [
-        `📊 <b>Kunlik hisobot</b> — ${ddmmyyyy(today)}`,
+        `📊 <b>${dayOffset ? 'Kechagi hisobot' : 'Kunlik hisobot'}</b> — ${ddmmyyyy(today)}`,
         esc(clinic.name),
         '',
         ...summaryLines(total),
@@ -297,14 +303,14 @@ export async function buildDailyReport(clinic: { id: string; name: string }): Pr
     const bad = (anomalies as any[]).filter(a => a.bad);
     if (bad.length) lines.push('', "⚠️ <b>E'tibor</b>", ...bad.map(a => `• ${esc(a.text)}`));
 
-    const advice = await adviceFor(clinic.id, total);
+    const advice = await adviceFor(clinic.id, total, dayOffset ? 'bugun' : 'ertaga');
     if (advice) lines.push('', `💡 ${esc(advice)}`);
 
     return fitTelegram(lines);
 }
 
-/** Ertaga nimaga e'tibor berish kerak — 2 gap. Raqamlar tayyor; model faqat izoh yozadi. */
-async function adviceFor(clinicId: string, s: Stats): Promise<string> {
+/** Ertaga (yoki ertalabki hisobotda — bugun) nimaga e'tibor berish kerak — 2 gap. Raqamlar tayyor; model faqat izoh yozadi. */
+async function adviceFor(clinicId: string, s: Stats, when: 'ertaga' | 'bugun'): Promise<string> {
     const facts = `Qabullar ${s.appts}, yakunlandi ${s.completed}, kelmadi ${s.noShow}, bekor ${s.cancelled}, `
         + `yangi bemorlar ${s.newPatients}, kassaga tushdi ${money(s.income)} so'm, xarajat ${money(s.expense)} so'm, `
         + `qarzga yozildi ${money(s.unpaid)} so'm.`;
@@ -315,7 +321,7 @@ async function adviceFor(clinicId: string, s: Stats): Promise<string> {
                     role: 'system',
                     content: 'Sen stomatologiya klinikasi egasiga kunlik hisobot izohini yozasan. '
                         + 'Senga TAYYOR raqamlar beriladi — ularni qayta hisoblama va yangi raqam qo\'shma. '
-                        + 'Vazifang: 2 gapda ertaga nimaga e\'tibor berish kerakligini ayt. '
+                        + `Vazifang: 2 gapda ${when} nimaga e\'tibor berish kerakligini ayt. `
                         + 'Markdown, emoji va sarlavha ishlatma, faqat oddiy matn, o\'zbek tilida.',
                 },
                 { role: 'user', content: facts },

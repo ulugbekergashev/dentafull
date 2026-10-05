@@ -275,14 +275,15 @@ class BotManager {
 
                     // --- CHECK: Clinic Owner ---
                     for (const clinic of clinics) {
-                        if ((clinic as any).ownerPhone) {
-                            const ownerPhone = (clinic as any).ownerPhone.replace(/\s/g, '').replace('+', '');
-                            if (ownerPhone === phone) {
+                        if (clinic.ownerPhone) {
+                            // Oxirgi 9 raqam: "+998 90 123-45-67" va "901234567" bir xil hisoblanadi
+                            const ownerPhone = clinic.ownerPhone.replace(/\D/g, '').slice(-9);
+                            if (ownerPhone.length === 9 && ownerPhone === phone.replace(/\D/g, '').slice(-9)) {
                                 await prisma.clinic.update({
                                     where: { id: clinic.id },
                                     data: { telegramChatId: chatId }
                                 } as any);
-                                ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz ${clinic.name} egasi sifatida muvaffaqiyatli ulandingiz. Har kuni kechqurun kunlik hisobot keladi, istalgan payt esa "📊 Hisobot" tugmasini bosing.`, {
+                                ctx.reply(`✅ Xush kelibsiz, ${clinic.adminName}!\n\nSiz ${clinic.name} egasi sifatida muvaffaqiyatli ulandingiz. Kunlik hisobot har kuni ${clinic.dailyReportEnabled ? `soat ${clinic.dailyReportTime} da` : '(hozir o\'chirilgan)'} keladi — vaqtini CRM Sozlamalaridan o'zgartirish mumkin. Istalgan payt esa "📊 Hisobot" tugmasini bosing.`, {
                                     reply_markup: this.menuMarkup(await this.rolesFor(chatId, token))
                                 });
                                 foundAny = true;

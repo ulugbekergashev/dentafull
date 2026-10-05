@@ -290,7 +290,13 @@ export const translations = {
     'settings.general.phone': 'Telefon',
     'settings.general.email': 'Email',
     'settings.general.ownerPhone': 'Klinika Egasi Telefoni (Hisobotlar uchun)',
-    'settings.general.ownerPhoneHelp': 'Ushbu raqam Telegram bot orqali bog\'langanda hisobotlarni qabul qiladi.',
+    'settings.general.ownerPhoneHelp': 'Rahbar shu raqam bilan klinika Telegram botiga /start bosib, "Telefon raqamni yuborish" tugmasini bossa — rahbar sifatida ulanadi va hisobotlarni oladi.',
+    'settings.general.dailyReport': 'Rahbarga kunlik hisobot (Telegram)',
+    'settings.general.dailyReportEnabled': 'Kunlik hisobotni yuborish',
+    'settings.general.dailyReportTime': 'Yuborish vaqti',
+    'settings.general.dailyReportHelp': '12:00 dan oldingi vaqt tanlansa — kechagi kun hisoboti, keyin — o\'sha kun hisoboti yuboriladi. Raqam o\'zgartirilsa, eski rahbarga hisobot bormaydi.',
+    'settings.general.ownerConnected': '✅ Rahbar botga ulangan',
+    'settings.general.ownerNotConnected': '⚠️ Rahbar botga hali ulanmagan',
     'settings.general.saved': 'Saqlandi!',
 
     // Settings Services
@@ -3132,7 +3138,13 @@ export const translations = {
     'settings.general.phone': 'Телефон',
     'settings.general.email': 'Email',
     'settings.general.ownerPhone': 'Телефон владельца клиники (для отчетов)',
-    'settings.general.ownerPhoneHelp': 'На этот номер будут приходить отчеты через Telegram бот.',
+    'settings.general.ownerPhoneHelp': 'Руководитель с этим номером нажимает /start в Telegram-боте клиники и «Отправить номер телефона» — после этого он подключается как руководитель и получает отчеты.',
+    'settings.general.dailyReport': 'Ежедневный отчет руководителю (Telegram)',
+    'settings.general.dailyReportEnabled': 'Отправлять ежедневный отчет',
+    'settings.general.dailyReportTime': 'Время отправки',
+    'settings.general.dailyReportHelp': 'Если выбрано время до 12:00 — приходит отчет за вчера, позже — за текущий день. При смене номера прежний руководитель перестает получать отчеты.',
+    'settings.general.ownerConnected': '✅ Руководитель подключен к боту',
+    'settings.general.ownerNotConnected': '⚠️ Руководитель еще не подключен к боту',
     'settings.general.saved': 'Сохранено!',
 
     // Settings Services

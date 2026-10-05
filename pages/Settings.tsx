@@ -309,6 +309,8 @@ export const Settings: React.FC<SettingsProps> = ({
       phone: '',
       email: '',
       ownerPhone: '',
+      dailyReportEnabled: true,
+      dailyReportTime: '22:00',
       startHour: 8,
       endHour: 20,
       enableReceipts: false
@@ -372,6 +374,8 @@ export const Settings: React.FC<SettingsProps> = ({
             phone: currentClinic.phone || '',
             email: (currentClinic as any).email || '',
             ownerPhone: currentClinic.ownerPhone || '',
+            dailyReportEnabled: currentClinic.dailyReportEnabled ?? true,
+            dailyReportTime: currentClinic.dailyReportTime || '22:00',
             startHour: currentClinic.startHour ?? 8,
             endHour: currentClinic.endHour ?? 20,
             enableReceipts: currentClinic.enableReceipts ?? false
@@ -700,6 +704,8 @@ export const Settings: React.FC<SettingsProps> = ({
             phone: generalForm.phone,
             email: generalForm.email,
             ownerPhone: generalForm.ownerPhone,
+            dailyReportEnabled: generalForm.dailyReportEnabled,
+            dailyReportTime: generalForm.dailyReportTime,
             startHour: Number(generalForm.startHour),
             endHour: Number(generalForm.endHour),
             enableReceipts: generalForm.enableReceipts
@@ -857,6 +863,40 @@ export const Settings: React.FC<SettingsProps> = ({
                               placeholder="998901234567"
                               helperText={t('settings.general.ownerPhoneHelp')}
                            />
+                           {/* Rahbarga kunlik Telegram hisobot: qachon yuborilishi */}
+                           <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                 <p className="text-sm font-medium text-gray-900 dark:text-white">{t('settings.general.dailyReport')}</p>
+                                 {generalForm.ownerPhone && (
+                                    currentClinic?.telegramChatId && generalForm.ownerPhone === (currentClinic.ownerPhone || '')
+                                       ? <span className="text-xs text-green-600 dark:text-green-400">{t('settings.general.ownerConnected')}</span>
+                                       : <span className="text-xs text-amber-600 dark:text-amber-400">{t('settings.general.ownerNotConnected')}</span>
+                                 )}
+                              </div>
+                              <label className="flex items-center space-x-3 cursor-pointer">
+                                 <input
+                                    type="checkbox"
+                                    checked={generalForm.dailyReportEnabled}
+                                    onChange={(e) => setGeneralForm({ ...generalForm, dailyReportEnabled: e.target.checked })}
+                                    className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
+                                 />
+                                 <span className="text-sm text-gray-700 dark:text-gray-300">{t('settings.general.dailyReportEnabled')}</span>
+                              </label>
+                              {generalForm.dailyReportEnabled && (
+                                 <div className="max-w-[12rem]">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('settings.general.dailyReportTime')}</label>
+                                    <Select
+                                       value={generalForm.dailyReportTime}
+                                       onChange={e => setGeneralForm({ ...generalForm, dailyReportTime: e.target.value })}
+                                       options={Array.from({ length: 48 }, (_, i) => {
+                                          const v = `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`;
+                                          return { value: v, label: v };
+                                       })}
+                                    />
+                                 </div>
+                              )}
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.general.dailyReportHelp')}</p>
+                           </div>
                            <div className="grid grid-cols-2 gap-4 mt-4">
                               <div>
                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Ishni boshlash vaqti')}</label>

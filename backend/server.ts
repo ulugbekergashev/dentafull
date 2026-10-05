@@ -5734,6 +5734,35 @@ app.post('/api/dhp/enqueue', authenticateToken, async (req, res) => {
     }
 });
 
+/** Telefonni solishtirish uchun: faqat raqamlar, oxirgi 9 tasi (998 / +998 / bo'shliqlar farq qilmaydi). */
+const phoneKey = (p?: string | null) => String(p || '').replace(/\D/g, '').slice(-9);
+
+/**
+ * Rahbar raqami o'zgarganda: eski rahbarning Telegram ulanishi uziladi (hisobotlar
+ * endi unga bormasin). Yangi raqam egasi shu klinika botiga shifokor yoki resepshn
+ * sifatida allaqachon ulangan bo'lsa — darhol rahbar sifatida ham ulanadi, aks holda
+ * botga /start bosib telefon raqamini yuborishi kerak.
+ */
+async function ownerPhoneData(clinicId: string, ownerPhone: any) {
+    if (ownerPhone === undefined) return {};
+    const next = String(ownerPhone || '').trim() || null;
+    const current = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { ownerPhone: true } });
+    if (phoneKey(current?.ownerPhone) === phoneKey(next)) return { ownerPhone: next };
+
+    let telegramChatId: string | null = null;
+    const key = phoneKey(next);
+    if (key.length === 9) {
+        const candidates = await Promise.all([
+            prisma.doctor.findMany({ where: { clinicId, telegramChatId: { not: null } }, select: { phone: true, telegramChatId: true } }),
+            prisma.receptionist.findMany({ where: { clinicId, telegramChatId: { not: null } }, select: { phone: true, telegramChatId: true } }),
+        ]);
+        telegramChatId = candidates.flat().find((x: any) => phoneKey(x.phone) === key)?.telegramChatId || null;
+    }
+    return { ownerPhone: next, telegramChatId };
+}
+
+const REPORT_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 // --- Umumiy sozlamalar (klinika admini o'z klinikasini yangilaydi) ---
 // PUT /api/clinics/:id faqat SUPER_ADMIN/SALES_AGENT uchun, shuning uchun
 // klinika admini uchun xavfsiz maydonlargina ruxsat etilgan alohida endpoint.
@@ -5741,10 +5770,13 @@ app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
     try {
         if (!(await allow(req, res, p => p.can('settings', 'clinic', 'edit'), "klinika sozlamalari"))) return;
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
-        const { name, address, phone, email, ownerPhone, startHour, endHour, enableReceipts, inn } = req.body;
+        const { name, address, phone, email, ownerPhone, startHour, endHour, enableReceipts, inn, dailyReportEnabled, dailyReportTime } = req.body;
         // STIR: faqat raqamlar (9 ta) — DHP Organization identifikatori
         if (inn !== undefined && inn && !/^\d{9}$/.test(String(inn).trim())) {
             return res.status(400).json({ error: "STIR 9 ta raqamdan iborat bo'lishi kerak" });
+        }
+        if (dailyReportTime !== undefined && !REPORT_TIME_RE.test(String(dailyReportTime))) {
+            return res.status(400).json({ error: "Hisobot vaqti HH:MM ko'rinishida bo'lishi kerak" });
         }
         const clinic = await prisma.clinic.update({
             where: { id: req.params.id },
@@ -5754,7 +5786,9 @@ app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
                 phone: phone !== undefined ? phone : undefined,
                 email: email !== undefined ? (email || null) : undefined,
                 inn: inn !== undefined ? (String(inn).trim() || null) : undefined,
-                ownerPhone: ownerPhone !== undefined ? (ownerPhone || null) : undefined,
+                ...(await ownerPhoneData(req.params.id, ownerPhone)),
+                dailyReportEnabled: dailyReportEnabled !== undefined ? !!dailyReportEnabled : undefined,
+                dailyReportTime: dailyReportTime !== undefined ? String(dailyReportTime) : undefined,
                 startHour: startHour !== undefined ? Number(startHour) : undefined,
                 endHour: endHour !== undefined ? Number(endHour) : undefined,
                 enableReceipts: enableReceipts !== undefined ? !!enableReceipts : undefined
@@ -5870,7 +5904,7 @@ app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
             where: { id: clinicId },
             data: {
                 botToken: botToken !== undefined ? (botToken || null) : undefined,
-                ownerPhone: ownerPhone !== undefined ? (ownerPhone || null) : undefined
+                ...(await ownerPhoneData(clinicId, ownerPhone))
             } as any
         });
 
@@ -7218,10 +7252,11 @@ cron.schedule('*/10 * * * *', () => {
     timezone: "Asia/Tashkent"
 });
 
-// Daily Clinic Reports - Every day at 10:00 PM (22:00)
-cron.schedule('0 22 * * *', () => {
-    console.log('⏰ Cron: Daily clinic report job triggered');
-    sendDailyClinicReports();
+// Rahbarga kunlik hisobot — har klinika o'zi tanlagan vaqtda (Sozlamalar → Klinika).
+// Har daqiqada shu daqiqaga to'g'ri kelgan klinikalar olinadi.
+cron.schedule('* * * * *', () => {
+    const now = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Tashkent', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    sendDailyClinicReports(now);
 }, {
     timezone: "Asia/Tashkent"
 });
@@ -7367,30 +7402,36 @@ cron.schedule('0 20 * * *', () => {
  * bittasi: qabullar, kassa, filiallar, shifokorlar, nazorat, ogohlantirish va
  * AI maslahati (backend/botReports.ts). Bo'sh kun (dam olish) — xabar yo'q.
  */
-const { buildDailyReport } = require('./botReports');
+const { buildDailyReport, reportDayOffset } = require('./botReports');
 
-async function sendDailyClinicReports() {
+/**
+ * @param time "HH:MM" — faqat shu vaqtni tanlagan klinikalar (cron). Berilmasa —
+ *   hisobot yoqilgan barcha klinikalar (qo'lda sinash endpointlari).
+ */
+async function sendDailyClinicReports(time?: string) {
     try {
-        console.log('📊 Running daily clinic report job...');
-
         const clinics = await prisma.clinic.findMany({
             where: {
                 telegramChatId: { not: null },
                 botToken: { not: null },
-                status: 'Active'
+                status: 'Active',
+                dailyReportEnabled: true,
+                ...(time ? { dailyReportTime: time } : {})
             },
-            select: { id: true, name: true, adminName: true, telegramChatId: true }
+            select: { id: true, name: true, adminName: true, telegramChatId: true, dailyReportTime: true }
         });
+        if (!clinics.length) return;
 
-        console.log(`Processing reports for ${clinics.length} clinics...`);
+        console.log(`📊 Daily report job${time ? ` (${time})` : ''}: ${clinics.length} clinics`);
 
         for (const clinic of clinics) {
             try {
-                const message = await buildDailyReport(clinic);
+                const offset = reportDayOffset(clinic.dailyReportTime || '22:00');
+                const message = await buildDailyReport(clinic, offset);
                 if (!message) continue;
                 await botManager.notifyClinicUser(
                     clinic.id, clinic.telegramChatId!, message, undefined, 'DailyReport',
-                    { inline_keyboard: [[{ text: '📊 Batafsil hisobot', callback_data: 'rp:d0:sum:' }]] },
+                    { inline_keyboard: [[{ text: '📊 Batafsil hisobot', callback_data: offset ? 'rp:d1:sum:' : 'rp:d0:sum:' }]] },
                     { source: 'report' },
                     { parseMode: 'HTML' }
                 );
@@ -7400,7 +7441,6 @@ async function sendDailyClinicReports() {
             }
         }
 
-        console.log('📊 Daily clinic report job completed.');
     } catch (error) {
         console.error('❌ Daily clinic report job error:', error);
     }
@@ -9344,6 +9384,9 @@ async function runStartupMigrations() {
         CREATE INDEX IF NOT EXISTS "AuditLog_clinicId_createdAt_idx" ON "AuditLog" ("clinicId", "createdAt")
     `);
 
+    await migrationStep('Clinic.dailyReportEnabled', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "dailyReportEnabled" BOOLEAN NOT NULL DEFAULT true`);
+    await migrationStep('Clinic.dailyReportTime', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "dailyReportTime" TEXT NOT NULL DEFAULT '22:00'`);
+
     console.log('✅ Startup migrations applied');
 }
 
@@ -9361,6 +9404,8 @@ const CRITICAL_COLUMNS: ReadonlyArray<{ table: string; column: string; type: str
     { table: 'Transaction', column: 'forDate', type: 'TEXT' },
     { table: 'CashRegisterDay', column: 'handedOver', type: 'DOUBLE PRECISION NOT NULL DEFAULT 0' },
     { table: 'Service', column: 'onePrice', type: 'BOOLEAN NOT NULL DEFAULT false' },
+    { table: 'Clinic', column: 'dailyReportEnabled', type: 'BOOLEAN NOT NULL DEFAULT true' },
+    { table: 'Clinic', column: 'dailyReportTime', type: "TEXT NOT NULL DEFAULT '22:00'" },
 ];
 
 async function verifyCriticalSchema(): Promise<boolean> {

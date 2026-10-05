@@ -324,6 +324,10 @@ model Clinic {
   smsLimit                Int                 @default(0)
   smsUsedThisMonth        Int                 @default(0)
   ownerPhone              String?
+  /// Rahbarga Telegram kunlik hisobot: yoqilganmi va qaysi vaqtda ("HH:MM", Toshkent).
+  /// 12:00 dan oldingi vaqtda kechagi kun hisoboti yuboriladi.
+  dailyReportEnabled      Boolean             @default(true)
+  dailyReportTime         String              @default("22:00")
   facebookPageAccessToken String?
   facebookPageId          String?
   facebookPageName        String?

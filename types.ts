@@ -550,6 +550,9 @@ export interface Clinic {
   email?: string; // New field
   inn?: string | null; // STIR — DHP Organization identifikatori
   ownerPhone?: string; // Dedicated phone for clinic owner to receive reports
+  telegramChatId?: string | null; // Rahbar botga ulangan bo'lsa — uning Telegram chat ID si
+  dailyReportEnabled?: boolean; // Rahbarga kunlik Telegram hisobot
+  dailyReportTime?: string; // "HH:MM" (Toshkent), standart 22:00
   status: 'Active' | 'Blocked' | 'Pending';
   planId: string;
   subscriptionStartDate: string; // Added field
