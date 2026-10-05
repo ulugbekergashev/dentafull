@@ -705,7 +705,7 @@ export const Settings: React.FC<SettingsProps> = ({
             email: generalForm.email,
             ownerPhone: generalForm.ownerPhone,
             dailyReportEnabled: generalForm.dailyReportEnabled,
-            dailyReportTime: generalForm.dailyReportTime,
+            dailyReportTime: generalForm.dailyReportTime || '22:00',
             startHour: Number(generalForm.startHour),
             endHour: Number(generalForm.endHour),
             enableReceipts: generalForm.enableReceipts
@@ -884,14 +884,14 @@ export const Settings: React.FC<SettingsProps> = ({
                               </label>
                               {generalForm.dailyReportEnabled && (
                                  <div className="max-w-[12rem]">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('settings.general.dailyReportTime')}</label>
-                                    <Select
+                                    {/* Istalgan daqiqa (masalan 23:59) — server HH:MM ni har daqiqada tekshiradi */}
+                                    <Input
+                                       type="time"
+                                       label={t('settings.general.dailyReportTime')}
                                        value={generalForm.dailyReportTime}
                                        onChange={e => setGeneralForm({ ...generalForm, dailyReportTime: e.target.value })}
-                                       options={Array.from({ length: 48 }, (_, i) => {
-                                          const v = `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`;
-                                          return { value: v, label: v };
-                                       })}
+                                       className="dark:[color-scheme:dark]"
+                                       required
                                     />
                                  </div>
                               )}
