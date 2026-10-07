@@ -1985,6 +1985,33 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      <Input label={t('patients.modal.phone')} value={editFormData.phone || ''} onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })} required />
                      <Input label={t('patients.modal.secondaryPhone')} value={editFormData.secondaryPhone || ''} onChange={(e) => setEditFormData({ ...editFormData, secondaryPhone: e.target.value })} />
                   </div>
+                  {/* Tug'ilgan sana va jins — ilgari faqat bemor qo'shishda kiritilardi, xatoni tuzatib bo'lmasdi */}
+                  <div className="grid grid-cols-2 gap-4">
+                     <DateField
+                        label={t('patients.modal.dob')}
+                        value={String(editFormData.dob || '').slice(0, 10)}
+                        onChange={dob => setEditFormData({ ...editFormData, dob })}
+                        max={formatDateToISO(new Date())}
+                     />
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('patients.modal.gender')}</label>
+                        <div className="flex gap-2">
+                           {(['Male', 'Female'] as const).map(g => (
+                              <button
+                                 key={g}
+                                 type="button"
+                                 onClick={() => setEditFormData({ ...editFormData, gender: g })}
+                                 aria-pressed={editFormData.gender === g}
+                                 className={`flex-1 h-10 rounded-lg text-sm font-medium border transition-all ${editFormData.gender === g
+                                    ? 'bg-primary text-white border-primary'
+                                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary-400'}`}
+                              >
+                                 {g === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}
+                              </button>
+                           ))}
+                        </div>
+                     </div>
+                  </div>
                   <Input label={t('patients.modal.address')} value={editFormData.address || ''} onChange={e => setEditFormData({ ...editFormData, address: e.target.value })} placeholder={t('auto.Bemor manzilini kiriting...')} />
                   <RegionDistrictSelect regionCode={editFormData.regionCode} districtCode={editFormData.districtCode} onChange={v => setEditFormData({ ...editFormData, ...v })} />
                   <div className="grid grid-cols-2 gap-4">
