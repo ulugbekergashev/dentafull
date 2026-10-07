@@ -4,7 +4,7 @@ import { Card, Button, Modal, Input, Select, Badge, SearchableSelect, statusLabe
 import {
   ChevronLeft, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Clock, User, FileText,
   XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
-  Search, Phone
+  Search, Phone, Minimize2
 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
@@ -21,11 +21,16 @@ import { usePerms } from '../context/PermissionsContext';
 const CALENDAR_VIEW_KEY = 'dentalflow_calendar_view';
 /** Yon panel (keng ekranda) yig'ib qo'yilganmi */
 const CALENDAR_SIDEBAR_KEY = 'dentalflow_calendar_sidebar';
+/** "Hamma soatlar bir ekranda" rejimi yoqilganmi (klinika so'rovi: Google Kalendardagi kabi) */
+const CALENDAR_FIT_KEY = 'dentalflow_calendar_fit';
 /** Bir soat balandligi (px) chegaralari: ish kuni imkon qadar jadvalga to'liq sig'adi */
 const HOUR_MIN_PX = 56;
 const HOUR_MAX_PX = 120;
-/** Vaqt ustuni kengligi (px) */
+/** "Bir ekranda" rejimida soat shu balandlikkacha qisiladi — undan pasti o'qilmaydi */
+const HOUR_FIT_MIN_PX = 18;
+/** Vaqt ustuni kengligi (px); telefonda "bir ekranda" rejimida torroq */
 const TIME_COL_PX = 60;
+const TIME_COL_FIT_PX = 34;
 type CalView = 'day' | 'week' | 'month';
 
 const minutesOfTime = (time: string) => {
@@ -127,7 +132,20 @@ export const Calendar: React.FC<CalendarProps> = ({
     return null;
   });
   const [narrow, setNarrow] = useState(() => window.innerWidth < 768);
-  const view: CalView = narrow ? 'day' : chosenView ?? (!ownDoctorId && activeDoctors.length > 1 ? 'day' : 'week');
+  // "Hamma soatlar bir ekranda": soatlar va ustunlar ekranga sig'guncha qisiladi, aylantirish
+  // kerak bo'lmaydi. Telefonda shu rejimda "Hafta" ham ochiladi (odatda u yerda faqat "Kun").
+  const [fitAll, setFitAll] = useState(() => {
+    try { return localStorage.getItem(CALENDAR_FIT_KEY) === '1'; } catch { return false; }
+  });
+  const toggleFitAll = () => setFitAll(on => {
+    try { localStorage.setItem(CALENDAR_FIT_KEY, on ? '0' : '1'); } catch { /* sessiya davomida baribir ishlaydi */ }
+    return !on;
+  });
+  const pickedView: CalView = chosenView ?? (!ownDoctorId && activeDoctors.length > 1 ? 'day' : 'week');
+  const view: CalView = !narrow ? pickedView : fitAll && pickedView === 'week' ? 'week' : 'day';
+  /** Telefonda ixcham ko'rinish: tor vaqt ustuni, qisqa sarlavhalar */
+  const dense = fitAll && narrow;
+  const timeCol = dense ? TIME_COL_FIT_PX : TIME_COL_PX;
   const setView = (v: CalView) => {
     setChosenView(v);
     try { localStorage.setItem(CALENDAR_VIEW_KEY, v); } catch { /* sessiya davomida baribir ishlaydi */ }
@@ -295,10 +313,10 @@ export const Calendar: React.FC<CalendarProps> = ({
   const dayKeys = displayDays.map(d => formatDateToISO(d));
   const gridColumns = view === 'week' ? 7 : Math.max(1, columnDoctors.length);
   const gridTemplate = view === 'week'
-    ? `${TIME_COL_PX}px repeat(7, minmax(0, 1fr))`
+    ? `${timeCol}px repeat(7, minmax(0, 1fr))`
     : columnDoctors.length > 0
-      ? `${TIME_COL_PX}px repeat(${columnDoctors.length}, minmax(160px, 1fr))`
-      : `${TIME_COL_PX}px 1fr`;
+      ? `${timeCol}px repeat(${columnDoctors.length}, minmax(${fitAll ? 0 : 160}px, 1fr))`
+      : `${timeCol}px 1fr`;
   const doctorRank = new Map<string, number>(doctors.map((d, i) => [d.id, i]));
   const spanOf = (a: Appointment): [number, number] => {
     const start = minutesOfTime(a.time);
@@ -330,7 +348,7 @@ export const Calendar: React.FC<CalendarProps> = ({
     return () => ro.disconnect();
   }, [view]);
   const fitPx = bodyViewport > 0 ? Math.floor(bodyViewport / gridHours.length / 2) * 2 : 72;
-  const hourPx = Math.min(HOUR_MAX_PX, Math.max(HOUR_MIN_PX, fitPx));
+  const hourPx = Math.min(HOUR_MAX_PX, Math.max(fitAll ? HOUR_FIT_MIN_PX : HOUR_MIN_PX, fitPx));
   const gridHeight = gridHours.length * hourPx;
   const yOf = (min: number) => (min - gridStartMin) * hourPx / 60;
 
@@ -750,7 +768,22 @@ export const Calendar: React.FC<CalendarProps> = ({
       {label}
     </button>
   );
-  const colW = `((100% - ${TIME_COL_PX}px) / ${gridColumns})`;
+  const colW = `((100% - ${timeCol}px) / ${gridColumns})`;
+  const fitTitle = t('calendar.fitAll');
+  const fitButton = (extra: string) => (
+    <button
+      type="button"
+      onClick={toggleFitAll}
+      aria-pressed={fitAll}
+      aria-label={fitTitle}
+      title={fitTitle}
+      className={`inline-flex items-center justify-center shrink-0 border transition-colors ${extra} ${fitAll
+        ? 'border-primary-500 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/30 dark:text-primary-200'
+        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`}
+    >
+      <Minimize2 className="w-4 h-4" />
+    </button>
+  );
 
   return (
     // Balandlik ekranga teng: sahifa emas, faqat jadval aylanadi (yuqori panel va chekkalar ayiriladi)
@@ -810,6 +843,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           {viewButton('week', t('calendar.week'))}
           {viewButton('month', t('calendar.month'))}
         </div>
+        <span className="hidden md:inline-flex">{fitButton('h-9 w-9 rounded-lg')}</span>
         {canCreate && (
           <Button onClick={() => openAddModal()} data-tour="cal-new" className="shrink-0" title={t('calendar.newAppointment')}>
             <Plus className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">{t('calendar.newAppointment')}</span>
@@ -818,8 +852,27 @@ export const Calendar: React.FC<CalendarProps> = ({
       </div>
 
       {/* Shifokorlar (keng ekranda — yon panelda): rang izohi va filtr bir joyda, blok rangi shifokor rangi */}
-      {doctors.length > 1 && (
+      {(doctors.length > 1 || narrow) && (
         <div role="group" aria-label={t('calendar.doctorFilter')} data-tour="cal-doctors" className={`${sidebarOpen ? '2xl:hidden' : ''} flex items-center gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 py-0.5`}>
+          {narrow && fitButton('h-8 w-8 rounded-full')}
+          {dense && (
+            <div className="flex items-center gap-0.5 p-0.5 rounded-full shrink-0 bg-gray-100 dark:bg-gray-700/60">
+              {(['day', 'week'] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  aria-pressed={view === v}
+                  className={`h-7 px-3 text-xs font-semibold rounded-full transition-all ${view === v
+                    ? 'bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-white'
+                    : 'text-gray-500 dark:text-gray-400'}`}
+                >
+                  {t(v === 'day' ? 'calendar.day' : 'calendar.week')}
+                </button>
+              ))}
+            </div>
+          )}
+          {doctors.length > 1 && (<>
           <button
             type="button"
             onClick={() => setDoctorFilter(null)}
@@ -850,6 +903,7 @@ export const Calendar: React.FC<CalendarProps> = ({
               </button>
             );
           })}
+          </>)}
         </div>
       )}
 
@@ -880,7 +934,7 @@ export const Calendar: React.FC<CalendarProps> = ({
               onCreate={canCreate ? key => openAddModal(key) : undefined}
             />
           ) : (
-          <div ref={gridRef} className={`relative ${view === 'week' ? 'min-w-[840px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
+          <div ref={gridRef} className={`relative ${fitAll ? 'w-full' : view === 'week' ? 'min-w-[840px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
             {/* Sarlavha: kunlar yoki shifokorlar */}
             <div ref={headerRef} className="grid sticky top-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700" style={{ gridTemplateColumns: gridTemplate }}>
               <div className="sticky left-0 z-40 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700"></div>
@@ -889,6 +943,18 @@ export const Calendar: React.FC<CalendarProps> = ({
                   const isToday = dayKeys[i] === todayKey;
                   const count = gridAppointments.filter(a => a.date === dayKeys[i]).length;
                   return (
+                    dense ? (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => openDay(dayKeys[i])}
+                      title={t('calendar.openDay')}
+                      className={`flex flex-col items-center min-w-0 py-1 border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}
+                    >
+                      <span className={`text-[10px] font-bold uppercase leading-none ${isToday ? 'text-primary-600 dark:text-primary-300' : 'text-gray-500 dark:text-gray-400'}`}>{dayNames[day.getDay()].slice(0, 2)}</span>
+                      <span className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold tabular-nums ${isToday ? 'bg-primary-600 text-white' : 'text-gray-800 dark:text-gray-100'}`}>{day.getDate()}</span>
+                    </button>
+                    ) : (
                     <button
                       key={i}
                       type="button"
@@ -902,6 +968,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                         <span className="block text-[11px] truncate text-gray-400">{count > 0 ? t('calendar.dayCount').replace('{n}', String(count)) : '—'}</span>
                       </span>
                     </button>
+                    )
                   );
                 })
               ) : columnDoctors.length > 0 ? (
@@ -909,6 +976,15 @@ export const Calendar: React.FC<CalendarProps> = ({
                   const color = doc.color || '#3B82F6';
                   const count = gridAppointments.filter(a => a.doctorId === doc.id).length;
                   const hours = doctorHours(doc, currentClinic);
+                  // Ixcham rejimda ustun tor: faqat rangli bosh harflar va familiya
+                  if (fitAll && (dense || columnDoctors.length > 4)) {
+                    return (
+                      <div key={doc.id} title={`Dr. ${doc.lastName}`} className="flex flex-col items-center min-w-0 px-0.5 py-1 border-r border-gray-100 dark:border-gray-700 last:border-0">
+                        <span className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: color }}>{initials(doc)}</span>
+                        <span className="mt-0.5 max-w-full text-[10px] font-semibold leading-none truncate text-gray-700 dark:text-gray-200">{doc.lastName}</span>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={doc.id} className="flex items-center gap-2.5 min-w-0 px-3 py-2 border-r border-gray-100 dark:border-gray-700 last:border-0">
                       <span className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: color }}>{initials(doc)}</span>
@@ -940,14 +1016,14 @@ export const Calendar: React.FC<CalendarProps> = ({
                 {gridHours.map((hour, i) => (
                   <div key={hour} className="relative" style={{ height: hourPx }}>
                     <span
-                      className={`absolute right-2 text-[11px] tabular-nums text-gray-400 dark:text-gray-500 ${showNowLine && Math.abs(nowMin - hour * 60) * hourPx / 60 < 14 ? 'invisible' : ''}`}
-                      style={{ top: i === 0 ? 4 : -8 }}
+                      className={`absolute ${dense ? 'right-1 text-[10px]' : 'right-2 text-[11px]'} tabular-nums text-gray-400 dark:text-gray-500 ${!dense && showNowLine && Math.abs(nowMin - hour * 60) * hourPx / 60 < 14 ? 'invisible' : ''}`}
+                      style={{ top: i === 0 ? (hourPx < 30 ? 1 : 4) : -8 }}
                     >
                       {hour}:00
                     </span>
                   </div>
                 ))}
-                {showNowLine && (
+                {showNowLine && !dense && (
                   <div className="absolute right-1 -translate-y-1/2 px-1 py-px rounded bg-red-500 text-white text-[10px] font-bold tabular-nums pointer-events-none" style={{ top: nowTop }}>
                     {hhmmOf(nowMin)}
                   </div>
@@ -966,7 +1042,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       return (
                         <React.Fragment key={hour}>
                           <div
-                            className="border-b border-dashed border-gray-100 dark:border-gray-700/40 cursor-pointer transition-colors hover:bg-primary-50/60 dark:hover:bg-primary-900/10"
+                            className={`${hourPx < 30 ? '' : 'border-b border-dashed border-gray-100 dark:border-gray-700/40'} cursor-pointer transition-colors hover:bg-primary-50/60 dark:hover:bg-primary-900/10`}
                             style={{ height: hourPx / 2 }}
                             onClick={() => openAddModal(dateStr, `${hh}:00`, docId)}
                           ></div>
@@ -995,7 +1071,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                     style={{
                       top: a,
                       height: b - a,
-                      left: `calc(${TIME_COL_PX}px + ${col} * ${colW})`,
+                      left: `calc(${timeCol}px + ${col} * ${colW})`,
                       width: `calc(${colW})`,
                       backgroundColor: 'rgba(148, 163, 184, 0.06)',
                       backgroundImage: 'repeating-linear-gradient(-45deg, rgba(148, 163, 184, 0.16) 0 1px, transparent 1px 8px)',
@@ -1010,8 +1086,8 @@ export const Calendar: React.FC<CalendarProps> = ({
                   className="absolute z-[5] pointer-events-none"
                   style={{
                     top: nowTop,
-                    left: view === 'week' ? `calc(${TIME_COL_PX}px + ${todayCol} * ${colW})` : TIME_COL_PX,
-                    width: view === 'week' ? `calc(${colW})` : `calc(100% - ${TIME_COL_PX}px)`,
+                    left: view === 'week' ? `calc(${timeCol}px + ${todayCol} * ${colW})` : timeCol,
+                    width: view === 'week' ? `calc(${colW})` : `calc(100% - ${timeCol}px)`,
                   }}
                 >
                   <div className="relative h-0.5 bg-red-500/90">
@@ -1036,11 +1112,11 @@ export const Calendar: React.FC<CalendarProps> = ({
                 const box: React.CSSProperties = {
                   top: top + 1,
                   height: heightPx,
-                  left: `calc(${TIME_COL_PX}px + ${place.col} * ${colW} + ${place.sub} * ${subW} + 1px)`,
+                  left: `calc(${timeCol}px + ${place.col} * ${colW} + ${place.sub} * ${subW} + 1px)`,
                   width: `calc(${place.span} * ${subW} - 3px)`,
                 };
                 // Blok necha piksel — shunga qarab qancha matn sig'ishi tanlanadi
-                const blockPx = gridWidth > 0 ? (gridWidth - TIME_COL_PX) / gridColumns / place.subs * place.span : 160;
+                const blockPx = gridWidth > 0 ? (gridWidth - timeCol) / gridColumns / place.subs * place.span : 160;
                 const tier = blockPx < 40 ? 'tiny' : blockPx < 72 ? 'mini' : blockPx < 120 ? 'compact' : 'full';
                 const oneLine = heightPx < 34;
                 const tightY = heightPx < 42 ? 'py-0.5' : 'py-1';
@@ -1110,10 +1186,16 @@ export const Calendar: React.FC<CalendarProps> = ({
                     }}
                   >
                     <div className={`h-full ${done ? 'opacity-70' : ''}`}>
-                      {tier === 'tiny' ? null : oneLine ? (
+                      {fitAll && (tier === 'tiny' || tier === 'mini') ? (
+                        // Google Kalendardagi kabi: tor blokda faqat familiya, sig'ganicha bir necha qatorda
+                        <div className={`px-0.5 text-[9px] font-semibold leading-[1.1] break-all text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>
+                          {surname}
+                        </div>
+                      ) : tier === 'tiny' ? null : oneLine ? (
                         // Qisqa qabul: vaqt va ism bir qatorda
                         <div className="h-full px-1.5 flex items-center gap-1 text-[10px] leading-none whitespace-nowrap">
-                          <span className="font-bold tabular-nums text-gray-700 dark:text-gray-200">{app.time}</span>
+                          {/* "Bir ekranda" rejimida tor blokda vaqt o'rniga ism: vaqt chapdagi shkaladan ko'rinadi */}
+                          {!(fitAll && tier !== 'full') && <span className="font-bold tabular-nums text-gray-700 dark:text-gray-200">{app.time}</span>}
                           {tier !== 'mini' && statusIcon}
                           <span className={`min-w-0 font-semibold truncate text-gray-900 dark:text-white ${noShow ? 'line-through opacity-60' : ''}`}>
                             {tier === 'full' ? app.patientName : tier === 'compact' ? shortName : surname}
