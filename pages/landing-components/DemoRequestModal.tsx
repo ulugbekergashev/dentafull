@@ -5,6 +5,8 @@ import { API_URL } from "../../services/api";
 import { useLandingCopy } from "./useLandingCopy";
 import { LANDING_CONST } from "./content";
 import { markDemoSubmitted } from "./hooks/useDemoPopupTrigger";
+import { rememberSentLead } from "../../utils/sentLead";
+import { getMetaTrack } from "../../utils/metaPixel";
 
 interface DemoRequestModalProps {
   isOpen: boolean;
@@ -104,6 +106,8 @@ export default function DemoRequestModal({ isOpen, onClose }: DemoRequestModalPr
           city: form.city.trim(),
           source: "landing",
           doctorsCount: form.doctorsCount,
+          // Server shu belgilar bilan Meta'ga "yangi lid" deb xabar beradi; bu sahifada piksel yo'q
+          track: getMetaTrack(),
         }),
       });
 
@@ -116,6 +120,8 @@ export default function DemoRequestModal({ isOpen, onClose }: DemoRequestModalPr
       if (data && data.success === false) throw new Error(data.message || "rejected");
 
       markDemoSubmitted();
+      // Shu odam keyin reklamani bosib /lifetime ga kelsa, forma qayta chiqmaydi
+      rememberSentLead(form.name.trim(), digits);
       setStatus("success");
     } catch {
       setStatus("error");

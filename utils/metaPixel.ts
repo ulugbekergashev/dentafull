@@ -34,8 +34,64 @@ export const initMetaPixel = () => {
   window.fbq('track', 'PageView');
 };
 
+// Xuddi shu hodisani server ham Meta'ga yuboradi (backend/leadSignals.ts) — brauzerdagi
+// piksel bloklangan bo'lsa ham signal yo'qolmaydi. eventId ikkalasida bir xil bo'lgani
+// uchun Meta ularni bitta hodisa deb sanaydi.
+const withId = (eventId?: string) => (eventId ? { eventID: eventId } : undefined);
+
 /** Standart hodisa. Shaxsiy ma'lumot (ism, telefon) bu yerga hech qachon berilmaydi. */
-export const trackMetaEvent = (event: 'Lead', params?: Record<string, string>) => {
+export const trackMetaEvent = (event: 'Lead', params?: Record<string, string>, eventId?: string) => {
   if (!PIXEL_ID || !window.fbq) return;
-  window.fbq('track', event, params);
+  window.fbq('track', event, params, withId(eventId));
+};
+
+/**
+ * Maxsus hodisalar — konversiya hisoblanmaydi:
+ * CrmContact — bu odam bizda allaqachon bor. Ads Manager'da shu hodisa bo'yicha
+ *              auditoriya reklamadan chiqarib tashlanadi, unga qayta pul sarflanmaydi.
+ * NotClinic  — formada "klinikam yo'q" degan odam.
+ */
+export const trackMetaCustomEvent = (event: 'CrmContact' | 'NotClinic', eventId?: string) => {
+  if (!PIXEL_ID || !window.fbq) return;
+  window.fbq('trackCustom', event, {}, withId(eventId));
+};
+
+export interface MetaTrack {
+  eventId: string;
+  fbp: string | null;
+  fbc: string | null;
+  url: string;
+}
+
+const readCookie = (name: string): string | null => {
+  try {
+    const found = document.cookie.split('; ').find((c) => c.startsWith(`${name}=`));
+    return found ? decodeURIComponent(found.slice(name.length + 1)) : null;
+  } catch {
+    // Buzuq cookie tufayli ariza yuborilmay qolmasin
+    return null;
+  }
+};
+
+const newEventId = (): string => {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+};
+
+/**
+ * Ariza bilan birga serverga ketadigan belgilar: Meta shular orqali lidni u bosgan
+ * reklamaga bog'laydi. Pikselni yuklamaydi — faqat mavjud cookie va manzilni o'qiydi,
+ * shuning uchun saytning asosiy sahifasida ham xavfsiz.
+ */
+export const getMetaTrack = (): MetaTrack => {
+  const fbclid = new URLSearchParams(window.location.search).get('fbclid');
+  return {
+    eventId: newEventId(),
+    fbp: readCookie('_fbp'),
+    fbc: readCookie('_fbc') || (fbclid ? `fb.1.${Date.now()}.${fbclid}` : null),
+    url: `${window.location.origin}${window.location.pathname}`,
+  };
 };

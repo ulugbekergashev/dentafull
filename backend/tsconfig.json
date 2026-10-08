@@ -16,6 +16,8 @@
         "audit.ts",
         "botReports.ts",
         "doctorAlerts.ts",
+        "demoRequests.ts",
+        "leadSignals.ts",
         "segments.ts",
         "segmentFields.ts",
         "segmentAggregates.ts",

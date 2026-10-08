@@ -14,7 +14,15 @@ const getAdLeadPlan = (source?: string | null) => {
       ? { label: 'LIFETIME', campaign: m[2], Icon: InfinityIcon, border: 'border-l-4 border-l-amber-400', badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' }
       : { label: 'OYLIK', campaign: m[2], Icon: Repeat, border: 'border-l-4 border-l-sky-500', badge: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' };
 };
+
+// Odam arizani qayta qoldirsa yangi karta ochilmaydi — server eski kartaning izohiga
+// shu so'z bilan boshlanadigan qator yozadi. backend/demoRequests.ts dagi
+// DEMO_REPEAT_MARK bilan bir xil bo'lishi shart.
+const LEAD_REPEAT_MARK = '🔁 Qayta ariza qoldirdi';
+const countLeadRepeats = (notes?: string | null) =>
+   (notes || '').split('\n').filter(line => line.startsWith(LEAD_REPEAT_MARK)).length;
 import { useLanguage } from '../context/LanguageContext';
+import { MetaSignalsPanel } from '../components/MetaSignalsPanel';
 import { api } from '../services/api';
 import { tLabel, tPlanFeature } from '../i18n/labels';
 import { isDemoUsername } from '../services/demoData';
@@ -1812,13 +1820,21 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         >
                            {(() => {
                               const plan = getAdLeadPlan(req.source);
-                              if (!plan) return null;
+                              const repeats = countLeadRepeats(req.notes);
+                              if (!plan && repeats === 0) return null;
                               return (
-                                 <div className="flex items-center gap-2 mb-3">
-                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-extrabold tracking-wide ${plan.badge}`}>
-                                       <plan.Icon className="w-3.5 h-3.5" /> {plan.label}
-                                    </span>
-                                    {plan.campaign && <span className="text-[11px] text-gray-400 truncate">{plan.campaign}</span>}
+                                 <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    {plan && (
+                                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-extrabold tracking-wide ${plan.badge}`}>
+                                          <plan.Icon className="w-3.5 h-3.5" /> {plan.label}
+                                       </span>
+                                    )}
+                                    {repeats > 0 && (
+                                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-extrabold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">
+                                          <RefreshCw className="w-3.5 h-3.5" /> Qayta qoldirdi{repeats > 1 ? ` · ${repeats} marta` : ''}
+                                       </span>
+                                    )}
+                                    {plan?.campaign && <span className="text-[11px] text-gray-400 truncate">{plan.campaign}</span>}
                                  </div>
                               );
                            })()}
@@ -2174,6 +2190,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                    deyarli ochilmaydi. Lekin u ekran yuqorisidan katta joy
                    egallab, asosiy ish maydonini — lidlar taxtasini — pastga
                    surib yuborardi. Endi yig'ilgan holda turadi. */}
+               {!salesAgentMode && <MetaSignalsPanel />}
+
                {!salesAgentMode && !leadApiOpen && (
                   <button
                      onClick={() => setLeadApiOpen(true)}

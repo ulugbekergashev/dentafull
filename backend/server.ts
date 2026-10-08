@@ -100,6 +100,8 @@ const dhp = require('./dhp');
 import { makePermChecker, PermChecker } from './permissions';
 const notif = require('./notifications');
 const doctorAlerts = require('./doctorAlerts');
+const { saveDemoRequest } = require('./demoRequests');
+const { createLeadSignals, cleanTrack } = require('./leadSignals');
 const cors = require('cors');
 const axios = require('axios');
 const { prisma } = require('./db');
@@ -4763,6 +4765,11 @@ const clip = (v: unknown, max: number): string | null => {
     return t.length ? t : null;
 };
 
+// Reklama formasidagi "Klinikangizda nechta shifokor ishlaydi?" savolining javoblari.
+// 'none' — klinikasi yo'q: bunday odamga karta ochilmaydi (pastga qarang).
+const AD_FORM_NO_CLINIC = 'none';
+const AD_FORM_DOCTORS = new Map([['1-2', '1–2'], ['3-5', '3–5'], ['6+', '6 va undan ko\'p']]);
+
 app.post('/api/public/demo-request', async (req: any, res: any) => {
     try {
         const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
@@ -4775,7 +4782,7 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
             });
         }
 
-        const { name, clinicName, phone, city, doctorsCount, source } = req.body || {};
+        const { name, clinicName, phone, city, doctorsCount, source, doctors, track } = req.body || {};
 
         const cleanPhone = typeof phone === 'string' ? phone.replace(/[^\d+]/g, '') : '';
         if (!/^\+?998\d{9}$/.test(cleanPhone)) {
@@ -4790,20 +4797,41 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
         const seats = Number(doctorsCount);
         const cleanSeats = Number.isFinite(seats) && seats > 0 && seats <= 500 ? Math.trunc(seats) : null;
 
-        const id = require('crypto').randomUUID();
-        await prisma.$executeRawUnsafe(
-            `INSERT INTO "DemoRequest" ("id","name","clinicName","phone","city","doctorsCount","source","status","createdAt","updatedAt")
-             VALUES ($1,$2,$3,$4,$5,$6,$7,'Inbox',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-            id,
-            cleanName,
-            clip(clinicName, 160),
-            cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`,
-            clip(city, 80),
-            cleanSeats,
-            clip(source, 40) || 'landing'
-        );
+        const fullPhone = cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`;
 
-        res.json({ success: true, id });
+        // Meta'ga signal javobdan KEYIN ketadi — forma Meta'ni kutib turmaydi.
+        const signal = {
+            phone: fullPhone,
+            track: cleanTrack(track),
+            ip: ip === 'unknown' ? null : ip,
+            userAgent: clip(req.headers['user-agent'], 400),
+        };
+
+        // Klinikasi yo'qligini o'zi aytgan odam lid emas: karta ochilmaydi, sotuvchi
+        // vaqt sarflamaydi. Meta'ga esa xabar beriladi — unga reklama qayta ko'rsatilmasin.
+        if (doctors === AD_FORM_NO_CLINIC) {
+            res.json({ success: true, notClinic: true });
+            leadSignals.formSubmitted({ ...signal, leadId: null, isNew: false, notClinic: true });
+            return;
+        }
+
+        const doctorsAnswer = typeof doctors === 'string' ? AD_FORM_DOCTORS.get(doctors) : undefined;
+
+        // repeat=true — bu raqam oldin ariza qoldirgan: yangi karta ochilmadi.
+        // Forma shunga qarab Meta Pixel'ga "yangi lid" deb xabar bermaydi.
+        const saved = await saveDemoRequest(prisma, {
+            name: cleanName,
+            phone: fullPhone,
+            clinicName: clip(clinicName, 160),
+            city: clip(city, 80),
+            doctorsCount: cleanSeats,
+            source: clip(source, 40) || 'landing',
+            notes: doctorsAnswer ? `Shifokorlar soni: ${doctorsAnswer}` : null,
+        });
+
+        // Eski kartaning id'si ochiq formaga qaytarilmaydi — unga kerak emas
+        res.json(saved.repeat ? { success: true, repeat: true } : { success: true, id: saved.id });
+        leadSignals.formSubmitted({ ...signal, leadId: saved.id, isNew: !saved.repeat, notClinic: false });
     } catch (error) {
         console.error('Demo request error:', error);
         res.status(500).json({ success: false, message: 'So\'rovni saqlab bo\'lmadi.' });
@@ -4893,6 +4921,8 @@ app.put('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_AD
             ...params
         );
         res.json({ success: true });
+        // Lid "O'ylamoqda" yoki "Oldi"ga o'tsa, Meta'ga "bu sifatli lid edi" degan signal ketadi
+        if (typeof status === 'string') leadSignals.stageChanged(req.params.id, status);
     } catch (error) {
         res.status(500).json({ error: 'Failed to update demo request' });
     }
@@ -4997,6 +5027,7 @@ app.delete('/api/admin/lead-api-key', authenticateToken, requireRole('SUPER_ADMI
 app.delete('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
     try {
         await prisma.$executeRawUnsafe(`DELETE FROM "DemoRequest" WHERE "id"=$1`, req.params.id);
+        await leadSignals.leadDeleted(req.params.id);
         const callbacks = await getLeadCallbacks();
         if (callbacks[req.params.id]) {
             delete callbacks[req.params.id];
@@ -5348,32 +5379,22 @@ const handlePlatformLead = async (payload: any, res: any) => {
         return res.status(400).json({ error: 'phone (telefon raqami) majburiy' });
     }
 
-    const since = new Date(Date.now() - PUBLIC_LEAD_DEDUP_MINUTES * 60 * 1000);
-    const duplicate = await prisma.demoRequest.findFirst({
-        where: { phone, createdAt: { gte: since } },
-        select: { id: true }
-    });
-    if (duplicate) {
-        return res.status(200).json({ success: true, duplicate: true, id: duplicate.id });
-    }
-
     const parsedDoctors = parseInt(String(fields.doctorsCount || ''), 10);
 
-    const created = await prisma.demoRequest.create({
-        data: {
-            name: fields.name || 'Noma\'lum',
-            phone,
-            clinicName: fields.clinicName || null,
-            city: fields.city || null,
-            doctorsCount: Number.isFinite(parsedDoctors) ? parsedDoctors : null,
-            source: fields.source || 'yuboraman',
-            notes,
-            // Yangi lid avval superadminning "Tushgan lid" ustuniga tushadi
-            status: 'Inbox'
-        }
+    const saved = await saveDemoRequest(prisma, {
+        name: fields.name || 'Noma\'lum',
+        phone,
+        clinicName: fields.clinicName || null,
+        city: fields.city || null,
+        doctorsCount: Number.isFinite(parsedDoctors) ? parsedDoctors : null,
+        source: fields.source || 'yuboraman',
+        notes,
     });
 
-    return res.status(201).json({ success: true, id: created.id });
+    if (saved.repeat) return res.status(200).json({ success: true, duplicate: true, id: saved.id });
+
+    res.status(201).json({ success: true, id: saved.id });
+    leadSignals.contactAdded(phone);
 };
 
 app.post('/api/public/leads', async (req, res) => {
@@ -6534,6 +6555,49 @@ const setPlatformSetting = async (key: string, value: string | null) => {
     }
 };
 
+// --- Meta'ga lid sifati haqida signal (Conversions API) ---
+// Token SuperAdmin > Lidlar sahifasida bir marta kiritiladi. Javobda token
+// hech qachon qaytarilmaydi — faqat ulangan-ulanmagani.
+const leadSignals = createLeadSignals({
+    db: prisma,
+    getSetting: getPlatformSetting,
+    setSetting: setPlatformSetting,
+    http: axios,
+});
+
+app.get('/api/admin/meta-signals', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        res.json(await leadSignals.status());
+    } catch (error) {
+        res.status(500).json({ error: 'Meta holatini olib bo\'lmadi' });
+    }
+});
+
+app.post('/api/admin/meta-signals', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const result = await leadSignals.saveToken(req.body?.token);
+        if (!result.ok) return res.status(400).json({ error: result.error });
+        res.json({ ...(await leadSignals.status()), synced: result.synced });
+    } catch (error) {
+        res.status(500).json({ error: 'Tokenni saqlab bo\'lmadi' });
+    }
+});
+
+app.delete('/api/admin/meta-signals', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        await leadSignals.clearToken();
+        res.json(await leadSignals.status());
+    } catch (error) {
+        res.status(500).json({ error: 'Uzib bo\'lmadi' });
+    }
+});
+
+// Meta auditoriyada odamni ko'pi bilan 180 kun saqlaydi. Har oy boshida lidlar va
+// klinikalar qayta bildiriladi — eski mijozlarga reklama qayta ko'rsatila boshlamasin.
+cron.schedule('0 4 1 * *', () => {
+    leadSignals.syncContacts();
+}, { timezone: 'Asia/Tashkent' });
+
 app.get('/api/admin/facebook/status', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
     try {
         const pageName = await getPlatformSetting('fb_page_name');
@@ -6674,15 +6738,14 @@ app.post('/api/facebook/webhook', async (req, res) => {
                                 let pNotes = `FB Lead ID: ${leadgen_id}`;
                                 if (pQAs.length > 0) pNotes += `\n\nSavollar va Javoblar:\n` + pQAs.join('\n');
 
-                                await prisma.$executeRawUnsafe(
-                                    `INSERT INTO "DemoRequest" ("id","name","phone","source","status","notes","createdAt","updatedAt")
-                                     VALUES ($1,$2,$3,$4,'Inbox',$5,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-                                    require('crypto').randomUUID(),
-                                    pFieldData.full_name || 'Facebook User',
-                                    pFieldData.phone_number || 'N/A',
-                                    'Facebook',
-                                    pNotes
-                                );
+                                const fbPhone = normalizeLeadPhone(pFieldData.phone_number || '') || 'N/A';
+                                const fbSaved = await saveDemoRequest(prisma, {
+                                    name: pFieldData.full_name || 'Facebook User',
+                                    phone: fbPhone,
+                                    source: 'Facebook',
+                                    notes: pNotes,
+                                });
+                                if (!fbSaved.repeat) leadSignals.contactAdded(fbPhone);
                                 console.log(`✅ Platform FB Lead saved to DemoRequest: ${pFieldData.full_name}`);
                                 return;
                             }

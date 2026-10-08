@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, AuditLogEntry, AuditLogQuery, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, MetaSignalsStatus, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, AuditLogEntry, AuditLogQuery, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
 import { addDaysISO, applyCallChange } from '../utils/desk';
 import { formatDateToISO } from '../utils/dateUtils';
 import { DEMO_SEED_VERSION } from './demoSeed';
@@ -1282,6 +1282,21 @@ export const api = {
             if (isDemoMode()) return Promise.resolve({ success: true as const });
             return fetchJson<{ success: true }>('/admin/lead-api-key', { method: 'DELETE' });
         },
+    },
+    // Meta'ga lid sifati haqida signal (Conversions API). Token serverda qoladi —
+    // bu yerga faqat ulangan-ulanmagani va oxirgi yuborish natijasi qaytadi.
+    adminMetaSignals: {
+        status: () => {
+            if (isDemoMode()) return Promise.resolve<MetaSignalsStatus>({ connected: false, pixelId: '', last: null });
+            return fetchJson<MetaSignalsStatus>('/admin/meta-signals');
+        },
+        connect: (token: string) =>
+            fetchJson<MetaSignalsStatus & { synced: number }>('/admin/meta-signals', {
+                method: 'POST',
+                body: JSON.stringify({ token }),
+            }),
+        disconnect: () =>
+            fetchJson<MetaSignalsStatus>('/admin/meta-signals', { method: 'DELETE' }),
     },
     // Platforma (SuperAdmin) Facebook integratsiyasi — lidlar DemoRequest'ga tushadi
     adminFacebook: {

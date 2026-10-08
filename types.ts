@@ -858,6 +858,13 @@ export interface LeadApiKeyInfo {
   endpoint: string;
 }
 
+/** Meta'ga lid signallari holati (SuperAdmin > Lidlar). Token bu yerga hech qachon kelmaydi. */
+export interface MetaSignalsStatus {
+  connected: boolean;
+  pixelId: string;
+  last: { at: string; ok: boolean; error: string | null; events: string[] } | null;
+}
+
 export interface SalesAgent {
   id: string;
   name: string;
