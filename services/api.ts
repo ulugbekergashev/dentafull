@@ -1220,6 +1220,13 @@ export const api = {
             }),
         remove: (id: string) =>
             fetchJson<any>(`/admin/demo-requests/${id}`, { method: 'DELETE' }),
+        // Lidlarni doskadan yashirish / qaytarish (faqat SUPER_ADMIN). Sotuvchiga ko'rinmaydi, statistikada qoladi
+        setHidden: (ids: string[], hidden: boolean) =>
+            fetchJson<{ success: boolean; changed: number }>('/admin/demo-requests-hidden', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids, hidden }),
+            }),
         // Qayta qo'ng'iroq vaqti; at=null — rejani olib tashlaydi
         setCallback: (id: string, at: string | null, note?: string) =>
             fetchJson<{ success: boolean; callbackAt: string | null; callbackNote: string | null }>(`/admin/demo-requests/${id}/callback`, {

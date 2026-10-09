@@ -100,7 +100,7 @@ const dhp = require('./dhp');
 import { makePermChecker, PermChecker } from './permissions';
 const notif = require('./notifications');
 const doctorAlerts = require('./doctorAlerts');
-const { saveDemoRequest } = require('./demoRequests');
+const { saveDemoRequest, earlierApplications } = require('./demoRequests');
 const { createLeadSignals, cleanTrack } = require('./leadSignals');
 const cors = require('cors');
 const axios = require('axios');
@@ -4817,8 +4817,8 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
 
         const doctorsAnswer = typeof doctors === 'string' ? AD_FORM_DOCTORS.get(doctors) : undefined;
 
-        // repeat=true — bu raqam oldin ariza qoldirgan: yangi karta ochilmadi.
-        // Forma shunga qarab Meta Pixel'ga "yangi lid" deb xabar bermaydi.
+        // repeat=true — bu raqam oldin ham ariza qoldirgan. Karta baribir ochiladi
+        // ("Dublikat" belgisi bilan), lekin forma Meta Pixel'ga "yangi lid" deb xabar bermaydi.
         const saved = await saveDemoRequest(prisma, {
             name: cleanName,
             phone: fullPhone,
@@ -4829,7 +4829,7 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
             notes: doctorsAnswer ? `Shifokorlar soni: ${doctorsAnswer}` : null,
         });
 
-        // Eski kartaning id'si ochiq formaga qaytarilmaydi — unga kerak emas
+        // Takror arizada karta id'si ochiq formaga qaytarilmaydi — unga kerak emas
         res.json(saved.repeat ? { success: true, repeat: true } : { success: true, id: saved.id });
         leadSignals.formSubmitted({ ...signal, leadId: saved.id, isNew: !saved.repeat, notClinic: false });
     } catch (error) {
@@ -4868,6 +4868,21 @@ const getLeadCallbacks = async (): Promise<Record<string, LeadCallback>> => {
     }
 };
 
+// Doskadan yashirilgan lidlar ham shu usulda: { "<demoRequestId>": "<ISO — qachon yashirilgan>" }.
+// Superadmin "Oldi" / "Bekor" bo'lgan lidlarni yashiradi — ular sotuvchiga ko'rinmaydi,
+// lekin o'chmaydi: statistikada qoladi va istalgan payt qaytariladi.
+const LEAD_HIDDEN_KEY = 'demo_request_hidden';
+
+const getHiddenLeads = async (): Promise<Record<string, string>> => {
+    try {
+        const raw = await getPlatformSetting(LEAD_HIDDEN_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+};
+
 // SUPER_ADMIN barcha lidlarni, SALES_AGENT esa faqat o'ziga biriktirilganini ko'radi.
 app.get('/api/admin/demo-requests', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
     try {
@@ -4875,15 +4890,21 @@ app.get('/api/admin/demo-requests', authenticateToken, requireRole('SUPER_ADMIN'
         const rows: any[] = await prisma.$queryRawUnsafe(`SELECT * FROM "DemoRequest" ORDER BY "createdAt" DESC`);
         const assignments = await getLeadAssignments();
         const callbacks = await getLeadCallbacks();
+        const hidden = await getHiddenLeads();
+        // Dublikat belgisi butun ro'yxat bo'yicha sanaladi — sotuvchi o'ziga
+        // ko'rinmaydigan oldingi karta borligini ham bilsin
+        const earlier = earlierApplications(rows);
         const withAgent = rows.map(r => ({
             ...r,
             salesAgentId: assignments[r.id] || null,
             callbackAt: callbacks[r.id]?.at || null,
             callbackNote: callbacks[r.id]?.note || null,
+            duplicateOf: earlier[r.id] || 0,
+            hidden: !!hidden[r.id],
         }));
-        // "Inbox" — superadminning taqsimlash ustuni; sotuvchi uni ko'rmaydi
+        // "Inbox" — superadminning taqsimlash ustuni; sotuvchi uni ham, yashirilgan lidni ham ko'rmaydi
         res.json(user.role === 'SALES_AGENT'
-            ? withAgent.filter(r => r.salesAgentId === user.salesAgentId && r.status !== 'Inbox')
+            ? withAgent.filter(r => r.salesAgentId === user.salesAgentId && r.status !== 'Inbox' && !r.hidden)
             : withAgent);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch demo requests' });
@@ -4986,6 +5007,30 @@ app.put('/api/admin/demo-requests/:id/assign', authenticateToken, requireRole('S
     }
 });
 
+// Lidlarni doskadan yashirish / qaytarish — faqat superadmin. Bitta lid ham, butun ustun
+// ham shu yo'l bilan: { ids: [...], hidden: true|false }. Lidning o'ziga tegilmaydi.
+app.post('/api/admin/demo-requests-hidden', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const ids: string[] = Array.isArray(req.body?.ids)
+            ? req.body.ids.filter((x: any) => typeof x === 'string' && x.length > 0 && x.length <= 64).slice(0, 5000)
+            : [];
+        const hide = req.body?.hidden !== false;
+        if (ids.length === 0) return res.json({ success: true, changed: 0 });
+
+        const hidden = await getHiddenLeads();
+        const stamp = new Date().toISOString();
+        let changed = 0;
+        for (const id of ids) {
+            if (hide && !hidden[id]) { hidden[id] = stamp; changed++; }
+            if (!hide && hidden[id]) { delete hidden[id]; changed++; }
+        }
+        if (changed > 0) await setPlatformSetting(LEAD_HIDDEN_KEY, JSON.stringify(hidden));
+        res.json({ success: true, changed });
+    } catch (error: any) {
+        res.status(500).json({ error: 'Lidni yashirishda xatolik: ' + error.message });
+    }
+});
+
 // --- Platforma (SuperAdmin) uchun lid qabul qilish kaliti ---
 // Bu kalit bilan kelgan lidlar klinikaning doskasiga emas, DentaCRM sotuv
 // voronkasiga (DemoRequest -> SuperAdmin > Lidlar) tushadi.
@@ -5032,6 +5077,11 @@ app.delete('/api/admin/demo-requests/:id', authenticateToken, requireRole('SUPER
         if (callbacks[req.params.id]) {
             delete callbacks[req.params.id];
             await setPlatformSetting(LEAD_CALLBACKS_KEY, JSON.stringify(callbacks));
+        }
+        const hidden = await getHiddenLeads();
+        if (hidden[req.params.id]) {
+            delete hidden[req.params.id];
+            await setPlatformSetting(LEAD_HIDDEN_KEY, JSON.stringify(hidden));
         }
         res.json({ success: true });
     } catch (error) {

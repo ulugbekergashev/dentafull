@@ -1,10 +1,10 @@
-// DentaCRM sotuv lidlari: takror arizalar (demoRequests.ts) va Meta signallari (leadSignals.ts).
+// DentaCRM sotuv lidlari: takror arizalar va dublikat belgisi (demoRequests.ts), Meta signallari (leadSignals.ts).
 // Soxta baza va soxta tarmoq bilan ishlaydi — haqiqiy bazaga ham, Meta'ga ham ulanmaydi.
 // Ishga tushirish (backend papkasidan):  node tests/lead-forms.test.cjs
 const path = require('path');
 const assert = require('assert');
 require('ts-node').register({ transpileOnly: true, compilerOptions: { module: 'commonjs' } });
-const { saveDemoRequest, DEMO_REPEAT_MARK } = require(path.join(__dirname, '..', 'demoRequests.ts'));
+const { saveDemoRequest, earlierApplications } = require(path.join(__dirname, '..', 'demoRequests.ts'));
 const { createLeadSignals, cleanTrack, hashPhone, META_PIXEL_ID } = require(path.join(__dirname, '..', 'leadSignals.ts'));
 
 const PHONE = '+998901234567';
@@ -42,7 +42,6 @@ const fakeDb = (rows = [], clinics = []) => {
 };
 const save = (db, input, at) => { db.clock = at; return saveDemoRequest(db, input, at); };
 const lead = (over = {}) => ({ id: 'old', name: 'Aziz', phone: PHONE, clinicName: null, city: null, doctorsCount: null, source: 'ad-lifetime-x', status: 'Thinking', notes: null, createdAt: T0, updatedAt: T0, ...over });
-const marks = (notes) => String(notes || '').split('\n').filter((l) => l.startsWith(DEMO_REPEAT_MARK)).length;
 
 // ---------- leadSignals ----------
 
@@ -69,90 +68,80 @@ const TRACK = { eventId: 'abcdef123456', fbp: 'fb.1.1700000000000.123456789', fb
 const form = (over = {}) => ({ leadId: 'L1', isNew: true, notClinic: false, phone: PHONE, track: TRACK, ip: '1.2.3.4', userAgent: 'Mozilla/5.0', ...over });
 
 const tests = {
-  // --- takror arizalar ---
+  // --- takror arizalar: har biri alohida karta, belgi "Dublikat" ---
   'yangi raqam — yangi karta, Taqsimlanmagan ustunida': async () => {
     const db = fakeDb();
     const res = await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, T0);
     assert.strictEqual(res.repeat, false);
+    assert.strictEqual(res.created, true);
     assert.strictEqual(db.rows[0].status, 'Inbox');
   },
-  'o\'sha raqam yana kelsa — yangi karta ochilmaydi, eski kartaga belgi tushadi': async () => {
-    const db = fakeDb([lead()]);
-    const res = await save(db, { name: 'Aziz', phone: PHONE, source: 'ad-lifetime-x' }, later(60 * 30));
-    assert.deepStrictEqual(res, { id: 'old', repeat: true });
-    assert.strictEqual(db.rows.length, 1);
-    assert.strictEqual(marks(db.rows[0].notes), 1);
-    assert.match(db.rows[0].notes, /02\.10\.2026 21:00/, 'Toshkent vaqti bilan yoziladi');
-    assert.strictEqual(db.rows[0].status, 'Thinking', 'ishlanayotgan lid joyidan qo\'zg\'almaydi');
-  },
-  'sotuvchining izohi o\'chib ketmaydi': async () => {
+  'o\'sha raqam yana kelsa — yangi karta ochiladi, eski kartaga tegilmaydi': async () => {
     const db = fakeDb([lead({ notes: 'ДЕМО СКИНУЛ' })]);
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, later(90));
-    assert.ok(db.rows[0].notes.startsWith('ДЕМО СКИНУЛ\n'));
+    const res = await save(db, { name: 'Aziz', phone: PHONE, source: 'ad-lifetime-x' }, later(60 * 30));
+    assert.strictEqual(res.repeat, true, 'Meta\'ga "yangi lid" deb xabar berilmasligi uchun');
+    assert.strictEqual(res.created, true);
+    assert.notStrictEqual(res.id, 'old');
+    assert.strictEqual(db.rows.length, 2);
+    assert.deepStrictEqual([db.rows[0].status, db.rows[0].notes], ['Thinking', 'ДЕМО СКИНУЛ']);
+    assert.deepStrictEqual(db.writes, [], 'eski karta yangilanmaydi — sotuvchining tahriri bosilib ketmasin');
+    assert.strictEqual(db.rows[1].status, 'Inbox', 'dublikat ham avval Taqsimlanmagan ustuniga tushadi');
   },
-  'Bekor va Trubkani ko\'tarmadi ustunidagi lid qayta arizada Yangi lidlarga qaytadi': async () => {
-    for (const status of ['Cancelled', 'NoAnswer']) {
+  'eski karta qaysi ustunda bo\'lsa ham joyidan qo\'zg\'almaydi': async () => {
+    for (const status of ['Cancelled', 'NoAnswer', 'Booked', 'New', 'Contacted']) {
       const db = fakeDb([lead({ status })]);
       await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, later(600));
-      assert.strictEqual(db.rows[0].status, 'New', status);
-    }
-  },
-  'boshqa ustunlardagi lid statusi o\'zgarmaydi, faqat izoh yoziladi': async () => {
-    for (const status of ['Booked', 'Inbox', 'New', 'Contacted']) {
-      const db = fakeDb([lead({ status, city: 'Buxoro' })]);
-      await save(db, { name: 'Aziz', phone: PHONE, city: 'Toshkent', source: 'landing' }, later(600));
       assert.strictEqual(db.rows[0].status, status);
-      assert.deepStrictEqual(db.writes, ['notes'], 'sotuvchining tahriri bosilib ketmasin');
+      assert.strictEqual(db.rows.length, 2, status);
     }
   },
-  'tugmani ikki marta bosish — bazaga hech narsa yozilmaydi': async () => {
+  'yangi kartada yangi arizaning o\'z ma\'lumoti turadi': async () => {
+    const db = fakeDb([lead({ city: 'Samarqand' })]);
+    await save(db, { name: 'Boshqa', phone: PHONE, clinicName: 'Smile', city: 'Toshkent', doctorsCount: 4, source: 'Facebook', notes: 'FB Lead ID: 77' }, later(600));
+    const fresh = db.rows[1];
+    assert.deepStrictEqual([fresh.name, fresh.clinicName, fresh.city, fresh.doctorsCount, fresh.source, fresh.notes], ['Boshqa', 'Smile', 'Toshkent', 4, 'Facebook', 'FB Lead ID: 77']);
+    assert.strictEqual(db.rows[0].city, 'Samarqand');
+  },
+  'tugmani ikki marta bosish — yangi karta ochilmaydi, bazaga hech narsa yozilmaydi': async () => {
     const db = fakeDb([lead()]);
     const res = await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, later(3));
-    assert.strictEqual(res.repeat, true);
+    assert.deepStrictEqual(res, { id: 'old', repeat: true, created: false });
+    assert.strictEqual(db.rows.length, 1);
     assert.deepStrictEqual(db.writes, []);
   },
-  'lid tushgach darrov Trubkani ko\'tarmadi qilingan karta ham Yangi lidlarga qaytadi': async () => {
-    const db = fakeDb([lead({ status: 'NoAnswer' })]);
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, later(10));
-    assert.strictEqual(db.rows[0].status, 'New');
-    assert.strictEqual(db.rows[0].notes, null);
-  },
-  'qayta arizadan keyin tugma yana bosilsa — belgi ikkilanmaydi': async () => {
+  'ikki marta bosish eng oxirgi kartaga nisbatan hisoblanadi': async () => {
     const db = fakeDb([lead()]);
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, later(600));
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, later(601));
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'ad-monthly' }, later(3000));
-    assert.strictEqual(marks(db.rows[0].notes), 2);
+    const second = await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, later(600));
+    db.rows[1].createdAt = later(600);
+    const third = await save(db, { name: 'Aziz', phone: PHONE, source: 'landing' }, later(601));
+    assert.strictEqual(db.rows.length, 2);
+    assert.deepStrictEqual(third, { id: second.id, repeat: true, created: false });
+    const fourth = await save(db, { name: 'Aziz', phone: PHONE, source: 'ad-monthly' }, later(3000));
+    assert.strictEqual(fourth.created, true);
+    assert.strictEqual(db.rows.length, 3);
   },
-  'manba ichidagi qator uzilishi soxta belgi yarata olmaydi': async () => {
-    const db = fakeDb([lead()]);
-    await save(db, { name: 'Aziz', phone: PHONE, source: ['x', DEMO_REPEAT_MARK + ': soxta'].join('\n') }, later(600));
-    assert.strictEqual(marks(db.rows[0].notes), 1);
-  },
-  'bo\'sh maydonlar to\'ldiriladi, borlari ustidan yozilmaydi': async () => {
-    const db = fakeDb([lead({ city: 'Samarqand' })]);
-    await save(db, { name: 'Boshqa', phone: PHONE, clinicName: 'Smile', city: 'Toshkent', doctorsCount: 4, source: 'landing' }, later(600));
-    assert.deepStrictEqual([db.rows[0].clinicName, db.rows[0].doctorsCount, db.rows[0].city, db.rows[0].name], ['Smile', 4, 'Samarqand', 'Aziz']);
-  },
-  'raqamsiz lid (Facebook "N/A") hech kim bilan birlashtirilmaydi': async () => {
+  'raqamsiz lid (Facebook "N/A") hech kim bilan solishtirilmaydi': async () => {
     const db = fakeDb([lead({ phone: 'N/A' })]);
-    const res = await save(db, { name: 'FB', phone: 'N/A', source: 'Facebook' }, later(600));
+    const res = await save(db, { name: 'FB', phone: 'N/A', source: 'Facebook' }, later(1));
     assert.strictEqual(res.repeat, false);
     assert.strictEqual(db.rows.length, 2);
   },
-  'qayta arizada bir xil izoh takrorlanmaydi, yangi javoblar esa saqlanadi': async () => {
-    const db = fakeDb([lead({ notes: 'FB Lead ID: 1' })]);
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'Facebook', notes: 'FB Lead ID: 1' }, later(600));
-    assert.strictEqual(db.rows[0].notes.match(/FB Lead ID: 1/g).length, 1);
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'Facebook', notes: 'FB Lead ID: 77' }, later(6000));
-    assert.match(db.rows[0].notes, /FB Lead ID: 77/);
+  'dublikat belgisi: birinchi karta belgisiz, keyingilari — oldin nechta ariza bo\'lganini biladi': async () => {
+    const rows = [
+      { id: 'c', phone: PHONE, createdAt: later(500) },
+      { id: 'a', phone: PHONE, createdAt: T0 },
+      { id: 'b', phone: PHONE, createdAt: later(100).toISOString() },
+      { id: 'solo', phone: '+998900000001', createdAt: T0 },
+    ];
+    assert.deepStrictEqual(earlierApplications(rows), { b: 1, c: 2 });
   },
-  'yangi javob bilan kelgan qayta arizadan keyin tugma yana bosilsa — belgi ikkilanmaydi': async () => {
-    const db = fakeDb([lead()]);
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'ad-lifetime', notes: 'Shifokorlar soni: 3–5' }, later(600));
-    await save(db, { name: 'Aziz', phone: PHONE, source: 'ad-lifetime', notes: 'Shifokorlar soni: 3–5' }, later(601));
-    assert.strictEqual(marks(db.rows[0].notes), 1);
-    assert.match(db.rows[0].notes, /^Shifokorlar soni: 3–5\n/);
+  'dublikat belgisi raqamsiz va noto\'g\'ri raqamli lidlarga qo\'yilmaydi': async () => {
+    const rows = [
+      { id: 'x', phone: 'N/A', createdAt: T0 }, { id: 'y', phone: 'N/A', createdAt: later(5) },
+      { id: 'z', phone: null, createdAt: T0 }, { id: 'w', phone: null, createdAt: later(9) },
+    ];
+    assert.deepStrictEqual(earlierApplications(rows), {});
+    assert.deepStrictEqual(earlierApplications([]), {});
   },
 
   // --- Meta signallari ---
