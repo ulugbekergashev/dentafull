@@ -255,16 +255,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
    // Sotuvchi rejimida backend allaqachon faqat o'ziga biriktirilgan lidlarni qaytaradi,
    // shuning uchun filtr faqat superadmin uchun ishlaydi.
-   // Yashirilgan lidlar: superadmin "Oldi" / "Bekor" bo'lib doskada xalaqit berayotganlarni
-   // yashiradi. Sotuvchiga server ularni umuman bermaydi; statistikada esa qoladi.
-   const [showHiddenLeads, setShowHiddenLeads] = useState(false);
-   const hiddenLeadCount = demoRequests.filter((r: any) => r.hidden).length;
-   const boardRequests = showHiddenLeads ? demoRequests : demoRequests.filter((r: any) => !r.hidden);
    const visibleDemoRequests = (salesAgentMode || leadAgentFilter === 'All')
-      ? boardRequests
+      ? demoRequests
       : leadAgentFilter === 'Unassigned'
-         ? boardRequests.filter((r: any) => !r.salesAgentId)
-         : boardRequests.filter((r: any) => r.salesAgentId === leadAgentFilter);
+         ? demoRequests.filter((r: any) => !r.salesAgentId)
+         : demoRequests.filter((r: any) => r.salesAgentId === leadAgentFilter);
+
+   // Sotuvchidan yashirish: superadmin "Oldi" / "Bekor" bo'lib sotuvchiga xalaqit berayotgan
+   // lidlarni yashiradi. Sotuvchiga server ularni umuman bermaydi. Superadminning o'zida
+   // esa karta joyida qoladi — faqat "Sotuvchiga ko'rinmaydi" belgisi bilan.
 
    const setLeadsHidden = async (ids: string[], hidden: boolean) => {
       if (ids.length === 0) return;
@@ -1764,29 +1763,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onChange={e => setLeadAgentFilter(e.target.value)}
                            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-700 dark:text-gray-200"
                         >
-                           <option value="All">Barcha lidlar ({boardRequests.length})</option>
-                           <option value="Unassigned">Taqsimlanmagan ({boardRequests.filter((r: any) => !r.salesAgentId).length})</option>
+                           <option value="All">Barcha lidlar ({demoRequests.length})</option>
+                           <option value="Unassigned">Taqsimlanmagan ({demoRequests.filter((r: any) => !r.salesAgentId).length})</option>
                            {salesAgents.map((a: any) => (
                               <option key={a.id} value={a.id}>
-                                 {a.name} ({boardRequests.filter((r: any) => r.salesAgentId === a.id).length})
+                                 {a.name} ({demoRequests.filter((r: any) => r.salesAgentId === a.id).length})
                               </option>
                            ))}
                         </select>
-                     )}
-                     {/* Yashirilganlarni ko'rsatish / berkitish — faqat superadmin */}
-                     {!salesAgentMode && (hiddenLeadCount > 0 || showHiddenLeads) && (
-                        <button
-                           type="button"
-                           onClick={() => setShowHiddenLeads(v => !v)}
-                           aria-pressed={showHiddenLeads}
-                           title="Yashirilgan lidlar sotuvchiga ko'rinmaydi, statistikada qoladi"
-                           className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${showHiddenLeads
-                              ? 'bg-gray-800 text-white dark:bg-gray-200 dark:text-gray-900'
-                              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                        >
-                           {showHiddenLeads ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                           Yashirilgan: {hiddenLeadCount}
-                        </button>
                      )}
                      <button
                         onClick={() => { setDemoLoading(true); api.demoRequests.getAll().then(setDemoRequests).finally(() => setDemoLoading(false)); }}
@@ -1837,20 +1821,27 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                        faqat siz
                                     </span>
                                  )}
-                                 {/* Tugagan lidlar sotuvchiga xalaqit bermasin — butun ustunni yashirish (faqat superadmin) */}
-                                 {!salesAgentMode && (stage === 'Booked' || stage === 'Cancelled') && stageLeads.some((r: any) => !r.hidden) && (
-                                    <button
-                                       type="button"
-                                       onClick={() => {
-                                          const ids = stageLeads.filter((r: any) => !r.hidden).map((r: any) => r.id);
-                                          if (window.confirm(`"${DEMO_STAGE_LABELS[stage]}" ustunidagi ${ids.length} ta lid yashirilsinmi?\n\nSotuvchiga ko'rinmaydi. Statistikada qoladi, istalgan payt qaytarasiz.`)) setLeadsHidden(ids, true);
-                                       }}
-                                       title="Ustundagi hamma lidni yashirish"
-                                       className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-gray-500 hover:text-gray-900 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 transition-colors"
-                                    >
-                                       <EyeOff className="w-3.5 h-3.5" /> Yashirish
-                                    </button>
-                                 )}
+                                 {/* Tugagan lidlar sotuvchiga xalaqit bermasin — butun ustunni sotuvchidan yashirish
+                                     (faqat superadmin). Hammasi yashirilgan bo'lsa, tugma ularni qaytaradi. */}
+                                 {!salesAgentMode && (stage === 'Booked' || stage === 'Cancelled') && stageLeads.length > 0 && (() => {
+                                    const open = stageLeads.filter((r: any) => !r.hidden).map((r: any) => r.id);
+                                    const hiding = open.length > 0;
+                                    const ids = hiding ? open : stageLeads.map((r: any) => r.id);
+                                    const ask = hiding
+                                       ? `"${DEMO_STAGE_LABELS[stage]}" ustunidagi ${ids.length} ta lid sotuvchidan yashirilsinmi?\n\nSizda ko'rinib turadi, sotuvchiga ko'rinmaydi. Istalgan payt qaytarasiz.`
+                                       : `"${DEMO_STAGE_LABELS[stage]}" ustunidagi ${ids.length} ta lid sotuvchiga qaytarilsinmi?`;
+                                    return (
+                                       <button
+                                          type="button"
+                                          onClick={() => { if (window.confirm(ask)) setLeadsHidden(ids, hiding); }}
+                                          title={hiding ? 'Ustundagi hamma lidni sotuvchidan yashirish' : 'Ustundagi hamma lidni sotuvchiga qaytarish'}
+                                          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-gray-500 hover:text-gray-900 hover:bg-gray-200 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 transition-colors"
+                                       >
+                                          {hiding ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                          {hiding ? 'Sotuvchidan yashirish' : 'Sotuvchiga qaytarish'}
+                                       </button>
+                                    );
+                                 })()}
                               </div>
 
                               {stageLeads.length === 0 ? (
@@ -1865,7 +1856,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            draggable
                            onDragStart={() => setDraggingLeadId(req.id)}
                            onDragEnd={() => { setDraggingLeadId(null); setDragOverStage(null); }}
-                           className={`relative p-4 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${getAdLeadPlan(req.source)?.border ?? ''} ${draggingLeadId === req.id ? 'opacity-40' : req.hidden ? 'opacity-60' : ''}`}
+                           className={`relative p-4 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${getAdLeadPlan(req.source)?.border ?? ''} ${draggingLeadId === req.id ? 'opacity-40' : ''}`}
                         >
                            {(() => {
                               const plan = getAdLeadPlan(req.source);
@@ -1888,8 +1879,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                        </span>
                                     )}
                                     {req.hidden && (
-                                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-gray-800 text-white dark:bg-gray-200 dark:text-gray-900">
-                                          <EyeOff className="w-3 h-3" /> Yashirilgan
+                                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                                          <EyeOff className="w-3 h-3" /> Sotuvchiga ko'rinmaydi
                                        </span>
                                     )}
                                     {plan?.campaign && <span className="text-[11px] text-gray-400 truncate">{plan.campaign}</span>}
@@ -1908,14 +1899,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     <p className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleDateString('uz-UZ', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
                                  </div>
                               </div>
-                              {/* Yashirish (sotuvchiga ko'rinmaydi, statistikada qoladi) va o'chirish — faqat superadmin */}
+                              {/* Sotuvchidan yashirish (superadminda karta qoladi) va o'chirish — faqat superadmin */}
                               {!salesAgentMode && (
                                  <div className="flex items-center gap-0.5 shrink-0">
                                     <button
                                        type="button"
                                        onClick={() => setLeadsHidden([req.id], !req.hidden)}
-                                       title={req.hidden ? 'Doskaga qaytarish' : "Yashirish — sotuvchiga ko'rinmaydi"}
-                                       aria-label={req.hidden ? 'Doskaga qaytarish' : 'Yashirish'}
+                                       title={req.hidden ? 'Sotuvchiga qaytarish' : 'Sotuvchidan yashirish — sizda ko\'rinib turadi'}
+                                       aria-label={req.hidden ? 'Sotuvchiga qaytarish' : 'Sotuvchidan yashirish'}
                                        className="p-1.5 text-gray-400 hover:text-gray-800 hover:bg-gray-100 dark:hover:text-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                     >
                                        {req.hidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
