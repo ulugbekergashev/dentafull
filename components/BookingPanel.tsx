@@ -255,7 +255,6 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
         if (moving) {
             if (!canMove || !onUpdateAppointment) return t('booking.cantMove').replace('{time}', moving.time);
             if (conflict) return t('booking.rescheduleConflict').replace('{time}', conflict.time).replace('{doctor}', conflict.doctorName);
-            if (sameTime) return t('booking.sameTime').replace('{time}', time).replace('{patient}', sameTime.patientName);
             return null;
         }
         if (mode === 'now' && nowPlan) {
@@ -266,10 +265,12 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
         if (mode !== 'now') {
             if (existing?.status === 'Completed') return t('booking.alreadyDoneDay');
             if (existing && !canMove) return t('booking.cantMove').replace('{time}', existing.time);
-            if (sameTime) return t('booking.sameTime').replace('{time}', time).replace('{patient}', sameTime.patientName);
         }
         return null;
     })();
+    // Shifokorda shu vaqtga boshqa bemor yozilgan — taqiq emas: ogohlantiriladi va saqlashda
+    // so'raladi (bemor 5 daqiqaga ko'rinib ketishga kelgan bo'lishi mumkin)
+    const sameTimeNote = sameTime ? t('booking.sameTime').replace('{time}', time).replace('{patient}', sameTime.patientName) : null;
     const willMove = mode === 'now'
         ? nowPlan?.kind === 'move' && canMove
         : !!existing && existing.status !== 'Completed' && canMove;
@@ -326,6 +327,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
         if (mode !== 'now' && (!TIME_RE.test(time) || !targetDate)) { setError(t('booking.pickTime')); return; }
         if (blocked) { setError(blocked); return; }
         if (!doctor) return;
+        if (sameTimeNote && !window.confirm(`${sameTimeNote}\n\n${t('booking.bookAnyway')}`)) return;
         const doctorName = `Dr. ${doctor.lastName}`;
         const apptTime = mode === 'now' ? nowStr : time;
         const dur = Number(duration) || 30;
@@ -727,7 +729,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                         className="h-8 px-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
                                     />
                                 </label>
-                                {overlaps && <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{t('booking.overlap')}</p>}
+                                {(sameTimeNote || overlaps) && <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{sameTimeNote || t('booking.overlap')}</p>}
                             </div>
                         </>
                     )}

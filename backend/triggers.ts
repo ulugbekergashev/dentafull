@@ -87,6 +87,13 @@ const patientName = (p: any) => ({
 
 const doctorName = (d: any) => (d ? `${d.firstName} ${d.lastName}` : '');
 
+/**
+ * Tashrifga shuncha vaqt ham qolmaganda yozilgan bo'lsa — bemorga SMS ketmaydi
+ * (eslatma ham, "yozildingiz" ham): u yo klinikada turibdi (kelib, shifokorning
+ * yaqin bo'sh vaqtiga yozildi), yo u bilan hozirgina gaplashildi.
+ */
+const JUST_BOOKED_MS = 60 * 60000;
+
 // Sana+vaqtni Toshkent devor soati sifatida ms ga aylantiradi
 const wallClockMs = (date: string, time?: string) =>
     Date.parse(`${date}T${time || '00:00'}:00Z`);
@@ -150,6 +157,9 @@ export const TRIGGERS: TriggerDef[] = [
                 if (isNaN(apptMs)) continue;
                 // Oyna: (qabul - N soat) dan qabul vaqtigacha
                 if (nowMs < apptMs - hours * 3600000 || nowMs >= apptMs) continue;
+                // Qabulga 1 soat ham qolmaganda yozilgan — eslatish shart emas (bemor shu yerda).
+                // bookedAt NULL (eski qabullar, Telegram bot) — avvalgidek eslatiladi.
+                if (appt.bookedAt && apptMs - (new Date(appt.bookedAt).getTime() + TASHKENT_OFFSET_MS) < JUST_BOOKED_MS) continue;
                 due.push({
                     patient: appt.patient,
                     refId: appt.id,
@@ -196,9 +206,9 @@ export const TRIGGERS: TriggerDef[] = [
             const due: DueItem[] = [];
             for (const appt of appointments) {
                 const apptMs = wallClockMs(appt.date, appt.time);
-                // Hozir kelgan bemor (qabul vaqti = hozir) yoki qabulgacha 30 daqiqa
+                // Hozir kelgan bemor (qabul vaqti = hozir) yoki qabulgacha 1 soat
                 // ham qolmagan — bemor klinikada yoki hozirgina gaplashildi
-                if (isNaN(apptMs) || apptMs - nowMs < 30 * 60000) continue;
+                if (isNaN(apptMs) || apptMs - nowMs < JUST_BOOKED_MS) continue;
                 due.push({
                     patient: appt.patient,
                     // Yozilish vaqti bilan: bekor qilinib qayta yozilsa yana ketadi

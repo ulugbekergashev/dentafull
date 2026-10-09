@@ -942,19 +942,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          return;
       }
 
-      // Doctor Conflict Validation
-      const doctorConflict = appointments.some(appt =>
-         appt.doctorId === doctor.id &&
-         appt.date === apptData.date &&
-         appt.time === apptData.time &&
-         occupiesDoctorTime(appt)
-      );
-
-      if (doctorConflict) {
-         alert(t('patients.details.alerts.doctorConflict'));
-         return;
-      }
-
       // Patient Conflict Validation
       const patientConflict = appointments.some(appt =>
          appt.patientId === patient.id &&
@@ -967,6 +954,17 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
          alert(t('patients.details.alerts.patientConflict'));
          return;
       }
+
+      // Shifokorda shu vaqtga boshqa qabul bor — taqiqlanmaydi, so'raladi (kalendardagi kabi)
+      const sameTime = appointments.some(appt =>
+         appt.patientId !== patient.id &&
+         appt.doctorId === doctor.id &&
+         appt.date === apptData.date &&
+         appt.time === apptData.time &&
+         occupiesDoctorTime(appt)
+      );
+
+      if (sameTime && !window.confirm(`${t('booking.sameTimeBusy').replace('{time}', apptData.time)}\n\n${t('booking.bookAnyway')}`)) return;
 
       onAddAppointment({
          patientId: patient.id,

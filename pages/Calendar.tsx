@@ -567,20 +567,6 @@ export const Calendar: React.FC<CalendarProps> = ({
       finalDoctorName = `Dr. ${doctor.lastName}`;
     }
 
-    // Doctor Conflict Validation
-    const doctorConflict = appointments.some(appt =>
-      appt.id !== editingApptId &&
-      appt.doctorId === finalDoctorId &&
-      appt.date === formData.date &&
-      appt.time === formData.time &&
-      occupiesDoctorTime(appt)
-    );
-
-    if (doctorConflict) {
-      alert(t('patients.details.alerts.doctorConflict'));
-      return;
-    }
-
     // Patient Conflict Validation
     const patientConflict = appointments.some(appt =>
       appt.id !== editingApptId &&
@@ -593,6 +579,25 @@ export const Calendar: React.FC<CalendarProps> = ({
     if (patientConflict) {
       alert(t('patients.details.alerts.patientConflict'));
       return;
+    }
+
+    // Shifokorda shu vaqtga boshqa bemor yozilgan — taqiqlanmaydi, so'raladi:
+    // bemor 5 daqiqaga ko'rinib ketishga kelgan bo'lishi mumkin
+    const sameTime = appointments.find(appt =>
+      appt.id !== editingApptId &&
+      appt.patientId !== patient.id &&
+      appt.doctorId === finalDoctorId &&
+      appt.date === formData.date &&
+      appt.time === formData.time &&
+      occupiesDoctorTime(appt)
+    );
+
+    if (sameTime) {
+      // Hamkasb qabulida bemor ismi ko'rinmaydi (ko'rish doirasi "faqat o'zinikini")
+      const who = isPrivate(sameTime)
+        ? t('booking.sameTimeBusy').replace('{time}', sameTime.time)
+        : t('booking.sameTime').replace('{time}', sameTime.time).replace('{patient}', sameTime.patientName);
+      if (!window.confirm(`${who}\n\n${t('booking.bookAnyway')}`)) return;
     }
 
     try {
