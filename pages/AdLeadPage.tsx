@@ -1,6 +1,6 @@
 import { useLanguage } from '../context/LanguageContext';
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle, Phone, User, AlertCircle, Loader2, ShieldCheck, Clock, Headphones, Building2 } from 'lucide-react';
+import { CheckCircle, Phone, User, AlertCircle, Loader2, ShieldCheck, Clock, Headphones } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { Logo } from '../components/Logo';
 import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent } from '../utils/metaPixel';
@@ -12,7 +12,7 @@ interface AdLeadPageProps {
   plan: AdPlan;
 }
 
-type Status = 'idle' | 'loading' | 'success' | 'notClinic' | 'error';
+type Status = 'idle' | 'loading' | 'success' | 'error';
 
 // Reklamadan keladigan qisqa forma: faqat ism va telefon — telefonning birinchi ekraniga
 // maydonlar ham, tugma ham sig'ishi shart.
@@ -32,17 +32,6 @@ const COPY: Record<AdPlan, { title: string; sub: string }> = {
     sub: "Tish kartasi, qabullar va kassa — bitta dasturda. Bepul ko'rsatib beramiz.",
   },
 };
-
-// Bitta bosish bilan javob beriladigan savol. Ariza qabul qilingandan KEYIN so'raladi:
-// forma ichida turganida (2026-10-09) bir yarim kunda birorta ham ariza tushmagan.
-// Qiymatlar backend/demoRequests.ts dagi DOCTORS_ANSWERS / DOCTORS_NO_CLINIC bilan bir xil.
-const NO_CLINIC = 'none';
-const DOCTOR_OPTIONS: { value: string; label: string }[] = [
-  { value: '1-2', label: '1–2' },
-  { value: '3-5', label: '3–5' },
-  { value: '6+', label: "6 va ko'p" },
-  { value: NO_CLINIC, label: "Klinikam yo'q" },
-];
 
 const toDigits = (raw: string) => {
 
@@ -80,9 +69,6 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   // Ariza oldin qoldirilgan: shu qurilmadan yoki shu raqamdan
   const [isRepeat, setIsRepeat] = useState(!!sentBefore);
   const [phoneError, setPhoneError] = useState(false);
-  // Yangi lidning id'si — "Rahmat" oynasidagi savol javobi shu lidga yoziladi
-  const [leadId, setLeadId] = useState<string | null>(null);
-  const [doctors, setDoctors] = useState('');
   // Bitta ariza uchun bitta belgi: xatodan keyin qayta yuborilsa ham Meta uni bir marta sanaydi
   const track = useRef<MetaTrack | null>(null);
   const returnMarked = useRef(false);
@@ -100,8 +86,6 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   const startOver = () => {
     setName('');
     setDigits('');
-    setDoctors('');
-    setLeadId(null);
     setIsRepeat(false);
     setStatus('idle');
   };
@@ -135,7 +119,6 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       // Bu yerda Meta'ga "Lead" KETMAYDI: ism va raqam yozishning o'zi lid emas — lidni sotuvchi tasdiqlaydi.
       const repeat = !!data?.repeat;
       rememberSentLead(name.trim(), digits);
-      setLeadId(typeof data?.id === 'string' ? data.id : null);
       setIsRepeat(repeat);
       setStatus('success');
     } catch {
@@ -143,80 +126,19 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
     }
   };
 
-  // Javob darhol ekranda aks etadi; serverga yozilmay qolsa ham lid allaqachon saqlangan
-  const answerDoctors = (value: string) => {
-    setDoctors(value);
-    if (!leadId) return;
-    // Javob faqat doskada ko'rinadi. Meta'ga "Lead" bu sahifadan UMUMAN ketmaydi: odam o'zi
-    // bosadigan narsani o'ylamay bosib yuborishi mumkin. Lid deb faqat sotuvchi tasdiqlagani
-    // xabar qilinadi — serverdan (backend/leadSignals.ts, stageChanged).
-    if (value === NO_CLINIC) {
-      trackMetaCustomEvent('NotClinic', `${leadId}-none`);
-      setStatus('notClinic');
-    }
-    fetch(`${API_URL}/public/demo-request/${leadId}/doctors`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ doctors: value }),
-    }).catch(() => { /* javobsiz ham ariza joyida */ });
-  };
-
-  // Ariza saqlandi, lekin savolga hali javob berilmagan
-  const isAsking = !!leadId && !isRepeat && !doctors;
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary-50 via-white to-white flex flex-col items-center px-4 py-8">
       <Logo size="md" forceLight />
 
       <div className="w-full max-w-md mt-8 bg-white rounded-3xl shadow-xl shadow-primary-900/10 border border-slate-100 p-6 sm:p-8">
-        {status === 'notClinic' ? (
-          <div className="text-center py-6 space-y-4">
-            <div className="w-20 h-20 rounded-3xl bg-slate-50 border-2 border-slate-100 flex items-center justify-center mx-auto">
-              <Building2 className="w-10 h-10 text-slate-400" />
-            </div>
-            <h1 className="text-2xl font-extrabold text-slate-900">DentaCRM — stomatologiya klinikalari uchun dastur</h1>
-            <p className="text-base text-slate-500 leading-relaxed">
-              Bu yerda tish davolanmaydi va qabulga yozilmaydi. Dastur klinika egalari va shifokorlarga bemorlar, qabullar va kassani yuritish uchun kerak.
-            </p>
-            <p className="text-sm text-slate-500">
-              Klinika ochmoqchi bo'lsangiz, qo'ng'iroq qiling:{' '}
-              <a href={`tel:${OUR_PHONE.replace(/\s/g, '')}`} className="font-bold text-primary-600 whitespace-nowrap">{OUR_PHONE}</a>
-            </p>
-            <button type="button" onClick={startOver} className="text-sm font-semibold text-slate-400 hover:text-primary-600 underline underline-offset-4">
-              Adashib bosdim, formaga qaytish
-            </button>
-          </div>
-        ) : status === 'success' ? (
+        {status === 'success' ? (
           <div className="text-center py-6 space-y-4">
             <div className="w-20 h-20 rounded-3xl bg-emerald-50 border-2 border-emerald-100 flex items-center justify-center mx-auto">
               <CheckCircle className="w-10 h-10 text-emerald-500" />
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900">
-              {isRepeat ? `Arizangiz bizda bor${name.trim() ? `, ${name.trim()}` : ''}` : isAsking ? 'Qabul qilindi! Bitta savol qoldi' : `Rahmat, ${name.trim()}!`}
+              {isRepeat ? `Arizangiz bizda bor${name.trim() ? `, ${name.trim()}` : ''}` : `Rahmat, ${name.trim()}!`}
             </h1>
-            {leadId && !isRepeat && (
-              <div className={`rounded-2xl border-2 p-4 space-y-3 text-left ${doctors ? 'border-slate-100' : 'border-primary-200 bg-primary-50/60'}`}>
-                <p className="text-base font-extrabold text-slate-800">
-                  {doctors ? "Rahmat, yozib qo'ydik." : 'Klinikangizda nechta shifokor ishlaydi?'}
-                </p>
-                {!doctors && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {DOCTOR_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => answerDoctors(option.value)}
-                        className="min-h-[52px] px-2 rounded-2xl border-2 border-primary-200 bg-white text-sm font-extrabold text-primary-700 whitespace-nowrap
-                                   hover:border-primary-400 transition-all active:scale-[0.98]"
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             <p className="text-base text-slate-500 leading-relaxed">
               {isRepeat ? 'Qayta qoldirish shart emas —' : t('auto.Arizangiz qabul qilindi. Tez orada')}{' '}
               <span className="font-bold text-slate-700 whitespace-nowrap">{formatPhone(digits)}</span> raqamiga{isRepeat ? ' albatta' : ''} qo'ng'iroq qilamiz.

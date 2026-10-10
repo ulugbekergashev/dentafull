@@ -49,9 +49,8 @@ export const trackMetaEvent = (event: 'Lead', params?: Record<string, string>, e
  * Maxsus hodisalar — konversiya hisoblanmaydi:
  * CrmContact — bu odam bizda allaqachon bor. Ads Manager'da shu hodisa bo'yicha
  *              auditoriya reklamadan chiqarib tashlanadi, unga qayta pul sarflanmaydi.
- * NotClinic  — formada "klinikam yo'q" degan odam.
  */
-export const trackMetaCustomEvent = (event: 'CrmContact' | 'NotClinic', eventId?: string) => {
+export const trackMetaCustomEvent = (event: 'CrmContact', eventId?: string) => {
   if (!PIXEL_ID || !window.fbq) return;
   window.fbq('trackCustom', event, {}, withId(eventId));
 };

@@ -100,7 +100,7 @@ const dhp = require('./dhp');
 import { makePermChecker, PermChecker } from './permissions';
 const notif = require('./notifications');
 const doctorAlerts = require('./doctorAlerts');
-const { saveDemoRequest, saveDoctorsAnswer, earlierApplications } = require('./demoRequests');
+const { saveDemoRequest, earlierApplications } = require('./demoRequests');
 const { createLeadSignals, cleanTrack } = require('./leadSignals');
 const cors = require('cors');
 const axios = require('axios');
@@ -4765,11 +4765,6 @@ const clip = (v: unknown, max: number): string | null => {
     return t.length ? t : null;
 };
 
-// Reklama formasidagi "Klinikangizda nechta shifokor ishlaydi?" savolining javoblari.
-// 'none' — klinikasi yo'q: bunday odamga karta ochilmaydi (pastga qarang).
-const AD_FORM_NO_CLINIC = 'none';
-const AD_FORM_DOCTORS = new Map([['1-2', '1–2'], ['3-5', '3–5'], ['6+', '6 va undan ko\'p']]);
-
 app.post('/api/public/demo-request', async (req: any, res: any) => {
     try {
         const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
@@ -4782,7 +4777,7 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
             });
         }
 
-        const { name, clinicName, phone, city, doctorsCount, source, doctors, track } = req.body || {};
+        const { name, clinicName, phone, city, doctorsCount, source, track } = req.body || {};
 
         const cleanPhone = typeof phone === 'string' ? phone.replace(/[^\d+]/g, '') : '';
         if (!/^\+?998\d{9}$/.test(cleanPhone)) {
@@ -4807,16 +4802,6 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
             userAgent: clip(req.headers['user-agent'], 400),
         };
 
-        // Klinikasi yo'qligini o'zi aytgan odam lid emas: karta ochilmaydi, sotuvchi
-        // vaqt sarflamaydi. Meta'ga esa xabar beriladi — unga reklama qayta ko'rsatilmasin.
-        if (doctors === AD_FORM_NO_CLINIC) {
-            res.json({ success: true, notClinic: true });
-            leadSignals.formSubmitted({ ...signal, leadId: null, isNew: false, notClinic: true });
-            return;
-        }
-
-        const doctorsAnswer = typeof doctors === 'string' ? AD_FORM_DOCTORS.get(doctors) : undefined;
-
         // repeat=true — bu raqam oldin ham ariza qoldirgan. Karta baribir ochiladi
         // ("Dublikat" belgisi bilan), lekin forma Meta Pixel'ga "yangi lid" deb xabar bermaydi.
         const saved = await saveDemoRequest(prisma, {
@@ -4826,44 +4811,17 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
             city: clip(city, 80),
             doctorsCount: cleanSeats,
             source: clip(source, 40) || 'landing',
-            notes: doctorsAnswer ? `Shifokorlar soni: ${doctorsAnswer}` : null,
         });
 
         // Takror arizada karta id'si ochiq formaga qaytarilmaydi — unga kerak emas
         res.json(saved.repeat ? { success: true, repeat: true } : { success: true, id: saved.id });
         // Saytdagi to'liq forma klinika nomi va shifokorlar sonini so'raydi — bu o'zi tasdiq.
-        // Reklama formasida (faqat ism va telefon) lid keyin, savolga javob berganda tasdiqlanadi.
-        const confirmed = !!clip(clinicName, 160) || cleanSeats !== null || !!doctorsAnswer;
-        leadSignals.formSubmitted({ ...signal, leadId: saved.id, isNew: !saved.repeat, notClinic: false, confirmed });
+        // Reklama formasidan (faqat ism va telefon) kelgan lidni keyin sotuvchi tasdiqlaydi.
+        const confirmed = !!clip(clinicName, 160) || cleanSeats !== null;
+        leadSignals.formSubmitted({ ...signal, leadId: saved.id, isNew: !saved.repeat, confirmed });
     } catch (error) {
         console.error('Demo request error:', error);
         res.status(500).json({ success: false, message: 'So\'rovni saqlab bo\'lmadi.' });
-    }
-});
-
-// Ariza qabul qilingach "Rahmat" oynasida beriladigan savolning javobi
-// ("Klinikangizda nechta shifokor ishlaydi?"). Javob har doim bir xil — so'rov
-// yaroqli bo'lsa ham, bo'lmasa ham: bu manzil orqali lid bor-yo'qligini bilib bo'lmasin.
-app.post('/api/public/demo-request/:id/doctors', async (req: any, res: any) => {
-    try {
-        const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-            || req.socket?.remoteAddress || 'unknown';
-        if (!aiRateLimit(`demo-answer:${ip}`, 10, 60 * 60 * 1000)) {
-            return res.status(429).json({ success: false });
-        }
-        const saved = await saveDoctorsAnswer(prisma, req.params.id, req.body?.doctors);
-        res.json({ success: true });
-        if (saved) {
-          leadSignals.doctorsAnswered({
-            leadId: req.params.id,
-            hasClinic: req.body.doctors !== 'none',
-            ip: ip === 'unknown' ? null : ip,
-            userAgent: clip(req.headers['user-agent'], 400),
-          });
-        }
-    } catch (error) {
-        console.error('Demo request answer error:', error);
-        res.status(500).json({ success: false });
     }
 });
 

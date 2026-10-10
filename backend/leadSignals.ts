@@ -8,13 +8,12 @@
  *   Lead          — SOTUVCHI TASDIQLAGAN lid. Reklama shu hodisaga optimizatsiya qilinadi, auditoriya
  *                   qo'yilmagan (Advantage+) kampaniyada esa Meta kimni qidirishini aynan shu
  *                   hodisa belgilaydi. Odamning o'zi bosadigan hech narsa (ism-raqam yozish,
- *                   "klinikamda 6+ shifokor" degan javob) lid EMAS — uni istagan odam o'ylamay
+ *                   formadagi istalgan savolga javob) lid EMAS — uni istagan odam o'ylamay
  *                   bosib yuboradi va Meta aynan shundaylarni ko'paytiradi. Lead ketadi:
  *                     · sotuvchi lidni "Bog'lashildi", "O'ylamoqda" yoki "Oldi"ga o'tkazganda;
  *                     · yoki saytdagi to'liq forma (klinika nomi, shahar, shifokorlar soni) to'ldirilganda.
  *                   "Bekor"ga o'tgan lid uchun hech qachon ketmaydi. Meta'da "yomon lid" degan
  *                   signal yo'q — bekor qilish unga hech narsa demaydi; faqat yaxshisini aytish mumkin.
- *   NotClinic     — "klinikam yo'q" deb javob bergan odam.
  *   QualifiedLead — sotuvchi lidni "O'ylamoqda" yoki "Oldi" ustuniga o'tkazdi.
  *   ClinicWon     — lid "Oldi" ustuniga o'tdi.
  *
@@ -243,7 +242,7 @@ export function createLeadSignals(deps: Deps) {
 
         /** Ochiq forma yuborildi (reklama sahifasi yoki sayt). */
         async formSubmitted(input: {
-            leadId: string | null; isNew: boolean; notClinic: boolean; phone: string;
+            leadId: string; isNew: boolean; phone: string;
             /** Forma o'zi klinikani tasdiqlaydi (saytdagi to'liq forma). Reklama formasida — false. */
             confirmed?: boolean;
             track: LeadTrack; ip?: string | null; userAgent?: string | null;
@@ -251,15 +250,11 @@ export function createLeadSignals(deps: Deps) {
             try {
                 const { track } = input;
                 const eventId = track.eventId || crypto.randomUUID();
-                // "Klinikam yo'q" degan odamga karta ochilmaydi, ya'ni uni hech kim tekshirmaydi.
-                // Shuning uchun raqami Meta'ga berilmaydi — faqat o'z brauzerining belgilari.
-                // Aks holda birov begona raqamni yozib, o'sha odamni reklamadan chiqarib yubora olardi.
-                const phone = input.notClinic ? null : input.phone;
-                const base = { source: 'website' as ActionSource, phone, fbc: track.fbc, fbp: track.fbp, ip: input.ip, userAgent: input.userAgent, url: track.url };
+                const base = { source: 'website' as ActionSource, phone: input.phone, fbc: track.fbc, fbp: track.fbp, ip: input.ip, userAgent: input.userAgent, url: track.url };
 
                 // Reklama belgilari token hali ulanmagan bo'lsa ham saqlanadi: sotuvchi lidni
                 // keyin tasdiqlaganda Meta uni qaysi reklamadan va qaysi sahifadan kelganini bilishi kerak.
-                if (input.isNew && input.leadId) {
+                if (input.isNew) {
                     await deps.setSetting(leadMetaKey(input.leadId), JSON.stringify({
                         fbc: track.fbc, fbp: track.fbp, ua: input.userAgent || null, url: track.url,
                     }));
@@ -268,35 +263,13 @@ export function createLeadSignals(deps: Deps) {
                 if (!allowFormSignal()) return;
 
                 const events: EventInput[] = [{ ...base, name: 'CrmContact', id: `${eventId}-c` }];
-                if (input.notClinic) events.push({ ...base, name: 'NotClinic', id: `${eventId}-n` });
                 // Reklama formasidan (faqat ism va telefon) kelgan ariza bu yerda hali lid emas
-                const isLead = !input.notClinic && input.isNew && !!input.confirmed && !!input.leadId;
+                const isLead = input.isNew && !!input.confirmed;
                 if (isLead) events.push({ ...base, name: 'Lead', id: `${input.leadId}-Lead` });
                 const ok = await send(events);
-                if (ok && isLead) await markSent(input.leadId as string, ['Lead']);
+                if (ok && isLead) await markSent(input.leadId, ['Lead']);
             } catch (err: any) {
                 console.error('[leadSignals] formSubmitted:', err?.message || err);
-            }
-        },
-
-        /** Lid "Rahmat" oynasidagi savolga javob berdi. */
-        async doctorsAnswered(input: { leadId: string; hasClinic: boolean; ip?: string | null; userAgent?: string | null }): Promise<void> {
-            try {
-                if (!(await getToken()) || !allowFormSignal()) return;
-                const lead = await deps.db.demoRequest.findUnique({ where: { id: input.leadId }, select: { id: true, phone: true } });
-                if (!lead) return;
-
-                // "Klinikam bor" degan javob Meta'ga ketmaydi: uni o'ylamay bosib yuborish mumkin.
-                // U faqat doskada ko'rinadi. Meta'ga faqat "klinikam yo'q" degani xabar qilinadi.
-                if (input.hasClinic) return;
-
-                const meta = parseJson(await deps.getSetting(leadMetaKey(input.leadId)));
-                await send([{
-                    name: 'NotClinic', id: `${lead.id}-none`, source: 'website',
-                    fbc: meta.fbc, fbp: meta.fbp, ip: input.ip, userAgent: input.userAgent,
-                }]);
-            } catch (err: any) {
-                console.error('[leadSignals] doctorsAnswered:', err?.message || err);
             }
         },
 
