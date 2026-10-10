@@ -25,6 +25,39 @@ const DOUBLE_SUBMIT_MS = 15 * 60 * 1000;
 // Raqamsiz ("N/A") lidlarni bir-biri bilan solishtirib bo'lmaydi.
 const REAL_PHONE = /^\+\d{7,15}$/;
 
+// Ariza qabul qilingach beriladigan savol: "Klinikangizda nechta shifokor ishlaydi?".
+// Savol ataylab forma ICHIDA emas — 2026-10-09 da u forma boshida turganida bir
+// yarim kun ichida birorta ham ariza tushmagan. Avval lid olinadi, keyin so'raladi.
+const DOCTORS_ANSWERS = new Map([['1-2', '1–2'], ['3-5', '3–5'], ['6+', '6 va undan ko\'p']]);
+const DOCTORS_NO_CLINIC = 'none';
+const DOCTORS_NOTE_PREFIX = 'Shifokorlar soni:';
+/** Kartadagi "Klinikasi yo'q" belgisi shu qatorga qaraydi (pages/SuperAdminDashboard.tsx). */
+export const NO_CLINIC_NOTE = 'Klinikasi yo\'q (o\'zi belgiladi)';
+// Javob faqat ariza qoldirilgan zahoti qabul qilinadi
+const ANSWER_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Javobni lid izohining boshiga yozadi. Bir lid uchun bir marta; noto'g'ri yoki
+ * kechikkan so'rov jimgina e'tiborsiz qoldiriladi (ochiq manzil bo'lgani uchun).
+ */
+export async function saveDoctorsAnswer(db: any, leadId: unknown, answer: unknown, now: Date = new Date()): Promise<boolean> {
+    if (typeof leadId !== 'string' || !/^[0-9a-f-]{36}$/i.test(leadId) || typeof answer !== 'string') return false;
+
+    const answerLabel = DOCTORS_ANSWERS.get(answer);
+    const line = answer === DOCTORS_NO_CLINIC ? NO_CLINIC_NOTE : answerLabel ? `${DOCTORS_NOTE_PREFIX} ${answerLabel}` : null;
+    if (!line) return false;
+
+    const lead = await db.demoRequest.findUnique({ where: { id: leadId }, select: { id: true, notes: true, createdAt: true } });
+    if (!lead) return false;
+
+    const notes = String(lead.notes || '');
+    const isLate = now.getTime() - new Date(lead.createdAt).getTime() > ANSWER_WINDOW_MS;
+    if (isLate || notes.includes(DOCTORS_NOTE_PREFIX) || notes.includes(NO_CLINIC_NOTE)) return false;
+
+    await db.demoRequest.update({ where: { id: lead.id }, data: { notes: [line, lead.notes].filter(Boolean).join('\n') } });
+    return true;
+}
+
 export interface DemoRequestInput {
     name: string;
     /** Yagona formatga keltirilgan raqam: +998XXXXXXXXX */

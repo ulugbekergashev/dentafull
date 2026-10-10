@@ -4,7 +4,8 @@
 const path = require('path');
 const assert = require('assert');
 require('ts-node').register({ transpileOnly: true, compilerOptions: { module: 'commonjs' } });
-const { saveDemoRequest, earlierApplications } = require(path.join(__dirname, '..', 'demoRequests.ts'));
+const { saveDemoRequest, saveDoctorsAnswer, earlierApplications, NO_CLINIC_NOTE } = require(path.join(__dirname, '..', 'demoRequests.ts'));
+const UUID = 'a1b2c3d4-0000-4000-8000-123456789abc';
 const { createLeadSignals, cleanTrack, hashPhone, META_PIXEL_ID } = require(path.join(__dirname, '..', 'leadSignals.ts'));
 
 const PHONE = '+998901234567';
@@ -142,6 +143,30 @@ const tests = {
     ];
     assert.deepStrictEqual(earlierApplications(rows), {});
     assert.deepStrictEqual(earlierApplications([]), {});
+  },
+
+  // --- arizadan keyingi savol ---
+  'savol javobi lid izohining boshiga yoziladi, sotuvchi izohi saqlanadi': async () => {
+    const db = fakeDb([lead({ id: UUID, notes: 'eski izoh' })]);
+    assert.strictEqual(await saveDoctorsAnswer(db, UUID, '3-5', later(2)), true);
+    assert.strictEqual(db.rows[0].notes, 'Shifokorlar soni: 3–5\neski izoh');
+  },
+  '"klinikam yo\'q" javobi kartada belgi bo\'ladi': async () => {
+    const db = fakeDb([lead({ id: UUID })]);
+    await saveDoctorsAnswer(db, UUID, 'none', later(2));
+    assert.strictEqual(db.rows[0].notes, NO_CLINIC_NOTE);
+  },
+  'javob bir marta yoziladi; kechikkan, noma\'lum yoki axlat so\'rov e\'tiborsiz': async () => {
+    const db = fakeDb([lead({ id: UUID })]);
+    assert.strictEqual(await saveDoctorsAnswer(db, UUID, '3-5', later(61)), false, 'bir soatdan keyin');
+    assert.strictEqual(await saveDoctorsAnswer(db, UUID, '99', later(2)), false, 'ro\'yxatda yo\'q javob');
+    assert.strictEqual(await saveDoctorsAnswer(db, UUID, { a: 1 }, later(2)), false);
+    assert.strictEqual(await saveDoctorsAnswer(db, 'old', '3-5', later(2)), false, 'id uuid emas');
+    assert.strictEqual(await saveDoctorsAnswer(db, UUID.replace('a', 'b'), '3-5', later(2)), false, 'bunday lid yo\'q');
+    assert.deepStrictEqual(db.writes, []);
+    assert.strictEqual(await saveDoctorsAnswer(db, UUID, '1-2', later(2)), true);
+    assert.strictEqual(await saveDoctorsAnswer(db, UUID, 'none', later(3)), false, 'ikkinchi javob');
+    assert.strictEqual(db.rows[0].notes, 'Shifokorlar soni: 1–2');
   },
 
   // --- Meta signallari ---

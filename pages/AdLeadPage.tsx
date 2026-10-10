@@ -1,6 +1,6 @@
 import { useLanguage } from '../context/LanguageContext';
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle, Phone, User, AlertCircle, Loader2, ShieldCheck, Clock, Headphones, Building2, Stethoscope } from 'lucide-react';
+import { CheckCircle, Phone, User, AlertCircle, Loader2, ShieldCheck, Clock, Headphones, Building2 } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { Logo } from '../components/Logo';
 import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent, trackMetaEvent } from '../utils/metaPixel';
@@ -14,32 +14,32 @@ interface AdLeadPageProps {
 
 type Status = 'idle' | 'loading' | 'success' | 'notClinic' | 'error';
 
-// Reklamadan keladigan qisqa forma: ism, telefon va bitta bosiladigan savol.
+// Reklamadan keladigan qisqa forma: faqat ism va telefon — telefonning birinchi ekraniga
+// maydonlar ham, tugma ham sig'ishi shart.
 // Narxlar ataylab ko'rsatilmaydi — tafsilotni sotuvchi qo'ng'iroqda aytadi.
-// Sarlavha kim uchun ekanini birinchi so'zdan aytadi: "bir marta to'lang" degan
-// gapni ko'rib, buni kredit yoki boshqa xizmat deb o'ylab ariza qoldirishardi.
-const COPY: Record<AdPlan, { badge: string; title: string; sub: string }> = {
+// Kim uchun ekani tepadagi belgida turadi: "bir marta to'lang" degan gapni ko'rib,
+// buni kredit yoki boshqa xizmat deb o'ylab ariza qoldirishardi.
+const AUDIENCE_BADGE = 'Stomatologiya klinikalari uchun';
+const COPY: Record<AdPlan, { title: string; sub: string }> = {
   lifetime: {
-    badge: 'Bir martalik to\'lov',
-    title: 'Stomatologiya klinikangiz uchun dastur — bir marta to\'lang, umrbod foydalaning',
-    sub: 'DentaCRM: bemorlar kartasi, qabullar va kassa bitta joyda. Raqamingizni qoldiring — mutaxassisimiz qo\'ng\'iroq qilib barcha shartlarni tushuntiradi.',
+    title: "DentaCRM — bir marta to'lang, umrbod foydalaning",
+    sub: "Ism va raqamingizni qoldiring, mutaxassisimiz qo'ng'iroq qilib barcha shartlarni tushuntiradi.",
   },
   monthly: {
-    badge: 'Oylik obuna',
-    title: 'Stomatologiya klinikangiz uchun dastur — qulay oylik obuna',
-    sub: 'DentaCRM: bemorlar kartasi, qabullar va kassa bitta joyda. Raqamingizni qoldiring — mutaxassisimiz qo\'ng\'iroq qilib barcha shartlarni tushuntiradi.',
+    title: 'DentaCRM — klinikangiz uchun qulay oylik obuna',
+    sub: "Ism va raqamingizni qoldiring, mutaxassisimiz qo'ng'iroq qilib barcha shartlarni tushuntiradi.",
   },
 };
 
-// Bitta bosish bilan javob beriladigan savol. Ikki ishni qiladi: adashib kirgan odam
-// bu tish davolash joyi emasligini tushunadi, sotuvchi esa klinika hajmini oldindan biladi.
-// Qiymatlar backend/server.ts dagi AD_FORM_DOCTORS / AD_FORM_NO_CLINIC bilan bir xil.
+// Bitta bosish bilan javob beriladigan savol. Ariza qabul qilingandan KEYIN so'raladi:
+// forma ichida turganida (2026-10-09) bir yarim kunda birorta ham ariza tushmagan.
+// Qiymatlar backend/demoRequests.ts dagi DOCTORS_ANSWERS / DOCTORS_NO_CLINIC bilan bir xil.
 const NO_CLINIC = 'none';
 const DOCTOR_OPTIONS: { value: string; label: string }[] = [
   { value: '1-2', label: '1–2' },
   { value: '3-5', label: '3–5' },
-  { value: '6+', label: '6 va ko\'p' },
-  { value: NO_CLINIC, label: 'Klinikam yo\'q' },
+  { value: '6+', label: "6 va ko'p" },
+  { value: NO_CLINIC, label: "Klinikam yo'q" },
 ];
 
 const toDigits = (raw: string) => {
@@ -78,8 +78,9 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   // Ariza oldin qoldirilgan: shu qurilmadan yoki shu raqamdan
   const [isRepeat, setIsRepeat] = useState(!!sentBefore);
   const [phoneError, setPhoneError] = useState(false);
+  // Yangi lidning id'si — "Rahmat" oynasidagi savol javobi shu lidga yoziladi
+  const [leadId, setLeadId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState('');
-  const [doctorsError, setDoctorsError] = useState(false);
   // Bitta ariza uchun bitta belgi: xatodan keyin qayta yuborilsa ham Meta uni bir marta sanaydi
   const track = useRef<MetaTrack | null>(null);
   const lostResponse = useRef(false);
@@ -99,16 +100,18 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
     setName('');
     setDigits('');
     setDoctors('');
+    setLeadId(null);
     setIsRepeat(false);
     setStatus('idle');
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isPhoneOk = digits.length === 9;
-    setPhoneError(!isPhoneOk);
-    setDoctorsError(!doctors);
-    if (!isPhoneOk || !doctors) return;
+    if (digits.length !== 9) {
+      setPhoneError(true);
+      return;
+    }
+    setPhoneError(false);
 
     setStatus('loading');
     track.current = track.current || getMetaTrack();
@@ -119,7 +122,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       const res = await fetch(`${API_URL}/public/demo-request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), phone: `+998${digits}`, source: buildSource(plan), doctors, track: track.current }),
+        body: JSON.stringify({ name: name.trim(), phone: `+998${digits}`, source: buildSource(plan), track: track.current }),
       });
       gotResponse = true;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -130,26 +133,35 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       // Kim bo'lishidan qat'i nazar — bu odam endi bizda bor, unga reklama qayta ko'rsatilmasin
       trackMetaCustomEvent('CrmContact', `${eventId}-c`);
 
-      if (doctors === NO_CLINIC) {
-        trackMetaCustomEvent('NotClinic', `${eventId}-n`);
-        setStatus('notClinic');
-        return;
-      }
-
-      // Lead faqat yangi, klinikasi bor odam uchun ketadi: Meta aynan shunday odamlarni
-      // qidirishni o'rganadi. Qayta ariza lid emas.
+      // Lead faqat yangi lid uchun ketadi. Qayta ariza lid emas.
       const repeat = !!data?.repeat;
       // Oldingi urinish serverda saqlanib, javobi yo'lda yo'qolgan bo'lsa, bu "takror"
       // aslida o'sha yangi lid. Belgi bir xil — Meta uni ikki marta sanamaydi.
       if (!repeat || lostResponse.current) trackMetaEvent('Lead', { content_name: plan }, eventId);
       lostResponse.current = false;
       rememberSentLead(name.trim(), digits);
+      setLeadId(typeof data?.id === 'string' ? data.id : null);
       setIsRepeat(repeat);
       setStatus('success');
     } catch {
       if (!gotResponse) lostResponse.current = true;
       setStatus('error');
     }
+  };
+
+  // Javob darhol ekranda aks etadi; serverga yozilmay qolsa ham lid allaqachon saqlangan
+  const answerDoctors = (value: string) => {
+    setDoctors(value);
+    if (value === NO_CLINIC) {
+      trackMetaCustomEvent('NotClinic');
+      setStatus('notClinic');
+    }
+    if (!leadId) return;
+    fetch(`${API_URL}/public/demo-request/${leadId}/doctors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doctors: value }),
+    }).catch(() => { /* javobsiz ham ariza joyida */ });
   };
 
   return (
@@ -187,6 +199,29 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
               <span className="font-bold text-slate-700 whitespace-nowrap">{formatPhone(digits)}</span> raqamiga{isRepeat ? ' albatta' : ''} qo'ng'iroq qilamiz.
             </p>
 
+            {leadId && !isRepeat && (
+              <div className="rounded-2xl border-2 border-slate-100 p-4 space-y-3 text-left">
+                <p className="text-sm font-bold text-slate-700">
+                  {doctors ? "Rahmat, yozib qo'ydik." : "Qo'ng'iroqqa tayyorlanib olishimiz uchun: klinikangizda nechta shifokor ishlaydi?"}
+                </p>
+                {!doctors && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {DOCTOR_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => answerDoctors(option.value)}
+                        className="min-h-[48px] px-3 rounded-2xl border-2 border-slate-100 bg-slate-50 text-sm font-bold text-slate-600
+                                   hover:border-primary-200 transition-all active:scale-[0.98]"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Raqamimiz ko'z oldida tursin: "nomeringiz esimdan chiqdi" deb qayta ariza qoldirishmasin */}
             <div className="rounded-2xl bg-primary-50 border border-primary-100 p-4 space-y-3">
               <p className="text-sm font-semibold text-slate-600">Kutishni xohlamasangiz, o'zingiz qo'ng'iroq qiling</p>
@@ -209,48 +244,12 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
         ) : (
           <>
             <span className="inline-block text-[11px] font-black text-primary-700 bg-primary-50 uppercase tracking-[0.15em] px-3 py-1 rounded-full">
-              {copy.badge}
+              {AUDIENCE_BADGE}
             </span>
             <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">{copy.title}</h1>
             <p className="mt-2 text-sm text-slate-500 leading-relaxed">{copy.sub}</p>
 
             <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
-              <fieldset className="space-y-1.5">
-                <legend className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
-                  <Stethoscope className="w-4 h-4 text-primary-500" /> Klinikangizda nechta shifokor ishlaydi?
-                </legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {DOCTOR_OPTIONS.map((option) => {
-                    const isSelected = doctors === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        aria-pressed={isSelected}
-                        onClick={() => {
-                          setDoctors(option.value);
-                          setDoctorsError(false);
-                        }}
-                        className={`min-h-[48px] px-3 rounded-2xl border-2 text-sm font-bold transition-all active:scale-[0.98] ${
-                          isSelected
-                            ? 'border-primary-500 bg-primary-50 text-primary-700'
-                            : doctorsError
-                              ? 'border-red-200 bg-slate-50 text-slate-600'
-                              : 'border-slate-100 bg-slate-50 text-slate-600 hover:border-primary-200'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {doctorsError && (
-                  <p className="flex items-center gap-1.5 text-xs text-red-600 font-medium">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Bittasini tanlang
-                  </p>
-                )}
-              </fieldset>
-
               <div className="space-y-1.5">
                 <label htmlFor="ad-name" className="flex items-center gap-2 text-sm font-bold text-slate-700">
                   <User className="w-4 h-4 text-primary-500" /> {t('auto.Ismingiz')}

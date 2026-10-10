@@ -21,6 +21,9 @@ const getAdLeadPlan = (source?: string | null) => {
 // qator bo'lib yozilgan — belgi ularni ham sanaydi. backend/demoRequests.ts dagi
 // DEMO_REPEAT_MARK bilan bir xil bo'lishi shart.
 const LEAD_REPEAT_MARK = '🔁 Qayta ariza qoldirdi';
+// Ariza qoldirgach "klinikam yo'q" deb javob bergan odam — sotuvchi vaqt sarflamasin.
+// backend/demoRequests.ts dagi NO_CLINIC_NOTE bilan bir xil bo'lishi shart.
+const LEAD_NO_CLINIC_NOTE = "Klinikasi yo'q (o'zi belgiladi)";
 const countLeadRepeats = (notes?: string | null) =>
    (notes || '').split('\n').filter(line => line.startsWith(LEAD_REPEAT_MARK)).length;
 import { useLanguage } from '../context/LanguageContext';
@@ -1862,7 +1865,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               const plan = getAdLeadPlan(req.source);
                               // Shu raqamdan oldin nechta ariza bo'lgan: alohida kartalar + eski usulda izohga yozilganlari
                               const earlier = (Number(req.duplicateOf) || 0) + countLeadRepeats(req.notes);
-                              if (!plan && earlier === 0 && !req.hidden) return null;
+                              const hasNoClinic = (req.notes || '').includes(LEAD_NO_CLINIC_NOTE);
+                              if (!plan && earlier === 0 && !req.hidden && !hasNoClinic) return null;
                               return (
                                  <div className="flex flex-wrap items-center gap-2 mb-3">
                                     {plan && (
@@ -1881,6 +1885,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     {req.hidden && (
                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                                           <EyeOff className="w-3 h-3" /> Sotuvchiga ko'rinmaydi
+                                       </span>
+                                    )}
+                                    {hasNoClinic && (
+                                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-extrabold bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                                          <Ban className="w-3.5 h-3.5" /> Klinikasi yo'q
                                        </span>
                                     )}
                                     {plan?.campaign && <span className="text-[11px] text-gray-400 truncate">{plan.campaign}</span>}

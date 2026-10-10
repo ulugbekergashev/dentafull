@@ -100,7 +100,7 @@ const dhp = require('./dhp');
 import { makePermChecker, PermChecker } from './permissions';
 const notif = require('./notifications');
 const doctorAlerts = require('./doctorAlerts');
-const { saveDemoRequest, earlierApplications } = require('./demoRequests');
+const { saveDemoRequest, saveDoctorsAnswer, earlierApplications } = require('./demoRequests');
 const { createLeadSignals, cleanTrack } = require('./leadSignals');
 const cors = require('cors');
 const axios = require('axios');
@@ -4835,6 +4835,24 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
     } catch (error) {
         console.error('Demo request error:', error);
         res.status(500).json({ success: false, message: 'So\'rovni saqlab bo\'lmadi.' });
+    }
+});
+
+// Ariza qabul qilingach "Rahmat" oynasida beriladigan savolning javobi
+// ("Klinikangizda nechta shifokor ishlaydi?"). Javob har doim bir xil — so'rov
+// yaroqli bo'lsa ham, bo'lmasa ham: bu manzil orqali lid bor-yo'qligini bilib bo'lmasin.
+app.post('/api/public/demo-request/:id/doctors', async (req: any, res: any) => {
+    try {
+        const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+            || req.socket?.remoteAddress || 'unknown';
+        if (!aiRateLimit(`demo-answer:${ip}`, 10, 60 * 60 * 1000)) {
+            return res.status(429).json({ success: false });
+        }
+        await saveDoctorsAnswer(prisma, req.params.id, req.body?.doctors);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Demo request answer error:', error);
+        res.status(500).json({ success: false });
     }
 });
 
