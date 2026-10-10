@@ -233,6 +233,32 @@ const tests = {
     assert.strictEqual(last.ok, false);
     assert.match(last.error, /Invalid OAuth/);
   },
+  'savolga "klinikam bor" deb javob berildi: CompleteRegistration ketadi, lidning reklama belgisi bilan': async () => {
+    const s = fakeSignals({ rows: [lead({ id: 'L1' })] });
+    await s.signals.formSubmitted(form());
+    s.posts.length = 0;
+    await s.signals.doctorsAnswered({ leadId: 'L1', hasClinic: true, ip: '1.2.3.4', userAgent: 'Mozilla/5.0' });
+    assert.deepStrictEqual(s.names(), ['CompleteRegistration']);
+    const e = s.events()[0];
+    assert.strictEqual(e.event_id, 'L1-reg', 'brauzerdagi hodisa bilan bir xil belgi');
+    assert.strictEqual(e.user_data.fbc, TRACK.fbc);
+    assert.deepStrictEqual(e.user_data.ph, [hashPhone(PHONE)]);
+  },
+  'savolga "klinikam yo\'q" deb javob berildi: NotClinic ketadi, raqamsiz': async () => {
+    const s = fakeSignals({ rows: [lead({ id: 'L1' })] });
+    await s.signals.formSubmitted(form());
+    s.posts.length = 0;
+    await s.signals.doctorsAnswered({ leadId: 'L1', hasClinic: false, ip: '1.2.3.4', userAgent: 'Mozilla/5.0' });
+    assert.deepStrictEqual(s.names(), ['NotClinic']);
+    assert.strictEqual(s.events()[0].user_data.ph, undefined);
+  },
+  'savol javobi: token ulanmagan yoki lid yo\'q bo\'lsa hech narsa ketmaydi, xato ham otilmaydi': async () => {
+    const noToken = fakeSignals({ token: null, rows: [lead({ id: 'L1' })] });
+    await noToken.signals.doctorsAnswered({ leadId: 'L1', hasClinic: true });
+    const noLead = fakeSignals();
+    await noLead.signals.doctorsAnswered({ leadId: 'yoq', hasClinic: true });
+    assert.strictEqual(noToken.posts.length + noLead.posts.length, 0);
+  },
   'kanban: O\'ylamoqda — QualifiedLead bir marta ketadi': async () => {
     const s = fakeSignals({ rows: [lead({ id: 'L1' })] });
     await s.signals.formSubmitted(form());

@@ -4848,8 +4848,16 @@ app.post('/api/public/demo-request/:id/doctors', async (req: any, res: any) => {
         if (!aiRateLimit(`demo-answer:${ip}`, 10, 60 * 60 * 1000)) {
             return res.status(429).json({ success: false });
         }
-        await saveDoctorsAnswer(prisma, req.params.id, req.body?.doctors);
+        const saved = await saveDoctorsAnswer(prisma, req.params.id, req.body?.doctors);
         res.json({ success: true });
+        if (saved) {
+          leadSignals.doctorsAnswered({
+            leadId: req.params.id,
+            hasClinic: req.body.doctors !== 'none',
+            ip: ip === 'unknown' ? null : ip,
+            userAgent: clip(req.headers['user-agent'], 400),
+          });
+        }
     } catch (error) {
         console.error('Demo request answer error:', error);
         res.status(500).json({ success: false });

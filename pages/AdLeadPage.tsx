@@ -25,11 +25,11 @@ const AUDIENCE_BADGE = 'Stomatologlar uchun';
 const COPY: Record<AdPlan, { title: string; sub: string }> = {
   lifetime: {
     title: "Klinika uchun kompyuter dasturi — bir marta to'lang, umrbod foydalaning",
-    sub: "Bemorlar kartasi, tish formulasi, qabullar va kassa — bitta dasturda. Raqamingizni qoldiring, bepul ko'rsatib beramiz.",
+    sub: "Tish kartasi, qabullar va kassa — bitta dasturda. Bepul ko'rsatib beramiz.",
   },
   monthly: {
     title: 'Klinika uchun kompyuter dasturi — qulay oylik obuna',
-    sub: "Bemorlar kartasi, tish formulasi, qabullar va kassa — bitta dasturda. Raqamingizni qoldiring, bepul ko'rsatib beramiz.",
+    sub: "Tish kartasi, qabullar va kassa — bitta dasturda. Bepul ko'rsatib beramiz.",
   },
 };
 
@@ -154,17 +154,24 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   // Javob darhol ekranda aks etadi; serverga yozilmay qolsa ham lid allaqachon saqlangan
   const answerDoctors = (value: string) => {
     setDoctors(value);
-    if (value === NO_CLINIC) {
-      trackMetaCustomEvent('NotClinic');
-      setStatus('notClinic');
-    }
     if (!leadId) return;
+    // Belgilar server yuboradigan hodisa bilan bir xil (backend/leadSignals.ts) — Meta ikki marta sanamaydi.
+    // CompleteRegistration — o'z qo'li bilan "klinikam bor" degan lid: adashib bosganlar bu yerga yetmaydi.
+    if (value === NO_CLINIC) {
+      trackMetaCustomEvent('NotClinic', `${leadId}-none`);
+      setStatus('notClinic');
+    } else {
+      trackMetaEvent('CompleteRegistration', { content_name: plan }, `${leadId}-reg`);
+    }
     fetch(`${API_URL}/public/demo-request/${leadId}/doctors`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ doctors: value }),
     }).catch(() => { /* javobsiz ham ariza joyida */ });
   };
+
+  // Ariza saqlandi, lekin savolga hali javob berilmagan
+  const isAsking = !!leadId && !isRepeat && !doctors;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary-50 via-white to-white flex flex-col items-center px-4 py-8">
@@ -194,17 +201,12 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
               <CheckCircle className="w-10 h-10 text-emerald-500" />
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900">
-              {isRepeat ? `Arizangiz bizda bor${name.trim() ? `, ${name.trim()}` : ''}` : `Rahmat, ${name.trim()}!`}
+              {isRepeat ? `Arizangiz bizda bor${name.trim() ? `, ${name.trim()}` : ''}` : isAsking ? 'Qabul qilindi! Bitta savol qoldi' : `Rahmat, ${name.trim()}!`}
             </h1>
-            <p className="text-base text-slate-500 leading-relaxed">
-              {isRepeat ? 'Qayta qoldirish shart emas —' : t('auto.Arizangiz qabul qilindi. Tez orada')}{' '}
-              <span className="font-bold text-slate-700 whitespace-nowrap">{formatPhone(digits)}</span> raqamiga{isRepeat ? ' albatta' : ''} qo'ng'iroq qilamiz.
-            </p>
-
             {leadId && !isRepeat && (
-              <div className="rounded-2xl border-2 border-slate-100 p-4 space-y-3 text-left">
-                <p className="text-sm font-bold text-slate-700">
-                  {doctors ? "Rahmat, yozib qo'ydik." : "Qo'ng'iroqqa tayyorlanib olishimiz uchun: klinikangizda nechta shifokor ishlaydi?"}
+              <div className={`rounded-2xl border-2 p-4 space-y-3 text-left ${doctors ? 'border-slate-100' : 'border-primary-200 bg-primary-50/60'}`}>
+                <p className="text-base font-extrabold text-slate-800">
+                  {doctors ? "Rahmat, yozib qo'ydik." : 'Klinikangizda nechta shifokor ishlaydi?'}
                 </p>
                 {!doctors && (
                   <div className="grid grid-cols-2 gap-2">
@@ -213,8 +215,8 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
                         key={option.value}
                         type="button"
                         onClick={() => answerDoctors(option.value)}
-                        className="min-h-[48px] px-3 rounded-2xl border-2 border-slate-100 bg-slate-50 text-sm font-bold text-slate-600
-                                   hover:border-primary-200 transition-all active:scale-[0.98]"
+                        className="min-h-[52px] px-2 rounded-2xl border-2 border-primary-200 bg-white text-sm font-extrabold text-primary-700 whitespace-nowrap
+                                   hover:border-primary-400 transition-all active:scale-[0.98]"
                       >
                         {option.label}
                       </button>
@@ -223,6 +225,11 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
                 )}
               </div>
             )}
+
+            <p className="text-base text-slate-500 leading-relaxed">
+              {isRepeat ? 'Qayta qoldirish shart emas —' : t('auto.Arizangiz qabul qilindi. Tez orada')}{' '}
+              <span className="font-bold text-slate-700 whitespace-nowrap">{formatPhone(digits)}</span> raqamiga{isRepeat ? ' albatta' : ''} qo'ng'iroq qilamiz.
+            </p>
 
             {/* Raqamimiz ko'z oldida tursin: "nomeringiz esimdan chiqdi" deb qayta ariza qoldirishmasin */}
             <div className="rounded-2xl bg-primary-50 border border-primary-100 p-4 space-y-3">

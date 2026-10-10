@@ -40,7 +40,7 @@ export const initMetaPixel = () => {
 const withId = (eventId?: string) => (eventId ? { eventID: eventId } : undefined);
 
 /** Standart hodisa. Shaxsiy ma'lumot (ism, telefon) bu yerga hech qachon berilmaydi. */
-export const trackMetaEvent = (event: 'Lead', params?: Record<string, string>, eventId?: string) => {
+export const trackMetaEvent = (event: 'Lead' | 'CompleteRegistration', params?: Record<string, string>, eventId?: string) => {
   if (!PIXEL_ID || !window.fbq) return;
   window.fbq('track', event, params, withId(eventId));
 };

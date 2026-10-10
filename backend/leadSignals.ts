@@ -6,7 +6,10 @@
  *                   Ads Manager'da shu hodisa bo'yicha BITTA auditoriya tuziladi
  *                   va reklamadan chiqarib tashlanadi; keyin u o'zi to'lib boradi.
  *   Lead          — yangi, klinikasi bor lid. Reklama shu hodisaga optimizatsiya qilinadi.
- *   NotClinic     — formada "klinikam yo'q" degan odam. Lid hisoblanmaydi.
+ *   CompleteRegistration — ariza qoldirgach "klinikamda N ta shifokor" deb javob bergan
+ *                   lid, ya'ni tasdiqlangan. Adashib bosgan yoki kredit deb o'ylagan odam
+ *                   bu savolga javob bermaydi — reklamani shu hodisaga o'tkazsa bo'ladi.
+ *   NotClinic     — "klinikam yo'q" deb javob bergan odam.
  *   QualifiedLead — sotuvchi lidni "O'ylamoqda" yoki "Oldi" ustuniga o'tkazdi.
  *   ClinicWon     — lid "Oldi" ustuniga o'tdi.
  *
@@ -247,6 +250,26 @@ export function createLeadSignals(deps: Deps) {
                 await send(events);
             } catch (err: any) {
                 console.error('[leadSignals] formSubmitted:', err?.message || err);
+            }
+        },
+
+        /** Lid "Rahmat" oynasidagi savolga javob berdi. */
+        async doctorsAnswered(input: { leadId: string; hasClinic: boolean; ip?: string | null; userAgent?: string | null }): Promise<void> {
+            try {
+                if (!(await getToken()) || !allowFormSignal()) return;
+                const lead = await deps.db.demoRequest.findUnique({ where: { id: input.leadId }, select: { id: true, phone: true } });
+                if (!lead) return;
+
+                const meta = parseJson(await deps.getSetting(leadMetaKey(input.leadId)));
+                await send([{
+                    name: input.hasClinic ? 'CompleteRegistration' : 'NotClinic',
+                    id: `${lead.id}-${input.hasClinic ? 'reg' : 'none'}`,
+                    source: 'website',
+                    phone: input.hasClinic ? lead.phone : null,
+                    fbc: meta.fbc, fbp: meta.fbp, ip: input.ip, userAgent: input.userAgent,
+                }]);
+            } catch (err: any) {
+                console.error('[leadSignals] doctorsAnswered:', err?.message || err);
             }
         },
 

@@ -24,6 +24,10 @@ const LEAD_REPEAT_MARK = '🔁 Qayta ariza qoldirdi';
 // Ariza qoldirgach "klinikam yo'q" deb javob bergan odam — sotuvchi vaqt sarflamasin.
 // backend/demoRequests.ts dagi NO_CLINIC_NOTE bilan bir xil bo'lishi shart.
 const LEAD_NO_CLINIC_NOTE = "Klinikasi yo'q (o'zi belgiladi)";
+// Reklama formasidan keyin beriladigan savol ("nechta shifokor") shu paytdan beri so'raladi —
+// undan oldingi lidlarda javob bo'lishi mumkin emas, ularga "javob bermagan" deb yozilmaydi.
+const LEAD_QUESTION_SINCE = new Date('2026-10-10T09:43:00Z').getTime();
+const leadDoctorsAnswer = (notes?: string | null) => ((notes || '').match(/^Shifokorlar soni: (.+)$/m) || [])[1] || null;
 const countLeadRepeats = (notes?: string | null) =>
    (notes || '').split('\n').filter(line => line.startsWith(LEAD_REPEAT_MARK)).length;
 import { useLanguage } from '../context/LanguageContext';
@@ -1866,7 +1870,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               // Shu raqamdan oldin nechta ariza bo'lgan: alohida kartalar + eski usulda izohga yozilganlari
                               const earlier = (Number(req.duplicateOf) || 0) + countLeadRepeats(req.notes);
                               const hasNoClinic = (req.notes || '').includes(LEAD_NO_CLINIC_NOTE);
-                              if (!plan && earlier === 0 && !req.hidden && !hasNoClinic) return null;
+                              // Savolga javob bergan lid — o'zi tasdiqlagan; javob bermagani ko'pincha adashib bosgan
+                              const doctorsAnswer = leadDoctorsAnswer(req.notes);
+                              const isUnanswered = !!plan && !doctorsAnswer && !hasNoClinic && new Date(req.createdAt).getTime() >= LEAD_QUESTION_SINCE;
+                              if (!plan && earlier === 0 && !req.hidden && !hasNoClinic && !doctorsAnswer) return null;
                               return (
                                  <div className="flex flex-wrap items-center gap-2 mb-3">
                                     {plan && (
@@ -1885,6 +1892,19 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     {req.hidden && (
                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                                           <EyeOff className="w-3 h-3" /> Sotuvchiga ko'rinmaydi
+                                       </span>
+                                    )}
+                                    {doctorsAnswer && (
+                                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                          <CheckCircle className="w-3.5 h-3.5" /> {doctorsAnswer} shifokor
+                                       </span>
+                                    )}
+                                    {isUnanswered && (
+                                       <span
+                                          title="Ariza qoldirgach «nechta shifokor» savoliga javob bermagan — ko'pincha adashib bosganlar"
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
+                                       >
+                                          Savolga javob bermagan
                                        </span>
                                     )}
                                     {hasNoClinic && (
