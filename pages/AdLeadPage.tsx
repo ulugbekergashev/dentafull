@@ -17,17 +17,19 @@ type Status = 'idle' | 'loading' | 'success' | 'notClinic' | 'error';
 // Reklamadan keladigan qisqa forma: faqat ism va telefon — telefonning birinchi ekraniga
 // maydonlar ham, tugma ham sig'ishi shart.
 // Narxlar ataylab ko'rsatilmaydi — tafsilotni sotuvchi qo'ng'iroqda aytadi.
-// Kim uchun ekani tepadagi belgida turadi: "bir marta to'lang" degan gapni ko'rib,
-// buni kredit yoki boshqa xizmat deb o'ylab ariza qoldirishardi.
-const AUDIENCE_BADGE = 'Stomatologiya klinikalari uchun';
+// Matn nima sotilayotganini aniq aytishi shart: "bir marta to'lang", "shartlarni
+// tushuntiramiz" kabi gaplarni ko'rib, buni kredit deb o'ylab ariza qoldirishardi.
+// "Dastur" so'zining o'zi ham ikki ma'noli (kredit dasturi), shuning uchun "kompyuter dasturi".
+// Qisqa — telefonda bir qatorga sig'adi va forma pastga surilmaydi
+const AUDIENCE_BADGE = 'Stomatologlar uchun';
 const COPY: Record<AdPlan, { title: string; sub: string }> = {
   lifetime: {
-    title: "DentaCRM — bir marta to'lang, umrbod foydalaning",
-    sub: "Ism va raqamingizni qoldiring, mutaxassisimiz qo'ng'iroq qilib barcha shartlarni tushuntiradi.",
+    title: "Klinika uchun kompyuter dasturi — bir marta to'lang, umrbod foydalaning",
+    sub: "Bemorlar kartasi, tish formulasi, qabullar va kassa — bitta dasturda. Raqamingizni qoldiring, bepul ko'rsatib beramiz.",
   },
   monthly: {
-    title: 'DentaCRM — klinikangiz uchun qulay oylik obuna',
-    sub: "Ism va raqamingizni qoldiring, mutaxassisimiz qo'ng'iroq qilib barcha shartlarni tushuntiradi.",
+    title: 'Klinika uchun kompyuter dasturi — qulay oylik obuna',
+    sub: "Bemorlar kartasi, tish formulasi, qabullar va kassa — bitta dasturda. Raqamingizni qoldiring, bepul ko'rsatib beramiz.",
   },
 };
 
@@ -327,6 +329,21 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
                 </div>
               ))}
             </div>
+
+            {/* Dasturning o'zi ko'rinib tursin — formadan PASTDA, shunda tugma birinchi ekranda qoladi */}
+            <figure className="mt-6 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+              <img
+                src="/landing/tooth-chart.webp"
+                alt="DentaCRM dasturidagi tish kartasi"
+                width={1600}
+                height={1000}
+                loading="lazy"
+                className="block w-full h-auto"
+              />
+              <figcaption className="px-3 py-2 text-[11px] font-semibold text-slate-500 text-center">
+                Dastur ichidan: bemorning tish kartasi
+              </figcaption>
+            </figure>
           </>
         )}
       </div>
