@@ -85,7 +85,6 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   const [doctors, setDoctors] = useState('');
   // Bitta ariza uchun bitta belgi: xatodan keyin qayta yuborilsa ham Meta uni bir marta sanaydi
   const track = useRef<MetaTrack | null>(null);
-  const lostResponse = useRef(false);
   const returnMarked = useRef(false);
 
   useEffect(() => {
@@ -118,7 +117,6 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
     setStatus('loading');
     track.current = track.current || getMetaTrack();
     const { eventId } = track.current;
-    let gotResponse = false;
 
     try {
       const res = await fetch(`${API_URL}/public/demo-request`, {
@@ -126,7 +124,6 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), phone: `+998${digits}`, source: buildSource(plan), track: track.current }),
       });
-      gotResponse = true;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json().catch(() => null);
       if (data && data.success === false) throw new Error(data.message || 'rejected');
@@ -135,18 +132,13 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       // Kim bo'lishidan qat'i nazar — bu odam endi bizda bor, unga reklama qayta ko'rsatilmasin
       trackMetaCustomEvent('CrmContact', `${eventId}-c`);
 
-      // Lead faqat yangi lid uchun ketadi. Qayta ariza lid emas.
+      // Bu yerda Meta'ga "Lead" KETMAYDI: ism va raqam yozishning o'zi lid emas (pastda answerDoctors).
       const repeat = !!data?.repeat;
-      // Oldingi urinish serverda saqlanib, javobi yo'lda yo'qolgan bo'lsa, bu "takror"
-      // aslida o'sha yangi lid. Belgi bir xil — Meta uni ikki marta sanamaydi.
-      if (!repeat || lostResponse.current) trackMetaEvent('Lead', { content_name: plan }, eventId);
-      lostResponse.current = false;
       rememberSentLead(name.trim(), digits);
       setLeadId(typeof data?.id === 'string' ? data.id : null);
       setIsRepeat(repeat);
       setStatus('success');
     } catch {
-      if (!gotResponse) lostResponse.current = true;
       setStatus('error');
     }
   };
@@ -155,13 +147,15 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   const answerDoctors = (value: string) => {
     setDoctors(value);
     if (!leadId) return;
-    // Belgilar server yuboradigan hodisa bilan bir xil (backend/leadSignals.ts) — Meta ikki marta sanamaydi.
-    // CompleteRegistration — o'z qo'li bilan "klinikam bor" degan lid: adashib bosganlar bu yerga yetmaydi.
+    // Meta uchun LID — aynan shu: odam o'z qo'li bilan "klinikamda N ta shifokor" dedi.
+    // Reklama shu hodisaga optimizatsiya qilinadi, shuning uchun adashib bosgan yoki kredit deb
+    // o'ylagan odam hisobga kirmasligi kerak — aks holda Meta aynan shundaylarni ko'paytiradi.
+    // Belgilar server yuboradigan hodisa bilan bir xil (backend/leadSignals.ts) — ikki marta sanalmaydi.
     if (value === NO_CLINIC) {
       trackMetaCustomEvent('NotClinic', `${leadId}-none`);
       setStatus('notClinic');
     } else {
-      trackMetaEvent('CompleteRegistration', { content_name: plan }, `${leadId}-reg`);
+      trackMetaEvent('Lead', { content_name: plan }, `${leadId}-Lead`);
     }
     fetch(`${API_URL}/public/demo-request/${leadId}/doctors`, {
       method: 'POST',

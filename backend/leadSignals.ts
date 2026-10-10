@@ -5,10 +5,14 @@
  *   CrmContact    — bu odam bizda allaqachon bor (ariza qoldirgan yoki mijoz).
  *                   Ads Manager'da shu hodisa bo'yicha BITTA auditoriya tuziladi
  *                   va reklamadan chiqarib tashlanadi; keyin u o'zi to'lib boradi.
- *   Lead          — yangi, klinikasi bor lid. Reklama shu hodisaga optimizatsiya qilinadi.
- *   CompleteRegistration — ariza qoldirgach "klinikamda N ta shifokor" deb javob bergan
- *                   lid, ya'ni tasdiqlangan. Adashib bosgan yoki kredit deb o'ylagan odam
- *                   bu savolga javob bermaydi — reklamani shu hodisaga o'tkazsa bo'ladi.
+ *   Lead          — TASDIQLANGAN lid. Reklama shu hodisaga optimizatsiya qilinadi, auditoriya
+ *                   qo'yilmagan (Advantage+) kampaniyada esa Meta kimni qidirishini aynan shu
+ *                   hodisa belgilaydi. Shuning uchun shunchaki ism va raqam yozish lid EMAS —
+ *                   aks holda Meta har narsaga raqam yozadigan odamlarni olib keladi. Lead ketadi:
+ *                     · arizadan keyingi savolga "klinikamda N ta shifokor" deb javob berilganda;
+ *                     · yoki sotuvchi lidni "O'ylamoqda" / "Oldi"ga o'tkazganda (savolni o'tkazib
+ *                       yuborgan haqiqiy mijoz ham hisobga kirsin);
+ *                     · yoki saytdagi to'liq forma (klinika nomi, shifokorlar soni) to'ldirilganda.
  *   NotClinic     — "klinikam yo'q" deb javob bergan odam.
  *   QualifiedLead — sotuvchi lidni "O'ylamoqda" yoki "Oldi" ustuniga o'tkazdi.
  *   ClinicWon     — lid "Oldi" ustuniga o'tdi.
@@ -208,6 +212,13 @@ export function createLeadSignals(deps: Deps) {
         return true;
     };
 
+    /** Lid bo'yicha qaysi hodisalar ketganini eslab qoladi — har biri bir marta ketsin. */
+    const markSent = async (leadId: string, names: string[]): Promise<void> => {
+        const meta = parseJson(await deps.getSetting(leadMetaKey(leadId)));
+        const sent: string[] = Array.isArray(meta.sent) ? meta.sent : [];
+        await deps.setSetting(leadMetaKey(leadId), JSON.stringify({ ...meta, sent: [...new Set([...sent, ...names])] }));
+    };
+
     return {
         /**
          * Ishonchli manbadan (Facebook lid formasi, tashqi manba kaliti) yangi lid keldi.
@@ -225,6 +236,8 @@ export function createLeadSignals(deps: Deps) {
         /** Ochiq forma yuborildi (reklama sahifasi yoki sayt). */
         async formSubmitted(input: {
             leadId: string | null; isNew: boolean; notClinic: boolean; phone: string;
+            /** Forma o'zi klinikani tasdiqlaydi (saytdagi to'liq forma). Reklama formasida — false. */
+            confirmed?: boolean;
             track: LeadTrack; ip?: string | null; userAgent?: string | null;
         }): Promise<void> {
             try {
@@ -246,8 +259,11 @@ export function createLeadSignals(deps: Deps) {
 
                 const events: EventInput[] = [{ ...base, name: 'CrmContact', id: `${eventId}-c` }];
                 if (input.notClinic) events.push({ ...base, name: 'NotClinic', id: `${eventId}-n` });
-                else if (input.isNew) events.push({ ...base, name: 'Lead', id: eventId });
-                await send(events);
+                // Reklama formasidan (faqat ism va telefon) kelgan ariza bu yerda hali lid emas
+                const isLead = !input.notClinic && input.isNew && !!input.confirmed && !!input.leadId;
+                if (isLead) events.push({ ...base, name: 'Lead', id: `${input.leadId}-Lead` });
+                const ok = await send(events);
+                if (ok && isLead) await markSent(input.leadId as string, ['Lead']);
             } catch (err: any) {
                 console.error('[leadSignals] formSubmitted:', err?.message || err);
             }
@@ -261,13 +277,17 @@ export function createLeadSignals(deps: Deps) {
                 if (!lead) return;
 
                 const meta = parseJson(await deps.getSetting(leadMetaKey(input.leadId)));
-                await send([{
-                    name: input.hasClinic ? 'CompleteRegistration' : 'NotClinic',
-                    id: `${lead.id}-${input.hasClinic ? 'reg' : 'none'}`,
+                const alreadyLead = Array.isArray(meta.sent) && meta.sent.includes('Lead');
+                if (input.hasClinic && alreadyLead) return;
+
+                const ok = await send([{
+                    name: input.hasClinic ? 'Lead' : 'NotClinic',
+                    id: `${lead.id}-${input.hasClinic ? 'Lead' : 'none'}`,
                     source: 'website',
                     phone: input.hasClinic ? lead.phone : null,
                     fbc: meta.fbc, fbp: meta.fbp, ip: input.ip, userAgent: input.userAgent,
                 }]);
+                if (ok && input.hasClinic) await markSent(lead.id, ['Lead']);
             } catch (err: any) {
                 console.error('[leadSignals] doctorsAnswered:', err?.message || err);
             }
@@ -283,7 +303,8 @@ export function createLeadSignals(deps: Deps) {
 
                 const meta = parseJson(await deps.getSetting(leadMetaKey(leadId)));
                 const sent: string[] = Array.isArray(meta.sent) ? meta.sent : [];
-                const wanted = status === WON_STATUS ? ['QualifiedLead', 'ClinicWon'] : ['QualifiedLead'];
+                // Lead ham shu yerda: savolga javob bermagan, lekin sotuvchi tasdiqlagan lid Meta uchun ham lid
+                const wanted = status === WON_STATUS ? ['Lead', 'QualifiedLead', 'ClinicWon'] : ['Lead', 'QualifiedLead'];
                 const names = wanted.filter(name => !sent.includes(name));
                 if (names.length === 0) return;
 
