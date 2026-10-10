@@ -95,8 +95,9 @@ export const MetaSignalsPanel: React.FC = () => {
               <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${badge}`}>{isConnected ? 'ulangan' : 'ulanmagan'}</span>
             </h4>
             <p className="text-xs text-gray-500 max-w-xl">
-              Ulangach Meta o'zi biladi: kim ariza qoldirgan yoki mijoz (unga reklama qayta ko'rsatilmaydi) va qaysi lid
-              sifatli chiqqan — lid "O'ylamoqda" yoki "Oldi" ustuniga o'tganda.
+              Meta'ga lid deb faqat sotuvchi "Bog'lashildi", "O'ylamoqda" yoki "Oldi"ga o'tkazgan odam aytiladi —
+              reklama shundaylarni qidiradi. "Bekor"ga o'tgani hech qachon aytilmaydi. Ariza qoldirganlar va
+              mijozlar esa "bizda bor" deb bildiriladi, ularga reklama qayta ko'rsatilmasin.
             </p>
           </div>
         </div>

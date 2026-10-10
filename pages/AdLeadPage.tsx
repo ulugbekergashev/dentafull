@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Phone, User, AlertCircle, Loader2, ShieldCheck, Clock, Headphones, Building2 } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { Logo } from '../components/Logo';
-import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent, trackMetaEvent } from '../utils/metaPixel';
+import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent } from '../utils/metaPixel';
 import { readSentLead, rememberSentLead } from '../utils/sentLead';
 
 export type AdPlan = 'lifetime' | 'monthly';
@@ -132,7 +132,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       // Kim bo'lishidan qat'i nazar — bu odam endi bizda bor, unga reklama qayta ko'rsatilmasin
       trackMetaCustomEvent('CrmContact', `${eventId}-c`);
 
-      // Bu yerda Meta'ga "Lead" KETMAYDI: ism va raqam yozishning o'zi lid emas (pastda answerDoctors).
+      // Bu yerda Meta'ga "Lead" KETMAYDI: ism va raqam yozishning o'zi lid emas — lidni sotuvchi tasdiqlaydi.
       const repeat = !!data?.repeat;
       rememberSentLead(name.trim(), digits);
       setLeadId(typeof data?.id === 'string' ? data.id : null);
@@ -147,15 +147,12 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   const answerDoctors = (value: string) => {
     setDoctors(value);
     if (!leadId) return;
-    // Meta uchun LID — aynan shu: odam o'z qo'li bilan "klinikamda N ta shifokor" dedi.
-    // Reklama shu hodisaga optimizatsiya qilinadi, shuning uchun adashib bosgan yoki kredit deb
-    // o'ylagan odam hisobga kirmasligi kerak — aks holda Meta aynan shundaylarni ko'paytiradi.
-    // Belgilar server yuboradigan hodisa bilan bir xil (backend/leadSignals.ts) — ikki marta sanalmaydi.
+    // Javob faqat doskada ko'rinadi. Meta'ga "Lead" bu sahifadan UMUMAN ketmaydi: odam o'zi
+    // bosadigan narsani o'ylamay bosib yuborishi mumkin. Lid deb faqat sotuvchi tasdiqlagani
+    // xabar qilinadi — serverdan (backend/leadSignals.ts, stageChanged).
     if (value === NO_CLINIC) {
       trackMetaCustomEvent('NotClinic', `${leadId}-none`);
       setStatus('notClinic');
-    } else {
-      trackMetaEvent('Lead', { content_name: plan }, `${leadId}-Lead`);
     }
     fetch(`${API_URL}/public/demo-request/${leadId}/doctors`, {
       method: 'POST',
