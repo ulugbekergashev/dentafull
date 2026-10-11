@@ -21,6 +21,8 @@ const getAdLeadPlan = (source?: string | null) => {
 // qator bo'lib yozilgan — belgi ularni ham sanaydi. backend/demoRequests.ts dagi
 // DEMO_REPEAT_MARK bilan bir xil bo'lishi shart.
 const LEAD_REPEAT_MARK = '🔁 Qayta ariza qoldirdi';
+const countLeadRepeats = (notes?: string | null) =>
+   (notes || '').split('\n').filter(line => line.startsWith(LEAD_REPEAT_MARK)).length;
 import { useLanguage } from '../context/LanguageContext';
 import { MetaSignalsPanel } from '../components/MetaSignalsPanel';
 import { api } from '../services/api';
