@@ -4815,10 +4815,7 @@ app.post('/api/public/demo-request', async (req: any, res: any) => {
 
         // Takror arizada karta id'si ochiq formaga qaytarilmaydi — unga kerak emas
         res.json(saved.repeat ? { success: true, repeat: true } : { success: true, id: saved.id });
-        // Saytdagi to'liq forma klinika nomi va shifokorlar sonini so'raydi — bu o'zi tasdiq.
-        // Reklama formasidan (faqat ism va telefon) kelgan lidni keyin sotuvchi tasdiqlaydi.
-        const confirmed = !!clip(clinicName, 160) || cleanSeats !== null;
-        leadSignals.formSubmitted({ ...signal, leadId: saved.id, isNew: !saved.repeat, confirmed });
+        leadSignals.formSubmitted({ ...signal, leadId: saved.id, isNew: !saved.repeat });
     } catch (error) {
         console.error('Demo request error:', error);
         res.status(500).json({ success: false, message: 'So\'rovni saqlab bo\'lmadi.' });

@@ -5,15 +5,7 @@
  *   CrmContact    — bu odam bizda allaqachon bor (ariza qoldirgan yoki mijoz).
  *                   Ads Manager'da shu hodisa bo'yicha BITTA auditoriya tuziladi
  *                   va reklamadan chiqarib tashlanadi; keyin u o'zi to'lib boradi.
- *   Lead          — SOTUVCHI TASDIQLAGAN lid. Reklama shu hodisaga optimizatsiya qilinadi, auditoriya
- *                   qo'yilmagan (Advantage+) kampaniyada esa Meta kimni qidirishini aynan shu
- *                   hodisa belgilaydi. Odamning o'zi bosadigan hech narsa (ism-raqam yozish,
- *                   formadagi istalgan savolga javob) lid EMAS — uni istagan odam o'ylamay
- *                   bosib yuboradi va Meta aynan shundaylarni ko'paytiradi. Lead ketadi:
- *                     · sotuvchi lidni "Bog'lashildi", "O'ylamoqda" yoki "Oldi"ga o'tkazganda;
- *                     · yoki saytdagi to'liq forma (klinika nomi, shahar, shifokorlar soni) to'ldirilganda.
- *                   "Bekor"ga o'tgan lid uchun hech qachon ketmaydi. Meta'da "yomon lid" degan
- *                   signal yo'q — bekor qilish unga hech narsa demaydi; faqat yaxshisini aytish mumkin.
+ *   Lead          — yangi, klinikasi bor lid. Reklama shu hodisaga optimizatsiya qilinadi.
  *   QualifiedLead — sotuvchi lidni "O'ylamoqda" yoki "Oldi" ustuniga o'tkazdi.
  *   ClinicWon     — lid "Oldi" ustuniga o'tdi.
  *
@@ -47,11 +39,6 @@ const MAX_URL_LENGTH = 200;
 const FORM_SIGNALS_PER_HOUR = 60;
 const HOUR_MS = 60 * 60 * 1000;
 
-/** Sotuvchi gaplashib, bekor qilmagan lid — Meta uchun "Lead". */
-const LEAD_STATUSES = ['Contacted', 'Thinking', 'Booked'];
-// Meta hodisa vaqtini ko'pi bilan 7 kun orqaga qabul qiladi
-const MAX_EVENT_AGE_MS = 6.5 * 24 * 60 * 60 * 1000;
-
 /** Shu ustunlarga o'tgan lid — haqiqiy klinika, sotuvchi u bilan gaplashgan. */
 export const QUALIFIED_STATUSES = ['Thinking', 'Booked'];
 const WON_STATUS = 'Booked';
@@ -75,8 +62,6 @@ interface EventInput {
     ip?: string | null;
     userAgent?: string | null;
     url?: string;
-    /** Hodisa aslida qachon bo'lgan (standart — hozir). */
-    at?: Date;
 }
 
 interface Deps {
@@ -178,7 +163,7 @@ export function createLeadSignals(deps: Deps) {
     const send = async (inputs: EventInput[]): Promise<boolean> => {
         try {
             const at = now();
-            const events = inputs.map(e => buildEvent(e, e.at || at)).filter(Boolean);
+            const events = inputs.map(e => buildEvent(e, at)).filter(Boolean);
             const token = await getToken();
             if (!token || events.length === 0) return false;
 
@@ -219,13 +204,6 @@ export function createLeadSignals(deps: Deps) {
         return true;
     };
 
-    /** Lid bo'yicha qaysi hodisalar ketganini eslab qoladi — har biri bir marta ketsin. */
-    const markSent = async (leadId: string, names: string[]): Promise<void> => {
-        const meta = parseJson(await deps.getSetting(leadMetaKey(leadId)));
-        const sent: string[] = Array.isArray(meta.sent) ? meta.sent : [];
-        await deps.setSetting(leadMetaKey(leadId), JSON.stringify({ ...meta, sent: [...new Set([...sent, ...names])] }));
-    };
-
     return {
         /**
          * Ishonchli manbadan (Facebook lid formasi, tashqi manba kaliti) yangi lid keldi.
@@ -243,8 +221,6 @@ export function createLeadSignals(deps: Deps) {
         /** Ochiq forma yuborildi (reklama sahifasi yoki sayt). */
         async formSubmitted(input: {
             leadId: string; isNew: boolean; phone: string;
-            /** Forma o'zi klinikani tasdiqlaydi (saytdagi to'liq forma). Reklama formasida — false. */
-            confirmed?: boolean;
             track: LeadTrack; ip?: string | null; userAgent?: string | null;
         }): Promise<void> {
             try {
@@ -252,22 +228,20 @@ export function createLeadSignals(deps: Deps) {
                 const eventId = track.eventId || crypto.randomUUID();
                 const base = { source: 'website' as ActionSource, phone: input.phone, fbc: track.fbc, fbp: track.fbp, ip: input.ip, userAgent: input.userAgent, url: track.url };
 
-                // Reklama belgilari token hali ulanmagan bo'lsa ham saqlanadi: sotuvchi lidni
-                // keyin tasdiqlaganda Meta uni qaysi reklamadan va qaysi sahifadan kelganini bilishi kerak.
-                if (input.isNew) {
-                    await deps.setSetting(leadMetaKey(input.leadId), JSON.stringify({
-                        fbc: track.fbc, fbp: track.fbp, ua: input.userAgent || null, url: track.url,
-                    }));
+                // Reklama belgilari token hali ulanmagan bo'lsa ham saqlanadi:
+                // lid keyin "O'ylamoqda"ga o'tganda Meta uni qaysi reklamadan kelganini bilishi kerak.
+                if (input.isNew && (track.fbc || track.fbp)) {
+                    await deps.setSetting(leadMetaKey(input.leadId), JSON.stringify({ fbc: track.fbc, fbp: track.fbp }));
                 }
 
                 if (!allowFormSignal()) return;
 
                 const events: EventInput[] = [{ ...base, name: 'CrmContact', id: `${eventId}-c` }];
-                // Reklama formasidan (faqat ism va telefon) kelgan ariza bu yerda hali lid emas
-                const isLead = input.isNew && !!input.confirmed;
-                if (isLead) events.push({ ...base, name: 'Lead', id: `${input.leadId}-Lead` });
-                const ok = await send(events);
-                if (ok && isLead) await markSent(input.leadId, ['Lead']);
+                // Lead — sahifadagi piksel yuboradigan hodisaning o'zi (belgi bir xil, Meta ikki marta
+                // sanamaydi). Kampaniya "saytdan lid"ga shu hodisa orqali yoqiladi: u jim bo'lib qolsa
+                // (2026-10-10..12 da shunday bo'lgan), Ads Manager kampaniyani ishga tushirmaydi.
+                if (input.isNew) events.push({ ...base, name: 'Lead', id: eventId });
+                await send(events);
             } catch (err: any) {
                 console.error('[leadSignals] formSubmitted:', err?.message || err);
             }
@@ -276,36 +250,21 @@ export function createLeadSignals(deps: Deps) {
         /** Kanbanda lid boshqa ustunga o'tdi. Har bir hodisa bitta lid uchun bir marta ketadi. */
         async stageChanged(leadId: string, status: string): Promise<void> {
             try {
-                if (!LEAD_STATUSES.includes(status) || !(await getToken())) return;
+                if (!QUALIFIED_STATUSES.includes(status) || !(await getToken())) return;
 
-                const lead = await deps.db.demoRequest.findUnique({ where: { id: leadId }, select: { id: true, phone: true, createdAt: true } });
+                const lead = await deps.db.demoRequest.findUnique({ where: { id: leadId }, select: { id: true, phone: true } });
                 if (!lead) return;
 
                 const meta = parseJson(await deps.getSetting(leadMetaKey(leadId)));
                 const sent: string[] = Array.isArray(meta.sent) ? meta.sent : [];
-                const wanted = [
-                    'Lead',
-                    ...(QUALIFIED_STATUSES.includes(status) ? ['QualifiedLead'] : []),
-                    ...(status === WON_STATUS ? ['ClinicWon'] : []),
-                ];
+                const wanted = status === WON_STATUS ? ['QualifiedLead', 'ClinicWon'] : ['QualifiedLead'];
                 const names = wanted.filter(name => !sent.includes(name));
                 if (names.length === 0) return;
 
-                // Lead — saytdagi arizaning o'zi, faqat sotuvchi tekshirgandan keyin xabar qilinadi:
-                // shuning uchun sayt hodisasi sifatida, ariza qoldirilgan vaqt bilan ketadi
-                // (reklama kampaniyasi "saytdan lid"ni sanaydi). Qolganlari — qo'ng'iroq natijasi.
-                const submittedAt = new Date(lead.createdAt);
-                const isFresh = now().getTime() - submittedAt.getTime() < MAX_EVENT_AGE_MS;
-                const ok = await send(names.map(name => name === 'Lead'
-                    ? {
-                        name, id: `${leadId}-Lead`, source: 'website' as ActionSource,
-                        phone: lead.phone, fbc: meta.fbc, fbp: meta.fbp,
-                        userAgent: meta.ua, url: meta.url, at: isFresh ? submittedAt : undefined,
-                    }
-                    : {
-                        name, id: `${leadId}-${name}`, source: 'phone_call' as ActionSource,
-                        phone: lead.phone, fbc: meta.fbc, fbp: meta.fbp,
-                    }));
+                const ok = await send(names.map(name => ({
+                    name, id: `${leadId}-${name}`, source: 'phone_call' as ActionSource,
+                    phone: lead.phone, fbc: meta.fbc, fbp: meta.fbp,
+                })));
                 if (ok) await deps.setSetting(leadMetaKey(leadId), JSON.stringify({ ...meta, sent: [...sent, ...names] }));
             } catch (err: any) {
                 console.error('[leadSignals] stageChanged:', err?.message || err);

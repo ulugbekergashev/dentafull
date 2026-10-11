@@ -146,20 +146,12 @@ const tests = {
 
 
   // --- Meta signallari ---
-  'reklama formasi (faqat ism va telefon): Meta\'ga Lead KETMAYDI, faqat CrmContact': async () => {
+  'yangi lid: Meta\'ga Lead va CrmContact ketadi, raqam xeshlangan': async () => {
     const s = fakeSignals();
     await s.signals.formSubmitted(form());
-    assert.deepStrictEqual(s.names(), ['CrmContact'], 'ism va raqam yozishning o\'zi Meta uchun lid emas');
-    assert.deepStrictEqual(s.events()[0].user_data.ph, [hashPhone(PHONE)]);
-    assert.ok(!JSON.stringify(s.posts).includes('998901234567'), 'ochiq raqam Meta\'ga ketmaydi');
-  },
-  'saytdagi to\'liq forma (klinika ma\'lumoti bilan): Lead darhol ketadi': async () => {
-    const s = fakeSignals();
-    await s.signals.formSubmitted(form({ confirmed: true }));
     assert.deepStrictEqual(s.names(), ['CrmContact', 'Lead']);
-    assert.deepStrictEqual(JSON.parse(s.settings.get('demo_meta:L1')).sent, ['Lead'], 'keyin qayta yuborilmasligi uchun eslab qolinadi');
     const leadEvent = s.events().find((e) => e.event_name === 'Lead');
-    assert.strictEqual(leadEvent.event_id, 'L1-Lead');
+    assert.strictEqual(leadEvent.event_id, 'abcdef123456', 'brauzerdagi hodisa bilan bir xil id — Meta ikki marta sanamaydi');
     assert.strictEqual(leadEvent.action_source, 'website');
     assert.strictEqual(leadEvent.event_source_url, 'https://dentacrm.uz/lifetime');
     assert.deepStrictEqual(leadEvent.user_data.ph, [hashPhone(PHONE)]);
@@ -197,7 +189,7 @@ const tests = {
     const s = fakeSignals({ token: null });
     await s.signals.formSubmitted(form());
     assert.strictEqual(s.posts.length, 0);
-    assert.deepStrictEqual(JSON.parse(s.settings.get('demo_meta:L1')), { fbc: TRACK.fbc, fbp: TRACK.fbp, ua: 'Mozilla/5.0', url: 'https://dentacrm.uz/lifetime' });
+    assert.deepStrictEqual(JSON.parse(s.settings.get('demo_meta:L1')), { fbc: TRACK.fbc, fbp: TRACK.fbp });
   },
   'Meta xato qaytarsa — funksiya xato otmaydi, sabab saqlanadi': async () => {
     const s = fakeSignals({ failWith: 'Invalid OAuth access token' });
@@ -206,54 +198,26 @@ const tests = {
     assert.strictEqual(last.ok, false);
     assert.match(last.error, /Invalid OAuth/);
   },
-  'sotuvchi Bekor qilgan odam: Meta\'ga hech qachon lid bo\'lib ketmaydi': async () => {
+  'kanban: O\'ylamoqda — QualifiedLead bir marta ketadi': async () => {
     const s = fakeSignals({ rows: [lead({ id: 'L1' })] });
     await s.signals.formSubmitted(form());
-    await s.signals.stageChanged('L1', 'Cancelled');
-    assert.deepStrictEqual(s.names(), ['CrmContact'], 'faqat ariza paytidagi "bizda bor" belgisi');
-  },
-  'kanban: Bog\'lashildi — sotuvchi gaplashdi va bekor qilmadi: Lead ketadi (ariza vaqti va sahifasi bilan)': async () => {
-    const s = fakeSignals({ rows: [lead({ id: 'L1', createdAt: T0 })] });
-    await s.signals.formSubmitted(form());
     s.posts.length = 0;
-    await s.signals.stageChanged('L1', 'Contacted');
-    await s.signals.stageChanged('L1', 'Contacted');
-    assert.deepStrictEqual(s.names(), ['Lead'], 'bir marta, QualifiedLead hali emas');
+    await s.signals.stageChanged('L1', 'Thinking');
+    await s.signals.stageChanged('L1', 'Thinking');
+    assert.deepStrictEqual(s.names(), ['QualifiedLead']);
     const e = s.events()[0];
-    assert.strictEqual(e.event_id, 'L1-Lead');
-    assert.strictEqual(e.action_source, 'website', 'kampaniya "saytdan lid"ni sanaydi');
-    assert.strictEqual(e.event_source_url, 'https://dentacrm.uz/lifetime');
-    assert.strictEqual(e.user_data.client_user_agent, 'Mozilla/5.0');
-    assert.strictEqual(e.user_data.fbc, TRACK.fbc, 'qaysi reklamadan kelgani');
-    assert.deepStrictEqual(e.user_data.ph, [hashPhone(PHONE)]);
-    assert.strictEqual(e.event_time, Math.floor(T0.getTime() / 1000));
-  },
-  'kanban: eski lid (7 kundan oshgan) tasdiqlansa — Meta rad etmasligi uchun hozirgi vaqt bilan ketadi': async () => {
-    const tenDaysAgo = new Date(T0.getTime() - 10 * 24 * 3600 * 1000);
-    const s = fakeSignals({ rows: [lead({ id: 'L1', createdAt: tenDaysAgo })] });
-    await s.signals.stageChanged('L1', 'Contacted');
-    assert.strictEqual(s.events()[0].event_time, Math.floor(T0.getTime() / 1000));
-  },
-  'kanban: savolga javob bermagan lid O\'ylamoqda\'ga o\'tsa — Lead ham, QualifiedLead ham, bir marta': async () => {
-    const s = fakeSignals({ rows: [lead({ id: 'L1' })] });
-    await s.signals.formSubmitted(form());
-    s.posts.length = 0;
-    await s.signals.stageChanged('L1', 'Thinking');
-    await s.signals.stageChanged('L1', 'Thinking');
-    assert.deepStrictEqual(s.names(), ['Lead', 'QualifiedLead'], 'savolni o\'tkazib yuborgan haqiqiy mijoz ham Meta uchun lid');
-    const e = s.events().find((x) => x.event_name === 'QualifiedLead');
     assert.strictEqual(e.action_source, 'phone_call');
     assert.strictEqual(e.user_data.fbc, TRACK.fbc, 'qaysi reklamadan kelgani ma\'lum bo\'lishi uchun');
   },
-  'kanban: Oldi — Lead, QualifiedLead va ClinicWon; oldin ketgani qayta ketmaydi': async () => {
+  'kanban: Oldi — QualifiedLead ham, ClinicWon ham; oldin ketgani qayta ketmaydi': async () => {
     const s = fakeSignals({ rows: [lead({ id: 'L1' })] });
     await s.signals.stageChanged('L1', 'Thinking');
     await s.signals.stageChanged('L1', 'Booked');
-    assert.deepStrictEqual(s.names(), ['ClinicWon', 'Lead', 'QualifiedLead']);
+    assert.deepStrictEqual(s.names(), ['ClinicWon', 'QualifiedLead']);
   },
-  'kanban: Bekor, Trubkani ko\'tarmadi, Yangi — Meta\'ga hech narsa ketmaydi': async () => {
+  'kanban: Bekor, Bog\'lashildi, Trubkani ko\'tarmadi — Meta\'ga hech narsa ketmaydi': async () => {
     const s = fakeSignals({ rows: [lead({ id: 'L1' })] });
-    for (const status of ['Cancelled', 'NoAnswer', 'New', 'Inbox']) await s.signals.stageChanged('L1', status);
+    for (const status of ['Cancelled', 'Contacted', 'NoAnswer', 'New', 'Inbox']) await s.signals.stageChanged('L1', status);
     assert.strictEqual(s.posts.length, 0);
   },
   'kanban: Meta qabul qilmasa, keyingi safar yana urinadi': async () => {

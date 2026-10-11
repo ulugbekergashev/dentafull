@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Phone, User, AlertCircle, Loader2, ShieldCheck, Clock, Headphones } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { Logo } from '../components/Logo';
-import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent } from '../utils/metaPixel';
+import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent, trackMetaEvent } from '../utils/metaPixel';
 import { readSentLead, rememberSentLead } from '../utils/sentLead';
 
 export type AdPlan = 'lifetime' | 'monthly';
@@ -71,6 +71,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   const [phoneError, setPhoneError] = useState(false);
   // Bitta ariza uchun bitta belgi: xatodan keyin qayta yuborilsa ham Meta uni bir marta sanaydi
   const track = useRef<MetaTrack | null>(null);
+  const lostResponse = useRef(false);
   const returnMarked = useRef(false);
 
   useEffect(() => {
@@ -101,6 +102,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
     setStatus('loading');
     track.current = track.current || getMetaTrack();
     const { eventId } = track.current;
+    let gotResponse = false;
 
     try {
       const res = await fetch(`${API_URL}/public/demo-request`, {
@@ -108,6 +110,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), phone: `+998${digits}`, source: buildSource(plan), track: track.current }),
       });
+      gotResponse = true;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json().catch(() => null);
       if (data && data.success === false) throw new Error(data.message || 'rejected');
@@ -116,12 +119,18 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       // Kim bo'lishidan qat'i nazar — bu odam endi bizda bor, unga reklama qayta ko'rsatilmasin
       trackMetaCustomEvent('CrmContact', `${eventId}-c`);
 
-      // Bu yerda Meta'ga "Lead" KETMAYDI: ism va raqam yozishning o'zi lid emas — lidni sotuvchi tasdiqlaydi.
+      // Lead — reklama kampaniyasi ("saytdan lid") shu hodisaga yoqiladi, shuning uchun u ariza
+      // qoldirilgan zahoti ketishi shart. Qayta ariza lid emas. Server ham xuddi shu belgi bilan
+      // yuboradi (backend/leadSignals.ts) — Meta ikki marta sanamaydi.
       const repeat = !!data?.repeat;
+      // Oldingi urinish serverda saqlanib, javobi yo'lda yo'qolgan bo'lsa, bu "takror" aslida o'sha yangi lid.
+      if (!repeat || lostResponse.current) trackMetaEvent('Lead', { content_name: plan }, eventId);
+      lostResponse.current = false;
       rememberSentLead(name.trim(), digits);
       setIsRepeat(repeat);
       setStatus('success');
     } catch {
+      if (!gotResponse) lostResponse.current = true;
       setStatus('error');
     }
   };
