@@ -943,3 +943,187 @@ model AuditLog {
 
   @@index([clinicId, createdAt])
 }
+
+/// Diagnostika qaydlari (backend/diag.ts): bot holati, kira olmagan login,
+/// ketmagan avtomatik xabar sababi, brauzer va server xatolari. Yordam boti
+/// mijozning muammosi sababini shu yerdan topadi. FK yo'q — klinika o'chsa ham
+/// qayd qoladi, platforma darajasidagi hodisalarda clinicId bo'sh.
+model DiagEvent {
+  id        String   @id @default(uuid())
+  clinicId  String?
+  /// bot_down | bot_up | bot_error | login_failed | automation_skip | client_error | server_error
+  kind      String
+  /// Nima haqida: qoida id, login, sahifa manzili
+  subject   String?
+  message   String
+  meta      String?
+  /// Kuniga bitta qatorga yig'iladigan hodisalar uchun takrorlar soni
+  count     Int      @default(1)
+  createdAt DateTime @default(now())
+  lastAt    DateTime @default(now())
+
+  @@index([clinicId, kind, lastAt])
+  @@index([kind, lastAt])
+}
+
+/// Yordam botiga yozgan odam. chatId — Telegram shaxsiy chat id'si.
+/// Klinikaga bog'lanish ikki xil: 'session' (ilovadagi bir martalik havola —
+/// kim ekani aniq) va 'phone' (kontakt yuborgan — faqat o'qish huquqi).
+model SupportUser {
+  chatId      String    @id
+  tgName      String?
+  tgUsername  String?
+  phone       String?
+  lang        String    @default("uz")
+  /// O'zbekcha qaysi yozuvda yozadi: latin | cyrillic
+  script      String    @default("latin")
+  clinicId    String?
+  /// CLINIC_ADMIN | DOCTOR | RECEPTIONIST | LAB_TECHNICIAN | SALES_AGENT | SUPER_ADMIN
+  role        String?
+  staffId     String?
+  staffName   String?
+  verifiedVia String?
+  linkedAt    DateTime?
+  blocked     Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([clinicId])
+}
+
+/// Ilovadagi "Yordam" tugmasi beradigan bir martalik kod (t.me/bot?start=l_<code>).
+model SupportLink {
+  code      String    @id
+  clinicId  String?
+  role      String
+  staffId   String?
+  staffName String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedBy    String?
+  createdAt DateTime  @default(now())
+}
+
+/// Bitta murojaat (savol va uning atrofidagi suhbat).
+model SupportTicket {
+  id           String    @id @default(uuid())
+  chatId       String
+  clinicId     String?
+  category     String    @default("other")
+  /// open | waiting_operator | human | resolved | closed
+  status       String    @default("open")
+  subject      String?
+  summary      String?
+  /// bot | operator | user
+  resolvedBy   String?
+  /// 1 — hal bo'ldi, -1 — yordam bermadi
+  rating       Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  firstReplyAt DateTime?
+  closedAt     DateTime?
+
+  @@index([chatId, status])
+  @@index([clinicId, createdAt])
+  @@index([status, updatedAt])
+}
+
+/// Suhbatdagi har bir xabar. Kelgan xabar javob berilguncha shu yerda turadi
+/// (state = pending) — server qayta ishga tushsa ham yo'qolmaydi.
+model SupportMessage {
+  id          String   @id @default(uuid())
+  ticketId    String?
+  chatId      String
+  /// in | out
+  direction   String
+  /// user | bot | operator | system
+  author      String
+  /// text | voice | photo | document | draft | card | proactive
+  kind        String   @default("text")
+  text        String?
+  fileId      String?
+  /// kelgan: pending | processing | done | failed · qoralama: pending | sent | edited | rejected
+  state       String   @default("done")
+  /// Foydalanuvchi chatidagi xabar raqami
+  tgMessageId Int?
+  /// Operator chatidagi karta raqami — javob shu orqali murojaatga bog'lanadi
+  opMessageId Int?
+  /// JSON: chaqirilgan tekshiruvlar, ishlatilgan maqolalar, tugmalar
+  meta        String?
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([chatId, createdAt])
+  @@index([direction, state])
+  @@index([opMessageId])
+}
+
+/// Bilim bazasi maqolasi. 'seed' — koddagi boshlang'ich to'plam (har deployda
+/// yangilanadi), 'learned' — operator javobidan yoki paneldan qo'shilgan.
+model SupportArticle {
+  id        String   @id
+  module    String
+  /// '*' yoki vergul bilan rollar
+  roles     String   @default("*")
+  titleUz   String
+  titleRu   String
+  bodyUz    String
+  bodyRu    String
+  keywords  String?
+  /// JSON: productMap.ts dagi yo'l id'lari
+  paths     String?
+  guideId   String?
+  source    String   @default("seed")
+  active    Boolean  @default(true)
+  uses      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([module])
+}
+
+/// Tasdiq kutayotgan amal: parol tiklash, obunani uzaytirish va h.k.
+/// Holat bitta UPDATE bilan almashadi — tugma ikki marta bosilsa ham amal
+/// bir marta bajariladi.
+model SupportAction {
+  id        String    @id @default(uuid())
+  ticketId  String?
+  /// So'ragan odamning chati
+  chatId    String
+  clinicId  String?
+  kind      String
+  /// JSON
+  args      String
+  /// pending | running | done | rejected | failed
+  status    String    @default("pending")
+  /// Kim tasdiqlaydi: operator | owner
+  approver  String
+  decidedBy String?
+  result    String?
+  createdAt DateTime  @default(now())
+  decidedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([clinicId, kind, createdAt])
+}
+
+/// Obuna to'lovlari tarixi. Ilgari muddat faqat expiryDate ni qo'lda
+/// o'zgartirish bilan uzaytirilardi va kim, qachon, qancha to'lagani hech
+/// qayerda qolmasdi.
+model SubscriptionPayment {
+  id            String   @id @default(uuid())
+  clinicId      String
+  /// payment — tasdiqlangan to'lov · trust — chek yuborilganda berilgan vaqtincha muddat
+  kind          String   @default("payment")
+  months        Int      @default(0)
+  days          Int      @default(0)
+  amount        Float?
+  fromExpiry    String?
+  toExpiry      String
+  receiptFileId String?
+  approvedBy    String?
+  note          String?
+  createdAt     DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+}

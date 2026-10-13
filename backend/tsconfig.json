@@ -44,7 +44,12 @@
         "dhp/client.ts",
         "dhp/codes.ts",
         "dhp/mappers.ts",
-        "dhp/sync.ts"
+        "dhp/sync.ts",
+        "diag.ts",
+        "ownerPhone.ts",
+        "passwordChange.ts",
+        "patientImport.ts",
+        "support/*.ts"
     ],
     "exclude": [
         "node_modules",

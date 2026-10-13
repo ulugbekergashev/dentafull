@@ -4,6 +4,31 @@ import { prisma } from './db';
 import * as notif from './notifications';
 import { buildReportScreen, parseReportCallback, reportCallback } from './botReports';
 import { tashkentDateStr } from './triggers';
+import { diag, botFailureReason } from './diag';
+import { uzContactKey } from './support/identity';
+
+// Testlarda soxta Telegram serveriga ulanish uchun (tests/helpers/fakeTelegram.cjs).
+// Productionda o'rnatilmaydi.
+const telegrafOptions = (): any =>
+    process.env.TELEGRAM_API_ROOT ? { telegram: { apiRoot: process.env.TELEGRAM_API_ROOT } } : {};
+
+// Bot o'chib qolsa qayta ko'tarish oralig'i: 15s, 30s, 1daq ... eng ko'pi 5 daqiqa
+const RELAUNCH_BASE_MS = 15_000;
+const RELAUNCH_MAX_MS = 5 * 60_000;
+/** Shuncha ishlab turgan bot yiqilsa — sanoq boshidan boshlanadi */
+const RELAUNCH_RESET_MS = 5 * 60_000;
+
+/**
+ * Yuborilgan kontakt yuboruvchining O'ZINIKI ekanini tekshiradi.
+ *
+ * "Telefon raqamni yuborish" tugmasi bosilganda Telegram kontaktga
+ * yuboruvchining o'z user_id sini qo'yadi. Boshqa odamning kontaktini
+ * (masalan rahbarning) qo'lda yuborganda user_id boshqa yoki umuman yo'q
+ * bo'ladi. Bu tekshiruvsiz rahbar raqamini bilgan har kim uning kontaktini
+ * forward qilib, "rahbar" sifatida ulanib, moliya hisobotlarini olardi.
+ */
+export const isOwnContact = (message: any): boolean =>
+    !!message?.contact?.user_id && !!message?.from?.id && message.contact.user_id === message.from.id;
 
 /**
  * Menyu tugmalari. Menyu har doim pastda turadi (is_persistent) va har bir
@@ -28,7 +53,9 @@ const LEGACY_REPORT_BTN = '📊 Kunlik hisobot';
 
 class BotManager {
     private bots: Map<string, Telegraf> = new Map(); // token -> Telegraf
-    private usageCount: Map<string, number> = new Map(); // token -> count of clinics
+    // token -> shu tokenni ishlatadigan klinikalar. Ilgari bu oddiy hisoblagich edi va
+    // bir klinika tokenni qayta saqlagan sari oshib borardi — bot hech qachon to'xtamasdi.
+    private tokenClinics: Map<string, Set<string>> = new Map();
     private botUsernames: Map<string, string> = new Map(); // token -> username
     private pendingPayments: Map<string, { appointmentId: string; clinicId: string }> = new Map(); // chatId -> payment info
 
@@ -120,9 +147,9 @@ class BotManager {
     }
 
     public async startBot(clinicId: string, token: string) {
-        // Increment usage count
-        const currentCount = this.usageCount.get(token) || 0;
-        this.usageCount.set(token, currentCount + 1);
+        const users = this.tokenClinics.get(token) || new Set<string>();
+        users.add(clinicId);
+        this.tokenClinics.set(token, users);
 
         // If bot already exists for this token, just return
         if (this.bots.has(token)) {
@@ -131,7 +158,7 @@ class BotManager {
         }
 
         try {
-            const bot = new Telegraf(token);
+            const bot = new Telegraf(token, telegrafOptions());
 
             // Fetch username immediately and cache it
             bot.telegram.getMe().then(me => {
@@ -140,6 +167,16 @@ class BotManager {
                 }
             }).catch(e => {
                 console.error(`Failed to fetch bot username for token:`, e.message);
+            });
+
+            // Handler ichidagi ushlanmagan xato (yoki 90 soniyalik muddat) ilgari
+            // Telegraf'ning standart xatti-harakatiga tushardi: xato qayta
+            // tashlanar va shu botning polling'i butunlay to'xtardi — bot server
+            // qayta ishga tushguncha hech kimga javob bermasdi. Endi xato
+            // yoziladi, bot ishlashda davom etadi.
+            bot.catch((err: any, ctx: any) => {
+                console.error(`Bot handler xatosi (${ctx?.updateType || '?'}):`, err?.message || err);
+                void this.noteHealth(token, 'bot_error', botFailureReason(err));
             });
 
             // 1. Start Command
@@ -154,7 +191,9 @@ class BotManager {
                             include: { clinic: true }
                         });
 
-                        if (patient) {
+                        // Havola shu klinika botiga tegishli bo'lishi shart: aks holda
+                        // boshqa klinika bemorining id'si bilan uning nomidan ulanish mumkin edi.
+                        if (patient && patient.clinic?.botToken === token) {
                             await prisma.patient.update({
                                 where: { id: payload },
                                 data: { telegramChatId: chatId }
@@ -262,6 +301,21 @@ class BotManager {
                 const contact = ctx.message.contact;
                 const chatId = String(ctx.chat.id);
                 if (!contact || !contact.phone_number) return;
+
+                if (!isOwnContact(ctx.message)) {
+                    ctx.reply("Bu boshqa odamning raqami. Iltimos, pastdagi «📱 Telefon raqamni yuborish» tugmasini bosib, o'z raqamingizni yuboring.", {
+                        reply_markup: this.menuMarkup({ owner: null, doctor: null, receptionist: null, patient: null })
+                    });
+                    return;
+                }
+
+                // Faqat oxirgi 9 xonani solishtirish chet el raqamini (+7 9XX...) o'zbek raqami deb olardi
+                if (!uzContactKey(contact.phone_number)) {
+                    ctx.reply("Ulanish faqat O'zbekiston raqami (+998...) bilan mumkin. Iltimos, klinikada yozilgan raqamingiz bilan ulaning.", {
+                        reply_markup: this.menuMarkup({ owner: null, doctor: null, receptionist: null, patient: null })
+                    });
+                    return;
+                }
 
                 let phone = contact.phone_number.replace(/\s/g, '').replace('+', '');
 
@@ -898,41 +952,89 @@ class BotManager {
                 });
             });
 
-            bot.launch().catch(err => console.error(`Bot launch failed for token ${token.substring(0, 5)}:`, err.message));
+            this.bots.set(token, bot);
+            this.launch(token, bot);
             // Telegram'ning "Menu" tugmasi — /menu har doim qo'l ostida
             bot.telegram.setMyCommands([
                 { command: 'menu', description: 'Menyu' },
                 { command: 'hisobot', description: 'Hisobot (klinika rahbari uchun)' },
             ]).catch((e: any) => console.error('setMyCommands xatosi:', e?.message));
-            this.bots.set(token, bot);
-            console.log(`✅ Bot instance started for token: ${token.substring(0, 10)}...`);
+            console.log(`✅ Bot instance started for token: ${token.substring(0, 5)}...`);
 
         } catch (error: any) {
             console.error(`Failed to start bot for token ${token.substring(0, 5)}:`, error.message);
         }
     }
 
-    public async removeBot(clinicId: string) {
-        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
-        if (!clinic || !clinic.botToken) return;
+    /**
+     * Botni ishga tushiradi va o'chib qolsa qayta ko'taradi.
+     *
+     * Ilgari launch() bir marta chaqirilardi. Token vaqtincha band bo'lsa (409 —
+     * deploy paytida eski va yangi server bir necha soniya birga ishlaydi) yoki
+     * tarmoq uzilsa, bot server qayta ishga tushguncha jim qolardi va buni
+     * hech kim bilmasdi: loglarda "Bot instance started" turardi.
+     *
+     * 401 (token noto'g'ri) da qayta urinilmaydi — u o'zi tuzalmaydi, klinika
+     * tokenni almashtirishi kerak. Sabab DiagEvent'ga yoziladi.
+     */
+    private launch(token: string, bot: Telegraf, attempt = 0) {
+        const startedAt = Date.now();
+        bot.launch(() => { void this.noteHealth(token, 'bot_up', 'Bot ishlayapti'); })
+            .catch((err: any) => {
+                const reason = botFailureReason(err);
+                console.error(`Bot launch failed for token ${token.substring(0, 5)}:`, reason);
+                void this.noteHealth(token, 'bot_down', reason);
 
-        const token = clinic.botToken;
-        const count = this.usageCount.get(token) || 0;
+                const code = err?.response?.error_code ?? err?.code;
+                // Bot bu orada o'chirilgan yoki almashtirilgan bo'lsa — tegmaymiz
+                if (code === 401 || this.bots.get(token) !== bot) return;
 
-        if (count <= 1) {
-            const bot = this.bots.get(token);
-            if (bot) {
-                try {
-                    await bot.stop();
-                } catch (e) { }
-                this.bots.delete(token);
-                this.usageCount.delete(token);
-                this.botUsernames.delete(token);
-                console.log(`🛑 Bot instance stopped for token: ${token.substring(0, 10)}...`);
-            }
-        } else {
-            this.usageCount.set(token, count - 1);
+                const next = Date.now() - startedAt > RELAUNCH_RESET_MS ? 0 : attempt + 1;
+                const delay = Math.min(RELAUNCH_BASE_MS * 2 ** next, RELAUNCH_MAX_MS);
+                const timer = setTimeout(() => {
+                    if (this.bots.get(token) === bot) this.launch(token, bot, next);
+                }, delay);
+                timer.unref?.();
+            });
+    }
+
+    /** Bot holatini shu tokenni ishlatadigan har bir klinikaga yozadi (yordam boti shundan o'qiydi) */
+    private async noteHealth(token: string, kind: 'bot_up' | 'bot_down' | 'bot_error', message: string) {
+        try {
+            const clinics = await prisma.clinic.findMany({ where: { botToken: token }, select: { id: true } });
+            for (const c of clinics) await diag.recordDaily({ clinicId: c.id, kind, message });
+        } catch (e: any) {
+            console.warn("Bot holatini yozib bo'lmadi:", e?.message);
+        }
+    }
+
+    /**
+     * @param knownToken klinikaning ESKI tokeni. Token bazada allaqachon
+     *   o'chirilgan yoki almashtirilgan bo'lsa shu beriladi — aks holda qaysi
+     *   botni to'xtatish kerakligini bilib bo'lmaydi va eski bot ishlab qolaveradi.
+     */
+    public async removeBot(clinicId: string, knownToken?: string | null) {
+        const token = knownToken
+            || (await prisma.clinic.findUnique({ where: { id: clinicId }, select: { botToken: true } }))?.botToken;
+        if (!token) return;
+
+        const users = this.tokenClinics.get(token);
+        users?.delete(clinicId);
+        if (users && users.size > 0) {
             console.log(`ℹ️ Bot instance remains active for other clinics. Clinic ${clinicId} association removed.`);
+            return;
+        }
+
+        const bot = this.bots.get(token);
+        // Xaritadan avval o'chiramiz: launch() shunga qarab qayta ko'tarmaydi
+        this.bots.delete(token);
+        this.tokenClinics.delete(token);
+        this.botUsernames.delete(token);
+        if (bot) {
+            try {
+                bot.stop();
+            } catch (e) { /* bot ishga tushmagan bo'lishi mumkin */ }
+            console.log(`🛑 Bot instance stopped for token: ${token.substring(0, 5)}...`);
         }
     }
 

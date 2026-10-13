@@ -1,13 +1,16 @@
 
 import React from 'react';
-import { Lightbulb, ExternalLink } from 'lucide-react';
+import { Lightbulb, Phone, Send } from 'lucide-react';
 import { Button } from './Common';
+import { useLanguage } from '../context/LanguageContext';
+import { openSupport, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from '../services/support';
 
 interface SubscriptionBlockModalProps {
   isOpen: boolean;
 }
 
 export const SubscriptionBlockModal: React.FC<SubscriptionBlockModalProps> = ({ isOpen }) => {
+  const { t } = useLanguage();
   if (!isOpen) return null;
 
   return (
@@ -25,39 +28,39 @@ export const SubscriptionBlockModal: React.FC<SubscriptionBlockModalProps> = ({ 
 
           {/* Title and Text */}
           <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Tizim bloklandi
+            {t('auto.Tizim bloklandi')}
           </h3>
-          
+
           <p className="text-gray-600 dark:text-gray-400 mb-2 leading-relaxed">
-            Sizning tarifingizning amal qilish muddati tugagan.
-          </p>
-          
-          <p className="text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
-            Tizim funksiyalari vaqtincha cheklangan. <br />
-            Iltimos, foydalanishni davom ettirish uchun menejer bilan bog'laning.
+            {t('auto.Sizning tarifingizning amal qilish muddati tugagan.')}
           </p>
 
-          {/* Action Button - Replaced with primary contact button */}
-          <Button 
+          <p className="text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
+            {t('auto.Tizim funksiyalari vaqtincha cheklangan.')} <br />
+            {t("auto.Davom ettirish uchun Telegram orqali yozing — to'lov chekini ham shu yerga yuborasiz.")}
+          </p>
+
+          {/* Asosiy amal: yordam boti. Xodim tizimga kirgan — bot qaysi klinika yozayotganini o'zi biladi */}
+          <Button
+            data-support="blocked"
             className="w-full h-14 text-base font-bold uppercase tracking-wider bg-primary-600 hover:bg-primary-700 text-white rounded-xl shadow-lg shadow-primary-500/20 transition-all active:scale-95 mb-4"
-            onClick={() => window.open('https://t.me/dentacrm', '_blank')}
+            onClick={() => { void openSupport(); }}
           >
-            MENEJER BILAN BOG'LANISH
+            <Send className="w-5 h-5 mr-2" />
+            {t('auto.Telegram orqali yozish')}
           </Button>
 
-          {/* Footer / Support */}
+          {/* Telegram ishlamasa — telefon */}
           <div className="mt-4 pt-6 border-t border-gray-100 dark:border-gray-800 w-full text-center">
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-              Batafsil ma'lumot olish uchun:
+              {t("auto.Yoki qo'ng'iroq qiling:")}
             </p>
-            <a 
-              href="https://t.me/dentacrm" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center text-primary-600 dark:text-primary-400 font-bold hover:underline gap-1 uppercase text-xs"
+            <a
+              href={SUPPORT_PHONE_HREF}
+              className="inline-flex items-center text-primary-600 dark:text-primary-400 font-bold hover:underline gap-1.5"
             >
-              DENTACRM ADMIN
-              <ExternalLink className="w-3 h-3" />
+              <Phone className="w-4 h-4" />
+              {SUPPORT_PHONE}
             </a>
           </div>
         </div>

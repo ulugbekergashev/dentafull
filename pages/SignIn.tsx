@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button, Input, Card } from '../components/Common';
 import { UserRole } from '../types';
-import { AlertCircle, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, Lock, User, Eye, EyeOff, Send } from 'lucide-react';
 import { api } from '../services/api';
+import { getSupportInfo, openSupport } from '../services/support';
 import { demoAuthData, isDemoUsername } from '../services/demoData';
 import { useLanguage } from '../context/LanguageContext';
 import { LogoMark } from '../components/Logo';
@@ -18,6 +19,9 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Yordam boti bor-yo'qligi oldindan so'raladi: "Telegram orqali yordam" bosilganda kutilmaydi
+  useEffect(() => { void getSupportInfo(); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +162,16 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
               {t('auth.support')} <br />
               <span className="font-medium text-primary-600">+998 90 824 29 92</span>
             </p>
+            {/* Parolni unutgan odam ham yordamga shu yerdan yoza oladi */}
+            <button
+              type="button"
+              onClick={() => { void openSupport(); }}
+              data-support="signin"
+              className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg border border-primary-200 px-4 py-2 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-50 dark:border-primary-800 dark:text-primary-400 dark:hover:bg-primary-900/20"
+            >
+              <Send className="h-4 w-4" />
+              {t('auto.Telegram orqali yordam')}
+            </button>
           </div>
         </Card>
 

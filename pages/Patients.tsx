@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { isAppointmentRecorded } from '../utils/unpaid';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
 import { StatCard } from '../components/StatCard';
 import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
-import { Search, Plus, Eye, Trash2, Loader2, Download, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity, MapPin } from 'lucide-react';
+import { Search, Plus, Eye, Trash2, Loader2, Download, Upload, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity, MapPin } from 'lucide-react';
 import { Patient, Doctor, Appointment, Transaction, Clinic, Branch } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
@@ -12,6 +12,7 @@ import { maskPhone } from '../utils/accessControl';
 import { CompletenessFilter, PATIENT_GAP_LABELS, districtName, matchesCompleteness, patientGaps, regionName } from '../utils/patientCompleteness';
 import * as XLSX from 'xlsx';
 import { usePerms } from '../context/PermissionsContext';
+import { PatientImportModal } from '../components/PatientImportModal';
 
 interface PatientsProps {
   userRole: string;
@@ -28,6 +29,8 @@ interface PatientsProps {
   branches?: Branch[];
   /** Sarlavhada tanlangan filial — yangi bemor odatda shunga biriktiriladi. */
   activeBranchId?: string | null;
+  /** Excel'dan bemorlar yuklangach ro'yxatni serverdan qayta olish. Berilmasa — oyna yopilganda sahifa yangilanadi. */
+  onPatientsImported?: () => void;
 }
 
 export const Patients: React.FC<PatientsProps> = ({
@@ -44,10 +47,25 @@ export const Patients: React.FC<PatientsProps> = ({
   showPatientPhone = true,
   branches = [],
   activeBranchId = null,
+  onPatientsImported,
 }) => {
   const { t } = useLanguage();
   const perms = usePerms();
   const canAdd = perms.can('patients', 'card', 'create');
+  // Excel'dan yuklash — ro'yxatni yuritadiganlar uchun: klinika egasi va resepshn
+  const canImport = canAdd && (userRole === 'CLINIC_ADMIN' || userRole === 'RECEPTIONIST');
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  // Ref: oyna "qo'shildi" deb xabar berib, shu zahoti yopilishi mumkin — holat (state) bunga ulgurmaydi
+  const reloadAfterImport = useRef(false);
+  const handlePatientsImported = () => {
+    if (onPatientsImported) onPatientsImported();
+    else reloadAfterImport.current = true;
+  };
+  const closeImport = () => {
+    setIsImportOpen(false);
+    // Ro'yxat App holatida turadi: yangilash yo'li berilmagan bo'lsa, yangi bemorlar sahifa yangilanganda ko'rinadi
+    if (reloadAfterImport.current) window.location.reload();
+  };
   const canEdit = perms.can('patients', 'card', 'edit');
   const canDelete = perms.can('patients', 'card', 'delete');
   const canExport = perms.can('patients', 'card', 'export');
@@ -370,7 +388,18 @@ export const Patients: React.FC<PatientsProps> = ({
               <span className="whitespace-nowrap">{t('patients.buttons.export')}</span>
             </Button>
           )}
-          
+
+          {canImport && (
+            <Button
+              variant="secondary"
+              className="flex-1 lg:flex-none justify-center gap-2 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all active:scale-95 py-2.5"
+              onClick={() => setIsImportOpen(true)}
+            >
+              <Upload className="w-4 h-4" />
+              <span className="whitespace-nowrap">{t("auto.Excel'dan yuklash")}</span>
+            </Button>
+          )}
+
           {canAdd && (
             <Button 
               data-tour="pat-add"
@@ -582,7 +611,7 @@ export const Patients: React.FC<PatientsProps> = ({
                         {patient.avatarUrl ? (
                           <img src={patient.avatarUrl} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          `${patient.firstName[0]}${patient.lastName[0]}`
+                          `${patient.firstName?.[0] ?? ''}${patient.lastName?.[0] ?? ''}`
                         )}
                       </div>
                       <div className="ml-3">
@@ -688,7 +717,7 @@ export const Patients: React.FC<PatientsProps> = ({
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
               <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 font-bold">
-                {selectedPatient.firstName[0]}{selectedPatient.lastName[0]}
+                {selectedPatient.firstName?.[0] ?? ''}{selectedPatient.lastName?.[0] ?? ''}
               </div>
               <div>
                 <p className="font-semibold text-gray-900 dark:text-white">{selectedPatient.lastName} {selectedPatient.firstName}</p>
@@ -883,6 +912,8 @@ export const Patients: React.FC<PatientsProps> = ({
           </div>
         </form>
       </Modal>
+
+      {isImportOpen && <PatientImportModal onClose={closeImport} onImported={handlePatientsImported} />}
 
     </div>
   );

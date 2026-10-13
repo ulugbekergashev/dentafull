@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { setupPwaAutoUpdate } from './utils/pwaUpdate';
+import { initErrorReporter } from './utils/errorReporter';
+
+// Kutilmagan xatolar serverga yetib borsin — sahifa sinsa, buni faqat foydalanuvchi ko'rmasin
+initErrorReporter();
 
 // Yangi versiya chiqqanda foydalanuvchi eski keshda qolib ketmasligi uchun
 setupPwaAutoUpdate();

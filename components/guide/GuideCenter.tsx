@@ -24,6 +24,8 @@ export interface GuideCenterProps {
     ctx: GuideContext;
     /** "Ishni boshlash" qadamlari — faqat klinika rahbariga beriladi; yangi klinikada markaz tepasida chiqadi */
     setup?: SetupInfo;
+    /** Havola orqali ochilganda (?guide=task-payment): shu qo'llanma darhol boshlanadi. Xodimga ochiq bo'lmasa — bosh oyna */
+    startId?: string;
     onClose: () => void;
 }
 
@@ -197,7 +199,7 @@ const AnimatedCheck: React.FC<{ reduced: boolean }> = ({ reduced }) => (
 
 type View = 'home' | 'run' | 'done';
 
-const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, setup, onClose }) => {
+const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, setup, startId, onClose }) => {
     const { t } = useLanguage();
     const navigate = useNavigate();
     const location = useLocation();
@@ -205,9 +207,11 @@ const GuideCenter: React.FC<GuideCenterProps> = ({ ctx, setup, onClose }) => {
 
     const { tour, pages, tasks } = useMemo(() => availableGuides(ctx), [ctx]);
     const all = useMemo(() => [tour, ...tasks, ...pages], [tour, tasks, pages]);
-    const [view, setView] = useState<View>('home');
-    const [active, setActive] = useState<Guide | null>(null);
-    const [run, setRun] = useState(0);
+    // Havoladagi qo'llanma faqat oyna ochilgan paytda qaraladi (App har bir havolaga yangi `key` beradi)
+    const [linked] = useState<Guide | null>(() => (startId ? all.find(g => g.id === startId) ?? null : null));
+    const [view, setView] = useState<View>(linked ? 'run' : 'home');
+    const [active, setActive] = useState<Guide | null>(linked);
+    const [run, setRun] = useState(linked ? 1 : 0);
     const [done, setDone] = useState<string[]>(() => loadDone(ctx.userKey));
     // Klaviatura bilan: oyna ochilganda Enter — tanishuvni boshlaydi
     const heroRef = useRef<HTMLButtonElement>(null);

@@ -29,6 +29,10 @@ import { api } from '../services/api';
 import { tLabel, tPlanFeature } from '../i18n/labels';
 import { isDemoUsername } from '../services/demoData';
 
+// Yordam boti paneli faqat superadmin "support" bo'limini ochganda yuklanadi —
+// sotuvchi va boshqa bo'limlar uning kodini umuman olmaydi.
+const SupportPanel = React.lazy(() => import('../components/superadmin/SupportPanel'));
+
 // Kunlik yangi klinikalar diagrammasi (oxirgi 12 oy)
 const UZ_MONTHS_SHORT = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
 
@@ -206,16 +210,16 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // brauzerning "orqaga" tugmasi ishlaydi va bo'limga havola yuborsa
    // bo'ladi.
    const [searchParams, setSearchParams] = useSearchParams();
-   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads', 'leadStats', 'calendar'] as const;
+   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads', 'leadStats', 'calendar', 'support'] as const;
    type TabId = typeof TABS[number];
 
    const fallbackTab: TabId = salesAgentMode ? 'clinics' : 'overview';
    const urlTab = searchParams.get('tab') as TabId | null;
-   // Lidlar statistikasi — faqat superadmin bo'limi. Sotuvchi shu havolani
-   // ochsa, bo'sh sahifa ko'rinmasin: o'zining odatdagi bo'limiga tushadi.
+   // Lidlar statistikasi va yordam boti — faqat superadmin bo'limlari. Sotuvchi
+   // shu havolani ochsa, bo'sh sahifa ko'rinmasin: o'zining odatdagi bo'limiga tushadi.
    const requestedTab: TabId | null = urlTab && TABS.includes(urlTab) ? urlTab : null;
    const activeTab: TabId = !requestedTab
-      || (salesAgentMode && requestedTab === 'leadStats')
+      || (salesAgentMode && (requestedTab === 'leadStats' || requestedTab === 'support'))
       || (!salesAgentMode && requestedTab === 'calendar')
       ? fallbackTab
       : requestedTab;
@@ -2090,6 +2094,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                </div>
             );
          })()}
+
+         {/* --- Yordam boti (faqat superadmin) --- */}
+         {activeTab === 'support' && !salesAgentMode && (
+            <React.Suspense fallback={<div className="py-14 text-center text-sm text-gray-500 dark:text-gray-400">{t('auto.Yuklanmoqda...')}</div>}>
+               <SupportPanel />
+            </React.Suspense>
+         )}
 
          {/* --- Lidlar statistikasi --- */}
          {/* Lidlar taxtasi kundalik ish uchun; raqamlar va sozlamalar esa

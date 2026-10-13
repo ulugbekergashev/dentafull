@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap, LifeBuoy, KeyRound
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -37,7 +37,11 @@ import { BottomNav } from './components/BottomNav';
 import { Logo } from './components/Logo';
 import { BranchSwitcher } from './components/BranchSwitcher';
 import { NotificationBell } from './components/NotificationBell';
-import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId } from './services/api';
+import { api, getActiveBranchId, setActiveBranchId as persistActiveBranchId, isDemoMode } from './services/api';
+import { getSupportInfo, openSupport } from './services/support';
+import { readGuideParam, stripGuideParam, stashPendingGuide, takePendingGuide } from './utils/guideLink';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import type { CashCloseInput } from './services/api';
 import { makePermChecker } from './utils/permissions';
 import { PermissionsProvider } from './context/PermissionsContext';
@@ -83,6 +87,8 @@ const SUPER_ADMIN_NAVIGATION = [
   { id: 'blocked', labelKey: 'superAdmin.tabs.blocked', icon: Shield, to: '/admin?tab=blocked', roles: [UserRole.SUPER_ADMIN] },
   { id: 'leads', labelKey: 'nav.leads', icon: MessageSquare, to: '/admin?tab=leads', roles: [UserRole.SUPER_ADMIN] },
   { id: 'leadStats', labelKey: 'nav.leadStats', icon: BarChart3, to: '/admin?tab=leadStats', roles: [UserRole.SUPER_ADMIN] },
+  // Yordam boti: mijozlar murojaatlari, bilim bazasi, sozlamalar, qaydlar
+  { id: 'support', labelKey: 'nav.support', icon: LifeBuoy, to: '/admin?tab=support', roles: [UserRole.SUPER_ADMIN] },
 ];
 
 const SALES_NAVIGATION = [
@@ -1322,7 +1328,11 @@ const AppContent: React.FC = () => {
       try { localStorage.setItem('denta_guide_seen_v1', '1'); } catch { /* shaxsiy rejim */ }
     }
   };
-  const openTour = () => {
+  // Havola orqali ochilganda (?guide=task-payment) O'quv markazi shu qo'llanmani darhol boshlaydi.
+  // n — har bir havola uchun yangi: markaz ochiq tursa ham qo'llanma qaytadan boshlanadi.
+  const [guideStart, setGuideStart] = useState<{ id: string; n: number } | null>(null);
+  const openGuideCenter = (startId?: string) => {
+    setGuideStart(startId ? { id: startId, n: Date.now() } : null);
     setIsSidebarOpen(false);
     setGuideNudge(false);
     if (!guideSeen) {
@@ -1336,6 +1346,8 @@ const AppContent: React.FC = () => {
       () => window.location.reload(),
     );
   };
+  // Tugmalar uchun: bosish hodisasi qo'llanma nomi o'rniga o'tib ketmasin
+  const openTour = () => openGuideCenter();
   // Qo'llanma hali ochilmagan bo'lsa: yangi klinika rahbariga O'quv markazi o'zi ochiladi (tepada
   // "Ishni boshlash"), qolganlarga tugma yonida eslatma chiqadi. Ikkalasi ham bir marta.
   useEffect(() => {
@@ -1344,6 +1356,54 @@ const AppContent: React.FC = () => {
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guideSeen, setupLoaded, isStaffRole, isNewClinic]);
+
+  // Qo'llanmani havola orqali ochish — yordam boti `/?guide=task-payment` kabi havola yuboradi.
+  // 1) Nomi eslab qolinadi va manzildan olib tashlanadi. Tizimga kirilmagan bo'lsa — kirish
+  //    sahifasi ochiladi (landing emas), qo'llanma esa kirgandan keyin boshlanadi.
+  const [guideLinkTick, setGuideLinkTick] = useState(0);
+  useEffect(() => {
+    if (!authChecked) return;
+    const linked = readGuideParam(location.search);
+    if (linked === null) return;
+    // Reklama formasi sahifalari ilovaning o'zi emas
+    if (location.pathname.replace(/\/+$/, '') in AD_LEAD_PATHS) return;
+    stashPendingGuide(linked);
+    setGuideLinkTick(n => n + 1);
+    navigate(
+      isAuthenticated
+        ? { pathname: location.pathname, search: stripGuideParam(location.search), hash: location.hash }
+        : { pathname: '/login' },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authChecked, isAuthenticated, location.pathname, location.search]);
+  // 2) Ma'lumot yuklangach (menyu va ruxsatlar ma'lum bo'lgach) O'quv markazi ochiladi:
+  //    qo'llanma shu xodimga ochiq bo'lsa — boshlanadi, aks holda markazning o'zi.
+  useEffect(() => {
+    if (!isAuthenticated || isLoading || error) return;
+    // SUPER_ADMIN va sotuvchida O'quv markazi yo'q — kutib turgan havola tashlab yuboriladi
+    if (!isStaffRole) { takePendingGuide(); return; }
+    if (!setupLoaded) return;
+    const pending = takePendingGuide();
+    if (pending === null || isSubscriptionBlocked) return;
+    openGuideCenter(pending || undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isLoading, error, isStaffRole, setupLoaded, guideLinkTick]);
+
+  // "Yordam" bosilganda kutib qolinmasin: yordam boti bor-yo'qligi oldindan so'raladi
+  useEffect(() => {
+    if (isAuthenticated && isStaffRole) void getSupportInfo();
+  }, [isAuthenticated, isStaffRole]);
+
+  // "Parolni almashtirish" — klinika xodimlarining hammasiga; demo'da haqiqiy hisob yo'q.
+  // Kompyuterda: ism yozilgan doiracha bosilganda chiqadigan kichik menyudan (sarlavhada yangi
+  // tugmaga joy yo'q), telefonda: ☰ menyusidan.
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const canChangePassword = useMemo(() => isAuthenticated && isStaffRole && !isDemoMode(), [isAuthenticated, isStaffRole, clinicId]);
+  // Sarlavhadagi "Yordam" yozuvi: filial tanlagichi bor klinikada qator torroq, shuning uchun yozuv
+  // faqat keng ekranda chiqadi, torroqda — belgining o'zi (qidiruv maydoni siqilib qolmasin)
+  const helpLabelWide = branches.length > 0;
 
   // --- Main Render ---
   // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
@@ -1487,6 +1547,20 @@ const AppContent: React.FC = () => {
             </button>
           )}
           {isStaffRole && guideNudge && <GuideNudge mobile onOpen={openTour} onClose={markGuideSeen} />}
+          {/* Yordam. Tor telefonda bu qatorga sig'maydi (sarlavha ekrandan chiqib ketardi) —
+              u yerda ☰ menyusidagi "Yordam" qatori ishlatiladi */}
+          {isStaffRole && (
+            <button
+              type="button"
+              onClick={() => { void openSupport(); }}
+              data-support="header-mobile"
+              title={t('auto.Yordam')}
+              aria-label={t('auto.Yordam')}
+              className="hidden min-[440px]:block p-2 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 active:scale-95 transition-transform"
+            >
+              <LifeBuoy className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={() => { setAiAutoVoice(false); setAiOpen(true); }}
             aria-label="DentaAI"
@@ -1577,6 +1651,31 @@ const AppContent: React.FC = () => {
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
+            {/* Yordam va parol — telefonda shu yerda (sarlavhada joy yo'q) */}
+            {isStaffRole && (
+              <div className="mb-3 -mx-1">
+                <button
+                  type="button"
+                  onClick={() => { setIsSidebarOpen(false); void openSupport(); }}
+                  data-support="drawer"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                >
+                  <LifeBuoy className="w-4 h-4 text-gray-400" />
+                  {t('auto.Yordam')}
+                </button>
+                {canChangePassword && (
+                  <button
+                    type="button"
+                    onClick={() => { setIsSidebarOpen(false); setPasswordOpen(true); }}
+                    data-password="open-mobile"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                  >
+                    <KeyRound className="w-4 h-4 text-gray-400" />
+                    {t('auto.Parolni almashtirish')}
+                  </button>
+                )}
+              </div>
+            )}
             {/* Language Toggle */}
             <div className="flex items-center bg-gray-200/70 dark:bg-gray-700/60 rounded-full p-0.5 gap-0.5 border border-gray-200 dark:border-gray-600">
               {(['uz', 'ru'] as const).map((lang) => (
@@ -1750,6 +1849,20 @@ const AppContent: React.FC = () => {
                   {guideNudge && <GuideNudge onOpen={openTour} onClose={markGuideSeen} />}
                 </div>
               )}
+              {/* Yordam — Telegram'dagi yordam boti (bot yoqilmagan bo'lsa — menejer) */}
+              {isStaffRole && (
+                <button
+                  type="button"
+                  onClick={() => { void openSupport(); }}
+                  data-support="header"
+                  title={t('auto.Yordam')}
+                  aria-label={t('auto.Yordam')}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[13px] font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-[0.97] transition-all ${helpLabelWide ? 'min-[1700px]:pr-3.5' : 'xl:pr-3.5'}`}
+                >
+                  <LifeBuoy className="w-4 h-4" />
+                  <span className={helpLabelWide ? 'hidden min-[1700px]:inline' : 'hidden xl:inline'}>{t('auto.Yordam')}</span>
+                </button>
+              )}
               {/* DentaAI — sarlavhadagi doimiy kirish nuqtasi.
                   Sana yonida turibdi: ko'z bu joyni har doim ko'radi,
                   lekin u asosiy harakat tugmalari bilan raqobatlashmaydi. */}
@@ -1809,9 +1922,44 @@ const AppContent: React.FC = () => {
 
               {/* User Profile Info */}
               <div className="flex items-center gap-2 xl:gap-3 pl-2 xl:pl-4 border-l border-gray-200 dark:border-gray-700">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm uppercase shadow-sm ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-primary'}`}>
-                  {userName ? userName.slice(0, 2) : 'A'}
-                </div>
+                {canChangePassword ? (
+                  <div className="relative" onKeyDown={e => { if (e.key === 'Escape') setUserMenuOpen(false); }}>
+                    {/* Doiracha — xodimning kichik menyusi: parolni almashtirish */}
+                    <button
+                      type="button"
+                      onClick={() => setUserMenuOpen(open => !open)}
+                      data-user-menu
+                      aria-haspopup="menu"
+                      aria-expanded={userMenuOpen}
+                      title={t('auto.Parolni almashtirish')}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm uppercase shadow-sm bg-primary transition-shadow hover:ring-4 hover:ring-primary-500/20 focus:outline-none focus-visible:ring-4 focus-visible:ring-primary-500/30"
+                    >
+                      {userName ? userName.slice(0, 2) : 'A'}
+                    </button>
+                    {userMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)}></div>
+                        <div role="menu" className="absolute right-0 top-full mt-2 z-50 w-60 rounded-2xl border border-gray-200 bg-white p-1.5 shadow-xl animate-fade-in dark:border-gray-700 dark:bg-gray-800">
+                          <p className="truncate px-3 pt-2 pb-1.5 text-sm font-semibold text-gray-900 dark:text-white" title={userName}>{userName}</p>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setUserMenuOpen(false); setPasswordOpen(true); }}
+                            data-password="open"
+                            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                          >
+                            <KeyRound className="w-4 h-4 text-gray-400" />
+                            {t('auto.Parolni almashtirish')}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm uppercase shadow-sm ${userRole === UserRole.SUPER_ADMIN ? 'bg-purple-600' : 'bg-primary'}`}>
+                    {userName ? userName.slice(0, 2) : 'A'}
+                  </div>
+                )}
                 <div className="hidden 2xl:flex flex-col">
                   <span className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{userName}</span>
                   <span className="text-xs text-gray-500 capitalize leading-tight">
@@ -1919,6 +2067,8 @@ const AppContent: React.FC = () => {
       <main className="flex-1 lg:pt-28 min-h-screen flex flex-col items-center">
         {/* Kalendar ekranni to'liq egallaydi — tepa-past chekkasi ixchamroq */}
         <div className={`w-full px-4 sm:px-6 lg:px-10 xl:px-14 py-4 sm:py-6 flex-1 overflow-x-clip pb-24 ${onCalendarPage ? 'lg:py-4 lg:pb-4' : 'lg:py-8 lg:pb-8'}`}>
+          {/* Sahifa sinsa — oq ekran emas, xabar chiqadi; menyu joyida qoladi */}
+          <ErrorBoundary>
           <Routes>
 
             <>
@@ -2239,6 +2389,7 @@ const AppContent: React.FC = () => {
               <Route path="*" element={<Navigate to="/" replace />} />
             </>
           </Routes>
+          </ErrorBoundary>
         </div>
       </main>
 
@@ -2259,7 +2410,22 @@ const AppContent: React.FC = () => {
       {/* Subscription Block Modal */}
       <SubscriptionBlockModal isOpen={isSubscriptionBlocked} />
 
-      {GuideCenter && guideOpen && <GuideCenter ctx={guideCtx} setup={guideSetup} onClose={() => setGuideOpen(false)} />}
+      {GuideCenter && guideOpen && (
+        <GuideCenter
+          key={guideStart ? guideStart.n : 'center'}
+          ctx={guideCtx}
+          setup={guideSetup}
+          startId={guideStart?.id}
+          onClose={() => setGuideOpen(false)}
+        />
+      )}
+
+      {passwordOpen && (
+        <ChangePasswordModal
+          onClose={() => setPasswordOpen(false)}
+          onChanged={() => { setPasswordOpen(false); addToast('success', t('auto.Parol almashtirildi')); }}
+        />
+      )}
     </div>
     </PermissionsProvider>
   );
@@ -2303,7 +2469,10 @@ const GuideNudge: React.FC<{ mobile?: boolean; onOpen: () => void; onClose: () =
 const App: React.FC = () => {
   return (
     <LanguageProvider>
-      <AppContent />
+      {/* Sarlavha yoki ilovaning o'zi sinsa ham ekran bo'sh qolmaydi */}
+      <ErrorBoundary fullScreen>
+        <AppContent />
+      </ErrorBoundary>
     </LanguageProvider>
   );
 };

@@ -703,7 +703,8 @@ export const Settings: React.FC<SettingsProps> = ({
             inn: generalForm.inn,
             phone: generalForm.phone,
             email: generalForm.email,
-            ownerPhone: generalForm.ownerPhone,
+            // Rahbar raqami faqat klinika rahbaridan yuboriladi — boshqa xodimdan kelsa server 403 qaytaradi
+            ...(isAdmin ? { ownerPhone: generalForm.ownerPhone } : {}),
             dailyReportEnabled: generalForm.dailyReportEnabled,
             dailyReportTime: generalForm.dailyReportTime || '22:00',
             startHour: Number(generalForm.startHour),
@@ -856,12 +857,17 @@ export const Settings: React.FC<SettingsProps> = ({
                               maxLength={9}
                               helperText={t('settings.general.innHelp')}
                            />
+                           {/* Rahbar raqamini faqat klinika rahbari o'zgartiradi (server ham rad etadi) —
+                               boshqa xodimga maydon faqat ko'rsatiladi */}
                            <Input
                               label={t('settings.general.ownerPhone')}
                               value={generalForm.ownerPhone}
-                              onChange={e => setGeneralForm({ ...generalForm, ownerPhone: e.target.value })}
+                              onChange={e => { if (isAdmin) setGeneralForm({ ...generalForm, ownerPhone: e.target.value }); }}
                               placeholder="998901234567"
-                              helperText={t('settings.general.ownerPhoneHelp')}
+                              readOnly={!isAdmin}
+                              data-owner-phone
+                              className={isAdmin ? '' : '!bg-gray-100 !text-gray-500 cursor-not-allowed dark:!bg-gray-800 dark:!text-gray-400'}
+                              helperText={isAdmin ? t('settings.general.ownerPhoneHelp') : t("auto.Bu raqamni faqat klinika rahbari o'zgartira oladi")}
                            />
                            {/* Rahbarga kunlik Telegram hisobot: qachon yuborilishi */}
                            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-3">

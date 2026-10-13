@@ -108,6 +108,22 @@ const { prisma } = require('./db');
 // O'zgarishlar jurnali: har bir qo'shish/o'zgartirish/o'chirish kim tomonidan qilinganini yozadi
 const { installAuditMiddleware, runWithActor, runWithoutActor, auditLogin, pruneAuditLog } = require('./audit');
 installAuditMiddleware();
+// Diagnostika qaydlari: kira olmagan login, ketmagan avtomatik xabar, server xatolari
+const { diag } = require('./diag');
+// Telegram ulanishlarini bekor qilish (hisob paroli yoki holati o'zgarganda)
+const { revokeSupportLinks } = require('./support/identity');
+
+// Diagnostika qaydlariga tezlik chegarasi: bir xil kalit uchun `everyMs` ichida bitta yozuv.
+// Baza ishdan chiqqanda har muvaffaqiyatsiz so'rov yana bir yozuv urinishi bo'lib, vaziyatni
+// yomonlashtirmasligi uchun; hujum paytida haqiqiy qaydlar siqib chiqarilmasligi uchun ham.
+const diagThrottle = new Map<string, number>();
+const diagDue = (key: string, everyMs: number): boolean => {
+    const now = Date.now();
+    if ((diagThrottle.get(key) || 0) + everyMs > now) return false;
+    if (diagThrottle.size > 2000) diagThrottle.clear();
+    diagThrottle.set(key, now);
+    return true;
+};
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -216,7 +232,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 // Pre-flight handling is integrated into app.use(cors())
 
-app.use(express.json());
+// Bemorlarni Excel'dan yuklash bir so'rovda yuzlab qator yuboradi — standart
+// 100 KB chegarasiga sig'maydi. Shu yo'l uchun chegara kattaroq, lekin katta
+// so'rov faqat token tekshirilgandan KEYIN o'qiladi (yo'lning o'zida, pastda):
+// aks holda istalgan odam serverni 2 MB lik JSON bilan band qila olardi.
+const PATIENT_IMPORT_PATH = '/api/patients/import';
+const jsonBody = express.json();
+const jsonBodyLarge = express.json({ limit: '2mb' });
+app.use((req, res, next) => (req.path === PATIENT_IMPORT_PATH ? next() : jsonBody(req, res, next)));
 // Tashqi lid manbalari ko'pincha oddiy forma (x-www-form-urlencoded) yuboradi —
 // JSON'dan tashqari uni ham qabul qilamiz.
 app.use(express.urlencoded({ extended: true }));
@@ -302,6 +325,46 @@ app.use((req: any, res: any, next: any) => {
         if (res.statusCode >= 400) return;
         const cid = getScopedClinicId(req);
         if (cid) invalidateClinicContext(cid);
+    });
+    next();
+});
+
+// Server xatolari diagnostika qaydiga tushadi (kuniga bitta qator, soni bilan).
+// Endpointlarning ko'pi xatoni o'zi ushlab 500 qaytaradi va umumiy xato
+// ishlovchisiga yetib bormaydi — shuning uchun javob holatiga qaraladi.
+// Mijoz "saqlanmayapti" deb yozganda yordam boti shu yerdan ko'radi: xato
+// haqiqatan serverda bo'lganmi va qaysi amalda.
+// AI endpointlari bundan mustasno — ular AiLog'ga yoziladi (provayder band bo'lsa ham 5xx beradi).
+app.use((req: any, res: any, next: any) => {
+    if (!req.path.startsWith('/api/') || req.path.startsWith('/api/ai/')) return next();
+    res.on('finish', () => {
+        // 503 — "xizmat yoqilmagan" (AI kaliti yo'q, yordam boti o'chiq): xato emas
+        if (res.statusCode < 500 || res.statusCode === 503) return;
+        if (!diagDue(`5xx:${req.method} ${req.route?.path || req.path}`, 30_000)) return;
+        void diag.recordDaily({
+            clinicId: req.user?.clinicId || null,
+            kind: 'server_error',
+            subject: `${req.method} ${req.route?.path || req.path}`,
+            message: `Server xatosi (${res.statusCode})`,
+        });
+    });
+    next();
+});
+
+// Xodim paroli o'zgartirilsa, xodim o'chirilsa yoki faolsizlantirilsa — uning yordam botidagi
+// ulanishi ham uziladi. Ulanish ilgari abadiy qolardi: ishdan ketgan xodim botdan klinika
+// ma'lumotini ko'rishda davom etardi. Endpointlarning o'zi o'zgarmaydi: javob yuborilgach ishlaydi.
+const STAFF_PATH_ROLE: Record<string, string> = { doctors: 'DOCTOR', receptionists: 'RECEPTIONIST', 'lab-technicians': 'LAB_TECHNICIAN' };
+app.use((req: any, res: any, next: any) => {
+    if (req.method !== 'PUT' && req.method !== 'DELETE') return next();
+    const m = /^\/api\/(doctors|receptionists|lab-technicians)\/([^/]+)$/.exec(req.path);
+    if (!m) return next();
+    res.on('finish', () => {
+        if (res.statusCode >= 400) return;
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const deactivated = req.method === 'DELETE' || (body.status !== undefined && body.status !== 'Active');
+        const passwordChanged = typeof body.password === 'string' && body.password.trim() !== '';
+        if (deactivated || passwordChanged) revokeSupportAccess(null, STAFF_PATH_ROLE[m[1]], m[2]);
     });
     next();
 });
@@ -1462,6 +1525,32 @@ app.post('/api/ai/dental-advisor', async (req: any, res: any) => {
     }
 });
 
+// Kira olmagan urinishlar DiagEvent'ga tushadi: mijoz "kira olmayapman" deb
+// yozganda yordam boti sababni (login yo'q / parol xato / akkaunt o'chirilgan)
+// shu yerdan topadi. PAROL HECH QACHON YOZILMAYDI.
+//
+// Daqiqasiga chegara bor: endpoint ochiq, tasodifiy loginlar bilan urilsa
+// jadval axlatga to'lib ketmasin. Chegaradan oshgani shunchaki yozilmaydi.
+const LOGIN_DIAG_PER_MINUTE = 60;
+let loginDiagWindow = { startedAt: 0, count: 0 };
+
+const noteLoginFailure = (username: string, reason: string, clinicId: string | null) => {
+    const now = Date.now();
+    if (now - loginDiagWindow.startedAt > 60_000) loginDiagWindow = { startedAt: now, count: 0 };
+    if (loginDiagWindow.count >= LOGIN_DIAG_PER_MINUTE) return;
+    if (!diagDue(`login:${clinicId || '-'}:${clinicId ? username.slice(0, 80) : ''}`, 10_000)) return;
+    loginDiagWindow.count++;
+    // Noma'lum login (klinika topilmadi): kiritilgan matn ba'zan xato yozilgan PAROL bo'ladi —
+    // saqlanmaydi, kuniga bitta umumiy qatorga yig'iladi.
+    const known = clinicId !== null;
+    void diag.recordDaily({
+        clinicId,
+        kind: 'login_failed',
+        subject: known ? username.slice(0, 80) : 'noma\'lum login',
+        message: known ? reason : 'Bunday login topilmadi',
+    });
+};
+
 // --- Authentication ---
 app.post('/api/auth/login', async (req, res) => {
     try {
@@ -1476,6 +1565,11 @@ app.post('/api/auth/login', async (req, res) => {
 
         let userPayload = null;
         let responseData = null;
+        // Shu login qaysi klinikaga tegishli ekani — parol xato bo'lsa ham qaydda
+        // klinika ko'rinsin ("kira olmayapman" degan xodimni topish uchun).
+        let knownClinicId: string | null | undefined;
+        const loginFailed = (reason: string, clinicId?: string | null) =>
+            noteLoginFailure(cleanUsername, reason, clinicId ?? knownClinicId ?? null);
 
         // Check for super admin (uses env variables with fallback)
         const superAdminUsername = process.env.SUPERADMIN_USERNAME;
@@ -1527,8 +1621,10 @@ app.post('/api/auth/login', async (req, res) => {
                 include: { plan: true }
             });
 
+            if (clinic) knownClinicId = clinic.id;
             if (clinic && await verifyAndUpgradePassword(clinic, 'clinic')) {
                 if (clinic.status !== 'Active') {
+                    loginFailed('Klinika bloklangan (holati: ' + clinic.status + ')', clinic.id);
                     return res.status(403).json({
                         success: false,
                         error: 'Klinika bloklangan yoki kutilmoqda'
@@ -1550,11 +1646,14 @@ app.post('/api/auth/login', async (req, res) => {
                     include: { clinic: true }
                 });
 
+                if (doctor) knownClinicId = doctor.clinicId;
                 if (doctor && await verifyAndUpgradePassword(doctor, 'doctor')) {
                     if (doctor.status !== 'Active') {
+                        loginFailed("Shifokor akkaunti o'chirib qo'yilgan", doctor.clinicId);
                         return res.status(403).json({ success: false, error: 'Shifokor bloklangan' });
                     }
                     if (doctor.clinic && doctor.clinic.status === 'Deleted') {
+                        loginFailed("Klinika tizimdan o'chirilgan", doctor.clinicId);
                         return res.status(403).json({ success: false, error: 'Klinika tizimdan o\'chirilgan' });
                     }
                     userPayload = { role: 'DOCTOR', name: `${doctor.firstName} ${doctor.lastName}`, clinicId: doctor.clinicId, doctorId: doctor.id };
@@ -1572,11 +1671,14 @@ app.post('/api/auth/login', async (req, res) => {
                         include: { clinic: true }
                     });
 
+                    if (receptionist) knownClinicId = receptionist.clinicId;
                     if (receptionist && await verifyAndUpgradePassword(receptionist, 'receptionist')) {
                         if (receptionist.status !== 'Active') {
+                            loginFailed("Resepshn akkaunti o'chirib qo'yilgan", receptionist.clinicId);
                             return res.status(403).json({ success: false, error: 'Resepshn bloklangan' });
                         }
                         if (receptionist.clinic && receptionist.clinic.status === 'Deleted') {
+                            loginFailed("Klinika tizimdan o'chirilgan", receptionist.clinicId);
                             return res.status(403).json({ success: false, error: 'Klinika tizimdan o\'chirilgan' });
                         }
                         userPayload = { role: 'RECEPTIONIST', name: `${receptionist.firstName} ${receptionist.lastName}`, clinicId: receptionist.clinicId, receptionistId: receptionist.id };
@@ -1596,8 +1698,10 @@ app.post('/api/auth/login', async (req, res) => {
                             include: { clinic: true }
                         });
 
+                        if (labTech) knownClinicId = labTech.clinicId;
                         if (labTech && labTech.password && await verifyAndUpgradePassword(labTech, 'labTechnician')) {
                             if (labTech.status !== 'Active') {
+                                loginFailed("Laborant akkaunti o'chirib qo'yilgan", labTech.clinicId);
                                 return res.status(403).json({ success: false, error: 'Lab texnik akkaunti faol emas' });
                             }
                             userPayload = { role: 'LAB_TECHNICIAN', name: `${labTech.firstName} ${labTech.lastName}`, clinicId: labTech.clinicId, technicianId: labTech.id };
@@ -1641,6 +1745,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         // Invalid credentials
+        loginFailed(knownClinicId !== undefined ? "Parol noto'g'ri" : 'Bunday login topilmadi');
         return res.status(401).json({
             success: false,
             error: 'Login yoki parol noto\'g\'ri'
@@ -1774,6 +1879,68 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
         }
 
         res.status(500).json({ error: 'Bemor yaratishda xatolik yuz berdi: ' + (error.message || 'Noma\'lum xatolik') });
+    }
+});
+
+// ─── Bemorlarni Excel'dan yuklash ────────────────────────────────────────────
+// Ilgari eski bazani ko'chirish qo'lda, bir martalik skript bilan qilinardi
+// (backend/scripts/import_patients*.cjs). Endi klinika o'zi yuklaydi:
+// Bemorlar → "Excel'dan yuklash". Qoidalar (majburiy maydonlar, takrorlar,
+// sana va telefon ko'rinishi) backend/patientImport.ts da.
+// `dryRun: true` — hech narsa yozmasdan natijani oldindan ko'rsatadi.
+const { importPatients, MAX_IMPORT_ROWS } = require('./patientImport');
+const { auditBulkCreate } = require('./audit');
+// Bir klinikada bir vaqtda bitta yuklash: ikki so'rov parallel ketsa ikkalasi ham
+// "bunday bemor yo'q" deb ko'rib, bir xil bemorni ikki marta qo'shardi.
+const importsInProgress = new Set<string>();
+
+app.post(PATIENT_IMPORT_PATH, authenticateToken, jsonBodyLarge, async (req: any, res: any) => {
+    let lockedClinic: string | null = null;
+    try {
+        const user = req.user;
+        if (!['CLINIC_ADMIN', 'RECEPTIONIST', 'SUPER_ADMIN'].includes(user?.role)) {
+            return res.status(403).json({ error: "Ruxsat yo'q: bemorlarni yuklash" });
+        }
+        if (!(await allow(req, res, p => p.can('patients', 'card', 'create'), "bemor qo'shish"))) return;
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'Klinika aniqlanmadi' });
+
+        const rows = req.body?.rows;
+        if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: "Yuklanadigan qatorlar yo'q" });
+        if (rows.length > MAX_IMPORT_ROWS) {
+            return res.status(400).json({ error: `Bir martada ko'pi bilan ${MAX_IMPORT_ROWS} ta qator yuklash mumkin` });
+        }
+        // 20 000 qatorli fayl 80 ta so'rov (40 tekshiruv + 40 yuklash) — bir necha faylga yetadi
+        if (!aiRateLimit(`patient-import:${clinicId}`, 400, 60 * 60 * 1000)) {
+            return res.status(429).json({ error: "Juda ko'p so'rov. Biroz kutib, qayta urinib ko'ring." });
+        }
+
+        const dryRun = !!req.body?.dryRun;
+        if (!dryRun) {
+            if (importsInProgress.has(clinicId)) {
+                return res.status(409).json({ error: 'Boshqa yuklash hali tugamadi. Biroz kutib, davom ettiring.' });
+            }
+            importsInProgress.add(clinicId);
+            lockedClinic = clinicId;
+        }
+        const branchId = dryRun ? null : await resolveBranchId(req, clinicId);
+        const result = await importPatients(prisma, clinicId, rows, { dryRun, branchId });
+        if (result.createdIds.length) auditBulkCreate(user, clinicId, 'Patient', `Excel'dan yuklandi: ${result.createdIds.length} ta bemor`);
+        res.json({ success: true, created: result.created, duplicates: result.duplicates, invalid: result.invalid });
+
+        // Davlat platformasiga (DHP) ulangan klinikada yangi bemorlar navbatga qo'yiladi.
+        // Javobdan keyin va BITTALAB: yuzlab so'rov birdan ketsa baza ulanishlari tugab qoladi.
+        // Klinika DHP ga ulanmagan bo'lsa birinchi urinishdayoq to'xtaydi.
+        void (async () => {
+            for (const id of result.createdIds) {
+                if (!(await dhp.enqueue(clinicId, 'Patient', id))) break;
+            }
+        })().catch((e: any) => console.error('[DHP] import navbati:', e?.message || e));
+    } catch (error: any) {
+        console.error('Patient import error:', error?.message);
+        if (!res.headersSent) res.status(500).json({ error: 'Bemorlarni yuklashda xatolik yuz berdi' });
+    } finally {
+        if (lockedClinic) importsInProgress.delete(lockedClinic);
     }
 });
 
@@ -5629,6 +5796,8 @@ app.put('/api/clinics/:id', authenticateToken, requireRole('SUPER_ADMIN', 'SALES
             data: updateData
         });
         const { password: _pw, ...clinicSafe } = clinic as any;
+        if (req.body?.password !== undefined && String(req.body.password).trim()) revokeSupportAccess(clinic.id, 'CLINIC_ADMIN');
+        if (clinic.status && clinic.status !== 'Active') revokeSupportAccess(clinic.id, 'CLINIC_ADMIN');
         res.json(clinicSafe);
     } catch (error: any) {
         console.error('Clinic update error:', error);
@@ -5820,31 +5989,32 @@ app.post('/api/dhp/enqueue', authenticateToken, async (req, res) => {
 });
 
 /** Telefonni solishtirish uchun: faqat raqamlar, oxirgi 9 tasi (998 / +998 / bo'shliqlar farq qilmaydi). */
-const phoneKey = (p?: string | null) => String(p || '').replace(/\D/g, '').slice(-9);
+// Rahbar raqami qoidalari ./ownerPhone.ts da (kim o'zgartira oladi, Telegram ulanishi).
+const { ownerPhoneData, OwnerPhoneForbidden } = require('./ownerPhone');
 
-/**
- * Rahbar raqami o'zgarganda: eski rahbarning Telegram ulanishi uziladi (hisobotlar
- * endi unga bormasin). Yangi raqam egasi shu klinika botiga shifokor yoki resepshn
- * sifatida allaqachon ulangan bo'lsa — darhol rahbar sifatida ham ulanadi, aks holda
- * botga /start bosib telefon raqamini yuborishi kerak.
- */
-async function ownerPhoneData(clinicId: string, ownerPhone: any) {
-    if (ownerPhone === undefined) return {};
-    const next = String(ownerPhone || '').trim() || null;
-    const current = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { ownerPhone: true } });
-    if (phoneKey(current?.ownerPhone) === phoneKey(next)) return { ownerPhone: next };
+// Klinika qatorida parol xeshi, bot tokeni, Eskiz paroli va boshqa kalitlar bor. Sozlamalarni
+// saqlash endpointlari ilgari qatorni XOM qaytarardi — ruxsatli resepshn ham shularni olardi.
+// Frontend javobdan faqat `id` ni ishlatadi.
+const CLINIC_SECRET_FIELDS = [
+    'password', 'botToken', 'eskizPassword', 'eskizToken', 'aiApiKey',
+    'dmedApiKey', 'dmedApiSecret', 'dmedToken', 'leadApiKey',
+    'facebookPageAccessToken', 'facebookUserAccessToken',
+];
+const clinicWithoutSecrets = (clinic: any) => {
+    if (!clinic || typeof clinic !== 'object') return clinic;
+    const out: any = { ...clinic };
+    for (const f of CLINIC_SECRET_FIELDS) delete out[f];
+    return out;
+};
 
-    let telegramChatId: string | null = null;
-    const key = phoneKey(next);
-    if (key.length === 9) {
-        const candidates = await Promise.all([
-            prisma.doctor.findMany({ where: { clinicId, telegramChatId: { not: null } }, select: { phone: true, telegramChatId: true } }),
-            prisma.receptionist.findMany({ where: { clinicId, telegramChatId: { not: null } }, select: { phone: true, telegramChatId: true } }),
-        ]);
-        telegramChatId = candidates.flat().find((x: any) => phoneKey(x.phone) === key)?.telegramChatId || null;
-    }
-    return { ownerPhone: next, telegramChatId };
-}
+// Hisob (parol, holat) o'zgarganda yordam botidagi Telegram ulanishlari bekor qilinadi:
+// eski sessiya egasi parol almashgandan keyin ham botdan foydalanib qolmasin.
+// Hech qachon xato tashlamaydi — asosiy amal to'xtamasligi shart.
+const revokeSupportAccess = (clinicId: string | null | undefined, role: string, staffId?: string | null) => {
+    if (!clinicId && !staffId) return;
+    void revokeSupportLinks(prisma, { clinicId: clinicId || null, role, staffId: staffId || null })
+        .catch((e: any) => console.warn('[support] ulanishni bekor qilib bo\'lmadi:', e?.message));
+};
 
 const REPORT_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -5871,7 +6041,7 @@ app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
                 phone: phone !== undefined ? phone : undefined,
                 email: email !== undefined ? (email || null) : undefined,
                 inn: inn !== undefined ? (String(inn).trim() || null) : undefined,
-                ...(await ownerPhoneData(req.params.id, ownerPhone)),
+                ...(await ownerPhoneData(prisma, req.params.id, ownerPhone, (req as any).user?.role)),
                 dailyReportEnabled: dailyReportEnabled !== undefined ? !!dailyReportEnabled : undefined,
                 dailyReportTime: dailyReportTime !== undefined ? String(dailyReportTime) : undefined,
                 startHour: startHour !== undefined ? Number(startHour) : undefined,
@@ -5879,8 +6049,9 @@ app.put('/api/clinics/:id/general', authenticateToken, async (req, res) => {
                 enableReceipts: enableReceipts !== undefined ? !!enableReceipts : undefined
             }
         });
-        res.json(clinic);
+        res.json(clinicWithoutSecrets(clinic));
     } catch (error: any) {
+        if (error instanceof OwnerPhoneForbidden) return res.status(403).json({ error: error.message });
         console.error('General settings update error:', error);
         res.status(500).json({ error: 'Umumiy sozlamalarni saqlashda xatolik' });
     }
@@ -5952,7 +6123,7 @@ app.put('/api/clinics/:id/cash-settings', authenticateToken, requireRole('CLINIC
             where: { id: req.params.id },
             data: { cashShiftsPerDay: shifts } as any,
         });
-        res.json({ success: true, clinic });
+        res.json({ success: true, clinic: clinicWithoutSecrets(clinic) });
     } catch (error: any) {
         console.error('Cash settings update error:', error);
         res.status(500).json({ error: 'Kassa sozlamalarini saqlashda xatolik' });
@@ -5969,7 +6140,7 @@ app.put('/api/clinics/:id/access-control', authenticateToken, requireRole('CLINI
         });
         // Yangi ruxsatlar keyingi so'rovdanoq amal qilsin
         invalidatePermCache(req.params.id);
-        res.json({ success: true, clinic });
+        res.json({ success: true, clinic: clinicWithoutSecrets(clinic) });
     } catch (error: any) {
         console.error('Access control update error:', error);
         res.status(500).json({ error: 'Ruxsat sozlamalarini saqlashda xatolik' });
@@ -5984,26 +6155,31 @@ app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
         const { botToken, ownerPhone } = req.body;
         const clinicId = req.params.id;
 
+        // Eski token yangilashdan OLDIN o'qiladi: keyin bazada u qolmaydi va
+        // qaysi botni to'xtatish kerakligini bilib bo'lmaydi (eski bot ishlab qolaverardi).
+        const before = botToken !== undefined
+            ? await prisma.clinic.findUnique({ where: { id: clinicId }, select: { botToken: true } })
+            : null;
+
         // Update clinic with new bot token and owner phone
         const clinic = await prisma.clinic.update({
             where: { id: clinicId },
             data: {
                 botToken: botToken !== undefined ? (botToken || null) : undefined,
-                ...(await ownerPhoneData(clinicId, ownerPhone))
+                ...(await ownerPhoneData(prisma, clinicId, ownerPhone, (req as any).user?.role))
             } as any
         });
 
         // Restart bot ONLY if token is provided or explicitly cleared
         if (botToken !== undefined) {
-            if (botToken) {
-                botManager.startBot(clinicId, botToken);
-            } else {
-                botManager.removeBot(clinicId);
-            }
+            const oldToken = before?.botToken || null;
+            if (oldToken && oldToken !== botToken) await botManager.removeBot(clinicId, oldToken);
+            if (botToken) botManager.startBot(clinicId, botToken);
         }
 
-        res.json({ success: true, clinic });
+        res.json({ success: true, clinic: clinicWithoutSecrets(clinic) });
     } catch (error: any) {
+        if (error instanceof OwnerPhoneForbidden) return res.status(403).json({ error: error.message });
         console.error('Bot settings update error:', error);
         res.status(500).json({ error: error.message || 'Failed to update bot settings' });
     }
@@ -6038,7 +6214,7 @@ app.put('/api/clinics/:id/prepayment-settings', authenticateToken, async (req, r
                 prepaymentAmount: prepaymentAmount ? Number(prepaymentAmount) : null,
             } as any
         });
-        res.json({ success: true, clinic });
+        res.json({ success: true, clinic: clinicWithoutSecrets(clinic) });
     } catch (error: any) {
         res.status(500).json({ error: error.message || 'Oldindan to\'lov sozlamalarini saqlashda xatolik' });
     }
@@ -7188,14 +7364,18 @@ async function runTriggerRules(triggerDef: any) {
 
     for (const rule of rules) {
         const clinic = clinicMap.get(rule.clinicId);
-        if (!clinic || !rule.template) continue;
+        if (!clinic || !rule.template) {
+            if (clinic) noteAutomationSkip(rule, 'Qoidaning shabloni topilmadi');
+            continue;
+        }
         (rule as any).extras = extrasMap.get(rule.id) || {};
 
         let due: any[] = [];
         try {
             due = await triggerDef.findDue(rule, clinic);
-        } catch (err) {
+        } catch (err: any) {
             console.error(`❌ [${triggerDef.id}] findDue xatosi (rule ${rule.id}):`, err);
+            noteAutomationSkip(rule, `Qoidani tekshirishda xato: ${err?.message || err}`);
             continue;
         }
 
@@ -7232,11 +7412,22 @@ async function runTriggerRules(triggerDef: any) {
                         .update({ where: { id: item.refId }, data: { status: 'reminded', remindedAt: new Date() } })
                         .catch(() => { });
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error(`❌ [${triggerDef.id}] yuborishda xatolik (rule ${rule.id}):`, err);
+                noteAutomationSkip(rule, `Xabar yuborishda xato: ${err?.message || err}`);
             }
         }
     }
+}
+
+/**
+ * Avtomatik xabar nega ketmaganini yozib qo'yadi (kuniga bitta qator, soni bilan).
+ * Ilgari bu sabablar faqat console'da qolardi: klinika "eslatma ketmayapti" desa,
+ * qoida xato bergani yoki shabloni yo'qolgani hech qayerdan ko'rinmasdi.
+ * Yuborilgan-u yetib bormagan xabarlar bu yerda emas — ular TelegramLog'da.
+ */
+function noteAutomationSkip(rule: any, reason: string) {
+    void diag.recordDaily({ clinicId: rule.clinicId, kind: 'automation_skip', subject: rule.id, message: reason });
 }
 
 /** Har 10 daqiqada barcha triggerlarni tekshiradi */
@@ -7514,6 +7705,9 @@ cron.schedule('0 9 * * *', () => {
     notifySubscriptionExpiry(today);
     notif.prune();
     pruneAuditLog();
+    diag.prune();
+    support.identity.pruneLinks();
+    support.tickets.prune();
 }, { timezone: 'Asia/Tashkent' });
 
 // Kechqurun 20:00 — ish tugagach, lekin odamlar hali ishdaligida.
@@ -7942,7 +8136,7 @@ const {
     toolsForRequest, cachedTool, tryFastPath, invalidateToolCache, actionsForQuestion,
 } = require('./ai/router');
 const { clinicContext } = require('./ai/context');
-const { applyGrounding, wrapToolResult } = require('./ai/guard');
+const { applyGrounding, wrapToolResult, sanitizeText } = require('./ai/guard');
 const { logAi, rateAiLog, aiUsageStats, negativeFeedback } = require('./ai/log');
 const {
     getClinicKey, invalidateClinicKey, verifyClinicKey, isSupportedProvider, SUPPORTED_PROVIDERS,
@@ -8068,6 +8262,32 @@ interface AskOutcome {
  */
 interface AskProgress { stage: string; }
 
+/**
+ * Ilovadan foydalanish haqidagi savolga mos maqolalar — system prompt'ga
+ * qo'shiladigan blok. Bilim bazasi yordam boti bilan umumiy (support/kb.ts),
+ * ya'ni Telegram'da va ilova ichida javob bir xil manbadan chiqadi.
+ * Maqola topilmasa model taxmin qilmasligi ochiq aytiladi.
+ */
+const helpArticlesFor = async (question: string, role: string, lang: 'uz' | 'ru'): Promise<string> => {
+    try {
+        const found = await support.kb.search(question, role, 3);
+        if (!found.length) {
+            return '\n\nILOVADAN FOYDALANISH: bu savol bo\'yicha qo\'llanma topilmadi. Bo\'lim va tugma nomlarini ' +
+                'taxmin qilma — bilmasligingni ayt va yuqoridagi «Yordam» tugmasi orqali yordam xizmatiga yozishni tavsiya qil.';
+        }
+        const body = found
+            // Matn operator javobidan yasalgan bo'lishi mumkin: ko'rsatma sifatida o'qilmasligi uchun tozalanadi
+            .map((a: any) => sanitizeText(`### ${lang === 'ru' ? a.titleRu : a.titleUz}\n${lang === 'ru' ? a.bodyRu : a.bodyUz}`))
+            .join('\n\n');
+        return '\n\nILOVADAN FOYDALANISH BO\'YICHA QO\'LLANMA (savolga mos maqolalar). Javobni FAQAT shu matnga tayanib yoz; ' +
+            'bo\'lim, tugma va maydon nomlarini aynan shundagidek ishlat, o\'zingdan qo\'shma. Mos kelmasa — bilmasligingni ' +
+            'ayt va yuqoridagi «Yordam» tugmasini tavsiya qil.\n\n' + body;
+    } catch (e: any) {
+        console.warn('[AI/ask] qo\'llanma olinmadi:', e?.message);
+        return '';
+    }
+};
+
 const runAsk = async (
     req: any,
     onEvent?: (e: any) => void,
@@ -8182,6 +8402,14 @@ const runAsk = async (
     progress.stage = 'klinika-profili';
     const profile = await clinicContext(clinicId);
 
+    // "Qanday qilaman" savoli (yo'nalish: tizim). Ilgari bu savolga model
+    // ilovani ko'rmasdan, taxmin bilan javob berardi — unga mahsulot haqida
+    // hech qanday matn berilmagan edi. Endi yordam botining bilim bazasidan
+    // savolga mos maqolalar qo'shiladi (model chaqirilmaydi, so'zlar mosligi).
+    const helpText = (!route.fallback && route.intent === 'tizim')
+        ? await helpArticlesFor(question, role, lang)
+        : '';
+
     let pendingAction: { id: string; name: string; preview: any } | null = null;
 
     const execute = async (name: string, args: any) => {
@@ -8230,7 +8458,7 @@ const runAsk = async (
     try {
         const { reply, toolCalls, meta } = await chatWithTools(
             [
-                { role: 'system', content: askSystemPrompt(today, lang, profile, actionTools.map((t: any) => t.function.name)) },
+                { role: 'system', content: askSystemPrompt(today, lang, profile, actionTools.map((t: any) => t.function.name)) + helpText },
                 ...history,
             ],
             tools,
@@ -9033,6 +9261,66 @@ app.post('/api/ai/insights', authenticateToken, async (req: any, res: any) => {
     }
 });
 
+// ─── Yordam boti (backend/support) ───────────────────────────────────────────
+// Mijozlarning savoliga javob beradigan platforma boti: bilim bazasi, klinika
+// holatini tekshirish, parol tiklash, obuna to'lovi, operatorga uzatish.
+// SUPPORT_BOT_TOKEN qo'yilmaguncha bot ishga tushmaydi — bu blok faqat API
+// yo'llarini ochadi va ular "bot yoqilmagan" deb javob beradi.
+const { createSupport } = require('./support');
+const { registerSupportRoutes } = require('./support/routes');
+const { KB_SEED } = require('./support/kbSeed');
+const { chat: aiChat } = require('./aiService');
+
+// Yordam uchun alohida AI kaliti (ixtiyoriy). Bo'lsa zanjir boshiga qo'yiladi:
+// umumiy bepul kalit band bo'lganda ham mijoz javobsiz qolmaydi.
+const supportAiKey = (): { provider: string; apiKey: string } | null => {
+    const provider = String(process.env.SUPPORT_AI_PROVIDER || '').trim();
+    const apiKey = String(process.env.SUPPORT_AI_KEY || '').trim();
+    return provider && apiKey ? { provider, apiKey } : null;
+};
+
+// Ovozni tanishda yordam beradigan so'zlar: bo'lim nomlari va tez-tez uchraydigan atamalar
+const SUPPORT_VOCAB = 'DentaCRM, Bemorlar, Kalendar, Moliya, Kassa, Hisobot, Xodimlar, Ombor, Laboratoriya, Xabarlar, ' +
+    'Sozlamalar, Integratsiyalar, Eskiz, SMS, Telegram bot, shablon, qabul, to\'lov, obuna, tarif, parol, login, resepshn, shifokor';
+
+const support = createSupport({
+    db: prisma,
+    diag,
+    ai: { chatWithTools, chat: aiChat, isConfigured: () => isAiConfigured(supportAiKey()), supportKey: supportAiKey },
+    logAi,
+    // Bot bajargan o'zgarishlar jurnalga "Yordam boti" nomidan tushadi (audit.ts)
+    withActor: (actor: any, fn: any) => runWithActor(actor, fn),
+    smsBalance: (clinicId: string) => smsService.getBalance(clinicId),
+    triggers: TRIGGERS.map((t: any) => ({ id: t.id, label: t.label, sendWindow: t.sendWindow })),
+    health: () => ({ build: BUILD_SHA, bootedAt: BOOTED_AT }),
+    stt: async (audio: Buffer, mimeType: string, lang: 'uz' | 'ru') =>
+        (await transcribe(audio, mimeType, lang, sttTargets(supportAiKey()), SUPPORT_VOCAB)).text,
+    seed: KB_SEED,
+});
+
+registerSupportRoutes(app, {
+    support,
+    db: prisma,
+    diag,
+    authenticateToken,
+    requireRole,
+    rateLimit: aiRateLimit,
+    optionalUser: (req: any) => {
+        try {
+            const token = String(req.headers['authorization'] || '').split(' ')[1];
+            return token ? jwt.verify(token, JWT_SECRET) : null;
+        } catch {
+            return null;
+        }
+    },
+});
+
+// Oldindan ogohlantirish (obuna tugashi, bot o'chgani, ketmagan xabarlar) —
+// har soatda; ish soatlaridan tashqarida o'zi jim turadi (support/proactive.ts).
+cron.schedule('5 * * * *', () => {
+    support.proactive.run().catch((e: any) => console.error('[support:proactive] cron xatolik:', e?.message));
+}, { timezone: 'Asia/Tashkent' });
+
 // ─── Proaktiv AI ─────────────────────────────────────────────────────────────
 // Kunlik xulosa va anomaliya signali. Batafsil: ai/proactive.ts
 
@@ -9098,6 +9386,8 @@ const migrationStep = async (label: string, sql: string): Promise<boolean> => {
         return false;
     }
 };
+
+const { SUPPORT_MIGRATIONS } = require('./support/schema');
 
 const columnExists = async (table: string, column: string): Promise<boolean> => {
     try {
@@ -9514,6 +9804,11 @@ async function runStartupMigrations() {
     await migrationStep('Clinic.dailyReportEnabled', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "dailyReportEnabled" BOOLEAN NOT NULL DEFAULT true`);
     await migrationStep('Clinic.dailyReportTime', `ALTER TABLE "Clinic" ADD COLUMN IF NOT EXISTS "dailyReportTime" TEXT NOT NULL DEFAULT '22:00'`);
 
+    // --- Diagnostika qaydlari va yordam boti jadvallari (backend/support/schema.ts) ---
+    // Hammasi yangi jadval — mavjud ma'lumotga tegmaydi. Jadval yaratilmasa ham
+    // server ishlayveradi: bu modullar xatoni yutadi (diag.ts, support/).
+    for (const step of SUPPORT_MIGRATIONS) await migrationStep(step.label, step.sql);
+
     console.log('✅ Startup migrations applied');
 }
 
@@ -9565,6 +9860,9 @@ runStartupMigrations()
         app.listen(PORT, () => {
             console.log(`✅ Server successfully started on port ${PORT}`);
         });
+        // Jadvallar tayyor bo'lgach: bilim bazasini yangilaydi va yordam botini
+        // ishga tushiradi. Xato tashlamaydi — bot ishlamasa ham CRM ishlaydi.
+        void support.start();
     })
     .catch((err: any) => {
         console.error('❌ Ishga tushirishda kutilmagan xatolik:', err);

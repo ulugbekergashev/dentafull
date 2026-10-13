@@ -192,6 +192,16 @@ export function auditLogin(user: any) {
     write(actorFromUser(user), { clinicId: user.clinicId, action: 'login', entity: 'Session', summary: '' });
 }
 
+/**
+ * Ommaviy qo'shish (masalan bemorlarni Excel'dan yuklash). `createMany`
+ * quyidagi middleware'dan o'tmaydi — har bemorga alohida qator yozish o'rniga
+ * jurnalga bitta umumiy yozuv tushadi: kim, qachon, nechta.
+ */
+export function auditBulkCreate(user: any, clinicId: string | null, entity: string, summary: string) {
+    if (!clinicId) return;
+    write(actorFromUser(user), { clinicId, action: 'create', entity, summary });
+}
+
 const clinicOf = (model: string, rec: any, actor: AuditActor): string | null =>
     (model === 'Clinic' ? rec?.id : rec?.clinicId) || actor.clinicId || null;
 
