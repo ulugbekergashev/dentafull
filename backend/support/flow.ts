@@ -251,7 +251,10 @@ export const createFlow = (deps: FlowDeps) => {
             ticket = ticket || await tickets.ensure(chatId, user.clinicId || null, text);
             // Tarix joriy xabarlar murojaatga biriktirilishidan OLDIN o'qiladi:
             // joriy savol modelga alohida beriladi, tarixda takrorlanmasin.
-            const history = await tickets.history(ticket.id, 12);
+            let history = await tickets.history(ticket.id, 12);
+            // "Yangi savol" yoki 12 soat jimlikdan keyingi birinchi xabar: oldingi gap butunlay
+            // unutilmasin ("hozir ulanmagan deyapdiku" kabi havolalar tushunilsin)
+            if (!history.length) history = await tickets.previousContext(chatId, ticket.id);
             await tickets.attachInbound(ids, ticket.id);
 
             // Yangi xabar kelgach, javobi hali yuborilmagan eski qoralamalar kuchini yo'qotadi:
@@ -269,7 +272,7 @@ export const createFlow = (deps: FlowDeps) => {
                 // Bir murojaat uchun kartalar soni cheklangan: mijoz ketma-ket yozsa operator chati to'lib ketmasin
                 const posted = allow(`relay:${ticket.id}`, 12) ? await deps.operator().relay(ticket, user, text, files) : true;
                 if (!posted) deps.onOperatorUnreachable?.('relay');
-                await say(user, !posted ? t.queued : fresh ? (withinWorkHours(s) ? t.escalated : t.escalatedNight) : t.alreadyWithOperator);
+                await say(user, !posted ? t.unreachable : fresh ? (withinWorkHours(s) ? t.escalated : t.escalatedNight) : t.alreadyWithOperator);
                 return;
             }
 
@@ -330,8 +333,14 @@ export const createFlow = (deps: FlowDeps) => {
             const first = ticket.status === 'open' && !ticket.firstReplyAt;
             await tickets.update(ticket.id, { status: 'waiting_operator' });
             const posted = await deps.operator().draftCard(ticket, user, text, draft, result);
-            if (!posted) deps.onOperatorUnreachable?.('draft');
-            if (first) await say(user, posted ? t.received : t.queued);
+            if (!posted) {
+                deps.onOperatorUnreachable?.('draft');
+                // Har xabarga: mijoz javobsiz qolmasin va "yozamiz" deb aldanmasin.
+                // Murojaat "kutmoqda" holatida qoladi — panelda javobsiz sifatida ko'rinadi.
+                await say(user, t.unreachable);
+                return;
+            }
+            if (first) await say(user, t.received);
         },
 
         /** Operatorga uzatish: foydalanuvchiga nima deyilishi `userText` da */
@@ -345,8 +354,9 @@ export const createFlow = (deps: FlowDeps) => {
             const posted = await deps.operator().escalationCard(ticket, user, question, why, summary, files);
             if (!posted) deps.onOperatorUnreachable?.('escalation');
             const fallback = withinWorkHours(s) ? t.escalated : t.escalatedNight;
-            // Operator chatiga yetmagan bo'lsa "mutaxassisga uzatdim" deb yolg'on aytilmaydi
-            const text = !posted ? t.queued : userText && userText.trim() ? userText : fallback;
+            // Operator chatiga yetmagan bo'lsa "mutaxassisga uzatdim" yoki "yozamiz" deb aldanmaydi:
+            // mijozga haqiqatni aytamiz (u qayta yozishi yoki boshqa yo'l bilan bog'lanishi mumkin)
+            const text = !posted ? t.unreachable : userText && userText.trim() ? userText : fallback;
             const sent = await say(user, text);
             await tickets.addMessage({
                 ticketId: ticket.id, chatId: user.chatId, direction: 'out', author: 'bot', text, tgMessageId: sent,

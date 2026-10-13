@@ -98,6 +98,64 @@ const setup = async (script, opts = {}) => {
 const ownerAuth = { role: 'CLINIC_ADMIN', clinicId: 'c1', name: 'Anvar' };
 
 runTests({
+  'operator ulanmagan + AI xato: mijozga "yozamiz" deyilmaydi, haqiqat aytiladi, murojaat panelda javobsiz qoladi': async () => {
+    const t = await setup([{ throw: 'AI limit' }], { operator: false });
+    await t.link(OWNER, ownerAuth);
+    await t.ask(OWNER, 'qanday qilib sms jonatsa boladi?');
+    assert.strictEqual(t.to(OWNER).length, 1);
+    assert.match(t.last(OWNER).text, /javob bera olmadim/);
+    assert.ok(!/yozamiz/.test(t.last(OWNER).text), 'mijozga yolg\'on va\'da berildi');
+    const ticket = await t.db.supportTicket.findFirst();
+    assert.strictEqual(ticket.status, 'waiting_operator', 'panelda javobsiz sifatida ko\'rinishi kerak');
+  },
+
+  'operator guruhiga karta yetmasa (qoralama) har xabarga haqiqat aytiladi': async () => {
+    const t = await setup([
+      { reply: 'Birinchi javob', calls: [['open_article', { id: 'finance.pay' }]] },
+      { reply: 'Ikkinchi javob', calls: [['open_article', { id: 'finance.pay' }]] },
+    ]);
+    await t.link(OWNER, ownerAuth);
+    t.failChats.add(OP);
+    await t.ask(OWNER, 'kassa qayerda');
+    await t.ask(OWNER, 'va yana bitta savol');
+    const texts = t.to(OWNER).map((m) => m.text);
+    assert.strictEqual(texts.length, 2, 'ikkinchi xabarga javobsiz qoldi: ' + JSON.stringify(texts));
+    assert.ok(texts.every((x) => /xodimga ham yetkaza olmadim/.test(x)), JSON.stringify(texts));
+    assert.strictEqual((await t.db.supportTicket.findFirst()).status, 'waiting_operator');
+  },
+
+  '"Yangi savol"dan keyin oldingi gap kontekst sifatida modelga beriladi': async () => {
+    const t = await setup([
+      { reply: 'Eskiz ulanmagan ekan.', calls: [['open_article', { id: 'general.phone' }]] },
+      { reply: 'Ulash uchun Sozlamalar → Integratsiyalar.', calls: [['open_article', { id: 'general.phone' }]] },
+    ], { operator: false });
+    await t.link(OWNER, ownerAuth);
+    await t.ask(OWNER, 'sms ketmayapti');
+    await t.support.flow.onMenu(OWNER, t.tg, 'newQuestion');
+    await t.ask(OWNER, 'hozir ulanmagan deyapdiku, qanday ulayman?');
+    const second = t.ai.seen[1].messages.filter((m) => m.role !== 'system');
+    const joined = second.map((m) => m.content).join('\n');
+    assert.ok(joined.includes('[Oldingi murojaatdan]') && joined.includes('sms ketmayapti') && joined.includes('Eskiz ulanmagan ekan'),
+      'oldingi gap modelga berilmadi: ' + joined);
+    // Joriy savol oxirgi xabar bo'lib qoladi
+    assert.ok(second[second.length - 1].content.includes('hozir ulanmagan deyapdiku'));
+  },
+
+  'eski murojaat (24 soatdan oldingi) yangi savolga aralashmaydi': async () => {
+    const t = await setup([
+      { reply: 'Birinchi', calls: [['open_article', { id: 'general.phone' }]] },
+      { reply: 'Ikkinchi', calls: [['open_article', { id: 'general.phone' }]] },
+    ], { operator: false });
+    await t.link(OWNER, ownerAuth);
+    await t.ask(OWNER, 'eski savol matni');
+    await t.support.flow.onMenu(OWNER, t.tg, 'newQuestion');
+    // Soxta baza update'da updatedAt ni yangilaydi — eskirganini qo'lda qo'yamiz
+    (await t.db.supportTicket._rows()).forEach((r) => { r.updatedAt = new Date(Date.now() - 25 * 3600 * 1000); });
+    await t.ask(OWNER, 'butunlay boshqa savol');
+    const joined = t.ai.seen[1].messages.filter((m) => m.role !== 'system').map((m) => m.content).join('\n');
+    assert.ok(!joined.includes('eski savol matni'), 'eski gap qo\'shildi');
+  },
+
   'qoralama rejimi: javob avval operatorga boradi, "Yuborish" bosilgach mijozga yetadi': async () => {
     const t = await setup([{ reply: "Moliya → Kassa bo'limida to'lovni qabul qiling.", calls: [['open_article', { id: 'finance.pay' }]] }]);
     await t.link(OWNER, ownerAuth);
@@ -351,7 +409,7 @@ runTests({
     await t.link(OWNER, ownerAuth);
     await t.ask(OWNER, "to'lov qayerda?");
     assert.ok(!t.to(OWNER).some((m) => (m.text || '').includes('Hisob-kitob')), 'ilovada yo\'q bo\'lim mijozga ketdi');
-    assert.match(t.last(OWNER).text, /qabul qilindi/);
+    assert.match(t.last(OWNER).text, /xodimga ham yetkaza olmadim/);
     const draft = await t.db.supportMessage.findFirst({ where: { kind: 'draft' } });
     assert.strictEqual(draft.state, 'pending', 'qoralama panelda ko\'rinishi kerak');
   },
@@ -363,7 +421,8 @@ runTests({
     t.failChats.add(OP);
     await t.ask(OWNER, 'kassani yopish qanday?');
     assert.doesNotMatch(t.last(OWNER).text, /mutaxassisga/i);
-    assert.match(t.last(OWNER).text, /qabul qilindi/);
+    assert.doesNotMatch(t.last(OWNER).text, /yozamiz/i);
+    assert.match(t.last(OWNER).text, /xodimga ham yetkaza olmadim/);
     assert.ok(await t.db.diagEvent.findFirst({ where: { subject: 'support_operator' } }), 'panelga qayd tushmadi');
   },
 

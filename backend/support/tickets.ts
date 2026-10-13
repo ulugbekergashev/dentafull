@@ -19,6 +19,10 @@ export const AUTO_MIN_RATE = 0.95;
 /** Hisobga faqat oxirgi qoralamalar olinadi: eski xatolar abadiy ushlab turmasin */
 const AUTO_WINDOW = 50;
 
+/** Yangi murojaatga oldingisidan shuncha vaqt ichida yozilgan gap kontekst sifatida beriladi */
+export const PREVIOUS_CONTEXT_MS = 24 * 60 * 60 * 1000;
+const PREVIOUS_CONTEXT_MESSAGES = 6;
+
 const ACTIVE: TicketStatus[] = ['open', 'waiting_operator', 'human'];
 
 export interface NewMessage {
@@ -153,6 +157,22 @@ export const createTickets = (db: any) => {
                     role: r.author === 'user' ? 'user' as const : 'assistant' as const,
                     content: r.author === 'operator' ? `[Operator javobi] ${r.text}` : r.text,
                 }));
+        },
+
+        /**
+         * Yangi murojaat uchun oldingisidan qisqa kontekst: shu chatning oxirgi (shu murojaatdan boshqa)
+         * murojaati, agar PREVIOUS_CONTEXT_MS ichida yangilangan bo'lsa. Modelga "oldingi gap" deb belgilanadi.
+         */
+        async previousContext(chatId: string, excludeTicketId: string, limit = PREVIOUS_CONTEXT_MESSAGES):
+            Promise<{ role: 'user' | 'assistant'; content: string }[]> {
+            const prev = await db.supportTicket.findFirst({
+                where: { chatId, id: { not: excludeTicketId }, updatedAt: { gte: new Date(Date.now() - PREVIOUS_CONTEXT_MS) } },
+                orderBy: { updatedAt: 'desc' },
+            });
+            if (!prev) return [];
+            const rows = await api.history(prev.id, limit);
+            if (!rows.length) return [];
+            return rows.map((r, i) => (i === 0 ? { ...r, content: `[Oldingi murojaatdan] ${r.content}` } : r));
         },
 
         /**
