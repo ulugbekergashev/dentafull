@@ -4,7 +4,7 @@ import { Card, Button, Modal, Input, Select, Badge, SearchableSelect, statusLabe
 import {
   ChevronLeft, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, Plus, Clock, User, FileText,
   XCircle, CheckCircle, Send, Bell, Edit2, Loader2,
-  Search, Phone, Minimize2
+  Search, Phone, Minimize2, Copy, X
 } from 'lucide-react';
 import { Appointment, Patient, Doctor, UserRole, Clinic, SubscriptionPlan, ServiceCategory } from '../types';
 import { api } from '../services/api';
@@ -31,6 +31,10 @@ const HOUR_FIT_MIN_PX = 18;
 /** Vaqt ustuni kengligi (px); telefonda "bir ekranda" rejimida torroq */
 const TIME_COL_PX = 60;
 const TIME_COL_FIT_PX = 34;
+/** Telefonda qabulni ko'chirish: barmoq shuncha ushlab turilgach blok "ko'tariladi" (ms) */
+const LONG_PRESS_MS = 400;
+/** Ko'chirishda vaqt qadami (daqiqa) */
+const MOVE_STEP_MIN = 15;
 type CalView = 'day' | 'week' | 'month';
 
 const minutesOfTime = (time: string) => {
@@ -134,15 +138,26 @@ export const Calendar: React.FC<CalendarProps> = ({
   const [narrow, setNarrow] = useState(() => window.innerWidth < 768);
   // "Hamma soatlar bir ekranda": soatlar va ustunlar ekranga sig'guncha qisiladi, aylantirish
   // kerak bo'lmaydi. Telefonda shu rejimda "Hafta" ham ochiladi (odatda u yerda faqat "Kun").
-  const [fitAll, setFitAll] = useState(() => {
-    try { return localStorage.getItem(CALENDAR_FIT_KEY) === '1'; } catch { return false; }
+  // Tanlanmagan bo'lsa: telefonda shifokorga yoqiq (klinika so'rovi — kirganda bir kun bir
+  // sahifada), qolganlarga va kompyuterda o'chiq.
+  const [fitChoice, setFitChoice] = useState<boolean | null>(() => {
+    try {
+      const saved = localStorage.getItem(CALENDAR_FIT_KEY);
+      return saved === '1' ? true : saved === '0' ? false : null;
+    } catch { return null; }
   });
-  const toggleFitAll = () => setFitAll(on => {
-    try { localStorage.setItem(CALENDAR_FIT_KEY, on ? '0' : '1'); } catch { /* sessiya davomida baribir ishlaydi */ }
-    return !on;
-  });
+  const fitAll = fitChoice ?? (narrow && !!ownDoctorId);
+  const toggleFitAll = () => {
+    setFitChoice(!fitAll);
+    try { localStorage.setItem(CALENDAR_FIT_KEY, fitAll ? '0' : '1'); } catch { /* sessiya davomida baribir ishlaydi */ }
+  };
   const pickedView: CalView = chosenView ?? (!ownDoctorId && activeDoctors.length > 1 ? 'day' : 'week');
-  const view: CalView = !narrow ? pickedView : fitAll && pickedView === 'week' ? 'week' : 'day';
+  // Telefonda shifokor hali tanlamagan bo'lsa — "Kun" (kompyuterdagi "Hafta" emas)
+  const phoneView: CalView = chosenView ?? (ownDoctorId ? 'day' : pickedView);
+  const view: CalView = !narrow ? pickedView : fitAll && phoneView === 'week' ? 'week' : 'day';
+  // Telefonda shifokor o'z kunini ko'radi — boshqa shifokorlar qatori va ustun sarlavhasi kerak emas.
+  // Hamkasb kalendari havola orqali ochilgan bo'lsa (?doctor=…) qator qaytadi: o'ziga qaytish uchun.
+  const ownPhoneDay = narrow && !!ownDoctorId && !doctorParam;
   /** Telefonda ixcham ko'rinish: tor vaqt ustuni, qisqa sarlavhalar */
   const dense = fitAll && narrow;
   const timeCol = dense ? TIME_COL_FIT_PX : TIME_COL_PX;
@@ -168,6 +183,16 @@ export const Calendar: React.FC<CalendarProps> = ({
     : [];
   const [editingApptId, setEditingApptId] = useState<string | null>(null);
   const [remindedAppts, setRemindedAppts] = useState<Set<string>>(new Set());
+  // Nusxa: qabul oynasida "Nusxa olish" → jadvalda bo'sh joy bosilsa, shu bemor, xizmat va
+  // davomiylik bilan yangi qabul formasi ochiladi
+  const [copySource, setCopySource] = useState<Appointment | null>(null);
+  // Ko'chirish (telefonda): blokni bosib ushlab, boshqa vaqtga yoki ustunga sudrash.
+  // drag — sudralayotgan payt, pendingMove — qo'yib yuborilgach tasdiq oynasi.
+  const [drag, setDrag] = useState<{ app: Appointment; col: number; start: number } | null>(null);
+  const [pendingMove, setPendingMove] = useState<{ app: Appointment; date: string; time: string; doctorId: string } | null>(null);
+  const [moving, setMoving] = useState(false);
+  // Sudrab bo'lingach barmoq ko'tarilganda "bosish" ham kelishi mumkin — qabul oynasi ochilmasin
+  const suppressClickUntil = React.useRef(0);
 
   // Message Modal State
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
@@ -216,17 +241,20 @@ export const Calendar: React.FC<CalendarProps> = ({
     // Check if clinic is on individual plan
     const isIndividualPlan = currentClinic?.planId === 'individual';
 
+    // Nusxa rejimida — nusxa olingan qabulning bemori, shifokori, xizmati va davomiyligi.
+    // Izoh o'tmaydi: tugagan qabulda u "Bajarilgan ishlar … narx" bo'ladi.
+    const copy = copySource;
     setFormData({
-      patientId: patients.length > 0 ? patients[0].id : '',
-      // Defolt shifokor: berilgan → filtrda bitta shifokor tanlangan bo'lsa, o'sha →
-      // kirgan shifokor (DOCTOR roli) → birinchi shifokor
-      doctorId: initialDoctorId || (selectedDoctorIds?.length === 1 ? selectedDoctorIds[0] : '') || (userRole === UserRole.DOCTOR && doctorId ? doctorId : '') || (doctors.length > 0 ? doctors[0].id : ''),
-      type: '',
+      patientId: copy ? copy.patientId : patients.length > 0 ? patients[0].id : '',
+      // Defolt shifokor: berilgan → nusxa olingan qabulniki → filtrda bitta shifokor tanlangan
+      // bo'lsa, o'sha → kirgan shifokor (DOCTOR roli) → birinchi shifokor
+      doctorId: initialDoctorId || copy?.doctorId || (selectedDoctorIds?.length === 1 ? selectedDoctorIds[0] : '') || (userRole === UserRole.DOCTOR && doctorId ? doctorId : '') || (doctors.length > 0 ? doctors[0].id : ''),
+      type: copy?.type || '',
       categoryId: '',
       // Tugma onClick hodisasini uzatib yuborsa ham sana har doim matn bo'lsin
       date: typeof initialDate === 'string' && initialDate ? initialDate : formatDateToISO(new Date()),
       time: initialTime || '09:00',
-      duration: 60,
+      duration: copy?.duration || 60,
       notes: ''
     });
     setIsAddModalOpen(true);
@@ -449,6 +477,120 @@ export const Calendar: React.FC<CalendarProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, currentKey, hourPx]);
 
+  // ─── Ko'chirish (telefonda) ─────────────────────────────────────────────────
+  // Blokni bosib ushlab turiladi → blok "ko'tariladi" → boshqa vaqtga (15 daqiqa qadam) yoki
+  // boshqa ustunga (kun — shifokor, hafta — kun) suriladi → qo'yib yuborilsa tasdiq so'raladi.
+  // Ushlab turmasdan surilsa — oddiy aylantirish. Saqlash "Qabulni tahrirlash" bilan bir xil
+  // (ruxsat, xabarlar). Faqat hali bo'lmagan qabul ko'chiriladi — kelgani va tugagani emas.
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  const canDrag = (a: Appointment) => narrow && canEdit && !isPrivate(a)
+    && (a.status === 'Pending' || a.status === 'Confirmed');
+  const startPress = (e: React.TouchEvent, app: Appointment, col: number) => {
+    const body = bodyRef.current;
+    if (e.touches.length !== 1 || !body) return;
+    const { clientX: x0, clientY: y0 } = e.touches[0];
+    const appStart = minutesOfTime(app.time);
+    const dur = Math.max(10, app.duration || 30);
+    // Blokning ushlangan joyi barmoq ostida qoladi — blok sakrab ketmaydi
+    const grabMin = (y0 - body.getBoundingClientRect().top) / hourPx * 60 + gridStartMin - appStart;
+    const lastStart = Math.max(gridStartMin, (gridLastHour + 1) * 60 - dur);
+    let target = { col, start: appStart };
+    let active = false;
+    let timer = 0;
+    const targetAt = (cx: number, cy: number) => {
+      const r = body.getBoundingClientRect();
+      const colPx = (r.width - timeCol) / gridColumns;
+      const c = Math.min(gridColumns - 1, Math.max(0, Math.floor((cx - r.left - timeCol) / colPx)));
+      const raw = (cy - r.top) / hourPx * 60 + gridStartMin - grabMin;
+      // Faqat yonga (boshqa kun yoki shifokorga) surilsa — vaqt o'zgarmaydi (19:25 → 19:30 bo'lib qolmasin)
+      const s = Math.abs(raw - appStart) < MOVE_STEP_MIN / 2 ? appStart : Math.round(raw / MOVE_STEP_MIN) * MOVE_STEP_MIN;
+      return { col: c, start: Math.min(lastStart, Math.max(gridStartMin, s)) };
+    };
+    const stop = () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchcancel', onCancel);
+    };
+    const onMove = (ev: TouchEvent) => {
+      const p = ev.touches[0];
+      if (!p || ev.touches.length > 1) { onCancel(); return; }
+      if (!active) {
+        // Ushlab turmasdan surildi — bu aylantirish, ko'chirish emas
+        if (Math.hypot(p.clientX - x0, p.clientY - y0) > 8) stop();
+        return;
+      }
+      ev.preventDefault();
+      const next = targetAt(p.clientX, p.clientY);
+      if (next.col !== target.col || next.start !== target.start) {
+        target = next;
+        setDrag({ app, ...next });
+      }
+    };
+    const onEnd = (ev: TouchEvent) => {
+      stop();
+      if (!active) return;
+      ev.preventDefault();
+      suppressClickUntil.current = Date.now() + 600;
+      setDrag(null);
+      const date = view === 'week' ? dayKeys[target.col] : currentKey;
+      const toDoctor = view === 'day' && columnDoctors.length > 0 ? columnDoctors[target.col].id : app.doctorId;
+      const time = hhmmOf(target.start);
+      if (date !== app.date || time !== app.time || toDoctor !== app.doctorId) {
+        setPendingMove({ app, date, time, doctorId: toDoctor });
+      }
+    };
+    const onCancel = () => {
+      stop();
+      if (!active) return;
+      suppressClickUntil.current = Date.now() + 600;
+      setDrag(null);
+    };
+    timer = window.setTimeout(() => {
+      active = true;
+      try { navigator.vibrate?.(15); } catch { /* tebranmasa ham ishlaydi */ }
+      setDrag({ app, ...target });
+    }, LONG_PRESS_MS);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd, { passive: false });
+    document.addEventListener('touchcancel', onCancel);
+  };
+
+  // Shifokorda shu vaqtga boshqa bemor yozilgan — taqiqlanmaydi, tasdiq oynasida aytiladi
+  const moveClash = pendingMove ? appointments.find(a =>
+    a.id !== pendingMove.app.id &&
+    a.patientId !== pendingMove.app.patientId &&
+    a.doctorId === pendingMove.doctorId &&
+    a.date === pendingMove.date &&
+    a.time === pendingMove.time &&
+    occupiesDoctorTime(a)
+  ) : undefined;
+  const confirmMove = async () => {
+    if (!pendingMove) return;
+    const { app, date, time, doctorId: toDoctor } = pendingMove;
+    // Bemorning o'zi shu vaqtda boshqa qabulda — tahrirlashdagidek to'xtatiladi
+    const patientConflict = appointments.some(a =>
+      a.id !== app.id && a.patientId === app.patientId && a.date === date && a.time === time && a.status !== 'Cancelled');
+    if (patientConflict) {
+      alert(t('patients.details.alerts.patientConflict'));
+      return;
+    }
+    const toDoc = doctors.find(d => d.id === toDoctor);
+    setMoving(true);
+    try {
+      await onUpdateAppointment(app.id, {
+        date,
+        time,
+        ...(toDoctor !== app.doctorId ? { doctorId: toDoctor, doctorName: toDoc ? `Dr. ${toDoc.lastName}` : app.doctorName } : {}),
+      });
+      setPendingMove(null);
+    } catch {
+      // Xato xabarini App.tsx ko'rsatadi; oyna ochiq qoladi
+    } finally {
+      setMoving(false);
+    }
+  };
+
   // Handlers
   const handlePrev = () => {
     if (view === 'month') {
@@ -626,6 +768,8 @@ export const Calendar: React.FC<CalendarProps> = ({
           status: 'Pending',
           notes: formData.notes
         });
+        // Nusxa yozildi — rejim tugaydi
+        setCopySource(null);
       }
       setIsAddModalOpen(false);
       setEditingApptId(null);
@@ -877,7 +1021,7 @@ export const Calendar: React.FC<CalendarProps> = ({
               ))}
             </div>
           )}
-          {doctors.length > 1 && (<>
+          {doctors.length > 1 && !ownPhoneDay && (<>
           <button
             type="button"
             onClick={() => setDoctorFilter(null)}
@@ -912,6 +1056,25 @@ export const Calendar: React.FC<CalendarProps> = ({
         </div>
       )}
 
+      {/* Nusxa rejimi: bo'sh joy bosilsa — shu bemor bilan yangi qabul formasi */}
+      {copySource && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-600 text-white text-sm shadow-sm">
+          <Copy className="w-4 h-4 shrink-0" />
+          <span className="flex-1 min-w-0 truncate">
+            <span className="font-bold">{copySource.patientName}</span> — {t('calendar.copyPick')}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCopySource(null)}
+            aria-label={t('common.cancel')}
+            title={t('common.cancel')}
+            className="p-1 -m-1 rounded-md shrink-0 hover:bg-white/15"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Kalendar: yon panel (keng ekranda) va jadval */}
       <div className="flex-1 min-h-0 flex bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {sidebarOpen && <CalendarSidebar
@@ -941,7 +1104,8 @@ export const Calendar: React.FC<CalendarProps> = ({
           ) : (
           <div ref={gridRef} className={`relative ${fitAll ? 'w-full' : view === 'week' ? 'min-w-[840px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
             {/* Sarlavha: kunlar yoki shifokorlar */}
-            <div ref={headerRef} className="grid sticky top-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700" style={{ gridTemplateColumns: gridTemplate }}>
+            {/* Telefonda shifokorning o'z kuni: ustun bitta va o'ziniki — sarlavha kerak emas */}
+            <div ref={headerRef} className={`${ownPhoneDay && view === 'day' && columnDoctors.length === 1 ? 'hidden' : 'grid'} sticky top-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700`} style={{ gridTemplateColumns: gridTemplate }}>
               <div className="sticky left-0 z-40 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700"></div>
               {view === 'week' ? (
                 displayDays.map((day, i) => {
@@ -1015,7 +1179,7 @@ export const Calendar: React.FC<CalendarProps> = ({
             </div>
 
             {/* Jadval */}
-            <div className="grid relative" style={{ gridTemplateColumns: gridTemplate, height: gridHeight }}>
+            <div ref={bodyRef} className="grid relative" style={{ gridTemplateColumns: gridTemplate, height: gridHeight }}>
               {/* Soatlar: yozuv soat chizig'i ustida (birinchisi — chiziq ostida) */}
               <div className="sticky left-0 z-20 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700">
                 {gridHours.map((hour, i) => (
@@ -1178,16 +1342,21 @@ export const Calendar: React.FC<CalendarProps> = ({
                         ? <Bell className="w-3 h-3 shrink-0 text-primary-500 fill-current" />
                         : null;
 
+                const draggable = canDrag(app);
                 return (
                   <div
                     key={app.id}
-                    onClick={() => setSelectedAppointment(app)}
+                    onClick={() => { if (Date.now() >= suppressClickUntil.current) setSelectedAppointment(app); }}
+                    onTouchStart={draggable ? e => startPress(e, app, place.col) : undefined}
+                    // Bosib turilganda telefon o'z menyusini (nusxa/belgilash) ochmasin
+                    onContextMenu={draggable ? e => e.preventDefault() : undefined}
                     title={title}
-                    className="absolute rounded-md overflow-hidden z-10 cursor-pointer transition-shadow hover:shadow-md hover:z-20 bg-white dark:bg-gray-800"
+                    className={`absolute rounded-md overflow-hidden z-10 cursor-pointer transition-shadow hover:shadow-md hover:z-20 bg-white dark:bg-gray-800 ${drag?.app.id === app.id ? 'opacity-40' : ''}`}
                     style={{
                       ...box,
                       backgroundImage: `linear-gradient(${tint}, ${tint})`,
                       borderLeft: `3px ${pending ? 'dashed' : 'solid'} ${noShow ? '#9CA3AF' : color}`,
+                      ...(draggable ? { WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } : {}),
                     }}
                   >
                     <div className={`h-full ${done ? 'opacity-70' : ''}`}>
@@ -1234,6 +1403,33 @@ export const Calendar: React.FC<CalendarProps> = ({
                   </div>
                 );
               })}
+
+              {/* Sudralayotgan qabul — qo'yib yuborilsa qayerga tushishi va yangi vaqti */}
+              {drag && (() => {
+                const dur = Math.max(10, drag.app.duration || 30);
+                const toDoc = view === 'day' && columnDoctors.length > 0 ? columnDoctors[drag.col] : doctors.find(d => d.id === drag.app.doctorId);
+                const color = toDoc?.color || '#3B82F6';
+                const height = Math.max(16, dur * hourPx / 60 - 2);
+                return (
+                  <div
+                    aria-hidden="true"
+                    className="absolute z-40 pointer-events-none rounded-md overflow-hidden bg-white dark:bg-gray-800 shadow-xl ring-2 ring-primary-500"
+                    style={{
+                      top: yOf(drag.start) + 1,
+                      height,
+                      left: `calc(${timeCol}px + ${drag.col} * ${colW} + 1px)`,
+                      width: `calc(${colW} - 3px)`,
+                      backgroundImage: `linear-gradient(${color}33, ${color}33)`,
+                      borderLeft: `3px solid ${color}`,
+                    }}
+                  >
+                    <div className="px-1 py-0.5 leading-tight">
+                      <div className="text-[11px] font-bold tabular-nums text-gray-900 dark:text-white">{hhmmOf(drag.start)}</div>
+                      {height >= 28 && <div className="text-[10px] font-semibold truncate text-gray-700 dark:text-gray-200">{drag.app.patientName.split(/\s+/)[0]}</div>}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           )}
@@ -1362,6 +1558,16 @@ export const Calendar: React.FC<CalendarProps> = ({
                     <Edit2 className="w-5 h-5" />
                   </button>
                 )}
+                {narrow && canCreate && (
+                  <button
+                    onClick={() => { setCopySource(selectedAppointment); setSelectedAppointment(null); }}
+                    className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:text-gray-400 dark:hover:bg-gray-800 rounded-md transition-colors"
+                    title={t('calendar.copy')}
+                    aria-label={t('calendar.copy')}
+                  >
+                    <Copy className="w-5 h-5" />
+                  </button>
+                )}
                 <Badge status={selectedAppointment.status} />
               </div>
             </div>
@@ -1459,6 +1665,52 @@ export const Calendar: React.FC<CalendarProps> = ({
           </div>
         </Modal>
       )}
+
+      {/* Ko'chirishni tasdiqlash (telefonda sudrab qo'yilgach) */}
+      <Modal isOpen={!!pendingMove} onClose={() => { if (!moving) setPendingMove(null); }} title={t('calendar.moveTitle')}>
+        {pendingMove && (() => {
+          const { app, date, time, doctorId: toDoctor } = pendingMove;
+          const dayChanged = date !== app.date;
+          const docChanged = toDoctor !== app.doctorId;
+          const docLabel = (id: string) => {
+            const d = doctors.find(x => x.id === id);
+            return d ? `Dr. ${d.lastName}` : app.doctorName;
+          };
+          // Faqat o'zgargan narsa yoziladi: odatda "09:00 → 14:30"
+          const side = (d: string, tm: string, doc: string) => [
+            dayChanged ? formatDayLong(language, new Date(`${d}T12:00`)) : '',
+            tm,
+            docChanged ? docLabel(doc) : '',
+          ].filter(Boolean).join(', ');
+          return (
+            <div className="space-y-4">
+              <div>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{app.patientName}</p>
+                <p className="mt-1 flex flex-wrap items-center gap-x-2 text-base tabular-nums">
+                  <span className="text-gray-500 dark:text-gray-400">{side(app.date, app.time, app.doctorId)}</span>
+                  <span aria-hidden="true" className="text-gray-400">→</span>
+                  <span className="font-bold text-primary-700 dark:text-primary-300">{side(date, time, toDoctor)}</span>
+                </p>
+              </div>
+              {moveClash && (
+                <p className="rounded-lg px-3 py-2 text-sm bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                  {isPrivate(moveClash)
+                    ? t('booking.sameTimeBusy').replace('{time}', moveClash.time)
+                    : t('booking.sameTime').replace('{time}', moveClash.time).replace('{patient}', moveClash.patientName)}
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setPendingMove(null)} disabled={moving}>{t('common.cancel')}</Button>
+                <Button type="button" onClick={confirmMove} disabled={moving}>
+                  {moving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {t('calendar.move')}
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
       {/* Message Modal */}
       <Modal isOpen={isMessageModalOpen} onClose={() => setIsMessageModalOpen(false)} title={t('calendar.sendMessage')}>
         <form onSubmit={handleSendMessage} className="space-y-4">
