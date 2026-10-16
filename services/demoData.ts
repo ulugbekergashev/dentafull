@@ -358,19 +358,20 @@ export const demoAuthData = () => ({
 });
 
 /**
- * Saytdagi demo login ilgari serverdagi "Demo Klinika"ga kirardi. O'sha paytda ochilgan
- * sessiya brauzerda qolgan bo'lsa, ilova login oynasini ko'rsatmay eski klinikani ochaverardi.
- * Bunday sessiya ham brauzer demosiga o'tkaziladi (server tokeni tashlanadi) — boshqa
- * foydalanuvchilarning sessiyasiga tegilmaydi.
+ * Brauzer demosi faqat localhost'da. Saytda demoklinikaadmin yana serverdagi sinov
+ * klinikasiga kiradi; 29-sentabr – 16-oktabr oralig'ida saytda ochilgan brauzer demo
+ * sessiyasi qolgan bo'lsa — tashlanadi, ilova login oynasini ko'rsatadi.
  */
-function migrateDemoLogin(): void {
+function dropSiteDemoSession(): void {
+    let local = false;
+    try { local = ['localhost', '127.0.0.1'].includes(window.location.hostname); } catch { /* brauzer emas */ }
+    if (local) return;
     for (const store of [sessionStorage, localStorage]) {
         try {
             const raw = store.getItem('dentalflow_auth');
-            if (!raw) continue;
-            const auth = JSON.parse(raw);
-            if (auth && !auth.isDemo && isDemoUsername(auth.username)) {
-                store.setItem('dentalflow_auth', JSON.stringify(demoAuthData()));
+            if (raw && JSON.parse(raw)?.isDemo === true) {
+                store.removeItem('dentalflow_auth');
+                localStorage.removeItem(STORAGE_KEY);
             }
         } catch { /* xotira yopiq — o'tkazib yuboriladi */ }
     }
@@ -408,7 +409,7 @@ export function demoAuditLogs(query: AuditLogQuery = {}): { items: AuditLogEntry
     return { items, nextBefore: null };
 }
 
-// Ilova sessiyani o'qishidan oldin: eski demo sessiyasi — brauzer demosiga
-migrateDemoLogin();
+// Ilova sessiyani o'qishidan oldin: saytda qolgan brauzer demo sessiyasi tashlanadi
+dropSiteDemoSession();
 // Sahifa demo ochiq holda yangilangan bo'lsa — ma'lumot birinchi so'rovgacha tayyor bo'lsin
 if (demoSessionActive()) ensureDemoData();

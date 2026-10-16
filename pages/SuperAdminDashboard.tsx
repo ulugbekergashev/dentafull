@@ -27,7 +27,6 @@ import { useLanguage } from '../context/LanguageContext';
 import { MetaSignalsPanel } from '../components/MetaSignalsPanel';
 import { api } from '../services/api';
 import { tLabel, tPlanFeature } from '../i18n/labels';
-import { isDemoUsername } from '../services/demoData';
 
 // Yordam boti paneli faqat superadmin "support" bo'limini ochganda yuklanadi —
 // sotuvchi va boshqa bo'limlar uning kodini umuman olmaydi.
@@ -2841,11 +2840,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                  onChange={(e) => setEditClinicData({ ...editClinicData, newPassword: e.target.value })}
                               />
                            </div>
-                           {isDemoUsername(editClinicData.username) && (
-                              <p className="text-xs text-amber-600">
-                                 Bu login saytdagi brauzer demosiga band — u bilan serverdagi klinikaga kirib bo'lmaydi. Boshqa login qo'ying.
-                              </p>
-                           )}
                         </>
                      )}
                   </div>

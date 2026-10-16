@@ -29,11 +29,10 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      // Demo klinika butunlay brauzerda ishlaydi (services/demoData.ts): bu login serverga
-      // yuborilmaydi va bazaga hech narsa yozilmaydi. Parol tekshirilmaydi — demo'da maxfiy
-      // narsa yo'q, bazadagi eski demo akkauntning paroli esa boshqacha bo'lishi mumkin.
-      // Boshqa loginlar odatdagidek serverga boradi.
-      if (isDemoUsername(username)) {
+      // Brauzer demosi (services/demoData.ts) faqat localhost'da: serverga so'rov ketmaydi.
+      // Saytda demoklinikaadmin — serverdagi sinov klinikasi, odatdagidek serverga boradi.
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalhost && isDemoUsername(username)) {
         // Har doim eslab qolinadi
         localStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData()));
 
