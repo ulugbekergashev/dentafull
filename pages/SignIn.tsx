@@ -4,7 +4,6 @@ import { UserRole } from '../types';
 import { AlertCircle, Lock, User, Eye, EyeOff, Send } from 'lucide-react';
 import { api } from '../services/api';
 import { getSupportInfo, openSupport } from '../services/support';
-import { demoAuthData, isDemoUsername } from '../services/demoData';
 import { useLanguage } from '../context/LanguageContext';
 import { LogoMark } from '../components/Logo';
 
@@ -29,19 +28,7 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      // Brauzer demosi (services/demoData.ts) faqat localhost'da: serverga so'rov ketmaydi.
-      // Saytda demoklinikaadmin — serverdagi sinov klinikasi, odatdagidek serverga boradi.
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      if (isLocalhost && isDemoUsername(username)) {
-        // Har doim eslab qolinadi
-        localStorage.setItem('dentalflow_auth', JSON.stringify(demoAuthData()));
-
-        onLogin(UserRole.CLINIC_ADMIN, 'Demo Admin', 'demo-clinic-1');
-        setIsLoading(false);
-        return;
-      }
-
-      // Regular backend authentication
+      // Hamma loginlar, demoklinikaadmin ham, serverga boradi — demo klinika oddiy klinikadek
       const response = await api.auth.login(username, password);
 
       if (response.success && response.role && response.name) {

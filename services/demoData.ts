@@ -1,4 +1,4 @@
-import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor, SegmentFieldDescriptor, Recall, FlowLog, TicketLog, UserRole, AuditLogEntry, AuditLogQuery } from '../types';
+import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor, SegmentFieldDescriptor, Recall, FlowLog, TicketLog, AuditLogEntry, AuditLogQuery } from '../types';
 import { formatDateToISO } from '../utils/dateUtils';
 import { advanceDemoDay, buildDemoSeed, DEMO_SEED_VERSION, DemoDayState } from './demoSeed';
 
@@ -337,35 +337,12 @@ export const DEMO_PLAN: SubscriptionPlan = {
     maxDoctors: 999,
 };
 
-// Demo credentials
-export const DEMO_CREDENTIALS = {
-    username: 'demoklinikaadmin',
-    password: 'demoklinikaparol',
-};
-
-/** Login demo akkauntniki (bo'sh joy va katta-kichik harf farq qilmaydi) */
-export const isDemoUsername = (username: unknown): boolean =>
-    String(username ?? '').trim().toLowerCase() === DEMO_CREDENTIALS.username;
-
-/** Brauzer demosi sessiyasi — serverga bormaydi, token soxta */
-export const demoAuthData = () => ({
-    role: UserRole.CLINIC_ADMIN,
-    name: 'Demo Admin',
-    clinicId: 'demo-clinic-1',
-    username: DEMO_CREDENTIALS.username,
-    token: 'demo-token',
-    isDemo: true,
-});
-
 /**
- * Brauzer demosi faqat localhost'da. Saytda demoklinikaadmin yana serverdagi sinov
- * klinikasiga kiradi; 29-sentabr – 16-oktabr oralig'ida saytda ochilgan brauzer demo
- * sessiyasi qolgan bo'lsa — tashlanadi, ilova login oynasini ko'rsatadi.
+ * Brauzer demosi endi ochilmaydi: demoklinikaadmin hamma joyda (localhost'da ham) oddiy
+ * klinikadek serverga kiradi, shifokor va boshqa xodimlar ham o'z login-paroli bilan.
+ * Ilgari ochilgan brauzer demo sessiyasi qolgan bo'lsa — tashlanadi, login oynasi chiqadi.
  */
-function dropSiteDemoSession(): void {
-    let local = false;
-    try { local = ['localhost', '127.0.0.1'].includes(window.location.hostname); } catch { /* brauzer emas */ }
-    if (local) return;
+function dropBrowserDemoSession(): void {
     for (const store of [sessionStorage, localStorage]) {
         try {
             const raw = store.getItem('dentalflow_auth');
@@ -409,7 +386,7 @@ export function demoAuditLogs(query: AuditLogQuery = {}): { items: AuditLogEntry
     return { items, nextBefore: null };
 }
 
-// Ilova sessiyani o'qishidan oldin: saytda qolgan brauzer demo sessiyasi tashlanadi
-dropSiteDemoSession();
+// Ilova sessiyani o'qishidan oldin: qolib ketgan brauzer demo sessiyasi tashlanadi
+dropBrowserDemoSession();
 // Sahifa demo ochiq holda yangilangan bo'lsa — ma'lumot birinchi so'rovgacha tayyor bo'lsin
 if (demoSessionActive()) ensureDemoData();
