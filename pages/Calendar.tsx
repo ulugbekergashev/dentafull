@@ -1363,7 +1363,8 @@ export const Calendar: React.FC<CalendarProps> = ({
                 };
 
                 // Telefonda — Google Kalendardagi kabi: to'q rangli blok, oq yozuv, avval ism, keyin vaqt.
-                // Tasdiqlanmagan — faqat chegarasi rangli; o'tgani xiraroq; kelmagani kulrang, ustidan chizilgan.
+                // Har bir qabul to'liq rangli (yangi yozilgani ham — u doim "tasdiqlanmagan" bo'lib boshlanadi);
+                // o'tgani xiraroq, kelmagani kulrang va ustidan chizilgan.
                 if (narrow) {
                   const fill = noShow ? '#6B7280' : solidShade(color);
                   const name = tier === 'full' ? app.patientName : tier === 'compact' ? shortName : surname;
@@ -1373,12 +1374,10 @@ export const Calendar: React.FC<CalendarProps> = ({
                       key={app.id}
                       {...touchProps}
                       title={title}
-                      className={`absolute rounded-md overflow-hidden z-10 cursor-pointer ring-1 ring-white dark:ring-gray-800 ${pending
-                        ? 'bg-white dark:bg-gray-800 text-[var(--c-l)] dark:text-[var(--c-d)] border-[1.5px] border-[var(--c-l)] dark:border-[var(--c-d)]'
-                        : 'text-white'} ${done || noShow ? 'opacity-60' : ''} ${drag?.app.id === app.id ? 'opacity-40' : ''}`}
+                      className={`absolute rounded-md overflow-hidden z-10 cursor-pointer ring-1 ring-white dark:ring-gray-800 text-white ${done || noShow ? 'opacity-60' : ''} ${drag?.app.id === app.id ? 'opacity-40' : ''}`}
                       style={{
                         ...box,
-                        ...(pending ? { '--c-l': fill, '--c-d': color } as React.CSSProperties : { backgroundColor: fill }),
+                        backgroundColor: fill,
                         ...(draggable ? { WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } : {}),
                       }}
                     >
