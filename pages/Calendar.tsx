@@ -62,7 +62,7 @@ interface CalendarProps {
   services: { name: string; price: number; duration: number }[];
   categories: ServiceCategory[];
   onAddAppointment: (appt: Omit<Appointment, 'id'>) => Promise<void>;
-  onUpdateAppointment: (id: string, data: Partial<Appointment>) => Promise<void>;
+  onUpdateAppointment: (id: string, data: Partial<Appointment>, opts?: { silent?: boolean }) => Promise<void>;
   onDeleteAppointment: (id: string) => void;
   onAddPatient: (patient: Omit<Patient, 'id'>) => Promise<Patient | undefined>;
   userRole: UserRole;
@@ -164,8 +164,9 @@ export const Calendar: React.FC<CalendarProps> = ({
     try { localStorage.setItem(CALENDAR_FIT_KEY, fitAll ? '0' : '1'); } catch { /* sessiya davomida baribir ishlaydi */ }
   };
   const pickedView: CalView = chosenView ?? (!ownDoctorId && activeDoctors.length > 1 ? 'day' : 'week');
-  // Telefonda shifokor hali tanlamagan bo'lsa — "Kun" (kompyuterdagi "Hafta" emas)
-  const phoneView: CalView = chosenView ?? (ownDoctorId ? 'day' : pickedView);
+  // Telefonda shifokor hali tanlamagan bo'lsa — "Hafta", klinika yuborgan Google Kalendar
+  // videosidagidek: butun hafta bir ekranda; "Kun" — bitta bosish
+  const phoneView: CalView = chosenView ?? (ownDoctorId ? 'week' : pickedView);
   const view: CalView = !narrow ? pickedView : fitAll && phoneView === 'week' ? 'week' : 'day';
   // Telefonda shifokor o'z kunini ko'radi — boshqa shifokorlar qatori va ustun sarlavhasi kerak emas.
   // Hamkasb kalendari havola orqali ochilgan bo'lsa (?doctor=…) qator qaytadi: o'ziga qaytish uchun.
@@ -199,10 +200,11 @@ export const Calendar: React.FC<CalendarProps> = ({
   // davomiylik bilan yangi qabul formasi ochiladi
   const [copySource, setCopySource] = useState<Appointment | null>(null);
   // Ko'chirish (telefonda): blokni bosib ushlab, boshqa vaqtga yoki ustunga sudrash.
-  // drag — sudralayotgan payt, pendingMove — qo'yib yuborilgach tasdiq oynasi.
+  // drag — sudralayotgan payt; moved — qo'yib yuborilgach pastdagi "… ga ko'chirildi — Qaytarish"
   const [drag, setDrag] = useState<{ app: Appointment; col: number; start: number } | null>(null);
-  const [pendingMove, setPendingMove] = useState<{ app: Appointment; date: string; time: string; doctorId: string } | null>(null);
-  const [moving, setMoving] = useState(false);
+  const [moved, setMoved] = useState<{ id: string; text: string; undo: Partial<Appointment> } | null>(null);
+  const movedTimer = React.useRef(0);
+  React.useEffect(() => () => window.clearTimeout(movedTimer.current), []);
   // Sudrab bo'lingach barmoq ko'tarilganda "bosish" ham kelishi mumkin — qabul oynasi ochilmasin
   const suppressClickUntil = React.useRef(0);
 
@@ -549,7 +551,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       const toDoctor = view === 'day' && columnDoctors.length > 0 ? columnDoctors[target.col].id : app.doctorId;
       const time = hhmmOf(target.start);
       if (date !== app.date || time !== app.time || toDoctor !== app.doctorId) {
-        setPendingMove({ app, date, time, doctorId: toDoctor });
+        void moveTo(app, date, time, toDoctor);
       }
     };
     const onCancel = () => {
@@ -568,39 +570,47 @@ export const Calendar: React.FC<CalendarProps> = ({
     document.addEventListener('touchcancel', onCancel);
   };
 
-  // Shifokorda shu vaqtga boshqa bemor yozilgan — taqiqlanmaydi, tasdiq oynasida aytiladi
-  const moveClash = pendingMove ? appointments.find(a =>
-    a.id !== pendingMove.app.id &&
-    a.patientId !== pendingMove.app.patientId &&
-    a.doctorId === pendingMove.doctorId &&
-    a.date === pendingMove.date &&
-    a.time === pendingMove.time &&
-    occupiesDoctorTime(a)
-  ) : undefined;
-  const confirmMove = async () => {
-    if (!pendingMove) return;
-    const { app, date, time, doctorId: toDoctor } = pendingMove;
-    // Bemorning o'zi shu vaqtda boshqa qabulda — tahrirlashdagidek to'xtatiladi
+  // Google Kalendardagi kabi: qo'yib yuborilgan zahoti saqlanadi, pastda "Ertaga, 12:00 ga
+  // ko'chirildi — Qaytarish". Bemorning o'zi shu vaqtda boshqa qabulda bo'lsa — ko'chirilmaydi;
+  // shifokorda shu vaqtga boshqa bemor bo'lsa — ko'chiriladi, yozuvda aytiladi.
+  const tomorrowKey = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return formatDateToISO(d); })();
+  const dayWord = (key: string) => key === todayKey ? t('datefield.today')
+    : key === tomorrowKey ? t('calendar.tomorrow') : formatDayLong(language, new Date(`${key}T12:00`));
+  const moveTo = async (app: Appointment, date: string, time: string, toDoctor: string) => {
     const patientConflict = appointments.some(a =>
       a.id !== app.id && a.patientId === app.patientId && a.date === date && a.time === time && a.status !== 'Cancelled');
     if (patientConflict) {
       alert(t('patients.details.alerts.patientConflict'));
       return;
     }
+    const clash = appointments.some(a =>
+      a.id !== app.id && a.patientId !== app.patientId && a.doctorId === toDoctor && a.date === date && a.time === time && occupiesDoctorTime(a));
     const toDoc = doctors.find(d => d.id === toDoctor);
-    setMoving(true);
+    const docChanged = toDoctor !== app.doctorId;
     try {
       await onUpdateAppointment(app.id, {
         date,
         time,
-        ...(toDoctor !== app.doctorId ? { doctorId: toDoctor, doctorName: toDoc ? `Dr. ${toDoc.lastName}` : app.doctorName } : {}),
-      });
-      setPendingMove(null);
+        ...(docChanged ? { doctorId: toDoctor, doctorName: toDoc ? `Dr. ${toDoc.lastName}` : app.doctorName } : {}),
+      }, { silent: true });
     } catch {
-      // Xato xabarini App.tsx ko'rsatadi; oyna ochiq qoladi
-    } finally {
-      setMoving(false);
+      return; // xato xabarini App.tsx ko'rsatadi
     }
+    const when = `${dayWord(date)}, ${time}${docChanged && toDoc ? ` · Dr. ${toDoc.lastName}` : ''}`;
+    window.clearTimeout(movedTimer.current);
+    setMoved({
+      id: app.id,
+      text: t('calendar.movedTo').replace('{when}', when) + (clash ? ` · ${t('calendar.movedClash')}` : ''),
+      undo: { date: app.date, time: app.time, ...(docChanged ? { doctorId: app.doctorId, doctorName: app.doctorName } : {}) },
+    });
+    movedTimer.current = window.setTimeout(() => setMoved(null), 6000);
+  };
+  const undoMove = async () => {
+    if (!moved) return;
+    const { id, undo } = moved;
+    window.clearTimeout(movedTimer.current);
+    setMoved(null);
+    try { await onUpdateAppointment(id, undo, { silent: true }); } catch { /* xato xabarini App.tsx ko'rsatadi */ }
   };
 
   // Handlers
@@ -1117,8 +1127,8 @@ export const Calendar: React.FC<CalendarProps> = ({
           <div ref={gridRef} className={`relative ${fitAll ? 'w-full' : view === 'week' ? 'min-w-[840px]' : columnDoctors.length > 2 ? 'min-w-fit' : 'w-full'}`}>
             {/* Sarlavha: kunlar yoki shifokorlar */}
             {/* Telefonda shifokorning o'z kuni: ustun bitta va o'ziniki — sarlavha kerak emas */}
-            <div ref={headerRef} className={`${ownPhoneDay && view === 'day' && columnDoctors.length === 1 ? 'hidden' : 'grid'} sticky top-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700`} style={{ gridTemplateColumns: gridTemplate }}>
-              <div className="sticky left-0 z-40 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700"></div>
+            <div ref={headerRef} className={`${ownPhoneDay && view === 'day' && columnDoctors.length === 1 ? 'hidden' : 'grid'} sticky top-0 z-30 bg-white dark:bg-gray-800 ${narrow ? '' : 'border-b border-gray-200 dark:border-gray-700'}`} style={{ gridTemplateColumns: gridTemplate }}>
+              <div className={`sticky left-0 z-40 bg-white dark:bg-gray-800 ${narrow ? '' : 'border-r border-gray-100 dark:border-gray-700'}`}></div>
               {view === 'week' ? (
                 displayDays.map((day, i) => {
                   const isToday = dayKeys[i] === todayKey;
@@ -1130,10 +1140,10 @@ export const Calendar: React.FC<CalendarProps> = ({
                       type="button"
                       onClick={() => openDay(dayKeys[i])}
                       title={t('calendar.openDay')}
-                      className={`flex flex-col items-center min-w-0 py-1 border-r border-gray-100 dark:border-gray-700 last:border-0 ${isToday ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}
+                      className="flex flex-col items-center min-w-0 pt-1 pb-1.5"
                     >
-                      <span className={`text-[10px] font-bold uppercase leading-none ${isToday ? 'text-primary-600 dark:text-primary-300' : 'text-gray-500 dark:text-gray-400'}`}>{dayNames[day.getDay()].slice(0, 2)}</span>
-                      <span className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold tabular-nums ${isToday ? 'bg-primary-600 text-white' : 'text-gray-800 dark:text-gray-100'}`}>{day.getDate()}</span>
+                      <span className={`text-[11px] font-medium leading-none ${isToday ? 'text-primary-600 dark:text-primary-300' : 'text-gray-500 dark:text-gray-400'}`}>{dayNames[day.getDay()]}</span>
+                      <span className={`mt-1 w-8 h-8 rounded-full flex items-center justify-center text-base font-semibold tabular-nums ${isToday ? 'bg-primary-600 text-white' : 'text-gray-900 dark:text-gray-100'}`}>{day.getDate()}</span>
                     </button>
                     ) : (
                     <button
@@ -1192,13 +1202,13 @@ export const Calendar: React.FC<CalendarProps> = ({
 
             {/* Jadval */}
             <div ref={bodyRef} className="grid relative" style={{ gridTemplateColumns: gridTemplate, height: gridHeight }}>
-              {/* Soatlar: yozuv soat chizig'i ustida (birinchisi — chiziq ostida) */}
-              <div className="sticky left-0 z-20 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700">
+              {/* Soatlar: yozuv soat chizig'i ustida (birinchisi — chiziq ostida); telefonda — katak tepasida */}
+              <div className={`sticky left-0 z-20 bg-white dark:bg-gray-800 ${narrow ? '' : 'border-r border-gray-100 dark:border-gray-700'}`}>
                 {gridHours.map((hour, i) => (
                   <div key={hour} className="relative" style={{ height: hourPx }}>
                     <span
                       className={`absolute ${dense ? 'right-1 text-[10px]' : 'right-2 text-[11px]'} tabular-nums text-gray-400 dark:text-gray-500 ${!dense && showNowLine && Math.abs(nowMin - hour * 60) * hourPx / 60 < 14 ? 'invisible' : ''}`}
-                      style={{ top: i === 0 ? (hourPx < 30 ? 1 : 4) : -8 }}
+                      style={{ top: narrow ? 3 : i === 0 ? (hourPx < 30 ? 1 : 4) : -8 }}
                     >
                       {hour}:00
                     </span>
@@ -1216,6 +1226,22 @@ export const Calendar: React.FC<CalendarProps> = ({
                 const dateStr = view === 'week' ? key : currentKey;
                 const docId = view === 'day' && columnDoctors.length > 0 ? key : undefined;
                 const isTodayCol = view === 'week' && key === todayKey;
+                if (narrow) {
+                  return (
+                    <div key={key}>
+                      {gridHours.map(hour => {
+                        const hh = hour.toString().padStart(2, '0');
+                        return (
+                          <div key={hour} className="relative" style={{ height: hourPx }}>
+                            <div className="absolute inset-[2px] rounded-md bg-gray-100 dark:bg-gray-900/70" />
+                            <div className="absolute inset-x-0 top-0 h-1/2 cursor-pointer" onClick={() => openAddModal(dateStr, `${hh}:00`, docId)} />
+                            <div className="absolute inset-x-0 bottom-0 h-1/2 cursor-pointer" onClick={() => openAddModal(dateStr, `${hh}:30`, docId)} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                }
                 return (
                   <div key={key} className={`border-r border-gray-100 dark:border-gray-700 last:border-0 ${isTodayCol ? 'bg-primary-50/30 dark:bg-primary-900/5' : ''}`}>
                     {gridHours.map(hour => {
@@ -1223,7 +1249,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       return (
                         <React.Fragment key={hour}>
                           <div
-                            className={`${hourPx < 30 || narrow ? '' : 'border-b border-dashed border-gray-100 dark:border-gray-700/40'} cursor-pointer transition-colors hover:bg-primary-50/60 dark:hover:bg-primary-900/10`}
+                            className={`${hourPx < 30 ? '' : 'border-b border-dashed border-gray-100 dark:border-gray-700/40'} cursor-pointer transition-colors hover:bg-primary-50/60 dark:hover:bg-primary-900/10`}
                             style={{ height: hourPx / 2 }}
                             onClick={() => openAddModal(dateStr, `${hh}:00`, docId)}
                           ></div>
@@ -1240,7 +1266,7 @@ export const Calendar: React.FC<CalendarProps> = ({
               })}
 
               {/* Ish vaqtidan tashqari — chiziqli xira fon (bosish baribir ishlaydi) */}
-              {columnWork.map(([ws, we], col) => {
+              {!narrow && columnWork.map(([ws, we], col) => {
                 const parts: [number, number][] = [];
                 if (ws > gridStartMin) parts.push([0, Math.min(gridHeight, yOf(ws))]);
                 if (yOf(we) < gridHeight) parts.push([Math.max(0, yOf(we)), gridHeight]);
@@ -1288,13 +1314,15 @@ export const Calendar: React.FC<CalendarProps> = ({
                 const top = Math.max(0, yOf(start));
                 const bottom = Math.min(gridHeight, yOf(end));
                 if (bottom <= 0 || top >= gridHeight) return null;
-                const heightPx = Math.max(14, bottom - top - 2);
+                // Telefonda blok katak ichida turadi — chetidan 2px
+                const gap = narrow ? 2 : 1;
+                const heightPx = Math.max(14, bottom - top - 2 * gap);
                 const subW = `(${colW} / ${place.subs})`;
                 const box: React.CSSProperties = {
-                  top: top + 1,
+                  top: top + gap,
                   height: heightPx,
-                  left: `calc(${timeCol}px + ${place.col} * ${colW} + ${place.sub} * ${subW} + 1px)`,
-                  width: `calc(${place.span} * ${subW} - 3px)`,
+                  left: `calc(${timeCol}px + ${place.col} * ${colW} + ${place.sub} * ${subW} + ${gap}px)`,
+                  width: `calc(${place.span} * ${subW} - ${gap + 2}px)`,
                 };
                 // Blok necha piksel — shunga qarab qancha matn sig'ishi tanlanadi
                 const blockPx = gridWidth > 0 ? (gridWidth - timeCol) / gridColumns / place.subs * place.span : 160;
@@ -1366,7 +1394,10 @@ export const Calendar: React.FC<CalendarProps> = ({
                 // Har bir qabul to'liq rangli (yangi yozilgani ham — u doim "tasdiqlanmagan" bo'lib boshlanadi);
                 // o'tgani xiraroq, kelmagani kulrang va ustidan chizilgan.
                 if (narrow) {
+                  // Kunduzgi rejimda rang oq yozuv o'qiladigan darajada to'q; tungi rejimda — shifokorning
+                  // asl, yorqin rangi (Google Kalendarning tungi ko'rinishidagi kabi)
                   const fill = noShow ? '#6B7280' : solidShade(color);
+                  const fillDark = noShow ? '#6B7280' : color;
                   const name = tier === 'full' ? app.patientName : tier === 'compact' ? shortName : surname;
                   const dot = arrived && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-current animate-pulse" />;
                   return (
@@ -1374,12 +1405,13 @@ export const Calendar: React.FC<CalendarProps> = ({
                       key={app.id}
                       {...touchProps}
                       title={title}
-                      className={`absolute rounded-md overflow-hidden z-10 cursor-pointer ring-1 ring-white dark:ring-gray-800 text-white ${done || noShow ? 'opacity-60' : ''} ${drag?.app.id === app.id ? 'opacity-40' : ''}`}
+                      className={`absolute rounded-md overflow-hidden z-10 cursor-pointer ring-1 ring-white dark:ring-gray-800 text-white bg-[var(--c-l)] dark:bg-[var(--c-d)] ${done || noShow ? 'opacity-60' : ''} ${drag?.app.id === app.id ? 'opacity-40' : ''}`}
                       style={{
                         ...box,
-                        backgroundColor: fill,
+                        '--c-l': fill,
+                        '--c-d': fillDark,
                         ...(draggable ? { WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } : {}),
-                      }}
+                      } as React.CSSProperties}
                     >
                       {tier === 'tiny' || tier === 'mini' ? (
                         // Tor ustun (hafta): faqat familiya, sig'ganicha bir necha qatorda — "Sai…" bo'lib qolmasin
@@ -1730,50 +1762,15 @@ export const Calendar: React.FC<CalendarProps> = ({
         </Modal>
       )}
 
-      {/* Ko'chirishni tasdiqlash (telefonda sudrab qo'yilgach) */}
-      <Modal isOpen={!!pendingMove} onClose={() => { if (!moving) setPendingMove(null); }} title={t('calendar.moveTitle')}>
-        {pendingMove && (() => {
-          const { app, date, time, doctorId: toDoctor } = pendingMove;
-          const dayChanged = date !== app.date;
-          const docChanged = toDoctor !== app.doctorId;
-          const docLabel = (id: string) => {
-            const d = doctors.find(x => x.id === id);
-            return d ? `Dr. ${d.lastName}` : app.doctorName;
-          };
-          // Faqat o'zgargan narsa yoziladi: odatda "09:00 → 14:30"
-          const side = (d: string, tm: string, doc: string) => [
-            dayChanged ? formatDayLong(language, new Date(`${d}T12:00`)) : '',
-            tm,
-            docChanged ? docLabel(doc) : '',
-          ].filter(Boolean).join(', ');
-          return (
-            <div className="space-y-4">
-              <div>
-                <p className="text-lg font-bold text-gray-900 dark:text-white">{app.patientName}</p>
-                <p className="mt-1 flex flex-wrap items-center gap-x-2 text-base tabular-nums">
-                  <span className="text-gray-500 dark:text-gray-400">{side(app.date, app.time, app.doctorId)}</span>
-                  <span aria-hidden="true" className="text-gray-400">→</span>
-                  <span className="font-bold text-primary-700 dark:text-primary-300">{side(date, time, toDoctor)}</span>
-                </p>
-              </div>
-              {moveClash && (
-                <p className="rounded-lg px-3 py-2 text-sm bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                  {isPrivate(moveClash)
-                    ? t('booking.sameTimeBusy').replace('{time}', moveClash.time)
-                    : t('booking.sameTime').replace('{time}', moveClash.time).replace('{patient}', moveClash.patientName)}
-                </p>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={() => setPendingMove(null)} disabled={moving}>{t('common.cancel')}</Button>
-                <Button type="button" onClick={confirmMove} disabled={moving}>
-                  {moving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  {t('calendar.move')}
-                </Button>
-              </div>
-            </div>
-          );
-        })()}
-      </Modal>
+      {/* Ko'chirilgach — pastda qisqa yozuv va "Qaytarish" (Google Kalendardagi kabi) */}
+      {moved && (
+        <div role="status" className="fixed left-3 right-3 bottom-[5.5rem] z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-sm bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">
+          <span className="flex-1 min-w-0">{moved.text}</span>
+          <button type="button" onClick={undoMove} className="shrink-0 font-bold text-primary-300 dark:text-primary-700">
+            {t('calendar.undo')}
+          </button>
+        </div>
+      )}
 
       {/* Message Modal */}
       <Modal isOpen={isMessageModalOpen} onClose={() => setIsMessageModalOpen(false)} title={t('calendar.sendMessage')}>
