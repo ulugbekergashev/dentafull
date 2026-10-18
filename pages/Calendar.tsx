@@ -42,6 +42,18 @@ const minutesOfTime = (time: string) => {
   return (h || 0) * 60 + (m || 0);
 };
 const hhmmOf = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+/** Telefonda blok to'q rangli, yozuv oq (Google Kalendardagi kabi): och rang (sariq, yashil)
+ *  oq yozuv o'qiladigan darajada to'qlashtiriladi — kontrast taxminan 4.5:1 */
+const solidShade = (hex: string) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const lin = (c: number) => { const s = c / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  const lum = 0.2126 * lin(ch[0]) + 0.7152 * lin(ch[1]) + 0.0722 * lin(ch[2]);
+  const f = lum > 0.18 ? Math.pow(0.18 / lum, 1 / 2.2) : 1;
+  return `#${ch.map(c => Math.round(c * f).toString(16).padStart(2, '0')).join('')}`;
+};
 
 interface CalendarProps {
   appointments: Appointment[];
@@ -1211,7 +1223,7 @@ export const Calendar: React.FC<CalendarProps> = ({
                       return (
                         <React.Fragment key={hour}>
                           <div
-                            className={`${hourPx < 30 ? '' : 'border-b border-dashed border-gray-100 dark:border-gray-700/40'} cursor-pointer transition-colors hover:bg-primary-50/60 dark:hover:bg-primary-900/10`}
+                            className={`${hourPx < 30 || narrow ? '' : 'border-b border-dashed border-gray-100 dark:border-gray-700/40'} cursor-pointer transition-colors hover:bg-primary-50/60 dark:hover:bg-primary-900/10`}
                             style={{ height: hourPx / 2 }}
                             onClick={() => openAddModal(dateStr, `${hh}:00`, docId)}
                           ></div>
@@ -1343,13 +1355,66 @@ export const Calendar: React.FC<CalendarProps> = ({
                         : null;
 
                 const draggable = canDrag(app);
+                const touchProps = {
+                  onClick: () => { if (Date.now() >= suppressClickUntil.current) setSelectedAppointment(app); },
+                  onTouchStart: draggable ? (e: React.TouchEvent) => startPress(e, app, place.col) : undefined,
+                  // Bosib turilganda telefon o'z menyusini (nusxa/belgilash) ochmasin
+                  onContextMenu: draggable ? (e: React.MouseEvent) => e.preventDefault() : undefined,
+                };
+
+                // Telefonda — Google Kalendardagi kabi: to'q rangli blok, oq yozuv, avval ism, keyin vaqt.
+                // Tasdiqlanmagan — faqat chegarasi rangli; o'tgani xiraroq; kelmagani kulrang, ustidan chizilgan.
+                if (narrow) {
+                  const fill = noShow ? '#6B7280' : solidShade(color);
+                  const name = tier === 'full' ? app.patientName : tier === 'compact' ? shortName : surname;
+                  const dot = arrived && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-current animate-pulse" />;
+                  return (
+                    <div
+                      key={app.id}
+                      {...touchProps}
+                      title={title}
+                      className={`absolute rounded-md overflow-hidden z-10 cursor-pointer ring-1 ring-white dark:ring-gray-800 ${pending
+                        ? 'bg-white dark:bg-gray-800 text-[var(--c-l)] dark:text-[var(--c-d)] border-[1.5px] border-[var(--c-l)] dark:border-[var(--c-d)]'
+                        : 'text-white'} ${done || noShow ? 'opacity-60' : ''} ${drag?.app.id === app.id ? 'opacity-40' : ''}`}
+                      style={{
+                        ...box,
+                        ...(pending ? { '--c-l': fill, '--c-d': color } as React.CSSProperties : { backgroundColor: fill }),
+                        ...(draggable ? { WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } : {}),
+                      }}
+                    >
+                      {tier === 'tiny' || tier === 'mini' ? (
+                        // Tor ustun (hafta): faqat familiya, sig'ganicha bir necha qatorda — "Sai…" bo'lib qolmasin
+                        <div
+                          className={`px-1 mt-0.5 text-[10px] font-semibold leading-[1.15] break-all overflow-hidden ${noShow ? 'line-through' : ''}`}
+                          // Sig'maydigan qator yarmi ko'rinib qolmasin
+                          style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: Math.max(1, Math.floor((heightPx - 2) / 11.5)) }}
+                        >
+                          {surname}
+                        </div>
+                      ) : oneLine ? (
+                        <div className="h-full px-1.5 flex items-center gap-1 text-[11px] leading-none whitespace-nowrap">
+                          {dot}
+                          <span className={`min-w-0 font-semibold truncate ${noShow ? 'line-through' : ''}`}>{name}</span>
+                          <span className="shrink-0 tabular-nums opacity-90">{app.time}</span>
+                        </div>
+                      ) : (
+                        <div className="px-1.5 py-0.5 text-[11px] leading-tight">
+                          <div className={`flex items-center gap-1 font-semibold ${noShow ? 'line-through' : ''}`}>
+                            {dot}
+                            <span className="min-w-0 truncate">{name}</span>
+                          </div>
+                          <div className="tabular-nums opacity-90 truncate">{timeRange}</div>
+                          {heightPx >= 46 && <div className="opacity-80 truncate">{app.type}</div>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={app.id}
-                    onClick={() => { if (Date.now() >= suppressClickUntil.current) setSelectedAppointment(app); }}
-                    onTouchStart={draggable ? e => startPress(e, app, place.col) : undefined}
-                    // Bosib turilganda telefon o'z menyusini (nusxa/belgilash) ochmasin
-                    onContextMenu={draggable ? e => e.preventDefault() : undefined}
+                    {...touchProps}
                     title={title}
                     className={`absolute rounded-md overflow-hidden z-10 cursor-pointer transition-shadow hover:shadow-md hover:z-20 bg-white dark:bg-gray-800 ${drag?.app.id === app.id ? 'opacity-40' : ''}`}
                     style={{
