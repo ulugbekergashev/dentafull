@@ -112,6 +112,7 @@ installAuditMiddleware();
 const { diag } = require('./diag');
 // Telegram ulanishlarini bekor qilish (hisob paroli yoki holati o'zgarganda)
 const { revokeSupportLinks } = require('./support/identity');
+const { isSupportBotToken, SUPPORT_TOKEN_REUSED } = require('./support/reservedToken');
 
 // Diagnostika qaydlariga tezlik chegarasi: bir xil kalit uchun `everyMs` ichida bitta yozuv.
 // Baza ishdan chiqqanda har muvaffaqiyatsiz so'rov yana bir yozuv urinishi bo'lib, vaziyatni
@@ -6154,6 +6155,9 @@ app.put('/api/clinics/:id/settings', authenticateToken, async (req, res) => {
         if (!canAccessClinic(req, req.params.id)) return res.status(403).json({ error: 'Ruxsat yo\'q (boshqa klinika)' });
         const { botToken, ownerPhone } = req.body;
         const clinicId = req.params.id;
+
+        // Yordam botining tokeni klinika botiga berilsa ikkalasi bir-birini uzib turadi (409)
+        if (botToken && isSupportBotToken(botToken)) return res.status(400).json({ error: SUPPORT_TOKEN_REUSED });
 
         // Eski token yangilashdan OLDIN o'qiladi: keyin bazada u qolmaydi va
         // qaysi botni to'xtatish kerakligini bilib bo'lmaydi (eski bot ishlab qolaverardi).

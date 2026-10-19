@@ -87,6 +87,28 @@ const { startFakeTelegram } = require('./helpers/fakeTelegram.cjs');
       await botManager.removeBot('c3', '666:BAD');
     },
 
+    'yordam botining tokeni klinikaga berilsa — klinika boti ishga tushmaydi, sabab yozib qo\'yiladi': async () => {
+      process.env.SUPPORT_BOT_TOKEN = '999000:SUPPORT-SECRET';
+      try {
+        const before = bots().size;
+        await global.prisma.clinic.update({ where: { id: 'c3' }, data: { botToken: '999000:SUPPORT-SECRET' } });
+        await botManager.startBot('c3', '999000:SUPPORT-SECRET');
+        // Token yangilangan (shu botning boshqa tokeni) ham o'tmaydi: bot raqami bir xil
+        await botManager.startBot('c3', '999000:REGENERATED');
+        assert.strictEqual(bots().size, before, 'yordam botining tokeni bilan klinika boti ishga tushdi');
+        assert.ok(!botManager.tokenClinics.has('999000:SUPPORT-SECRET'));
+        await wait(() => global.prisma.diagEvent._rows().some((e) => e.kind === 'bot_down' && e.clinicId === 'c3' && /yordam botiniki/.test(e.message)), 'bot_down qaydi');
+        const ev = global.prisma.diagEvent._rows().find((e) => /yordam botiniki/.test(e.message));
+        assert.ok(!ev.message.includes('SUPPORT-SECRET'), 'token qaydga tushdi');
+        // Boshqa bot raqami — odatdagidek ishlaydi
+        await botManager.startBot('c3', '888111:OTHER');
+        assert.strictEqual(bots().size, before + 1);
+        await botManager.removeBot('c3', '888111:OTHER');
+      } finally {
+        delete process.env.SUPPORT_BOT_TOKEN;
+      }
+    },
+
     'handler ichidagi xato botni to\'xtatmaydi (bot.catch)': async () => {
       process.env.TELEGRAM_API_ROOT = tg.url;
       await botManager.startBot('c3', '777:CATCH');

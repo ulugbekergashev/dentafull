@@ -6,6 +6,7 @@ import { buildReportScreen, parseReportCallback, reportCallback } from './botRep
 import { tashkentDateStr } from './triggers';
 import { diag, botFailureReason } from './diag';
 import { uzContactKey } from './support/identity';
+import { isSupportBotToken } from './support/reservedToken';
 
 // Testlarda soxta Telegram serveriga ulanish uchun (tests/helpers/fakeTelegram.cjs).
 // Productionda o'rnatilmaydi.
@@ -147,6 +148,13 @@ class BotManager {
     }
 
     public async startBot(clinicId: string, token: string) {
+        // Yordam botining tokeni klinikaga berilgan bo'lsa (ilgari saqlangan): ikkinchi polling
+        // yordam botini uzib qo'yadi. Ishga tushirmaymiz, sabab rahbarga ogohlantirish bo'lib boradi.
+        if (isSupportBotToken(token)) {
+            console.error(`⚠️ Klinika ${clinicId} yordam botining tokenini kiritgan — klinika boti ishga tushirilmadi.`);
+            void this.noteHealth(token, 'bot_down', "Bu token DentaCRM yordam botiniki — klinika uchun @BotFather da alohida bot yarating");
+            return;
+        }
         const users = this.tokenClinics.get(token) || new Set<string>();
         users.add(clinicId);
         this.tokenClinics.set(token, users);
