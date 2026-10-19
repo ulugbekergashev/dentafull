@@ -1,10 +1,11 @@
 import { useLanguage } from '../context/LanguageContext';
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle, Phone, User, AlertCircle, Loader2, ShieldCheck, Clock, Headphones } from 'lucide-react';
+import { CheckCircle, Phone, User, AlertCircle, Loader2, Building2, ArrowRight, LucideIcon } from 'lucide-react';
 import { API_URL } from '../services/api';
 import { Logo } from '../components/Logo';
 import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent, trackMetaEvent } from '../utils/metaPixel';
 import { readSentLead, rememberSentLead } from '../utils/sentLead';
+import './ad-lead.css';
 
 export type AdPlan = 'lifetime' | 'monthly';
 
@@ -14,24 +15,23 @@ interface AdLeadPageProps {
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
 
-// Reklamadan keladigan qisqa forma: faqat ism va telefon — telefonning birinchi ekraniga
-// maydonlar ham, tugma ham sig'ishi shart.
+// Reklamadan keladigan qisqa forma: ism, klinika nomi va telefon — telefonning birinchi
+// ekraniga maydonlar ham, tugma ham sig'ishi shart.
 // Narxlar ataylab ko'rsatilmaydi — tafsilotni sotuvchi qo'ng'iroqda aytadi.
 // Matn nima sotilayotganini aniq aytishi shart: "bir marta to'lang", "shartlarni
 // tushuntiramiz" kabi gaplarni ko'rib, buni kredit deb o'ylab ariza qoldirishardi.
 // "Dastur" so'zining o'zi ham ikki ma'noli (kredit dasturi), shuning uchun "kompyuter dasturi".
+// Sarlavha qisqa: "klinika uchun"ni nishon va "Klinika nomi" maydoni aytib turibdi.
 // Qisqa — telefonda bir qatorga sig'adi va forma pastga surilmaydi
 const AUDIENCE_BADGE = 'Stomatologlar uchun';
-const COPY: Record<AdPlan, { title: string; sub: string }> = {
-  lifetime: {
-    title: "Klinika uchun kompyuter dasturi — bir marta to'lang, umrbod foydalaning",
-    sub: "Tish kartasi, qabullar va kassa — bitta dasturda. Bepul ko'rsatib beramiz.",
-  },
-  monthly: {
-    title: 'Klinika uchun kompyuter dasturi — qulay oylik obuna',
-    sub: "Tish kartasi, qabullar va kassa — bitta dasturda. Bepul ko'rsatib beramiz.",
-  },
+const SUB = "Tish kartasi, qabullar va kassa — bitta dasturda. Bepul ko'rsatib beramiz.";
+const COPY: Record<AdPlan, { lead: string; offer: string; sub: string }> = {
+  lifetime: { lead: 'Kompyuter dasturi —', offer: "bir marta to'lang, umrbod foydalaning", sub: SUB },
+  monthly: { lead: 'Kompyuter dasturi —', offer: 'qulay oylik obuna', sub: SUB },
 };
+
+type FieldName = 'name' | 'clinic' | 'phone';
+const FIELD_ORDER: FieldName[] = ['name', 'clinic', 'phone'];
 
 const toDigits = (raw: string) => {
 
@@ -54,9 +54,39 @@ const buildSource = (plan: AdPlan) => {
 
 const OUR_PHONE = '+998 90 824 29 92';
 
-const FIELD =
-  'w-full bg-slate-50 border-2 border-slate-100 focus:border-primary-500 focus:bg-white rounded-2xl ' +
-  'px-4 py-3.5 text-base text-slate-800 placeholder:text-slate-300 outline-none transition-all';
+const inputClass = (hasError: boolean) =>
+  'w-full bg-slate-50 border-2 focus:bg-white focus:ring-4 rounded-2xl pl-11 pr-4 py-3 text-base ' +
+  'text-slate-800 placeholder:text-slate-300 outline-none transition-all ' +
+  (hasError
+    ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10'
+    : 'border-slate-100 hover:border-slate-200 focus:border-primary-500 focus:ring-primary-500/10');
+
+interface FieldProps {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  error: string | null;
+  delay: number;
+  children: React.ReactNode;
+}
+
+/** Yorliq, maydon ichidagi belgi va xato matni — uchala maydon bir xil ko'rinadi */
+const Field = ({ id, label, icon: Icon, error, delay, children }: FieldProps) => (
+  <div className="space-y-1 al-rise" style={{ animationDelay: `${delay}ms` }}>
+    <label htmlFor={id} className="block text-[13px] font-bold text-slate-700">
+      {label}
+    </label>
+    <div className="relative">
+      <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-primary-500 pointer-events-none" />
+      {children}
+    </div>
+    {error && (
+      <p className="flex items-center gap-1.5 text-xs text-red-600 font-medium">
+        <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
+      </p>
+    )}
+  </div>
+);
 
 export default function AdLeadPage({ plan }: AdLeadPageProps) {
   const { t } = useLanguage();
@@ -64,11 +94,15 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   const copy = COPY[plan];
   const [sentBefore] = useState(readSentLead);
   const [name, setName] = useState(sentBefore?.name ?? '');
+  const [clinic, setClinic] = useState('');
   const [digits, setDigits] = useState(sentBefore?.digits ?? '');
   const [status, setStatus] = useState<Status>(sentBefore ? 'success' : 'idle');
   // Ariza oldin qoldirilgan: shu qurilmadan yoki shu raqamdan
   const [isRepeat, setIsRepeat] = useState(!!sentBefore);
-  const [phoneError, setPhoneError] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<FieldName, boolean>>>({});
+  const clearError = (field: FieldName) => {
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: false }));
+  };
   // Bitta ariza uchun bitta belgi: xatodan keyin qayta yuborilsa ham Meta uni bir marta sanaydi
   const track = useRef<MetaTrack | null>(null);
   const lostResponse = useRef(false);
@@ -86,18 +120,23 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
 
   const startOver = () => {
     setName('');
+    setClinic('');
     setDigits('');
+    setErrors({});
     setIsRepeat(false);
     setStatus('idle');
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (digits.length !== 9) {
-      setPhoneError(true);
+    // Tugma hech qachon o'chirilmaydi: bosilganda nima yetishmayotgani aytiladi
+    const found = { name: !name.trim(), clinic: !clinic.trim(), phone: digits.length !== 9 };
+    const firstMissing = FIELD_ORDER.find((field) => found[field]);
+    setErrors(found);
+    if (firstMissing) {
+      document.getElementById(`ad-${firstMissing}`)?.focus();
       return;
     }
-    setPhoneError(false);
 
     setStatus('loading');
     track.current = track.current || getMetaTrack();
@@ -108,7 +147,13 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       const res = await fetch(`${API_URL}/public/demo-request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), phone: `+998${digits}`, source: buildSource(plan), track: track.current }),
+        body: JSON.stringify({
+          name: name.trim(),
+          clinicName: clinic.trim(),
+          phone: `+998${digits}`,
+          source: buildSource(plan),
+          track: track.current,
+        }),
       });
       gotResponse = true;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -136,13 +181,19 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-50 via-white to-white flex flex-col items-center px-4 py-8">
-      <Logo size="md" forceLight />
+    <div className="al-page relative min-h-screen overflow-hidden flex flex-col items-center px-4 pt-4 sm:pt-8 pb-10">
+      <div aria-hidden="true" className="al-blob al-blob-a" />
+      <div aria-hidden="true" className="al-blob al-blob-b" />
 
-      <div className="w-full max-w-md mt-8 bg-white rounded-3xl shadow-xl shadow-primary-900/10 border border-slate-100 p-6 sm:p-8">
+      <div className="relative al-rise">
+        <Logo size="md" forceLight />
+      </div>
+
+      <div className="relative w-full max-w-md mt-4 sm:mt-6 al-card al-rise" style={{ animationDelay: '60ms' }}>
+        <div className="bg-white rounded-[27px] p-5 sm:p-8">
         {status === 'success' ? (
           <div className="text-center py-6 space-y-4">
-            <div className="w-20 h-20 rounded-3xl bg-emerald-50 border-2 border-emerald-100 flex items-center justify-center mx-auto">
+            <div className="al-pop w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-50 to-emerald-100 ring-1 ring-emerald-200 shadow-lg shadow-emerald-500/20 flex items-center justify-center mx-auto">
               <CheckCircle className="w-10 h-10 text-emerald-500" />
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900">
@@ -158,8 +209,8 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
               <p className="text-sm font-semibold text-slate-600">Kutishni xohlamasangiz, o'zingiz qo'ng'iroq qiling</p>
               <a
                 href={`tel:${OUR_PHONE.replace(/\s/g, '')}`}
-                className="w-full py-3.5 min-h-[52px] rounded-2xl bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-lg
-                           transition-all active:scale-[0.98] flex items-center justify-center gap-2 whitespace-nowrap"
+                className="w-full py-3.5 min-h-[52px] rounded-2xl bg-gradient-to-r from-primary-600 to-sky-500 hover:brightness-110 text-white font-extrabold text-lg
+                           shadow-lg shadow-primary-500/25 transition-all active:scale-[0.98] flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <Phone className="w-5 h-5" /> {OUR_PHONE}
               </a>
@@ -174,53 +225,77 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
           </div>
         ) : (
           <>
-            <span className="inline-block text-[11px] font-black text-primary-700 bg-primary-50 uppercase tracking-[0.15em] px-3 py-1 rounded-full">
-              {AUDIENCE_BADGE}
-            </span>
-            <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">{copy.title}</h1>
-            <p className="mt-2 text-sm text-slate-500 leading-relaxed">{copy.sub}</p>
+            <div className="al-rise" style={{ animationDelay: '120ms' }}>
+              <span className="inline-flex items-center gap-2 text-[11px] font-black text-primary-700 bg-primary-50 ring-1 ring-primary-100 uppercase tracking-[0.15em] px-3 py-1 rounded-full">
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inline-flex w-full h-full rounded-full bg-primary-400 opacity-75 motion-safe:animate-ping" />
+                  <span className="relative inline-flex w-2 h-2 rounded-full bg-primary-500" />
+                </span>
+                {AUDIENCE_BADGE}
+              </span>
+              <h1 className="mt-3 text-[26px] sm:text-[32px] font-extrabold text-slate-900 leading-[1.15] tracking-tight">
+                {copy.lead} <span className="al-accent block [text-wrap:balance]">{copy.offer}</span>
+              </h1>
+              <p className="mt-2 text-sm text-slate-500 leading-relaxed">{copy.sub}</p>
+            </div>
 
-            <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
-              <div className="space-y-1.5">
-                <label htmlFor="ad-name" className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <User className="w-4 h-4 text-primary-500" /> {t('auto.Ismingiz')}
-                </label>
+            <form onSubmit={submit} className="mt-4 space-y-3" noValidate>
+              <Field id="ad-name" label={t('auto.Ismingiz')} icon={User} delay={180} error={errors.name ? 'Ismingizni yozing' : null}>
                 <input
                   id="ad-name"
                   type="text"
                   required
                   autoComplete="name"
                   placeholder="Masalan: Aziz"
+                  aria-invalid={!!errors.name}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className={FIELD}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    clearError('name');
+                  }}
+                  className={inputClass(!!errors.name)}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1.5">
-                <label htmlFor="ad-phone" className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <Phone className="w-4 h-4 text-primary-500" /> {t('auto.Telefon raqamingiz')}
-                </label>
+              <Field id="ad-clinic" label={t('auto.Klinika nomi')} icon={Building2} delay={230} error={errors.clinic ? 'Klinikangiz nomini yozing' : null}>
+                <input
+                  id="ad-clinic"
+                  type="text"
+                  required
+                  autoComplete="organization"
+                  placeholder="Masalan: Tabassum Dent"
+                  aria-invalid={!!errors.clinic}
+                  value={clinic}
+                  onChange={(e) => {
+                    setClinic(e.target.value);
+                    clearError('clinic');
+                  }}
+                  className={inputClass(!!errors.clinic)}
+                />
+              </Field>
+
+              <Field
+                id="ad-phone"
+                label={t('auto.Telefon raqamingiz')}
+                icon={Phone}
+                delay={280}
+                error={errors.phone ? "Raqamni to'liq kiriting: +998 va 9 ta raqam" : null}
+              >
                 <input
                   id="ad-phone"
                   type="tel"
                   inputMode="tel"
                   autoComplete="tel"
                   required
-                  aria-invalid={phoneError}
+                  aria-invalid={!!errors.phone}
                   value={formatPhone(digits)}
                   onChange={(e) => {
                     setDigits(toDigits(e.target.value));
-                    if (phoneError) setPhoneError(false);
+                    clearError('phone');
                   }}
-                  className={`${FIELD} font-mono ${phoneError ? 'border-red-300 focus:border-red-500' : ''}`}
+                  className={`${inputClass(!!errors.phone)} font-mono`}
                 />
-                {phoneError && (
-                  <p className="flex items-center gap-1.5 text-xs text-red-600 font-medium">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Raqamni to'liq kiriting: +998 va 9 ta raqam
-                  </p>
-                )}
-              </div>
+              </Field>
 
               {status === 'error' && (
                 <p className="flex items-start gap-2 p-3 rounded-2xl bg-red-50 border border-red-100 text-sm text-red-700">
@@ -229,52 +304,35 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
                 </p>
               )}
 
-              <button
-                type="submit"
-                disabled={status === 'loading' || !name.trim()}
-                className="w-full py-4 min-h-[52px] rounded-2xl bg-primary-600 hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed
-                           text-white font-extrabold text-base transition-all active:scale-[0.98] shadow-xl shadow-primary-500/25
-                           flex items-center justify-center gap-2"
-              >
-                {status === 'loading' ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" /> {t('auto.Yuborilmoqda...')}
-                  </>
-                ) : (
-                  'Qo\'ng\'iroq qilishingizni kutaman'
-                )}
-              </button>
+              {/* Kirish animatsiyasi o'ramda: tugmaning o'z transform'i (bosilganda kichrayish) unga to'qnashmasin */}
+              <div className="al-rise" style={{ animationDelay: '330ms' }}>
+                <button
+                  type="submit"
+                  disabled={status === 'loading'}
+                  className="al-shine group relative overflow-hidden w-full px-3 py-4 min-h-[56px] rounded-2xl
+                             bg-gradient-to-r from-primary-600 via-primary-500 to-sky-500 text-white font-extrabold
+                             text-[15px] min-[380px]:text-base leading-tight text-center
+                             shadow-xl shadow-primary-500/30 hover:shadow-2xl hover:shadow-primary-500/40 hover:brightness-110
+                             active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait transition-all
+                             flex items-center justify-center gap-2"
+                >
+                  {status === 'loading' ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" /> {t('auto.Yuborilmoqda...')}
+                    </>
+                  ) : (
+                    <>
+                      Qo'ng'iroq qilishingizni kutaman
+                      {/* Tor telefonda strelka yozuvni chetga siqib qo'ymasin */}
+                      <ArrowRight className="hidden min-[380px]:block w-5 h-5 shrink-0 transition-transform group-hover:translate-x-1" />
+                    </>
+                  )}
+                </button>
+              </div>
             </form>
-
-            <div className="mt-6 grid grid-cols-3 gap-2 text-center">
-              {[
-                { icon: Clock, text: 'O\'rnatish 1 kun' },
-                { icon: Headphones, text: 'O\'qitish bepul' },
-                { icon: ShieldCheck, text: 'Ma\'lumot xavfsiz' },
-              ].map(({ icon: Icon, text }) => (
-                <div key={text} className="flex flex-col items-center gap-1 text-[11px] font-semibold text-slate-500">
-                  <Icon className="w-4 h-4 text-primary-500" />
-                  {text}
-                </div>
-              ))}
-            </div>
-
-            {/* Dasturning o'zi ko'rinib tursin — formadan PASTDA, shunda tugma birinchi ekranda qoladi */}
-            <figure className="mt-6 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
-              <img
-                src="/landing/tooth-chart.webp"
-                alt="DentaCRM dasturidagi tish kartasi"
-                width={1600}
-                height={1000}
-                loading="lazy"
-                className="block w-full h-auto"
-              />
-              <figcaption className="px-3 py-2 text-[11px] font-semibold text-slate-500 text-center">
-                Dastur ichidan: bemorning tish kartasi
-              </figcaption>
-            </figure>
           </>
         )}
+        </div>
       </div>
     </div>
   );

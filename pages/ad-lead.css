@@ -1,0 +1,108 @@
+/*
+ * Reklama formasi sahifasiga (/lifetime, /monthly) xos CSS.
+ *
+ * Fayl global — har bir klass `al-` bilan boshlanadi.
+ * Faqat transform va opacity animatsiya qilinadi: sahifa Instagram ichidagi
+ * brauzerda, ko'pincha arzon telefonda ochiladi. Fon dog'lari filter: blur emas,
+ * radial-gradient — shuning uchun arzon.
+ */
+
+.al-page {
+  background-color: #f5f8ff;
+  background-image:
+    radial-gradient(36rem 26rem at 10% -8%, rgba(37, 99, 235, 0.18), transparent 62%),
+    radial-gradient(30rem 24rem at 95% 12%, rgba(14, 165, 233, 0.14), transparent 60%);
+}
+
+/* Sekin suzuvchi rangli dog'lar */
+.al-blob {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  will-change: transform;
+}
+.al-blob-a {
+  width: 22rem;
+  height: 22rem;
+  top: -6rem;
+  left: -8rem;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.28), transparent 68%);
+  animation: al-drift 14s ease-in-out infinite;
+}
+.al-blob-b {
+  width: 26rem;
+  height: 26rem;
+  bottom: -10rem;
+  right: -10rem;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.22), transparent 68%);
+  animation: al-drift 18s ease-in-out infinite reverse;
+}
+@keyframes al-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(2.5rem, 1.5rem) scale(1.08); }
+}
+
+/* Kartaning gradient hoshiyasi */
+.al-card {
+  padding: 1px;
+  border-radius: 1.75rem;
+  background: linear-gradient(140deg, #bfdbfe, rgba(255, 255, 255, 0.9) 40%, #bae6fd);
+  box-shadow: 0 24px 60px -12px rgba(30, 64, 175, 0.22), 0 2px 6px rgba(15, 23, 42, 0.05);
+}
+
+/* Sarlavhadagi taklif — ko'k gradient matn */
+.al-accent {
+  background-image: linear-gradient(90deg, #2563eb, #0ea5e9);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Kirishda pastdan ko'tarilib chiqish; kechikish style={{ animationDelay }} bilan */
+.al-rise {
+  animation: al-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes al-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Muvaffaqiyat belgisi "sakrab" chiqadi */
+.al-pop {
+  animation: al-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes al-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Tugma ustidan vaqti-vaqti bilan o'tadigan yaltiroq chiziq */
+.al-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: translateX(-120%) skewX(-20deg);
+  animation: al-shine 3.6s ease-in-out 1.2s infinite;
+  pointer-events: none;
+}
+.al-shine:disabled::after {
+  animation: none;
+  opacity: 0;
+}
+@keyframes al-shine {
+  0%, 55% { transform: translateX(-120%) skewX(-20deg); }
+  100%    { transform: translateX(320%) skewX(-20deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .al-blob,
+  .al-rise,
+  .al-pop,
+  .al-shine::after {
+    animation: none !important;
+  }
+}
