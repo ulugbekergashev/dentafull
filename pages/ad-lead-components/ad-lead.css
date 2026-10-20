@@ -1,0 +1,118 @@
+/*
+ * Reklama formasi sahifasiga (/lifetime, /monthly) xos CSS.
+ *
+ * Fayl global — har bir klass `al-` bilan boshlanadi.
+ * Yo'nalish: "toza klinik" — och kulrang-ko'k fon, siyohrang matn, ko'k aksent,
+ * sarlavhada sariq marker. Rangli dog'lar va gradient panellar ataylab yo'q.
+ * Animatsiyalar qisqa va bir martalik; `prefers-reduced-motion` da o'chadi.
+ */
+
+.al-root {
+  background-color: #f5f7fb;
+  color: #0f172a;
+}
+
+/* Yuqori chap burchakdan so'nib boruvchi nozik to'r */
+.al-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.045) 1px, transparent 1px);
+  background-size: 32px 32px;
+  -webkit-mask-image: radial-gradient(ellipse 75% 55% at 25% 0%, #000 20%, transparent 75%);
+  mask-image: radial-gradient(ellipse 75% 55% at 25% 0%, #000 20%, transparent 75%);
+}
+
+/* Taklif ostidan marker bilan chizilgandek sariq belgi tortiladi.
+   box-decoration-break: clone — sarlavha bir necha qatorga bo'linsa, har qator o'z belgisini oladi */
+.al-mark {
+  background-image: linear-gradient(104deg, rgba(253, 230, 138, 0) 0.5%, #fde68a 2.5%, #fcd34d 96%, rgba(252, 211, 77, 0) 99%);
+  background-repeat: no-repeat;
+  background-size: 0% 36%;
+  background-position: 0 88%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  padding: 0 0.06em;
+  animation: al-mark 0.9s cubic-bezier(0.65, 0, 0.35, 1) 0.55s forwards;
+}
+@keyframes al-mark {
+  to { background-size: 100% 36%; }
+}
+
+/* Forma kartasi: ingichka hoshiya + qatlamli yengil soya */
+.al-card {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 18px 40px -18px rgba(15, 23, 42, 0.18);
+}
+
+/* Brauzer avtoto'ldirganda maydon sariq/ko'k quti bo'lib qolmasin */
+.al-input:-webkit-autofill,
+.al-input:-webkit-autofill:hover,
+.al-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #0f172a;
+  transition: background-color 99999s ease-in-out 0s;
+}
+
+/* Tugma ustidan vaqti-vaqti bilan o'tadigan yaltiroq chiziq */
+.al-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: translateX(-120%) skewX(-20deg);
+  animation: al-shine 4.5s ease-in-out 1.6s infinite;
+  pointer-events: none;
+}
+.al-shine:disabled::after {
+  animation: none;
+  opacity: 0;
+}
+@keyframes al-shine {
+  0%, 65% { transform: translateX(-120%) skewX(-20deg); }
+  100%    { transform: translateX(320%) skewX(-20deg); }
+}
+
+/* ── Kirish va muvaffaqiyat ─────────────────────────────────────── */
+.al-rise {
+  animation: al-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes al-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.al-pop {
+  animation: al-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes al-pop {
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.al-ripple {
+  animation: al-ripple 2.2s ease-out infinite;
+}
+@keyframes al-ripple {
+  from { transform: scale(1); opacity: 0.6; }
+  to   { transform: scale(2); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .al-mark,
+  .al-shine::after,
+  .al-rise,
+  .al-pop,
+  .al-ripple {
+    animation: none !important;
+  }
+  .al-mark {
+    background-size: 100% 36%;
+  }
+}

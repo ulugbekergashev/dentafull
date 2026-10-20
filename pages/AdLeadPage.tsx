@@ -1,11 +1,12 @@
 import { useLanguage } from '../context/LanguageContext';
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle, Phone, User, AlertCircle, Loader2, Building2, ArrowRight, LucideIcon } from 'lucide-react';
+import { AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { API_URL } from '../services/api';
-import { Logo } from '../components/Logo';
 import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent, trackMetaEvent } from '../utils/metaPixel';
 import { readSentLead, rememberSentLead } from '../utils/sentLead';
-import './ad-lead.css';
+import { Logo } from '../components/Logo';
+import { AudienceBadge, Field, inputClass, SuccessView } from './ad-lead-components/AdLeadParts';
+import './ad-lead-components/ad-lead.css';
 
 export type AdPlan = 'lifetime' | 'monthly';
 
@@ -22,12 +23,15 @@ type Status = 'idle' | 'loading' | 'success' | 'error';
 // tushuntiramiz" kabi gaplarni ko'rib, buni kredit deb o'ylab ariza qoldirishardi.
 // "Dastur" so'zining o'zi ham ikki ma'noli (kredit dasturi), shuning uchun "kompyuter dasturi".
 // Sarlavha qisqa: "klinika uchun"ni nishon va "Klinika nomi" maydoni aytib turibdi.
-// Qisqa — telefonda bir qatorga sig'adi va forma pastga surilmaydi
+// Qisqa — telefonda logotip bilan bir qatorga sig'adi
 const AUDIENCE_BADGE = 'Stomatologlar uchun';
-const SUB = "Tish kartasi, qabullar va kassa — bitta dasturda. Bepul ko'rsatib beramiz.";
+// "Bepul ko'rsatib beramiz" forma sarlavhasida — bu yerda takrorlanmaydi
+const SUB = 'Tish kartasi, qabullar va kassa — bitta dasturda.';
+// "—" oldida bo'linmas probel: tire yolg'iz o'zi keyingi qatorga tushib qolmasin
+const LEAD = 'Kompyuter dasturi —';
 const COPY: Record<AdPlan, { lead: string; offer: string; sub: string }> = {
-  lifetime: { lead: 'Kompyuter dasturi —', offer: "bir marta to'lang, umrbod foydalaning", sub: SUB },
-  monthly: { lead: 'Kompyuter dasturi —', offer: 'qulay oylik obuna', sub: SUB },
+  lifetime: { lead: LEAD, offer: "bir marta to'lang, umrbod foydalaning", sub: SUB },
+  monthly: { lead: LEAD, offer: 'qulay oylik obuna', sub: SUB },
 };
 
 type FieldName = 'name' | 'clinic' | 'phone';
@@ -53,40 +57,6 @@ const buildSource = (plan: AdPlan) => {
 };
 
 const OUR_PHONE = '+998 90 824 29 92';
-
-const inputClass = (hasError: boolean) =>
-  'w-full bg-slate-50 border-2 focus:bg-white focus:ring-4 rounded-2xl pl-11 pr-4 py-3 text-base ' +
-  'text-slate-800 placeholder:text-slate-300 outline-none transition-all ' +
-  (hasError
-    ? 'border-red-300 focus:border-red-500 focus:ring-red-500/10'
-    : 'border-slate-100 hover:border-slate-200 focus:border-primary-500 focus:ring-primary-500/10');
-
-interface FieldProps {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  error: string | null;
-  delay: number;
-  children: React.ReactNode;
-}
-
-/** Yorliq, maydon ichidagi belgi va xato matni — uchala maydon bir xil ko'rinadi */
-const Field = ({ id, label, icon: Icon, error, delay, children }: FieldProps) => (
-  <div className="space-y-1 al-rise" style={{ animationDelay: `${delay}ms` }}>
-    <label htmlFor={id} className="block text-[13px] font-bold text-slate-700">
-      {label}
-    </label>
-    <div className="relative">
-      <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-primary-500 pointer-events-none" />
-      {children}
-    </div>
-    {error && (
-      <p className="flex items-center gap-1.5 text-xs text-red-600 font-medium">
-        <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
-      </p>
-    )}
-  </div>
-);
 
 export default function AdLeadPage({ plan }: AdLeadPageProps) {
   const { t } = useLanguage();
@@ -180,159 +150,162 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
     }
   };
 
-  return (
-    <div className="al-page relative min-h-screen overflow-hidden flex flex-col items-center px-4 pt-4 sm:pt-8 pb-10">
-      <div aria-hidden="true" className="al-blob al-blob-a" />
-      <div aria-hidden="true" className="al-blob al-blob-b" />
+  const form = (
+    <form onSubmit={submit} className="space-y-3 sm:space-y-4" noValidate>
+      <Field id="ad-name" label={t('auto.Ismingiz')} delay={260} error={errors.name ? 'Ismingizni yozing' : null}>
+        <input
+          id="ad-name"
+          type="text"
+          required
+          autoComplete="name"
+          placeholder="Masalan: Aziz"
+          aria-invalid={!!errors.name}
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            clearError('name');
+          }}
+          className={inputClass(!!errors.name)}
+        />
+      </Field>
 
-      <div className="relative al-rise">
-        <Logo size="md" forceLight />
+      <Field id="ad-clinic" label={t('auto.Klinika nomi')} delay={310} error={errors.clinic ? 'Klinikangiz nomini yozing' : null}>
+        <input
+          id="ad-clinic"
+          type="text"
+          required
+          autoComplete="organization"
+          placeholder="Masalan: Tabassum Dent"
+          aria-invalid={!!errors.clinic}
+          value={clinic}
+          onChange={(e) => {
+            setClinic(e.target.value);
+            clearError('clinic');
+          }}
+          className={inputClass(!!errors.clinic)}
+        />
+      </Field>
+
+      <Field
+        id="ad-phone"
+        label={t('auto.Telefon raqamingiz')}
+        delay={360}
+        error={errors.phone ? "Raqamni to'liq kiriting: +998 va 9 ta raqam" : null}
+      >
+        <input
+          id="ad-phone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          required
+          aria-invalid={!!errors.phone}
+          value={formatPhone(digits)}
+          onChange={(e) => {
+            setDigits(toDigits(e.target.value));
+            clearError('phone');
+          }}
+          className={`${inputClass(!!errors.phone)} tabular-nums tracking-wide`}
+        />
+      </Field>
+
+      {status === 'error' && (
+        <p className="flex items-start gap-2 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          Yuborib bo'lmadi. Qaytadan urinib ko'ring yoki {OUR_PHONE} raqamiga qo'ng'iroq qiling.
+        </p>
+      )}
+
+      {/* Kirish animatsiyasi o'ramda: tugmaning o'z transform'i (bosilganda kichrayish) unga to'qnashmasin */}
+      <div className="al-rise pt-1" style={{ animationDelay: '410ms' }}>
+        <button
+          type="submit"
+          disabled={status === 'loading'}
+          className="al-shine group relative overflow-hidden w-full px-3 min-h-[52px] rounded-xl
+                     bg-primary-600 hover:bg-primary-700 text-white font-bold text-[15px] min-[380px]:text-base
+                     leading-tight text-center
+                     shadow-[0_1px_2px_rgba(15,23,42,0.08),0_8px_20px_-8px_rgba(37,99,235,0.55)]
+                     hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_12px_24px_-8px_rgba(37,99,235,0.6)]
+                     active:scale-[0.97] disabled:opacity-70 disabled:cursor-wait
+                     transition-[transform,background-color,box-shadow] duration-150 ease-out
+                     flex items-center justify-center gap-2"
+        >
+          {status === 'loading' ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" /> {t('auto.Yuborilmoqda...')}
+            </>
+          ) : (
+            <>
+              Qo'ng'iroq qilishingizni kutaman
+              {/* Tor telefonda strelka yozuvni chetga siqib qo'ymasin */}
+              <ArrowRight className="hidden min-[380px]:block w-5 h-5 shrink-0 transition-transform group-hover:translate-x-1" />
+            </>
+          )}
+        </button>
       </div>
 
-      <div className="relative w-full max-w-md mt-4 sm:mt-6 al-card al-rise" style={{ animationDelay: '60ms' }}>
-        <div className="bg-white rounded-[27px] p-5 sm:p-8">
-        {status === 'success' ? (
-          <div className="text-center py-6 space-y-4">
-            <div className="al-pop w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-50 to-emerald-100 ring-1 ring-emerald-200 shadow-lg shadow-emerald-500/20 flex items-center justify-center mx-auto">
-              <CheckCircle className="w-10 h-10 text-emerald-500" />
-            </div>
-            <h1 className="text-2xl font-extrabold text-slate-900">
-              {isRepeat ? `Arizangiz bizda bor${name.trim() ? `, ${name.trim()}` : ''}` : `Rahmat, ${name.trim()}!`}
-            </h1>
-            <p className="text-base text-slate-500 leading-relaxed">
-              {isRepeat ? 'Qayta qoldirish shart emas —' : t('auto.Arizangiz qabul qilindi. Tez orada')}{' '}
-              <span className="font-bold text-slate-700 whitespace-nowrap">{formatPhone(digits)}</span> raqamiga{isRepeat ? ' albatta' : ''} qo'ng'iroq qilamiz.
-            </p>
+      <p className="pt-1 text-center text-[13px] text-slate-500">
+        Yoki o'zingiz qo'ng'iroq qiling:{' '}
+        <a href={`tel:${OUR_PHONE.replace(/\s/g, '')}`} className="font-semibold text-slate-900 whitespace-nowrap tabular-nums hover:text-primary-600">
+          {OUR_PHONE}
+        </a>
+      </p>
+    </form>
+  );
 
-            {/* Raqamimiz ko'z oldida tursin: "nomeringiz esimdan chiqdi" deb qayta ariza qoldirishmasin */}
-            <div className="rounded-2xl bg-primary-50 border border-primary-100 p-4 space-y-3">
-              <p className="text-sm font-semibold text-slate-600">Kutishni xohlamasangiz, o'zingiz qo'ng'iroq qiling</p>
-              <a
-                href={`tel:${OUR_PHONE.replace(/\s/g, '')}`}
-                className="w-full py-3.5 min-h-[52px] rounded-2xl bg-gradient-to-r from-primary-600 to-sky-500 hover:brightness-110 text-white font-extrabold text-lg
-                           shadow-lg shadow-primary-500/25 transition-all active:scale-[0.98] flex items-center justify-center gap-2 whitespace-nowrap"
-              >
-                <Phone className="w-5 h-5" /> {OUR_PHONE}
-              </a>
-              <p className="text-xs text-slate-500">Bu raqamni saqlab qo'ying.</p>
-            </div>
+  // Kompyuterda: chapda sarlavha, o'ngda oq kartadagi forma. Telefon va planshetda bitta ustun:
+  // logotip, sarlavha va karta bir xil kenglikda (max-w-md), chap chetlari bir chiziqda.
+  const column = 'mx-auto w-full max-w-md lg:max-w-none';
+  return (
+    <div className="al-root relative min-h-screen overflow-hidden antialiased">
+      <div aria-hidden="true" className="al-grid" />
 
-            {isRepeat && (
-              <button type="button" onClick={startOver} className="text-sm font-semibold text-slate-400 hover:text-primary-600 underline underline-offset-4">
-                Boshqa raqam qoldirish
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="al-rise" style={{ animationDelay: '120ms' }}>
-              <span className="inline-flex items-center gap-2 text-[11px] font-black text-primary-700 bg-primary-50 ring-1 ring-primary-100 uppercase tracking-[0.15em] px-3 py-1 rounded-full">
-                <span className="relative flex w-2 h-2">
-                  <span className="absolute inline-flex w-full h-full rounded-full bg-primary-400 opacity-75 motion-safe:animate-ping" />
-                  <span className="relative inline-flex w-2 h-2 rounded-full bg-primary-500" />
-                </span>
-                {AUDIENCE_BADGE}
+      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-5 sm:px-8 lg:px-12">
+        <header className={`al-rise flex items-center justify-between gap-3 pt-5 sm:pt-7 ${column}`}>
+          <Logo size="md" forceLight />
+          {/* 320px li eski telefonda logotip yoniga sig'maydi */}
+          <AudienceBadge text={AUDIENCE_BADGE} className="hidden min-[360px]:inline-flex" />
+        </header>
+
+        <main
+          className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start gap-5 pt-6 pb-10 sm:gap-8 sm:pt-10
+                     lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:content-center lg:items-center lg:gap-16 lg:py-12"
+        >
+          <section className={`al-rise ${column}`} style={{ animationDelay: '60ms' }}>
+            {/* "Kompyuter dasturi —" doim alohida qatorda, taklif uning ostida (marker har qator ostida) */}
+            <h1 className="text-[28px] min-[375px]:text-[30px] sm:text-[44px] lg:text-[48px] font-extrabold leading-[1.08] tracking-[-0.025em] text-slate-900">
+              <span className="block">{copy.lead}</span>
+              <span className="block [text-wrap:balance]">
+                <span className="al-mark">{copy.offer}</span>
               </span>
-              <h1 className="mt-3 text-[26px] sm:text-[32px] font-extrabold text-slate-900 leading-[1.15] tracking-tight">
-                {copy.lead} <span className="al-accent block [text-wrap:balance]">{copy.offer}</span>
-              </h1>
-              <p className="mt-2 text-sm text-slate-500 leading-relaxed">{copy.sub}</p>
-            </div>
+            </h1>
+            <p className="mt-3 sm:mt-5 max-w-md text-[15px] sm:text-lg leading-relaxed text-slate-600 [text-wrap:pretty]">
+              {copy.sub}
+              <span className="sm:hidden"> Bepul ko'rsatib beramiz.</span>
+            </p>
+          </section>
 
-            <form onSubmit={submit} className="mt-4 space-y-3" noValidate>
-              <Field id="ad-name" label={t('auto.Ismingiz')} icon={User} delay={180} error={errors.name ? 'Ismingizni yozing' : null}>
-                <input
-                  id="ad-name"
-                  type="text"
-                  required
-                  autoComplete="name"
-                  placeholder="Masalan: Aziz"
-                  aria-invalid={!!errors.name}
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    clearError('name');
-                  }}
-                  className={inputClass(!!errors.name)}
-                />
-              </Field>
-
-              <Field id="ad-clinic" label={t('auto.Klinika nomi')} icon={Building2} delay={230} error={errors.clinic ? 'Klinikangiz nomini yozing' : null}>
-                <input
-                  id="ad-clinic"
-                  type="text"
-                  required
-                  autoComplete="organization"
-                  placeholder="Masalan: Tabassum Dent"
-                  aria-invalid={!!errors.clinic}
-                  value={clinic}
-                  onChange={(e) => {
-                    setClinic(e.target.value);
-                    clearError('clinic');
-                  }}
-                  className={inputClass(!!errors.clinic)}
-                />
-              </Field>
-
-              <Field
-                id="ad-phone"
-                label={t('auto.Telefon raqamingiz')}
-                icon={Phone}
-                delay={280}
-                error={errors.phone ? "Raqamni to'liq kiriting: +998 va 9 ta raqam" : null}
-              >
-                <input
-                  id="ad-phone"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  required
-                  aria-invalid={!!errors.phone}
-                  value={formatPhone(digits)}
-                  onChange={(e) => {
-                    setDigits(toDigits(e.target.value));
-                    clearError('phone');
-                  }}
-                  className={`${inputClass(!!errors.phone)} font-mono`}
-                />
-              </Field>
-
-              {status === 'error' && (
-                <p className="flex items-start gap-2 p-3 rounded-2xl bg-red-50 border border-red-100 text-sm text-red-700">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  Yuborib bo'lmadi. Qaytadan urinib ko'ring yoki {OUR_PHONE} raqamiga qo'ng'iroq qiling.
-                </p>
-              )}
-
-              {/* Kirish animatsiyasi o'ramda: tugmaning o'z transform'i (bosilganda kichrayish) unga to'qnashmasin */}
-              <div className="al-rise" style={{ animationDelay: '330ms' }}>
-                <button
-                  type="submit"
-                  disabled={status === 'loading'}
-                  className="al-shine group relative overflow-hidden w-full px-3 py-4 min-h-[56px] rounded-2xl
-                             bg-gradient-to-r from-primary-600 via-primary-500 to-sky-500 text-white font-extrabold
-                             text-[15px] min-[380px]:text-base leading-tight text-center
-                             shadow-xl shadow-primary-500/30 hover:shadow-2xl hover:shadow-primary-500/40 hover:brightness-110
-                             active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait transition-all
-                             flex items-center justify-center gap-2"
-                >
-                  {status === 'loading' ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" /> {t('auto.Yuborilmoqda...')}
-                    </>
-                  ) : (
-                    <>
-                      Qo'ng'iroq qilishingizni kutaman
-                      {/* Tor telefonda strelka yozuvni chetga siqib qo'ymasin */}
-                      <ArrowRight className="hidden min-[380px]:block w-5 h-5 shrink-0 transition-transform group-hover:translate-x-1" />
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </>
-        )}
-        </div>
+          <section className={`al-rise al-card p-4 sm:p-7 lg:p-8 ${column} lg:max-w-[440px] lg:justify-self-end`} style={{ animationDelay: '160ms' }}>
+            {status === 'success' ? (
+              <SuccessView
+                title={isRepeat ? `Arizangiz bizda bor${name.trim() ? `, ${name.trim()}` : ''}` : `Rahmat, ${name.trim()}!`}
+                lead={isRepeat ? 'Qayta qoldirish shart emas —' : t('auto.Arizangiz qabul qilindi. Tez orada')}
+                phone={formatPhone(digits)}
+                isRepeat={isRepeat}
+                ourPhone={OUR_PHONE}
+                onStartOver={startOver}
+              />
+            ) : (
+              <>
+                {/* Telefonda bu gap sarlavha ostida turadi — joy tejaladi, tugma birinchi ekranda qoladi */}
+                <div className="hidden sm:block mb-5">
+                  <h2 className="text-xl font-bold tracking-tight text-slate-900">Bepul ko'rsatib beramiz</h2>
+                  <p className="mt-1 text-sm text-slate-500 [text-wrap:pretty]">Raqamingizni qoldiring — mutaxassisimiz o'zi qo'ng'iroq qiladi.</p>
+                </div>
+                {form}
+              </>
+            )}
+          </section>
+        </main>
       </div>
     </div>
   );
