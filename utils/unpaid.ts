@@ -1,5 +1,59 @@
 import { Appointment, Transaction, Service } from '../types';
 import { calculateAppointmentTotal, isAdvanceDeposit } from './financialCalculations';
+import { isOpenCharge } from '../backend/shared/debtRules';
+import { findUnbilledWork, UnbilledWork } from './workBilling';
+
+/** To'lov kutayotgan qabul: qabulning o'zi va (ishlarning bir qismi to'langan bo'lsa) qolgan ishlar */
+export type UnbilledVisit = UnbilledWork<Appointment>;
+
+/**
+ * To'lov kutayotgan qabullar — qabul ISHLARI bo'yicha (utils/workBilling.ts, dentalocal bilan bir xil).
+ *
+ * Ilgari qabul kunidagi istalgan yozuv (bitta ishning to'lovi ham) qabulni to'liq yopardi:
+ * to'lovdan keyin qo'shilgan ish ("Qo'shimcha") va qisman to'langan qabulning qolgan ishlari
+ * hech qayerda ko'rinmasdi — pul olinmay qolardi. Endi qabul faqat ishlari to'lov yoki qarz
+ * yozuvi bilan yopilganda yopiladi; bir qismi yopilsa — qolgani (remaining) kutiladi.
+ * Bemor bo'yicha hisoblanadi (id, eski yozuvlarda ism): bitta to'lov ikki qabulni yopmaydi.
+ * Natija: qabul id → kutilayotgan ish.
+ */
+export function findUnbilledVisits(
+    appointments: Appointment[],
+    transactions: Transaction[],
+    services: Service[]
+): Map<string, UnbilledVisit> {
+    const txById = new Map<string, Transaction[]>();
+    const txByName = new Map<string, Transaction[]>();
+    for (const tx of transactions || []) {
+        if (!tx) continue;
+        const map = tx.patientId ? txById : txByName;
+        const key = tx.patientId || tx.patientName || '';
+        const list = map.get(key);
+        if (list) list.push(tx); else map.set(key, [tx]);
+    }
+    const groups = new Map<string, Appointment[]>();
+    for (const a of appointments || []) {
+        if (!a) continue;
+        const key = a.patientId ? `id:${a.patientId}` : `name:${a.patientName}`;
+        const list = groups.get(key);
+        if (list) list.push(a); else groups.set(key, [a]);
+    }
+    const breakdownOf = (a: Appointment) => calculateAppointmentTotal(a.notes || '', services).breakdown || a.type;
+    const result = new Map<string, UnbilledVisit>();
+    groups.forEach(appts => {
+        const first = appts[0];
+        const txs = [
+            ...(first.patientId ? txById.get(first.patientId) || [] : []),
+            ...(txByName.get(first.patientName) || []),
+        ];
+        for (const work of findUnbilledWork(appts, txs, breakdownOf)) result.set(work.appointment.id, work);
+    });
+    return result;
+}
+
+/** Qabulning hali olinmagan summasi va ishlar ro'yxati (to'lov oynasiga shu tushadi) */
+export function unbilledDue(work: UnbilledVisit, services: Service[]): { total: number; breakdown: string } {
+    return work.remaining || calculateAppointmentTotal(work.appointment.notes || '', services);
+}
 
 /**
  * Olinmagan pul — yagona manba.
@@ -51,19 +105,20 @@ export function isAppointmentRecorded(
 export type PaymentState = 'paid' | 'awaiting' | 'debt';
 
 /**
- * Tashrif to'landimi — "Kutilayotgan to'lovlar" bilan aynan bir xil qoida:
- * kassada yozuvi yo'q — to'lov kutilmoqda; ochiq (Pending/Overdue) yozuv bor —
- * qarz belgisi bo'lsa qarz, bo'lmasa to'lov kutilmoqda; hammasi yopilgan — to'langan.
+ * Tashrif to'landimi: ishlari hali to'lov bilan yopilmagan — to'lov kutilmoqda; ochiq
+ * (Pending/Overdue) yozuv bor — qarz; hammasi yopilgan — to'langan. Qarz qoidasi:
+ * backend/shared/debtRules.ts. `unbilled` (findUnbilledVisits) berilsa — "Olinmagan pul"
+ * ro'yxati bilan aynan bir xil qoida; berilmasa — kassada yozuvi bor-yo'qligi bo'yicha.
  */
 export function appointmentPaymentState(
-    appointment: { date: string; patientId?: string; patientName: string },
-    transactions: Transaction[]
+    appointment: { id?: string; date: string; patientId?: string; patientName: string },
+    transactions: Transaction[],
+    unbilled?: ReadonlyMap<string, unknown>
 ): PaymentState {
     const recorded = transactions.filter(tx => txMatchesAppointment(tx, appointment));
-    if (recorded.length === 0) return 'awaiting';
-    const open = recorded.filter(tx => tx.status === 'Pending' || tx.status === 'Overdue');
-    if (open.length === 0) return 'paid';
-    return open.some(isDebtTransaction) ? 'debt' : 'awaiting';
+    if (unbilled && appointment.id && unbilled.has(appointment.id)) return 'awaiting';
+    if (!unbilled && recorded.length === 0) return 'awaiting';
+    return recorded.some(isOpenCharge) ? 'debt' : 'paid';
 }
 
 /** Ro'yxatdagi bitta qator — manbasidan qat'i nazar bir xil shaklda */
@@ -72,9 +127,8 @@ export interface UnpaidRow {
     /** 'debt' — kassada Pending yozuv bor; 'appointment' — kassada yozuv yo'q */
     source: 'debt' | 'appointment';
     /**
-     * Pul ataylab qarzga yozilganmi. Kassada Pending yozuv bo'lishining o'zi
-     * qarz degani emas: to'lov oddiygina hali kelmagan bo'lishi ham mumkin.
-     * Shuning uchun bu yerda faqat qarz ekani ANIQ holatlar true bo'ladi.
+     * Qarzmi: kassada ochiq yozuv bor (source='debt') — qarz; kassada hali hech qanday
+     * yozuv yo'q tugagan qabul — "Olinmagan pul", qarz emas (backend/shared/debtRules.ts).
      */
     isDebt: boolean;
     patientId?: string;
@@ -88,15 +142,18 @@ export interface UnpaidRow {
     sentToCashier: boolean;
     transaction?: Transaction;
     appointment?: Appointment;
+    /** Qabul ishlarining bir qismi to'langan bo'lsa — qolgan ishlar ("Nom|narx||...||TOTAL|jami") */
+    remainingBreakdown?: string;
 }
 
 /**
- * Tranzaksiya qarzmi. `isDebt` — to'lov oynasida "Qolgan qarzdorlik" to'ldirilganda
- * yoziladigan aniq belgi. Bu ustun paydo bo'lishidan oldingi yozuvlarda esa qarzni
- * faqat xizmat nomidagi "(Qarz)" bildiradi; qolganlari uchun qarz ekani aniq emas.
+ * Tranzaksiya qarzmi — ochiq (Pending/Overdue) yozuv, "qarz" belgisi bor-yo'qligidan qat'i nazar.
+ * Ilgari faqat `isDebt` belgisi yoki "(Qarz)" qo'shimchasi bo'lsa qarz sanalardi: belgisiz eski
+ * yozuvlar Bosh sahifada "Olinmagan pul" da, Moliya va botda esa qarzda chiqardi (2026-10-22).
+ * `isDebt` endi faqat "qarz yozildi" bildirishnomasi uchun.
  */
 export function isDebtTransaction(tx: Transaction): boolean {
-    return tx.isDebt === true || /\(Qarz\)/i.test(tx.service || '');
+    return isOpenCharge(tx);
 }
 
 /** Xizmat nomini qabul yozuvlaridan/tranzaksiyadan o'qiydi */
@@ -134,7 +191,7 @@ export function buildUnpaidRows(
 
     if (includeDebts) {
         for (const tx of transactions) {
-            if (tx.status !== 'Pending' && tx.status !== 'Overdue') continue;
+            if (!isOpenCharge(tx)) continue;
             if (date && tx.date !== date) continue;
             rows.push({
                 key: `tx:${tx.id}`,
@@ -152,13 +209,15 @@ export function buildUnpaidRows(
         }
     }
 
+    // Ishlari to'lov yoki qarz yozuvi bilan yopilmagan qabullar (findUnbilledVisits izohiga qarang)
+    const unbilled = findUnbilledVisits(appointments, transactions, services);
     for (const app of appointments) {
         if (app.status !== 'Completed' && app.status !== 'Checked-In') continue;
         if (app.status === 'Checked-In' && today && app.date >= today) continue;
         if (date && app.date !== date) continue;
-        // Kassada yozuv bor — qarz qatori uni allaqachon ifodalaydi
-        if (isAppointmentRecorded(app, transactions)) continue;
-        const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
+        const work = unbilled.get(app.id);
+        if (!work) continue;
+        const { total, breakdown } = unbilledDue(work, services);
         rows.push({
             key: `app:${app.id}`,
             source: 'appointment',
@@ -172,6 +231,8 @@ export function buildUnpaidRows(
             doctorId: app.doctorId,
             sentToCashier: !!app.sentToCashierAt,
             appointment: app,
+            // Ishlarning bir qismi to'langan — to'lov oynasiga faqat qolgani tushadi
+            remainingBreakdown: work.remaining?.breakdown,
         });
     }
 
@@ -193,11 +254,14 @@ export function unpaidTotal(rows: UnpaidRow[]): number {
 export function buildWaivedTransaction(
     app: Pick<Appointment, 'patientId' | 'patientName' | 'date' | 'doctorId' | 'doctorName' | 'clinicId' | 'type' | 'notes'>,
     services: Service[],
-    reason: string
+    reason: string,
+    /** Qabul ishlarining bir qismi to'langan bo'lsa — faqat qolgani kechiriladi (unbilledDue) */
+    due?: { total: number; breakdown: string }
 ): Omit<Transaction, 'id'> {
-    const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
+    const { total, breakdown } = due || calculateAppointmentTotal(app.notes || '', services);
     const name = breakdown ? breakdown.split('||')[0].split('|')[0] : (app.type || '—');
     const note = reason.trim();
+    const suffix = ` (Bepul${note ? `: ${note}` : ''})`;
     return {
         patientId: app.patientId,
         patientName: app.patientName,
@@ -207,7 +271,9 @@ export function buildWaivedTransaction(
         doctorName: app.doctorName,
         amount: 0,
         type: 'Cash',
-        service: `${name} (Bepul${note ? `: ${note}` : ''})`,
+        // Ishlar ro'yxati bilan yoziladi — shunda yozuv aynan shu ishlarni yopadi (utils/workBilling.ts);
+        // ro'yxat bo'lmasa (eski qabul) — avvalgidek birinchi ish nomi
+        service: breakdown && breakdown.includes('|') ? `${breakdown}${suffix}` : `${name}${suffix}`,
         status: 'Paid',
         discountPercent: total > 0 ? 100 : 0,
         discountAmount: total,

@@ -25,7 +25,7 @@ interface FinanceProps {
   transactions: Transaction[];
   expenses: Expense[];
   appointments: Appointment[];
-  services: { name: string; price: number; duration: number }[];
+  services: { name: string; price: number; duration: number; cost?: number }[];
   patients: Patient[];
   onPatientClick: (id: string) => void;
   doctorId: string;
@@ -47,6 +47,7 @@ interface FinanceProps {
 
 import { Doctor, InstallmentPlan, CashMovement } from '../types';
 import { getCurrentMonthRange, formatDateToISO } from '../utils/dateUtils';
+import { buildDebtors, totalDebt as totalDebtOf } from '../backend/shared/debtRules';
 
 // Xarajat kategoriyalari uchun badge ranglari
 const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
@@ -293,57 +294,13 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   // Filter appointments for Lost Revenue calculation to match the selected timeframe
   const filteredAppointments = filteredAppointmentsByDoctor.filter(a => isDateInRange(a.date));
 
-  // Calculate debtors from transactions (only Pending, not Overdue since it's not used)
-  const debtTransactions = transactions.filter(t => t.status === 'Pending');
-  const transactionDebt = debtTransactions.reduce((acc, t) => acc + t.amount, 0);
-
-  // Installment debt
-  // Faqat faol rejalar (bekor qilingan/yakunlangan rejaning qoldig'i qarz emas) — AI va
-  // xabarlar segmenti ham shunday hisoblaydi (backend findDebtors, buildDebtMap).
-  const activePlans = (installments || []).filter(plan => plan && (plan.status || 'Active') === 'Active');
-  const installmentDebt = activePlans.reduce((acc, plan) => acc + Math.max(0, (plan.totalAmount || 0) - (plan.totalPaid || 0)), 0);
-  const totalDebt = transactionDebt + installmentDebt;
-
-  // Create a map of patientName -> patientId from patients list
-  const patientIdMap = new Map<string, string>();
-  patients.forEach(p => {
-    patientIdMap.set(`${p.lastName} ${p.firstName}`, p.id);
-    // Also map just first name or variations if needed, but for now exact match or partial
-    patientIdMap.set(p.firstName, p.id); // Fallback
-  });
-
-  // Group debts by patient
-  const debtorMap = new Map<string, { name: string; amount: number; date: string; patientId?: string }>();
-  debtTransactions.forEach(t => {
-    const existing = debtorMap.get(t.patientName);
-    if (existing) {
-      existing.amount += t.amount;
-      // Keep the earliest date
-      if (new Date(t.date) < new Date(existing.date)) {
-        existing.date = t.date;
-      }
-    } else {
-      debtorMap.set(t.patientName, {
-        name: t.patientName,
-        amount: t.amount,
-        date: t.date,
-        patientId: patientIdMap.get(t.patientName) || patients.find(p => `${p.lastName} ${p.firstName}` === t.patientName)?.id
-      });
-    }
-  });
-
-  // Bo'lib to'lash qoldig'i. Ilgari u faqat to'lanmagan to'lovi ham bor bemorlarga
-  // qo'shilardi: faqat bo'lib to'lashi bor bemor jami summada bor, ro'yxatda yo'q edi
-  // (karta "2 200 000 / 1 ta qarzdor", ro'yxat esa 200 000 ko'rsatardi).
-  activePlans.forEach(plan => {
-    const remaining = (plan.totalAmount || 0) - (plan.totalPaid || 0);
-    if (remaining <= 0) return;
-    const patient = patients.find(p => p.id === plan.patientId);
-    const name = patient ? `${patient.lastName} ${patient.firstName}` : t("auto.Bo'lib to'lash");
-    const existing = debtorMap.get(name);
-    if (existing) existing.amount += remaining;
-    else debtorMap.set(name, { name, amount: remaining, date: plan.startDate || today, patientId: patient?.id });
-  });
+  // Qarz va qarzdorlar — backend/shared/debtRules.ts (dentalocal da ham aynan shu qoida):
+  // ochiq yozuv (Pending yoki Overdue) + faol bo'lib to'lash qoldig'i, bemor id bo'yicha.
+  // Ilgari bu yerda faqat Pending sanalardi va qarzdorlar ISM bo'yicha guruhlanardi:
+  // ikki bir xil ismli bemorning qarzi bitta qatorga qo'shilib ketardi.
+  const debtorPatients = patients.map(p => ({ id: p.id, name: `${p.lastName} ${p.firstName}` }));
+  const debtorRows = buildDebtors(transactions, installments || [], debtorPatients);
+  const totalDebt = totalDebtOf(transactions, installments || []);
 
   // Shu oyda kutilayotgan bo'lib to'lash to'lovlari — oyning OXIRIGACHA.
   // (getCurrentMonthRange bugungacha beradi: 20-sanaga belgilangan to'lov 3-sanada ko'rinmasdi.)
@@ -354,28 +311,25 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
     .filter(item => item.status === 'Pending' && String(item.expectedDate).slice(0, 10) >= monthStart && String(item.expectedDate).slice(0, 10) <= monthEnd);
   const upcomingInstallmentAmount = upcomingItems.reduce((acc, item) => acc + item.amount, 0);
 
-  const DEBTORS = Array.from(debtorMap.values())
-    .map((d, index) => {
-      const debtDate = new Date(d.date);
+  const DEBTORS = debtorRows.map((d, index) => {
+      const debtDate = new Date(d.oldestDate || today);
       const isValidDate = !isNaN(debtDate.getTime());
       const daysDiff = isValidDate
         ? Math.floor((new Date().getTime() - debtDate.getTime()) / (1000 * 60 * 60 * 24))
         : 0;
 
-      const patient = patients.find(p => p.id === d.patientId);
+      const patient = d.patientId ? patients.find(p => p.id === d.patientId) : undefined;
 
       return {
         id: d.patientId || `debtor-${index}`,
-        name: d.name,
-        amount: d.amount,
+        name: d.patientName || t("auto.Bo'lib to'lash"),
+        amount: d.total,
         phone: patient?.phone || '',
         days: Math.max(0, daysDiff),
         patientId: d.patientId,
         doctorId: patient?.doctorId || null
       };
-    })
-    .filter(d => d.amount > 0)
-    .sort((a, b) => b.amount - a.amount);
+    });
 
   const filteredDebtors = DEBTORS.filter(d => {
     if (selectedDebtorDoctorId === 'All') return true;
@@ -408,8 +362,9 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
   // avansdan yechilgan to'lovlar daromadga kiradi, lekin kassaga bugun pul kirmaydi.
   // --- Financial Breakdown Logic ---
   // Yagona manba: kirim (Paid), xarajatlar, shifokor ulushi, sof foyda
-  const financials = calculateTotalFinancials(dateFilteredTransactions, filteredExpenses, doctors);
-  const doctorShares = calculateDoctorShares(dateFilteredTransactions, filteredExpenses, doctors)
+  // Shifokor ulushi texnik xarajati ayirilgan summadan; bo'lingan ishning qismlari uchun to'liq ro'yxat ham beriladi
+  const financials = calculateTotalFinancials(dateFilteredTransactions, filteredExpenses, doctors, services, transactions);
+  const doctorShares = calculateDoctorShares(dateFilteredTransactions, filteredExpenses, doctors, services, transactions)
     .filter(s => s.percentage > 0 || s.accrued > 0 || s.paid > 0);
 
   // Bemorga qaytarilgan pul (Kassa → "Qaytarish"). Ilgari Moliya uni umuman ko'rmasdi:
@@ -1014,8 +969,8 @@ export const Finance: React.FC<FinanceProps> = ({ userRole, transactions, expens
                         <td className="px-6 py-4 font-bold text-red-600 dark:text-red-400">-{e.amount.toLocaleString()} UZS</td>
                         <td className="px-6 py-4 text-right">
                           {isAutoLab ? (
-                            <span className="text-[10px] font-bold text-purple-500 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded-full" title="Laboratoriya buyurtmasidan avtomatik yozilgan — Lab sahifasida boshqariladi">
-                              {t('auto.Avto')}
+                            <span className="text-[10px] font-bold text-purple-500 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded-full" title="Laboratoriya buyurtmasi uchun texnikka to'lov — Laboratoriya sahifasida boshqariladi (bekor qilish ham o'sha yerda)">
+                              {t('auto.Lab')}
                             </span>
                           ) : (
                             <div className="flex justify-end gap-1">

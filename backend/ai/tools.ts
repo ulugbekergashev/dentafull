@@ -14,6 +14,7 @@
 //     modelga umuman ko'rsatilmaydi va bajarilishda ham qayta tekshiriladi.
 
 const { prisma } = require('../db');
+import { isOpenCharge, installmentRemaining, OPEN_STATUSES } from '../shared/debtRules';
 import { sanitizeToolResult } from './guard';
 import { searchVariants } from './translit';
 import { fuzzyFind, confidentPick } from './fuzzy';
@@ -247,10 +248,11 @@ export interface Debtor {
 }
 
 export const findDebtors = async (ctx: ToolContext): Promise<Debtor[]> => {
-    const [pending, plans] = await Promise.all([
+    // Qarz qoidasi — backend/shared/debtRules.ts (Moliya sahifasi va dentalocal ham shu)
+    const [openRows, plans] = await Promise.all([
         prisma.transaction.findMany({
-            where: { clinicId: ctx.clinicId, status: 'Pending' },
-            select: { patientId: true, patientName: true, amount: true, date: true },
+            where: { clinicId: ctx.clinicId, status: { in: OPEN_STATUSES } },
+            select: { patientId: true, patientName: true, amount: true, date: true, status: true, type: true, service: true },
             take: 2000,
         }),
         prisma.installmentPlan.findMany({
@@ -259,6 +261,7 @@ export const findDebtors = async (ctx: ToolContext): Promise<Debtor[]> => {
             take: 2000,
         }),
     ]);
+    const pending = (openRows as any[]).filter(isOpenCharge);
 
     // Bemorlar FAQAT qarzi borlari bo'yicha olinadi. Ilgari bu yerda
     // klinikaning BARCHA bemorlari yuklanardi — bir necha ming yozuv, har
@@ -302,7 +305,7 @@ export const findDebtors = async (ctx: ToolContext): Promise<Debtor[]> => {
     }
 
     for (const pl of plans) {
-        const qoldiq = (pl.totalAmount || 0) - (pl.totalPaid || 0);
+        const qoldiq = installmentRemaining({ ...pl, status: 'Active' });
         if (qoldiq <= 0) continue;
         const p = byId.get(pl.patientId);
         add(pl.patientId, pl.patientId,

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '../Common';
-import { Doctor, Appointment, Transaction, Patient, Expense, Review, Clinic } from '../../types';
+import { Doctor, Appointment, Transaction, Patient, Expense, Review, Clinic, Service } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/paymentMethods';
 import { fmt, toDay, toMonth, todayIso, doctorPayroll, doctorHours, doctorWeekLoad, WEEKDAYS_UZ, WORK_DAYS_PER_WEEK, SALARY_TYPE_LABEL } from '../../utils/staffStats';
 import { StatTile, Section, MonthSwitcher, Empty, ExpenseTable, PayStatus, serviceLabel, TH, TD } from './ProfileBits';
@@ -19,6 +19,8 @@ export interface DoctorTabsProps {
    expenses: Expense[];
    reviews: Review[];
    currentClinic?: Clinic;
+   /** Narxnoma — KPI texnik xarajati ayirilgan summadan hisoblanadi */
+   services?: Service[];
    month: string;
    setMonth: (month: string) => void;
    canPay: boolean;
@@ -67,12 +69,12 @@ const MonthHeader: React.FC<{ title: string; month: string; setMonth: (m: string
    </div>
 );
 
-const Overview: React.FC<P> = ({ doctor, appointments, transactions, expenses, reviews, month, setMonth, onPatientClick }) => {
+const Overview: React.FC<P> = ({ doctor, appointments, transactions, expenses, reviews, services = [], month, setMonth, onPatientClick }) => {
    const mine = appointments.filter(a => a.doctorId === doctor.id);
    const monthAppts = mine.filter(a => toMonth(a.date) === month);
    const done = monthAppts.filter(a => a.status === 'Completed').length;
    const patientCount = new Set(monthAppts.map(a => a.patientId)).size;
-   const payroll = doctorPayroll(doctor, transactions, expenses, month);
+   const payroll = doctorPayroll(doctor, transactions, expenses, month, services);
    const apptIds = new Set(mine.map(a => a.id));
    const myReviews = reviews.filter(r => apptIds.has(r.appointmentId));
    const rating = myReviews.length ? myReviews.reduce((s, r) => s + r.rating, 0) / myReviews.length : 0;
@@ -194,9 +196,9 @@ const PatientsTab: React.FC<P> = ({ doctor, patients, onPatientClick }) => {
    );
 };
 
-const SalaryTab: React.FC<P> = ({ doctor, transactions, expenses, month, setMonth, canPay, onEditSalary }) => {
+const SalaryTab: React.FC<P> = ({ doctor, transactions, expenses, services = [], month, setMonth, canPay, onEditSalary }) => {
    const [showRevenue, setShowRevenue] = useState(false);
-   const p = doctorPayroll(doctor, transactions, expenses, month);
+   const p = doctorPayroll(doctor, transactions, expenses, month, services);
    const pct = doctor.percentage || 0;
    const hasFixed = p.type === 'fixed' || p.type === 'fixed_kpi';
    const hasKpi = p.type === 'kpi' || p.type === 'fixed_kpi';
@@ -234,7 +236,7 @@ const SalaryTab: React.FC<P> = ({ doctor, transactions, expenses, month, setMont
          <Section title="Maosh strukturasi">
             <div className="p-4 space-y-2.5 text-sm">
                {row('Fix maosh', fmt(p.fixed))}
-               {row(<>KPI {hasKpi && <span className="text-xs text-gray-400">· tushum {fmt(p.revenue)} × {pct}%</span>}</>, fmt(p.kpi))}
+               {row(<>KPI {hasKpi && <span className="text-xs text-gray-400">· tushum {fmt(p.revenue)}{p.technicianCost > 0 && <> − texnik {fmt(Math.round(p.technicianCost))}</>} × {pct}%</span>}</>, fmt(p.kpi))}
                <div className="border-t border-gray-100 dark:border-gray-700/60 pt-2.5 space-y-2.5">
                   {row('Hisoblangan', fmt(p.accrued), 'text-gray-900 dark:text-white font-bold')}
                   {row("To'langan", fmt(p.paid), 'text-emerald-600 dark:text-emerald-400')}

@@ -15,6 +15,7 @@ import { prisma } from './db';
 import { getField, SEGMENT_FIELDS, FieldContext, neededAggregates } from './segmentFields';
 import { buildAggregates, AggregateKey } from './segmentAggregates';
 import { normalizeUzPhone } from './smsService';
+import { isOpenCharge, installmentRemaining, OPEN_STATUSES } from './shared/debtRules';
 
 /**
  * Shart — yo maydon sharti (field/op/value), yo qavs ichidagi guruh
@@ -82,16 +83,17 @@ export function normalizeSegment(seg?: AudienceSegment | null): { match: 'all' |
 }
 
 /**
- * Klinikaning qarz xaritasi: Pending tranzaksiyalar + faol bo'lib to'lash
- * qoldiqlari. {qarz} o'zgaruvchisi ham, "qarzi bor" filtri ham shu hisobdan.
+ * Klinikaning qarz xaritasi: ochiq (Pending/Overdue) yozuvlar + faol bo'lib to'lash
+ * qoldiqlari — backend/shared/debtRules.ts qoidasi (Moliya sahifasi va dentalocal ham shu).
+ * {qarz} o'zgaruvchisi ham, "qarzi bor" filtri ham shu hisobdan.
  */
 export async function buildDebtMap(clinicId: string, patientIds?: string[]): Promise<Map<string, number>> {
     const scope = patientIds && patientIds.length > 0 ? { patientId: { in: patientIds } } : {};
 
     const [pendingTx, activePlans] = await Promise.all([
         prisma.transaction.findMany({
-            where: { clinicId, status: 'Pending', ...scope },
-            select: { patientId: true, amount: true },
+            where: { clinicId, status: { in: OPEN_STATUSES }, ...scope },
+            select: { patientId: true, amount: true, status: true, type: true, service: true },
         }),
         prisma.installmentPlan.findMany({
             where: { clinicId, status: 'Active', ...scope },
@@ -101,11 +103,11 @@ export async function buildDebtMap(clinicId: string, patientIds?: string[]): Pro
 
     const debtMap = new Map<string, number>();
     for (const t of pendingTx as any[]) {
-        if (!t.patientId) continue;
+        if (!t.patientId || !isOpenCharge(t)) continue;
         debtMap.set(t.patientId, (debtMap.get(t.patientId) || 0) + t.amount);
     }
     for (const p of activePlans as any[]) {
-        const remaining = Math.max(0, p.totalAmount - p.totalPaid);
+        const remaining = installmentRemaining({ ...p, status: 'Active' });
         if (remaining <= 0) continue;
         debtMap.set(p.patientId, (debtMap.get(p.patientId) || 0) + remaining);
     }

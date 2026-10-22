@@ -5,8 +5,8 @@ async function debugUpdate() {
         // 1. Login
         console.log('Logging in...');
         const loginRes = await axios.post('http://localhost:3001/api/auth/login', {
-            username: 'superadminulugbek',
-            password: 'superadminpassword'
+            username: process.env.ADMIN_USERNAME,
+            password: process.env.ADMIN_PASSWORD
         });
         const token = loginRes.data.token;
         console.log('Login successful.');

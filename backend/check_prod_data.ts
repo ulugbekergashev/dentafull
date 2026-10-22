@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient({
     datasources: {
         db: {
-            url: 'postgresql://postgres:aleGfSHPFhpJTYnTMpPghOJGGHKIZmXi@switchyard.proxy.rlwy.net:56686/railway'
+            url: process.env.DATABASE_URL
         }
     }
 });

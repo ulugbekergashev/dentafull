@@ -5,8 +5,8 @@ async function main() {
     const updated = await prisma.clinic.update({
         where: { id: 'c1' },
         data: {
-            botToken: '8297181111:AAG2nOSoGvEAtmmoClN26pBZBtQo64MPM3Y',
-            ownerPhone: '+998908242992'
+            botToken: process.env.BOT_TOKEN,
+            ownerPhone: process.env.OWNER_PHONE
         }
     });
     console.log('✅ Clinic c1 updated:', updated.name, updated.ownerPhone);

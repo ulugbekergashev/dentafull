@@ -24,6 +24,7 @@ import { ToolContext, searchPatients, findDebtors } from './tools';
 import { invalidateToolCache } from './router';
 import { resolveDoctor, invalidateClinicContext } from './context';
 import { fuzzyFind, confidentPick } from './fuzzy';
+import { planDebtPayment, isOpenCharge, OPEN_STATUSES } from '../shared/debtRules';
 
 // ─── Ta'riflar ───────────────────────────────────────────────────────────────
 
@@ -784,10 +785,10 @@ export const previewAction = async (
         // Mavjud qarzni ham ko'rsatamiz: foydalanuvchi tasdiqlashdan oldin
         // "bu bemorda allaqachon 2 mln qarz bor ekan" degan kontekstni
         // ko'rgani yaxshi — bu ko'pincha xatoni shu yerda to'xtatadi.
-        const oldingi = await prisma.transaction.findMany({
-            where: { clinicId: ctx.clinicId, patientId: patient.id, status: 'Pending' },
-            select: { amount: true },
-        });
+        const oldingi = (await prisma.transaction.findMany({
+            where: { clinicId: ctx.clinicId, patientId: patient.id, status: { in: OPEN_STATUSES } },
+            select: { amount: true, status: true, type: true, service: true },
+        })).filter(isOpenCharge);
         const mavjudQarz = oldingi.reduce((s: number, t: any) => s + (t.amount || 0), 0);
 
         return {
@@ -1143,11 +1144,11 @@ export const previewAction = async (
 
         // Eng eski qarzdan boshlab yopiladi — ilovaning o'zi ham shunday
         // qiladi (pages/Dashboard.tsx, qarz to'lash oynasi).
-        const pending = await prisma.transaction.findMany({
-            where: { clinicId: ctx.clinicId, patientId: p.id, status: 'Pending' },
+        const pending = (await prisma.transaction.findMany({
+            where: { clinicId: ctx.clinicId, patientId: p.id, status: { in: OPEN_STATUSES } },
             orderBy: { date: 'asc' },
-            select: { id: true, amount: true, service: true, date: true },
-        });
+            select: { id: true, amount: true, service: true, date: true, status: true, type: true },
+        })).filter(isOpenCharge);
         const qarz = pending.reduce((s: number, t: any) => s + (t.amount || 0), 0);
 
         if (qarz > 0 && amount > qarz) {
@@ -1683,55 +1684,59 @@ export const executeAction = async (
 
             // Qarzlar QAYTA o'qiladi: ko'rib chiqish bilan tasdiqlash orasida
             // boshqa xodim to'lovni yozib qo'ygan bo'lishi mumkin.
-            const pending = await prisma.transaction.findMany({
-                where: { clinicId: ctx.clinicId, patientId: args.patientId, status: 'Pending' },
+            // Qoida va hisob — backend/shared/debtRules.ts (ilova va dentalocal ham shu):
+            // ochiq yozuv = qarz, eng eskisidan boshlab yopiladi, hammasi bitta tranzaksiyada.
+            const pending = (await prisma.transaction.findMany({
+                where: { clinicId: ctx.clinicId, patientId: args.patientId, status: { in: OPEN_STATUSES } },
                 orderBy: { date: 'asc' },
-                select: { id: true, amount: true, service: true, doctorId: true, doctorName: true },
-            });
+            })).filter(isOpenCharge);
 
-            let qoldiq = args.amount;
-            let yopilgan = 0;
-
-            // Mantiq ilovaning o'zidan (pages/Dashboard.tsx): to'liq yopilsa
-            // yozuvning holati Paid ga o'tadi, qisman bo'lsa — yangi Paid
-            // yozuv yaratiladi va eski qarz shuncha kamayadi.
-            for (const t of pending) {
-                if (qoldiq <= 0) break;
-                if (qoldiq >= t.amount) {
-                    await prisma.transaction.update({
-                        where: { id: t.id },
-                        // forDate — tashrif kuni: to'lov sanasi ko'chsa ham tashrif "to'langan" bo'lib qoladi
-                        data: { status: 'Paid', type: args.method, date: args.date, forDate: t.forDate || String(t.date).slice(0, 10) },
-                    });
-                    qoldiq -= t.amount;
-                    yopilgan++;
-                } else {
-                    await prisma.transaction.create({
-                        data: {
-                            clinicId: ctx.clinicId,
-                            patientId: args.patientId,
-                            patientName: args.patientName,
-                            doctorId: t.doctorId || undefined,
-                            doctorName: t.doctorName || undefined,
-                            amount: qoldiq,
-                            status: 'Paid',
-                            type: args.method,
-                            service: `${t.service} (Qarzdorlik yopildi)`,
-                            date: args.date,
-                            forDate: t.forDate || String(t.date).slice(0, 10),
-                        },
-                    });
-                    await prisma.transaction.update({
-                        where: { id: t.id },
-                        data: { amount: { decrement: qoldiq } },
-                    });
-                    qoldiq = 0;
+            if (args.method === 'Balance') {
+                const withBalance = await prisma.patient.findUnique({ where: { id: args.patientId }, select: { balance: true } });
+                if (args.amount > (withBalance?.balance || 0) + 0.5) {
+                    return { ok: false, message: `Bemor hisobidagi avans yetarli emas: ${som(withBalance?.balance || 0)} so'm bor.` };
                 }
             }
 
-            // Qarzi bo'lmagan bemorning oddiy to'lovi.
+            let qoldiq = args.amount;
+            let yopilgan = 0;
+            const steps: any[] = [];
+            for (const t of pending) {
+                if (qoldiq <= 0) break;
+                const plan = planDebtPayment(t, { paid: qoldiq, method: args.method, today: args.date });
+                if (!plan) continue;
+                // forDate — tashrif kuni: to'lov sanasi ko'chsa ham tashrif "to'langan" bo'lib qoladi
+                const visitDay = t.forDate || String(t.date).slice(0, 10);
+                // Faqat qarz hali shu summada va to'lanmagan bo'lsa
+                const guard = { id: t.id, amount: t.amount, status: { not: 'Paid' } };
+                if (plan.full) {
+                    steps.push(prisma.transaction.update({
+                        where: guard,
+                        data: { ...plan.update, forDate: visitDay, createdAt: new Date() },
+                    }));
+                    yopilgan++;
+                } else {
+                    steps.push(prisma.transaction.update({ where: guard, data: plan.update }));
+                    steps.push(prisma.transaction.create({
+                        data: {
+                            clinicId: ctx.clinicId,
+                            patientId: args.patientId,
+                            patientName: t.patientName || args.patientName,
+                            doctorId: t.doctorId || undefined,
+                            doctorName: t.doctorName || undefined,
+                            branchId: t.branchId || undefined,
+                            ...plan.create,
+                            forDate: visitDay,
+                            isDebt: false,
+                        },
+                    }));
+                }
+                qoldiq -= plan.paid;
+            }
+
+            // Qarzi bo'lmagan bemorning oddiy to'lovi (yoki qarzdan ortgan qismi).
             if (qoldiq > 0) {
-                await prisma.transaction.create({
+                steps.push(prisma.transaction.create({
                     data: {
                         clinicId: ctx.clinicId,
                         patientId: args.patientId,
@@ -1742,7 +1747,19 @@ export const executeAction = async (
                         service: 'To\'lov',
                         date: args.date,
                     },
-                });
+                }));
+            }
+            if (args.method === 'Balance') {
+                steps.push(prisma.patient.update({ where: { id: args.patientId }, data: { balance: { decrement: args.amount } } }));
+            }
+
+            try {
+                await prisma.$transaction(steps);
+            } catch (err: any) {
+                if (err?.code === 'P2025') {
+                    return { ok: false, message: 'Bemorning qarzi hozirgina boshqa joyda o\'zgardi. Qayta urinib ko\'ring.' };
+                }
+                throw err;
             }
 
             invalidateToolCache(ctx.clinicId);

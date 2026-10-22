@@ -4,8 +4,8 @@ async function check() {
     try {
         console.log('Logging in...');
         const loginRes = await axios.post('https://dentafull-production.up.railway.app/api/auth/login', {
-            username: 'superadminulugbek',
-            password: 'superadminpassword'
+            username: process.env.ADMIN_USERNAME,
+            password: process.env.ADMIN_PASSWORD
         });
 
         const token = loginRes.data.token;

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { Card } from './Common';
-import { Doctor, Receptionist, LabTechnician, Appointment, Transaction, Expense, LabOrder, Review, Clinic } from '../types';
+import { Doctor, Receptionist, LabTechnician, Appointment, Transaction, Expense, LabOrder, Review, Clinic, Service } from '../types';
 import { staffProfilePath } from './StaffManagement';
 import { StatTile, Empty, TH, TD } from './staff/ProfileBits';
 import {
@@ -25,6 +25,8 @@ interface StaffStatisticsProps {
    labOrders: LabOrder[];
    reviews: Review[];
    currentClinic?: Clinic;
+   /** Narxnoma — shifokor KPI si texnik xarajati ayirilgan summadan */
+   services?: Service[];
 }
 
 type SortKey = 'name' | 'total' | 'completion' | 'patients' | 'revenue' | 'avgCheck' | 'load' | 'accrued' | 'rating';
@@ -48,7 +50,7 @@ const PILL: Record<string, string> = {
 
 const compactMoney = (v: number) => (v >= 1_000_000 ? `${Math.round(v / 100_000) / 10} mln` : fmt(v));
 
-export const StaffStatistics: React.FC<StaffStatisticsProps> = ({ doctors, receptionists, labTechnicians, appointments, transactions, expenses, labOrders, reviews, currentClinic }) => {
+export const StaffStatistics: React.FC<StaffStatisticsProps> = ({ doctors, receptionists, labTechnicians, appointments, transactions, expenses, labOrders, reviews, currentClinic, services = [] }) => {
    const navigate = useNavigate();
    const [preset, setPreset] = useState<PeriodPreset>('month');
    const [range, setRange] = useState(() => presetRange('month'));
@@ -61,7 +63,7 @@ export const StaffStatistics: React.FC<StaffStatisticsProps> = ({ doctors, recep
    const rows = doctors.map(doctor => ({
       doctor,
       name: `Dr. ${fullName(doctor)}`,
-      ...doctorPeriodStats(doctor, appointments, transactions, expenses, reviews, currentClinic, start, end),
+      ...doctorPeriodStats(doctor, appointments, transactions, expenses, reviews, currentClinic, start, end, services),
    }));
    const sortKey = sort.key;
    const sorted = [...rows].sort((a, b) => {

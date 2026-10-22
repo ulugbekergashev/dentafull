@@ -2,7 +2,7 @@
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 
-const JWT_SECRET = 'super_secret_jwt_key_denta_crm_2024';
+const JWT_SECRET = process.env.JWT_SECRET;
 const clinicId = '05bc3e4c-d409-4565-a53d-b690781a7a73';
 
 const token = jwt.sign({ role: 'CLINIC_ADMIN', clinicId }, JWT_SECRET);

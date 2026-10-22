@@ -12,7 +12,8 @@ import { Patient, Appointment, Transaction, UserRole, Doctor, Lead, LabOrder, Cl
 import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymentMethods';
 import { formatDateToISO, formatHeaderDate } from '../utils/dateUtils';
 import { transactionBelongsToDoctor, calculateAppointmentTotal, isEarnedRevenue } from '../utils/financialCalculations';
-import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow } from '../utils/unpaid';
+import { buildUnpaidRows, buildWaivedTransaction, unpaidTotal, UnpaidRow, findUnbilledVisits } from '../utils/unpaid';
+import { isOpenCharge } from '../backend/shared/debtRules';
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { PatientQuickSearch } from '../components/PatientQuickSearch';
 import { DoctorQueueCard } from '../components/DoctorQueueCard';
@@ -82,6 +83,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   const [newPatientPrefill, setNewPatientPrefill] = useState<{ firstName?: string; lastName?: string; phone?: string }>({});
   const [isQuickPaymentOpen, setIsQuickPaymentOpen] = useState(false);
   const [payingAppointment, setPayingAppointment] = useState<Appointment | null>(null);
+  // Qabul ishlarining bir qismi to'langan bo'lsa — to'lov oynasiga faqat qolgan ishlar va ularning summasi
+  const [payingDue, setPayingDue] = useState<{ breakdown: string; total: number } | null>(null);
   const [payingDebt, setPayingDebt] = useState<Transaction | null>(null);
   const [debtPayAmount, setDebtPayAmount] = useState('');
   const [debtPayMethod, setDebtPayMethod] = useState<PaymentMethod>('Cash');
@@ -180,7 +183,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
   }, [totalRevenue, filteredAppointments]);
 
   const pendingRevenue = useMemo(() =>
-    filteredTransactions.filter(t => t.status === 'Pending').reduce((acc, t) => acc + t.amount, 0)
+    filteredTransactions.filter(isOpenCharge).reduce((acc, t) => acc + t.amount, 0)
     , [filteredTransactions]);
 
 
@@ -333,8 +336,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
       const d = String(tx.date || '').slice(0, 10);
       return d >= from && d <= to;
     });
-    return { today: localToday, nowMin, flowLog: deskFlow.entries, transactions: inRange };
-  }, [localToday, nowMin, deskFlow.entries, transactions, startDate, endDate]);
+    // To'lov kutayotgan qabullar — "Olinmagan pul" ro'yxati bilan aynan bir xil qoida
+    const visits = appointments.filter(a => a && a.date >= from && a.date <= to);
+    return { today: localToday, nowMin, flowLog: deskFlow.entries, transactions: inRange, unbilled: findUnbilledVisits(visits, inRange, services) };
+  }, [localToday, nowMin, deskFlow.entries, transactions, appointments, services, startDate, endDate]);
   const statusOf = (a: Appointment) => visitStatus(a, visitCtx);
   // Shifokor hamkasbiga yo'naltirganda — hozir kabinetidagi bemor tanlangan holda yoziladi
   const myChairPatientId = useMemo(() => {
@@ -479,8 +484,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     }
   };
 
-  const openPaymentForAppointment = (app: Appointment) => {
+  const openPaymentForAppointment = (app: Appointment, due: { breakdown: string; total: number } | null = null) => {
     setPayingAppointment(app);
+    setPayingDue(due);
     setIsQuickPaymentOpen(true);
   };
 
@@ -491,7 +497,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
    */
   const openPaymentForRow = (row: UnpaidRow) => {
     if (row.source === 'debt' && row.transaction) openDebtPayment(row.transaction);
-    else if (row.appointment) openPaymentForAppointment(row.appointment);
+    else if (row.appointment) openPaymentForAppointment(row.appointment, row.remainingBreakdown ? { breakdown: row.remainingBreakdown, total: row.amount } : null);
   };
 
   // "Yakunlash" xaritada — kalendardagi holat o'zgartirish bilan bir xil
@@ -618,7 +624,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
     monthAppointments: filteredAppointments.length,
     monthRevenue: totalRevenue,
     newLeads: newLeadsCount,
-    debtorsCount: pendingDebts.length,
+    // Qarzdor BEMORLAR soni (ilgari ochiq yozuvlar soni edi — bitta bemor bir necha marta sanalardi)
+    debtorsCount: new Set(pendingDebts.map(r => r.patientId || `name:${r.patientName}`)).size,
     pendingRevenue,
     totalPatients,
     avgCheck,
@@ -674,6 +681,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
                 onClick={() => {
                   if (!onAddTransaction) return navigate('/finance');
                   setPayingAppointment(null);
+                  setPayingDue(null);
                   setIsQuickPaymentOpen(true);
                 }}
                 className="flex items-center gap-1.5 px-3 py-2 bg-success hover:bg-success-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95"
@@ -1215,7 +1223,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
           date={waivingRow.date}
           amount={waivingRow.amount}
           onConfirm={async reason => {
-            await onAddTransaction(buildWaivedTransaction(waivingRow.appointment!, services, reason));
+            // Bir qismi to'langan qabuldan faqat qolgan ishlar kechiriladi
+            await onAddTransaction(buildWaivedTransaction(waivingRow.appointment!, services, reason,
+              waivingRow.remainingBreakdown ? { breakdown: waivingRow.remainingBreakdown, total: waivingRow.amount } : undefined));
           }}
         />
       )}
@@ -1237,13 +1247,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
         />
       )}
       {onAddTransaction && (() => {
-        const { total: presetAmount } = payingAppointment
+        const { total: presetAmount } = payingDue || (payingAppointment
           ? calculateAppointmentTotal(payingAppointment.notes || '', services)
-          : { total: 0 };
+          : { total: 0 });
         return (
           <QuickPaymentModal
             isOpen={isQuickPaymentOpen}
-            onClose={() => { setIsQuickPaymentOpen(false); setPayingAppointment(null); }}
+            onClose={() => { setIsQuickPaymentOpen(false); setPayingAppointment(null); setPayingDue(null); }}
             patients={patients}
             doctors={doctors}
             services={services}
@@ -1251,7 +1261,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ patients, appointments, tr
             onAddTransaction={onAddTransaction}
             presetPatientId={payingAppointment?.patientId}
             presetDoctorId={payingAppointment?.doctorId || (userRole === UserRole.DOCTOR ? doctorId : undefined)}
-            presetService={payingAppointment?.type}
+            // Qolgan ishlar ro'yxati bilan yoziladi — to'lov aynan shu ishlarni yopadi (utils/workBilling.ts)
+            presetService={payingDue?.breakdown || payingAppointment?.type}
             presetAmount={presetAmount || undefined}
             presetDate={payingAppointment?.date}
             canChangeDate={perms.flag('money', 'backdate')}

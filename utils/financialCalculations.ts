@@ -1,4 +1,6 @@
 import { Transaction, Expense, Doctor, Service } from '../types';
+import { buildTechnicianCostIndex, technicianCostOf, ServiceLike } from './workBilling';
+export type { ServiceLike } from './workBilling';
 
 // Yangi moliya modeli (kassa usuli + shifokor ulushi hisobi):
 // - Kirim (hisoblangan daromad) = status 'Paid' bo'lgan to'lovlar, AVANS DEPOZITISIZ.
@@ -7,7 +9,9 @@ import { Transaction, Expense, Doctor, Service } from '../types';
 //   Ilgari depozit ham, uning sarfi ham daromadga qo'shilardi (bitta pul ikki marta),
 //   depozit esa ro'yxatdagi birinchi shifokorga yozilib, unga ulush hisoblanardi.
 //   Kassaga tushgan pul = daromad − avansdan yechilgan + avans depozitlari (Kassa tabi).
-// - Shifokor ulushi AVTOMATIK hisoblanadi: to'lov summasi × foiz (hisoblangan ulush).
+// - Shifokor ulushi AVTOMATIK hisoblanadi: (to'lov − shu ishning texnik xarajati) × foiz.
+//   Texnik xarajati — Sozlamalar → Xizmatlar → "Texniklar xarajati" (utils/workBilling.ts, dentalocal
+//   bilan bir xil). Sozlamalarda "sof foydadan foiz" deb yozilgan, hisob esa ilgari to'liq summadan edi.
 // - Kassadan shifokorga pul berilganda 'DoctorShare' kategoriyali Expense yoziladi —
 //   bu hisoblangan ulushni "to'laydi", lekin sof foydadan QAYTA ayirilmaydi (double-count yo'q).
 // - Sof foyda = Kirim − hisoblangan ulush − boshqa xarajatlar (DoctorShare dan tashqari).
@@ -17,6 +21,7 @@ export interface DoctorShareSummary {
     doctorName: string;
     percentage: number;
     grossRevenue: number; // shifokorga tegishli kirim (Paid)
+    technicianCost: number; // shu ishlarning texnik xarajati (ulush undan keyin hisoblanadi)
     accrued: number;      // hisoblangan ulush
     paid: number;         // to'langan (DoctorShare xarajatlari)
     balance: number;      // qoldiq (accrued - paid)
@@ -90,14 +95,36 @@ export function findDoctorForTransaction(tx: Transaction, doctors: Doctor[]): Do
 }
 
 /**
+ * Shifokor ulushi hisoblanadigan summa: to'lov − shu ishning texnik xarajati. Bo'lingan ish
+ * (qisman to'lov + qarz, bo'lib to'lash) qismlari texnik haqqini ulush bo'yicha bo'lishadi —
+ * shuning uchun `context` (davr filtrisiz ro'yxat) beriladi. Xizmatlar berilmasa — to'lovning o'zi.
+ */
+export function shareBaseOf(
+    transactions: Transaction[],
+    services: ServiceLike[] = [],
+    context?: Transaction[]
+): (tx: Transaction) => { base: number; technicianCost: number } {
+    if (!services.length) return tx => ({ base: tx.amount || 0, technicianCost: 0 });
+    const index = buildTechnicianCostIndex(context || transactions, services);
+    const own = () => buildTechnicianCostIndex(transactions, services);
+    return tx => {
+        const technicianCost = technicianCostOf(tx, index, own);
+        return { base: Math.max(0, (tx.amount || 0) - technicianCost), technicianCost };
+    };
+}
+
+/**
  * Har bir shifokor bo'yicha ulush hisobi: hisoblangan / to'langan / qoldiq.
  * transactions va expenses bir xil davr filtri bilan berilishi kerak.
  */
 export function calculateDoctorShares(
     transactions: Transaction[],
     expenses: Expense[],
-    doctors: Doctor[]
+    doctors: Doctor[],
+    services: ServiceLike[] = [],
+    context?: Transaction[]
 ): DoctorShareSummary[] {
+    const baseOf = shareBaseOf(transactions, services, context);
     const summaries = new Map<string, DoctorShareSummary>();
     doctors.forEach(d => {
         summaries.set(d.id, {
@@ -105,6 +132,7 @@ export function calculateDoctorShares(
             doctorName: `${d.lastName} ${d.firstName}`,
             percentage: doctorSharePercent(d),
             grossRevenue: 0,
+            technicianCost: 0,
             accrued: 0,
             paid: 0,
             balance: 0,
@@ -116,9 +144,11 @@ export function calculateDoctorShares(
         const doctor = findDoctorForTransaction(tx, doctors);
         if (!doctor) return;
         const s = summaries.get(doctor.id)!;
+        const { base, technicianCost } = baseOf(tx);
         s.grossRevenue += tx.amount;
+        s.technicianCost += technicianCost;
         if (s.percentage > 0) {
-            s.accrued += tx.amount * (s.percentage / 100);
+            s.accrued += base * (s.percentage / 100);
         }
     });
 
@@ -139,7 +169,9 @@ export function calculateDoctorShares(
 export function calculateTotalFinancials(
     transactions: Transaction[],
     expenses: Expense[],
-    doctors: Doctor[]
+    doctors: Doctor[],
+    services: ServiceLike[] = [],
+    context?: Transaction[]
 ): TotalFinancials {
     let totalRevenue = 0;
     let advanceDeposits = 0;
@@ -151,7 +183,7 @@ export function calculateTotalFinancials(
         if (tx.type === 'Balance') balanceDrawdown += tx.amount;
     });
 
-    const shares = calculateDoctorShares(transactions, expenses, doctors);
+    const shares = calculateDoctorShares(transactions, expenses, doctors, services, context);
     const doctorShareAccrued = shares.reduce((sum, s) => sum + s.accrued, 0);
     const doctorSharePaid = shares.reduce((sum, s) => sum + s.paid, 0);
 
@@ -190,80 +222,21 @@ export function calculateTotalFinancials(
 export function calculateDoctorShare(
     transactions: Transaction[],
     doctor: Doctor,
-    expenses: Expense[] = []
+    expenses: Expense[] = [],
+    services: ServiceLike[] = [],
+    context?: Transaction[]
 ): DoctorShareSummary {
-    const [summary] = calculateDoctorShares(transactions, expenses, [doctor]);
+    const [summary] = calculateDoctorShares(transactions, expenses, [doctor], services, context);
     return summary;
 }
 
 /**
- * Qabul notes matnidan (bajarilgan protseduralar ro'yxati) summani hisoblaydi.
- * PatientDetails (to'lov modali) va Dashboard (to'lanmagan qabullar paneli) shu bitta manbadan foydalanadi.
+ * Qabul izohidan bajarilgan ishlar summasi — utils/appointmentTotal.ts (dentalocal da ham aynan shu fayl).
+ * Erkin matn (reja, izoh) endi summaga kirmaydi: faqat narxli qatorlar va "Bajarilgan ishlar" /
+ * "Qo'shimcha" blokidagi "- " bandlari. Ilgari istalgan qator xizmat nomiga o'xshasa pulga qo'shilardi
+ * (dentalocal dagi klinika: 420 000 o'rniga 750 000).
  */
-export function calculateAppointmentTotal(
-    appointmentNotes: string,
-    services: Service[]
-): { total: number; breakdown: string } {
-    if (!appointmentNotes) return { total: 0, breakdown: '' };
-
-    try {
-        const sortedServices = [...(services || [])].sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
-        let total = 0;
-        const procedures: string[] = [];
-        const lines = appointmentNotes.split('\n');
-
-        lines.forEach(line => {
-            const trimmedLine = line.trim();
-            if (!trimmedLine || trimmedLine.includes('Bajarilgan ishlar:') || trimmedLine.includes("Qo'shimcha")) {
-                return;
-            }
-            // Xizmat emas, izoh ("⚠️ Majburiy talablarsiz yakunlandi ... Sabab: ...") —
-            // sababda xizmat nomi uchrasa ham narxi qo'shilmasin
-            if (trimmedLine.startsWith('⚠️')) {
-                return;
-            }
-
-            // 1. Try to parse price from brackets [100 000 UZS]
-            const priceMatch = trimmedLine.match(/\[([\d\s]+)\s*UZS\]/i);
-            if (priceMatch) {
-                const priceStr = priceMatch[1].replace(/\s/g, '');
-                const price = parseFloat(priceStr);
-                if (!isNaN(price)) {
-                    total += price;
-                    // Extract clean name before the brackets
-                    const nameMatch = trimmedLine.match(/^-\s*(.*?)\s*\[/);
-                    const name = nameMatch ? nameMatch[1].trim() : trimmedLine;
-                    procedures.push(`${name}|${price.toLocaleString().replace(/,/g, ' ')}`);
-                    return; // Skip to next line
-                }
-            }
-
-            // 2. Fallback: Try fuzzy matching with service list (for old format)
-            const cleanLine = trimmedLine.toLowerCase();
-
-            let matched = false;
-            for (const service of sortedServices) {
-                const serviceNameLower = service.name.toLowerCase();
-                if (cleanLine.includes(serviceNameLower) || serviceNameLower.includes(cleanLine)) {
-                    total += service.price;
-                    procedures.push(`${service.name}|${service.price.toLocaleString().replace(/,/g, ' ')}`);
-                    matched = true;
-                    break;
-                }
-            }
-
-            if (!matched && trimmedLine.startsWith('- ')) {
-                procedures.push(`${trimmedLine.substring(2)}|0`);
-            }
-        });
-
-        const breakdown = procedures.join('||') + (procedures.length > 0 ? `||TOTAL|${total.toLocaleString().replace(/,/g, ' ')}` : '');
-        return { total, breakdown };
-    } catch (e) {
-        console.error("Error calculating total", e);
-        return { total: 0, breakdown: '' };
-    }
-}
+export { calculateAppointmentTotal } from './appointmentTotal';
 
 /**
  * Qabul to'langanmi — sana + bemor (id ustuvor, aks holda ism) bo'yicha moslashtiradi.

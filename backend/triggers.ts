@@ -17,6 +17,7 @@
 
 import { prisma } from './db';
 import { resolveSegment, buildDebtMap } from './segments';
+import { isOpenCharge, OPEN_STATUSES } from './shared/debtRules';
 import { schedulePeriodKey } from './ruleExtras';
 
 // Toshkent vaqti (UTC+5, DST yo'q)
@@ -462,15 +463,16 @@ export const TRIGGERS: TriggerDef[] = [
             const now = new Date(tashkentNowMs());
             const period = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 
-            const pending = await prisma.transaction.findMany({
+            // Qarz qoidasi — backend/shared/debtRules.ts (ochiq yozuv: Pending yoki Overdue)
+            const pending = (await prisma.transaction.findMany({
                 where: {
                     clinicId: rule.clinicId,
-                    status: 'Pending',
+                    status: { in: OPEN_STATUSES },
                     patientId: { not: null },
                     createdAt: { lte: cutoff },
                 },
                 include: { patient: true },
-            });
+            })).filter(isOpenCharge);
 
             // Bemor bo'yicha jamlaymiz — bitta bemorga bitta xabar
             const byPatient = new Map<string, { patient: any; amount: number }>();

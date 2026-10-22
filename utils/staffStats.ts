@@ -1,5 +1,5 @@
 import { Appointment, Clinic, Doctor, Expense, LabOrder, Receptionist, LabTechnician, Review, Transaction } from '../types';
-import { transactionBelongsToDoctor, isEarnedRevenue, doctorSharePercent } from './financialCalculations';
+import { transactionBelongsToDoctor, isEarnedRevenue, doctorSharePercent, shareBaseOf, ServiceLike } from './financialCalculations';
 
 // Xodimlar ro'yxati va xodim profili uchun umumiy hisoblar. Hammasi bazada
 // allaqachon bor ma'lumotdan: qabullar, to'lovlar, xarajatlar, lab buyurtmalari.
@@ -73,19 +73,22 @@ const effectiveSalaryType = (doctor: Doctor): string => {
 };
 
 /** Shifokorning bir oylik maoshi: maosh turiga qarab fix va KPI, shu oyda to'langan xarajatlar */
-export const doctorPayroll = (doctor: Doctor, transactions: Transaction[], expenses: Expense[], month: string) => {
+export const doctorPayroll = (doctor: Doctor, transactions: Transaction[], expenses: Expense[], month: string, services: ServiceLike[] = []) => {
     const type = effectiveSalaryType(doctor);
     // Avans depoziti shifokor tushumi emas (Moliya bilan bir xil qoida)
     const revenueTx = transactions.filter(tx => isEarnedRevenue(tx) && toMonth(tx.date) === month && transactionBelongsToDoctor(tx, doctor));
     const revenue = revenueTx.reduce((s, tx) => s + tx.amount, 0);
     const fixed = type === 'fixed' || type === 'fixed_kpi' ? (doctor.fixedSalary || 0) : 0;
-    const kpi = Math.round((revenue * doctorSharePercent(doctor)) / 100);
+    // KPI — texnik xarajati ayirilgan summadan (Moliya → Hisobot bilan bir xil, utils/workBilling.ts)
+    const baseOf = shareBaseOf(transactions, services);
+    const technicianCost = revenueTx.reduce((s, tx) => s + baseOf(tx).technicianCost, 0);
+    const kpi = Math.round((revenueTx.reduce((s, tx) => s + baseOf(tx).base, 0) * doctorSharePercent(doctor)) / 100);
     const payments = expenses
         .filter(e => e.doctorId === doctor.id && (e.category === 'Salary' || e.category === 'DoctorShare') && toMonth(e.date) === month)
         .sort((a, b) => b.date.localeCompare(a.date));
     const paid = payments.reduce((s, e) => s + e.amount, 0);
     const accrued = fixed + kpi;
-    return { type, revenue, revenueTx, fixed, kpi, accrued, paid, balance: accrued - paid, payments };
+    return { type, revenue, revenueTx, technicianCost, fixed, kpi, accrued, paid, balance: accrued - paid, payments };
 };
 
 /** Resepshn: u qabul qilgan to'lovlar va shu oyda unga to'langan maosh */
@@ -168,7 +171,7 @@ export const presetRange = (preset: PeriodPreset) => {
 
 export const doctorPeriodStats = (
     doctor: Doctor, appointments: Appointment[], transactions: Transaction[], expenses: Expense[],
-    reviews: Review[], clinic: Clinic | undefined, start: string, end: string,
+    reviews: Review[], clinic: Clinic | undefined, start: string, end: string, services: ServiceLike[] = [],
 ) => {
     const today = todayIso();
     const appts = appointments.filter(a => a.doctorId === doctor.id && inRange(toDay(a.date), start, end));
@@ -181,7 +184,8 @@ export const doctorPeriodStats = (
     const revenue = revenueTx.reduce((s, tx) => s + tx.amount, 0);
     const type = effectiveSalaryType(doctor);
     const fixed = type === 'fixed' || type === 'fixed_kpi' ? (doctor.fixedSalary || 0) * monthsInRange(start, end) : 0;
-    const kpi = Math.round((revenue * doctorSharePercent(doctor)) / 100);
+    const baseOf = shareBaseOf(transactions, services);
+    const kpi = Math.round((revenueTx.reduce((s, tx) => s + baseOf(tx).base, 0) * doctorSharePercent(doctor)) / 100);
     const paid = expenses
         .filter(e => e.doctorId === doctor.id && (e.category === 'Salary' || e.category === 'DoctorShare') && inRange(toDay(e.date), start, end))
         .reduce((s, e) => s + e.amount, 0);

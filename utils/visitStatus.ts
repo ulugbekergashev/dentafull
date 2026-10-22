@@ -32,6 +32,8 @@ export interface VisitStatusContext {
     flowLog?: FlowLog;
     /** Kassa yozuvlari — "Kutilayotgan to'lovlar" bilan bir xil */
     transactions: Transaction[];
+    /** To'lov kutayotgan qabullar (utils/unpaid findUnbilledVisits) — berilsa "Olinmagan pul" bilan aynan bir xil */
+    unbilled?: ReadonlyMap<string, unknown>;
 }
 
 export function visitStatus(a: Appointment, ctx: VisitStatusContext): VisitStatus {
@@ -46,7 +48,7 @@ export function visitStatus(a: Appointment, ctx: VisitStatusContext): VisitStatu
         // "Keldi" (Checked-In) — bemor kelgan: "Kutilayotgan to'lovlar" kabi pulini qaraymiz.
         if (a.date > ctx.today || a.status !== 'Checked-In') return 'booked';
     }
-    const pay = appointmentPaymentState(a, ctx.transactions);
+    const pay = appointmentPaymentState(a, ctx.transactions, ctx.unbilled);
     return pay === 'paid' ? 'paid' : pay === 'debt' ? 'debt' : 'awaitingPayment';
 }
 

@@ -1,7 +1,8 @@
 const { Telegraf } = require('telegraf');
 
 async function check() {
-    const token = '8297181111:AAG2nOSoGvEAtmmoClN26pBZBtQo64MPM3Y';
+    const token = process.env.BOT_TOKEN;
+    if (!token) { console.error('BOT_TOKEN kerak'); return; }
     try {
         const bot = new Telegraf(token);
         const me = await bot.telegram.getMe();

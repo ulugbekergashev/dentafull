@@ -7,7 +7,7 @@ import { StaffKind, ROLE_BADGE_CLASS } from '../components/StaffManagement';
 import { DoctorTabs } from '../components/staff/DoctorTabs';
 import { ReceptionistTabs } from '../components/staff/ReceptionistTabs';
 import { TechnicianTabs } from '../components/staff/TechnicianTabs';
-import { UserRole, Receptionist, LabTechnician, Appointment, Transaction, Patient, Expense, LabOrder, Review } from '../types';
+import { UserRole, Receptionist, LabTechnician, Appointment, Transaction, Patient, Expense, LabOrder, Review, Service } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { currentMonth, doctorHours, doctorPayroll, fmt, fullName, initials, receptionistMonth, technicianStats, SALARY_TYPE_LABEL } from '../utils/staffStats';
 
@@ -25,6 +25,8 @@ interface StaffProfileProps extends StaffEditorsProps {
    expenses: Expense[];
    labOrders: LabOrder[];
    reviews: Review[];
+   /** Narxnoma — shifokor KPI si texnik xarajati ayirilgan summadan */
+   services?: Service[];
    onPatientClick: (id: string) => void;
 }
 
@@ -38,7 +40,7 @@ const TABS: Record<StaffKind, { key: string; label: string }[]> = {
 };
 
 export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
-   const { kind, userRole, doctors, receptionists, labTechnicians, appointments, transactions, patients, expenses, labOrders, reviews, branches = [], currentClinic, onPatientClick } = props;
+   const { kind, userRole, doctors, receptionists, labTechnicians, appointments, transactions, patients, expenses, labOrders, reviews, services = [], branches = [], currentClinic, onPatientClick } = props;
    const { t } = useLanguage();
    const { staffId } = useParams<{ staffId: string }>();
    const navigate = useNavigate();
@@ -86,7 +88,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
    const edit = () => { if (doctor) editors.openDoctor(doctor); else if (receptionist) editors.openReceptionist(receptionist); else if (tech) editors.openLabTech(tech); };
    const remove = () => { if (doctor) editors.askDeleteDoctor(doctor); else if (receptionist) editors.askDeleteReceptionist(receptionist); else if (tech) editors.askDeleteLabTech(tech); };
    const canPay = userRole === UserRole.CLINIC_ADMIN;
-   const payroll = doctor ? doctorPayroll(doctor, transactions, expenses, thisMonth) : null;
+   const payroll = doctor ? doctorPayroll(doctor, transactions, expenses, thisMonth, services) : null;
    const recMonth = receptionist ? receptionistMonth(receptionist, transactions, expenses, thisMonth) : null;
    const techStats = tech ? technicianStats(tech, labOrders, expenses, thisMonth) : null;
    const hours = doctor ? doctorHours(doctor, currentClinic) : null;
@@ -219,7 +221,7 @@ export const StaffProfile: React.FC<StaffProfileProps> = (props) => {
                <div className="p-4 sm:p-5">
                   {doctor && (
                      <DoctorTabs tab={tab} doctor={doctor} appointments={appointments} transactions={transactions} patients={patients} expenses={expenses}
-                        reviews={reviews} currentClinic={currentClinic} month={month} setMonth={setMonth} canPay={canPay} onEditSalary={edit} onPatientClick={onPatientClick} />
+                        reviews={reviews} services={services} currentClinic={currentClinic} month={month} setMonth={setMonth} canPay={canPay} onEditSalary={edit} onPatientClick={onPatientClick} />
                   )}
                   {receptionist && (
                      <ReceptionistTabs tab={tab} receptionist={receptionist} transactions={transactions} expenses={expenses} month={month} setMonth={setMonth} canPay={canPay} />

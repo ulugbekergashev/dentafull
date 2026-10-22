@@ -118,6 +118,7 @@ export const Staff: React.FC<StaffProps> = ({ userRole, analyticsDoctors, appoin
                labOrders={labOrders || []}
                reviews={reviews}
                currentClinic={management.currentClinic}
+               services={services}
             />
          )}
          {activeTab === 'access' && (

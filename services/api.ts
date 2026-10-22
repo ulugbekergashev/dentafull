@@ -1,4 +1,4 @@
-import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, MetaSignalsStatus, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, AuditLogEntry, AuditLogQuery, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements } from '../types';
+import { Branch, Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Clinic, SubscriptionPlan, Service, ServiceCategory, ICD10Code, PatientDiagnosis, InventoryItem, InventoryLog, Lead, LeadApiKeyInfo, MetaSignalsStatus, InstallmentPlan, MessageTemplate, AutomationRule, MessageLog, MessageChannel, BulkSendStatus, TriggerDescriptor, AudienceSegment, AudiencePreview, SegmentFieldDescriptor, SavedSegment, StaffNotification, CashRegisterDay, CashMovement, CashAuditLog, AuditLogEntry, AuditLogQuery, Recall, DhpStatus, DhpTestResult, CallLog, CallLogChange, FlowLog, TicketLog, ServiceRequirement, VisitRequirements, LabOrder, PaymentMethod } from '../types';
 import { addDaysISO, applyCallChange } from '../utils/desk';
 import { formatDateToISO } from '../utils/dateUtils';
 import { DEMO_SEED_VERSION } from './demoSeed';
@@ -964,6 +964,23 @@ export const api = {
         },
     },
     clinics: {
+        /**
+         * Klinikaning butun bazasi — dentalocal (kompyuterdagi nusxa) ga ko'chirish fayli (.json.gz).
+         * Faqat super-admin; fayl dentalocal Sozlamalar → Import da yuklanadi.
+         */
+        dentalocalExport: async (id: string): Promise<Blob> => {
+            if (isDemoMode()) throw new Error(DEMO_UNAVAILABLE);
+            let token = '';
+            try { token = JSON.parse(sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth') || '{}').token || ''; } catch { /* token yo'q */ }
+            const response = await fetch(`${API_URL}/admin/clinics/${encodeURIComponent(id)}/dentalocal-export`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || `HTTP ${response.status}`);
+            }
+            return response.blob();
+        },
         // Klinika kelishi bilan uning to'lov turlari to'lov oynalariga qo'llanadi
         getById: async (id: string) => {
             const clinic = isDemoMode() ? DEMO_CLINIC : await fetchJson<Clinic>(`/clinics/${id}`);
@@ -2158,6 +2175,12 @@ export const api = {
                 method: 'DELETE',
             });
         },
+        /** Texnikka to'lov — Laboratoriya xarajati yoziladi (Kassada ko'rinadi). Ikkinchi marta — 409 */
+        pay: (id: string, data: { method: PaymentMethod; amount?: number; title?: string }) =>
+            fetchJson<LabOrder>(`/lab-orders/${id}/pay`, { method: 'POST', body: JSON.stringify(data) }),
+        /** Adashib yozilgan to'lovni bekor qilish — xarajat o'chiriladi */
+        unpay: (id: string) =>
+            fetchJson<LabOrder>(`/lab-orders/${id}/pay`, { method: 'DELETE' }),
     },
     // Expose base URL for building direct URLs (e.g., TTS proxy)
     API_BASE_URL: API_URL.replace(/\/api$/, ''),

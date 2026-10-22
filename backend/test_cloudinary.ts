@@ -4,9 +4,9 @@ import path from 'path';
 
 // Configure Cloudinary with the same credentials as server.ts
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dj2qs9kgk',
-    api_key: process.env.CLOUDINARY_API_KEY || '628899167499441',
-    api_secret: process.env.CLOUDINARY_API_SECRET || 'RiLepq8hhEn2QlX0DqkeAmbNl0c'
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 async function testUpload() {

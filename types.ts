@@ -174,7 +174,7 @@ export interface Expense {
   clinicId: string;
   doctorId?: string | null;      // 'DoctorShare' va shifokorga 'Salary' uchun
   receptionistId?: string | null; // reception xodimiga 'Salary' uchun
-  labOrderId?: string | null;    // avtomatik Laboratoriya xarajati bog'lami
+  labOrderId?: string | null;    // texnikka to'lov — Laboratoriya buyurtmasi bog'lami
   inventoryItemId?: string | null; // avtomatik Ombor xarajati bog'lami
   createdAt?: string;
   branchId?: string | null;
@@ -907,4 +907,14 @@ export interface LabOrder {
   price: number;
   clinicianNotes?: string;
   technicianNotes?: string;
+  /** Texnikka to'lov (Laboratoriya xarajati). Yo'q — hali to'lanmagan */
+  expense?: LabOrderPayment | null;
+}
+
+export interface LabOrderPayment {
+  id: string;
+  amount: number;
+  /** Eski avtomatik yozilgan to'lovlarda usul bo'lmasligi mumkin */
+  method?: PaymentMethod | null;
+  date: string;
 }

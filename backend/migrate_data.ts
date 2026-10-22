@@ -1,7 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 
 // SOURCE: The database that HAS the data (found in check_prod_data.ts)
-const sourceUrl = 'postgresql://postgres:aleGfSHPFhpJTYnTMpPghOJGGHKIZmXi@switchyard.proxy.rlwy.net:56686/railway';
+const sourceUrl = process.env.SOURCE_DATABASE_URL || '';
+if (!sourceUrl) {
+    console.error('❌ Error: SOURCE_DATABASE_URL environment variable is required.');
+    process.exit(1);
+}
 
 // TARGET: The database that is currently empty/demo (the live one)
 // We will try to get this from process.env.DATABASE_URL if run locally with .env

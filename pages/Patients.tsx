@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { isAppointmentRecorded } from '../utils/unpaid';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { findUnbilledVisits } from '../utils/unpaid';
+import { buildDebtors } from '../backend/shared/debtRules';
 import { Card, Button, Input, Badge, Modal, Select } from '../components/Common';
 import { StatCard } from '../components/StatCard';
 import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
 import { Search, Plus, Eye, Trash2, Loader2, Download, Upload, Filter, UserCheck, AlertCircle, ChevronDown, Cake, Wallet, Users as UsersIcon, UserPlus as UserPlusIcon, Activity, MapPin } from 'lucide-react';
-import { Patient, Doctor, Appointment, Transaction, Clinic, Branch } from '../types';
+import { Patient, Doctor, Appointment, Transaction, Clinic, Branch, InstallmentPlan, Service } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { calcAge, formatDateToISO, formatDobDDMMYYYY } from '../utils/dateUtils';
@@ -19,6 +20,8 @@ interface PatientsProps {
   patients: Patient[];
   doctors: Doctor[];
   appointments: Appointment[];
+  /** Narxnoma — narxsiz eski qabul yozuvlarining summasi uchun ("To'lov kutilmoqda") */
+  services?: Service[];
   transactions: Transaction[];
   onPatientClick: (id: string) => void;
   onAddPatient: (patient: Omit<Patient, 'id'>) => Promise<any>;
@@ -37,6 +40,7 @@ export const Patients: React.FC<PatientsProps> = ({
   userRole,
   patients,
   doctors,
+  services = [],
   appointments,
   transactions,
   onPatientClick,
@@ -66,6 +70,34 @@ export const Patients: React.FC<PatientsProps> = ({
     // Ro'yxat App holatida turadi: yangilash yo'li berilmagan bo'lsa, yangi bemorlar sahifa yangilanganda ko'rinadi
     if (reloadAfterImport.current) window.location.reload();
   };
+  // Qarzdorlar — Moliya sahifasi bilan bir xil qoida (backend/shared/debtRules.ts):
+  // ochiq yozuvlar + faol bo'lib to'lash qoldig'i. Ilgari faqat "Pending" sanalardi,
+  // faqat bo'lib to'lash qarzi bor bemor bu yerda qarzdor chiqmasdi.
+  const [installments, setInstallments] = useState<InstallmentPlan[]>([]);
+  useEffect(() => {
+    if (!currentClinic?.id) return;
+    api.installments.getAll(currentClinic.id)
+      .then(data => setInstallments(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Failed to load installments:', err));
+  }, [currentClinic?.id]);
+  // To'lov kutayotgan bemorlar — Bosh sahifadagi "Olinmagan pul" bilan bir xil qoida: qabul ishlari
+  // hali to'lov yoki qarz yozuvi bilan yopilmagan (utils/unpaid findUnbilledVisits). Bugun "Keldi"
+  // qilingan qabul hali davom etyapti — pul yakunlangandan keyin kutiladi.
+  const waitingIds = useMemo(() => {
+    const today = formatDateToISO(new Date());
+    const unbilled = findUnbilledVisits(appointments, transactions, services);
+    const ids = new Set<string>();
+    appointments.forEach(a => {
+      if (a && unbilled.has(a.id) && (a.status === 'Completed' || (a.status === 'Checked-In' && a.date < today))) ids.add(a.patientId);
+    });
+    return ids;
+  }, [appointments, transactions, services]);
+  const debtorIds = useMemo(() => new Set(
+    buildDebtors(transactions, installments, patients.map(p => ({ id: p.id, name: `${p.lastName} ${p.firstName}` })))
+      .map(r => r.patientId)
+      .filter(Boolean)
+  ), [transactions, installments, patients]);
+
   const canEdit = perms.can('patients', 'card', 'edit');
   const canDelete = perms.can('patients', 'card', 'delete');
   const canExport = perms.can('patients', 'card', 'export');
@@ -160,23 +192,14 @@ export const Patients: React.FC<PatientsProps> = ({
         const lastVisitDate = p.lastVisit === 'Never' ? null : new Date(p.lastVisit);
         matchesStat = lastVisitDate ? lastVisitDate >= sevenDaysAgo : true;
       } else if (activeStatFilter === 'debtor') {
-        const patientTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
-        const totalDebt = patientTxs.filter(t => t.status === 'Pending').reduce((sum, t) => sum + t.amount, 0);
-        matchesStat = totalDebt > 0;
+        matchesStat = debtorIds.has(p.id);
       } else if (activeStatFilter === 'waiting') {
-        const patientAppts = appointments.filter(a => a.patientId === p.id || a.patientName === `${p.lastName} ${p.firstName}`);
-        const patientTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
-        const hasUnpaid = patientAppts.some(app => {
-          const hasTransaction = isAppointmentRecorded(app, patientTxs);
-          // Bugun "Keldi" qilingan qabul hali davom etyapti — pul yakunlangandan keyin kutiladi
-          return (app.status === 'Completed' || (app.status === 'Checked-In' && app.date < formatDateToISO(new Date()))) && !hasTransaction;
-        });
-        matchesStat = hasUnpaid;
+        matchesStat = waitingIds.has(p.id);
       }
 
       return matchesSearch && matchesStatus && matchesGender && matchesDoctor && matchesBranch && matchesDateFrom && matchesDateTo && matchesStat;
     });
-  }, [patients, searchTerm, filterStatus, filterGender, filterDoctor, filterBranch, filterDateFrom, filterDateTo, filterCompleteness, activeStatFilter, appointments, transactions]);
+  }, [patients, searchTerm, filterStatus, filterGender, filterDoctor, filterBranch, filterDateFrom, filterDateTo, filterCompleteness, activeStatFilter, appointments, transactions, debtorIds, waitingIds]);
 
   // Filtr ro'yxatida har bir holat yonida soni — hisobot shu yerning o'zida ko'rinadi
   const completenessCounts = useMemo(() => ({
@@ -193,23 +216,12 @@ export const Patients: React.FC<PatientsProps> = ({
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const newPatients = patients.filter(p => p.lastVisit === 'Never' || (p.lastVisit !== 'Never' && new Date(p.lastVisit) >= sevenDaysAgo)).length;
 
-    const debtors = patients.filter(p => {
-      const pTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
-      const totalDebt = pTxs.filter(t => t.status === 'Pending').reduce((sum, t) => sum + t.amount, 0);
-      return totalDebt > 0;
-    }).length;
+    const debtors = patients.filter(p => debtorIds.has(p.id)).length;
 
-    const waiting = patients.filter(p => {
-      const pAppts = appointments.filter(a => a.patientId === p.id || a.patientName === `${p.lastName} ${p.firstName}`);
-      const pTxs = transactions.filter(t => t.patientId === p.id || t.patientName === `${p.lastName} ${p.firstName}`);
-      return pAppts.some(app => {
-        const hasTransaction = isAppointmentRecorded(app, pTxs);
-        return (app.status === 'Completed' || (app.status === 'Checked-In' && app.date < formatDateToISO(new Date()))) && !hasTransaction;
-      });
-    }).length;
+    const waiting = patients.filter(p => waitingIds.has(p.id)).length;
 
     return { total, newPatients, debtors, waiting };
-  }, [patients, appointments, transactions]);
+  }, [patients, appointments, transactions, debtorIds, waitingIds]);
 
   const unassignedCount = patients.filter((p) => !p.doctorId).length;
 

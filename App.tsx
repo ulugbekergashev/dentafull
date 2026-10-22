@@ -1494,6 +1494,7 @@ const AppContent: React.FC = () => {
     <StaffProfile
       kind={kind}
       userRole={userRole}
+      services={services}
       doctors={doctors}
       receptionists={receptionists}
       labTechnicians={labTechnicians}
@@ -2142,6 +2143,7 @@ const AppContent: React.FC = () => {
                     patients={scopedPatients}
                     doctors={scopedDoctors}
                     appointments={scopedAppointments}
+                    services={services}
                     transactions={scopedTransactions}
                     showPatientPhone={showPatientPhoneForRole}
                     onPatientClick={handlePatientClick}
@@ -2282,6 +2284,8 @@ const AppContent: React.FC = () => {
                     doctors={doctors}
                     patients={patients}
                     onExpensesChanged={refreshExpenses}
+                    userRole={userRole}
+                    notify={addToast}
                     defaultDoctorName={(() => {
                       if (userRole !== UserRole.DOCTOR) return undefined;
                       const d = doctors.find(x => x.id === doctorId);

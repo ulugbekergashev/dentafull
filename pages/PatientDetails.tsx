@@ -7,13 +7,14 @@ import { PatientPhotos, PhotoUploadModal, fetchPatientPhotos } from '../componen
 import { VisitWorkflow, ProceduresSection, VisitCompletion } from '../components/ProceduresSection';
 import { InstallmentsTab } from '../components/InstallmentsTab';
 import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
-import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall, PaymentMethod, PatientPhoto, VisitRequirements, PendingMaterial } from '../types';
+import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall, PaymentMethod, PatientPhoto, VisitRequirements, PendingMaterial, InstallmentPlan } from '../types';
 import { api } from '../services/api';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDobDDMMYYYY, calcAge, formatDateToISO } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
-import { buildWaivedTransaction, isAppointmentRecorded } from '../utils/unpaid';
+import { buildWaivedTransaction, findUnbilledVisits, unbilledDue } from '../utils/unpaid';
+import { patientDebt } from '../backend/shared/debtRules';
 import { isConfirmedBooking, visitStatus, VisitStatusContext } from '../utils/visitStatus';
 import { VisitStatusBadge } from '../components/VisitStatusBadge';
 import { useDeskFlow } from '../hooks/useDeskFlow';
@@ -119,6 +120,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const canEditChart = perms.can('patients', 'chart', 'edit');
    const canViewPhotos = perms.can('patients', 'photos', 'view');
    const canViewPayments = perms.can('patients', 'payhist', 'view');
+   // Bemorning bo'lib to'lash rejalari — chap paneldagi "Qarz" Moliya sahifasi bilan bir xil
+   // chiqishi uchun (rejaning qolgani ham qarz). Bo'lib to'lash tabidan qaytganda yangilanadi.
+   const [patientPlans, setPatientPlans] = useState<InstallmentPlan[]>([]);
+   useEffect(() => {
+      if (!canViewPayments || !currentClinic?.id || !patient?.id) return;
+      api.installments.getAll(currentClinic.id, patient.id)
+         .then(data => setPatientPlans(Array.isArray(data) ? data : []))
+         .catch(err => console.error('Failed to load installments:', err));
+   }, [canViewPayments, currentClinic?.id, patient?.id, activeTab]);
    const canMessage = perms.flag('patients', 'message');
    const canBook = perms.can('calendar', 'appts', 'create');
    const tabAllowed = (id: string) =>
@@ -637,15 +647,23 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       const fullNameReverse = `${patient.firstName} ${patient.lastName}`;
       return t.patientName === fullName || t.patientName === fullNameReverse;
    });
-   const visitCtx: VisitStatusContext = { today: visitToday, nowMin: minutesOf(nowHHMM()), flowLog: visitFlow.entries, transactions: patientTransactions };
+   // Ishlari hali to'lov yoki qarz yozuvi bilan yopilmagan qabullar (utils/unpaid findUnbilledVisits) —
+   // bosh sahifadagi "Olinmagan pul" va Kassa bilan bir xil qoida, dentalocal bilan ham
+   const unbilledVisits = findUnbilledVisits(patientAppointments, patientTransactions, services);
+   const visitCtx: VisitStatusContext = { today: visitToday, nowMin: minutesOf(nowHHMM()), flowLog: visitFlow.entries, transactions: patientTransactions, unbilled: unbilledVisits };
    /**
     * To'lov kutayotgan qabul — bosh sahifadagi "Kutilayotgan to'lovlar" qoidasi bilan:
-    * yakunlangan (yoki o'tgan kunda "Keldi"), kassada umuman yozuvi yo'q. Kassada
+    * yakunlangan (yoki o'tgan kunda "Keldi"), ishlari to'lov bilan yopilmagan. Kassada
     * qarz yozuvi bo'lsa, u pastdagi to'lovlar tarixida "To'lash" bilan yopiladi.
     */
    const awaitsPayment = (app: Appointment) => !!app && !!app.date
       && (app.status === 'Completed' || (app.status === 'Checked-In' && app.date < visitToday))
-      && !isAppointmentRecorded(app, patientTransactions);
+      && unbilledVisits.has(app.id);
+   /** Qabul uchun hali olinmagan summa va ishlar (bir qismi to'langan bo'lsa — faqat qolgani) */
+   const dueOf = (app: Appointment) => {
+      const work = unbilledVisits.get(app.id);
+      return work ? unbilledDue(work, services) : calculateAppointmentTotal(app.notes || '', services);
+   };
 
    const todayKey = formatDateToISO(new Date());
    const paymentSplitProblem = paymentData.service === 'Avans'
@@ -661,6 +679,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const balanceText = patientBalance > 0
       ? 'text-emerald-600 dark:text-emerald-400'
       : patientBalance < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white';
+   // Qarz — Moliya va Bemorlar sahifalari bilan bir xil qoida (backend/shared/debtRules.ts)
+   const debtInfo = patientDebt({ id: patient.id, name: `${patient.lastName} ${patient.firstName}` }, patientTransactions, patientPlans);
    // "Sog'lom" belgisi ogohlantirish emas — faqat haqiqiy kasallik/allergiyalar ko'rsatiladi
    const healthAlerts = (patient.medicalHistory || '')
       .split('\n')
@@ -1270,6 +1290,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <dt className="text-gray-500 dark:text-gray-400">{balanceLabel}</dt>
                         <dd className={`font-bold tabular-nums ${balanceText}`}>{Math.abs(patientBalance).toLocaleString()} UZS</dd>
                      </div>
+                     {canViewPayments && debtInfo.total > 0 && (
+                        <div className="flex items-center justify-between gap-3">
+                           <dt className="text-gray-500 dark:text-gray-400">{t('patients.details.balanceDebt')}</dt>
+                           <dd className="font-bold tabular-nums text-red-600 dark:text-red-400">{debtInfo.total.toLocaleString()} UZS</dd>
+                        </div>
+                     )}
                      <div className="flex items-center justify-between gap-3">
                         <dt className="text-gray-500 dark:text-gray-400">{t('patients.details.stats.lastVisit')}</dt>
                         <dd className="text-gray-900 dark:text-white tabular-nums">{lastVisitLabel}</dd>
@@ -1671,7 +1697,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                           <td className="p-4 flex gap-2 flex-wrap">
                                              {canPayCreate && (<>
                                              <Button size="sm" onClick={() => {
-                                                const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
+                                                const { total, breakdown } = dueOf(app);
                                                 setDiscountType('percent');
                                                 setPaymentData({
                                                    amount: total.toString(),
@@ -1689,13 +1715,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                                                 setIsPaymentModalOpen(true);
                                              }}>{t('auto.To\'lov')}</Button>
                                              <Button size="sm" variant="secondary" className="bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800" onClick={() => {
-                                                const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
+                                                const { total, breakdown } = dueOf(app);
                                                 setInstallmentQuickOpen({ service: breakdown || app.type, amount: total, doctorId: app.doctorId, visitDate: app.date });
                                                 setActiveTab('installments');
                                              }}>{t('auto.Bo\'lib to\'lash')}</Button>
                                              {(patient.balance || 0) > 0 && (
                                                 <Button size="sm" variant="secondary" className="bg-primary-50 text-primary-700 border-primary-100" onClick={async () => {
-                                                   const { total, breakdown } = calculateAppointmentTotal(app.notes || '', services);
+                                                   const { total, breakdown } = dueOf(app);
                                                    // Avans yetmasa — yechilmaydi (ilgari qoldiq manfiy bo'lib, farq hech qayerda qarz bo'lib ko'rinmasdi)
                                                    if (total > (patient.balance || 0)) {
                                                       alert(t('patients.details.alerts.insufficientBalance'));
@@ -2448,7 +2474,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         onChange={e => setEditPaymentStatus(e.target.value)}
                         options={[
                            { value: 'Paid', label: 'To\'landi' },
-                           { value: 'Pending', label: 'Kutilmoqda' }
+                           // To'lanmagan yozuv hamma joyda qarz sanaladi (backend/shared/debtRules.ts)
+                           { value: 'Pending', label: 'Qarz (to\'lanmagan)' }
                         ]}
                      />
                   </div>
@@ -2498,7 +2525,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               setMessageText(`🏥 Qabul eslatmasi\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSizni ertaga klinikamizga qabulga kutamiz.\n\nIltimos, aniq vaqtni aniqlash uchun biz bilan bog'laning.`);
                            }
                         } else if (type === 'Debt') {
-                           const debt = patientTransactions.filter(t => t.status === 'Pending').reduce((acc, t) => acc + t.amount, 0);
+                           const debt = debtInfo.total;
                            if (debt > 0) {
                               setMessageText(`💳 To'lov eslatmasi\n\nHurmatli ${patient.lastName} ${patient.firstName}!\n\nSizning ${debt.toLocaleString()} UZS miqdorida qarzdorligingiz mavjud.\n\nIltimos, to'lovni amalga oshiring.\n\n📞 To'lov bo'yicha savol bo'lsa, biz bilan bog'laning.`);
                            } else {
@@ -2803,9 +2830,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                onClose={() => setWaivingAppointment(null)}
                patientName={`${patient.lastName} ${patient.firstName}`}
                date={waivingAppointment.date}
-               amount={calculateAppointmentTotal(waivingAppointment.notes || '', services).total}
+               amount={dueOf(waivingAppointment).total}
                onConfirm={async reason => {
-                  await onAddTransaction(buildWaivedTransaction(waivingAppointment, services, reason));
+                  // Bir qismi to'langan qabuldan faqat qolgan ishlar kechiriladi
+                  await onAddTransaction(buildWaivedTransaction(waivingAppointment, services, reason, dueOf(waivingAppointment)));
                }}
             />
          )}

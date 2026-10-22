@@ -343,7 +343,9 @@ export function buildCashBookDay(
         : undefined;
 
     if (prevShiftClosure) {
-        opening = prevShiftClosure.countedCash || 0;
+        // Kun almashinuvidagi qoida bilan bir xil: 1-smenada topshirilgan pul 2-smena kassasida yo'q
+        // (ilgari hisobga olinmasdi — 2-smena kassasi topshirilgan summa qadar ko'p ko'rinardi; dentalocal da to'g'ri edi)
+        opening = (prevShiftClosure.countedCash || 0) - (prevShiftClosure.handedOver || 0);
         anchorDate = date;
     } else {
         const computed = computeOpeningCash(date, transactions, expenses, closures, movements);
@@ -402,7 +404,9 @@ export function buildCashBookMonth(
     expenses: Expense[],
     doctors: Doctor[],
     closures: CashRegisterDay[] = [],
-    movements: CashMovement[] = []
+    movements: CashMovement[] = [],
+    /** Kuniga nechta smena — oxirgisidan oldingi smenalar topshirgan pul kun ichida kassadan chiqqan */
+    shiftsPerDay = 1
 ): CashBookMonth {
     const count = daysInMonth(month);
     const monthTotals = emptyTotals();
@@ -436,6 +440,21 @@ export function buildCashBookMonth(
     const allRows: CashBookRow[] = [];
     const days: CashBookMonthDay[] = [];
 
+    // Oy boshidagi qoldiq — oxirgi yopilishdan ko'chib keladi
+    const { opening: monthOpening, anchorDate: monthAnchor } = computeOpeningCash(
+        `${month}-01`, transactions, expenses, closures, movements
+    );
+
+    // Har kun uchun qoldiq qayta hisoblanadi. Shu oydagi kunlarga faqat oy boshidagi
+    // yopilishdan keyingi yozuvlar ta'sir qiladi — butun tarixni har safar aylanmaslik
+    // uchun ro'yxatlar bir marta qisqartiriladi (dentalocal dagi bilan bir xil).
+    const since = monthAnchor || `${month}-01`;
+    const recent = <T extends { date?: string }>(items: T[]): T[] => items.filter(item => dayOf(item?.date) >= since);
+    const hasClosures = closures.length > 0;
+    const recentTx = hasClosures ? recent(transactions) : [];
+    const recentExp = hasClosures ? recent(expenses) : [];
+    const recentMov = hasClosures ? recent(movements) : [];
+
     for (let i = 1; i <= count; i++) {
         const date = `${month}-${String(i).padStart(2, '0')}`;
         const dayTx = txByDay.get(date) || [];
@@ -459,10 +478,19 @@ export function buildCashBookMonth(
 
         dayExp.forEach(e => accumulateExpense(totals, e));
         dayMov.forEach(m => accumulateMovement(totals, m));
-        // Oylik jadvalda har bir kunning O'Z oqimi ko'rsatiladi (ochilish qoldig'isiz),
-        // aks holda ustun bo'ylab bir xil raqam takrorlanib, kunlik harakat ko'rinmay qolardi.
+        // Kun oxiridagi qoldiq — kunlik varaqdagi bilan aynan bir xil (2026-10-22). Ilgari oylik
+        // jadvalda faqat kunning o'z oqimi ko'rsatilardi: bitta kun oylikda bir raqam, kunlik
+        // varaqda boshqa raqam bo'lib chiqardi. Kunning o'z oqimi netCashFlow da turibdi.
+        totals.openingCash = i === 1
+            ? monthOpening
+            : (hasClosures ? computeOpeningCash(date, recentTx, recentExp, closures, recentMov).opening : 0);
         finalizeCash(totals);
-        totals.drawer = totals.netCashFlow;
+        // Ko'p smenali kunda oldingi smenalar topshirgan pul kun oxirida yashikda yo'q
+        if (shiftsPerDay > 1) {
+            closures.forEach(c => {
+                if (dayOf(c.date) === date && (c.shift || 1) < shiftsPerDay) totals.drawer -= c.handedOver || 0;
+            });
+        }
 
         days.push({
             date,
@@ -494,9 +522,6 @@ export function buildCashBookMonth(
     }
 
     // Oy yakunida: oy boshidagi qoldiq + oy davomidagi oqim
-    const { opening: monthOpening } = computeOpeningCash(
-        `${month}-01`, transactions, expenses, closures, movements
-    );
     monthTotals.openingCash = monthOpening;
     finalizeCash(monthTotals);
 

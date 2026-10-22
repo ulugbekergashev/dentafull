@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, Modal, Select, Badge } from '../components/Common';
 import { Clinic, SubscriptionPlan, LeadApiKeyInfo } from '../types';
-import { BarChart3, StickyNote, Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, BellRing, PhoneCall, Infinity as InfinityIcon, Repeat } from 'lucide-react';
+import { BarChart3, StickyNote, Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, BellRing, PhoneCall, Infinity as InfinityIcon, Repeat, Download } from 'lucide-react';
 
 // Reklama formalaridan (/lifetime, /monthly) kelgan lidlar kartada rang bilan ajralib turadi.
 // source: "ad-lifetime" yoki "ad-monthly", oxirida ixtiyoriy "-<utm_campaign>".
@@ -935,6 +935,30 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
          setTimeout(() => setCopiedKey(null), 1500);
       } catch (e) {
          // Clipboard API yopiq bo'lsa (http yoki eski brauzer) — jimgina o'tkazib yuboramiz
+      }
+   };
+
+   // Klinikani dentalocal ga ko'chirish fayli (backend/dentalocalExport.ts)
+   const [exportingClinicId, setExportingClinicId] = useState<string | null>(null);
+   const [dentalocalExportError, setDentalocalExportError] = useState('');
+   const handleDentalocalExport = async (clinic: Clinic) => {
+      setExportingClinicId(clinic.id);
+      setDentalocalExportError('');
+      try {
+         const blob = await api.clinics.dentalocalExport(clinic.id);
+         const slug = String(clinic.name || 'klinika').replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'klinika';
+         const url = URL.createObjectURL(blob);
+         const link = document.createElement('a');
+         link.href = url;
+         link.download = `DentaCRM-${slug}-${new Date().toISOString().slice(0, 10)}.json.gz`;
+         document.body.appendChild(link);
+         link.click();
+         link.remove();
+         setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      } catch (e: any) {
+         setDentalocalExportError(e?.message || 'Faylni tayyorlab bo\'lmadi');
+      } finally {
+         setExportingClinicId(null);
       }
    };
 
@@ -2593,7 +2617,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </div>
 
                   <Select
-                     label={t('superAdmin.tabs.plans')} Rejasi
+                     label={t('superAdmin.tabs.plans')}
                      options={plans.map(p => ({ value: p.id, label: `${p.name} - ${p.price.toLocaleString()} UZS` }))}
                      value={newClinicForm.planId}
                      onChange={e => {
@@ -2728,7 +2752,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                            onChange={(e) => setEditClinicData({ ...editClinicData, expiryDate: e.target.value })}
                         />
                         <Select
-                           label={t('superAdmin.tabs.plans')} Rejasi
+                           label={t('superAdmin.tabs.plans')}
                            value={editClinicData.planId}
                            onChange={(e) => setEditClinicData({ ...editClinicData, planId: e.target.value })}
                            options={plans.map(p => ({ value: p.id, label: p.name }))}
@@ -2850,6 +2874,26 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                      <span className={`font-bold ${getDaysRemaining(editClinicData.expiryDate) < 0 ? 'text-red-500' : 'text-green-600'}`}>
                         {editClinicData.expiryDate} ({getDaysRemaining(editClinicData.expiryDate)} kun)
                      </span>
+                  </div>
+
+                  {/* dentalocal (kompyuterdagi nusxa) ga ko'chirish — butun baza bitta faylda */}
+                  <div className="border border-gray-200 dark:border-gray-700 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                     <div className="min-w-0">
+                        <p className="font-medium text-gray-900 dark:text-white">dentalocal ga ko'chirish</p>
+                        <p className="text-gray-500 text-xs">
+                           Bemorlar, to'lov va qarzlar, kassa, xodimlar loginlari bilan — bitta fayl. dentalocal: Sozlamalar → Import.
+                           {dentalocalExportError && <span className="block text-red-600">{dentalocalExportError}</span>}
+                        </p>
+                     </div>
+                     <Button
+                        variant="secondary"
+                        className="shrink-0"
+                        disabled={exportingClinicId === selectedClinic.id}
+                        onClick={() => handleDentalocalExport(selectedClinic)}
+                     >
+                        <Download className="w-4 h-4 mr-2" />
+                        {exportingClinicId === selectedClinic.id ? 'Tayyorlanmoqda…' : 'Faylni yuklab olish'}
+                     </Button>
                   </div>
 
                   {/* Actions */}

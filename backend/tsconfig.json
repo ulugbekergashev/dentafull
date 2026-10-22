@@ -10,6 +10,8 @@
     },
     "include": [
         "server.ts",
+        "shared/debtRules.ts",
+        "dentalocalExport.ts",
         "botManager.ts",
         "smsService.ts",
         "triggers.ts",

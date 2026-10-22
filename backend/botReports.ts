@@ -21,6 +21,7 @@
  */
 
 import { prisma } from './db';
+import { isOpenCharge } from './shared/debtRules';
 import { tashkentDateStr } from './triggers';
 import { chat } from './aiService';
 import { getClinicKey } from './ai/keys';
@@ -79,7 +80,6 @@ const CATEGORY_LABEL: Record<string, string> = {
     DoctorShare: 'Shifokor ulushi', Salary: 'Oylik', Rent: 'Ijara', Utilities: 'Kommunal',
     Inventory: 'Ombor', Lab: 'Laboratoriya', Other: 'Boshqa',
 };
-const UNPAID = new Set(['Pending', 'Overdue']);
 
 // ─── Ma'lumot va hisob ───────────────────────────────────────────────────────
 
@@ -136,7 +136,9 @@ function computeStats(d: PeriodData, f: BranchFilter): Stats {
     for (const t of d.txs) {
         if (!inBranch(f, t.branchId)) continue;
         const amount = t.amount || 0;
-        if (UNPAID.has(t.status)) { s.unpaid += amount; continue; }
+        // Qarz qoidasi — backend/shared/debtRules.ts (avans depoziti qarz emas)
+        if (isOpenCharge(t)) { s.unpaid += amount; continue; }
+        if (t.status === 'Pending' || t.status === 'Overdue') continue;
         if (t.status !== 'Paid') continue;
         if (!isMoneyIn(t.type)) { s.fromBalance += amount; continue; }
         s.income += amount;

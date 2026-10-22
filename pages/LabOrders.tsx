@@ -1,10 +1,13 @@
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { FlaskConical, Plus, Search, Clock, CheckCircle, Package, Truck, X, Edit2, Trash2, AlertCircle, ChevronDown, User, Stethoscope, Calendar } from 'lucide-react';
-import { LabTechnician, LabOrder, Patient } from '../types';
+import { FlaskConical, Plus, Search, Clock, CheckCircle, Package, Truck, X, Edit2, Trash2, AlertCircle, ChevronDown, User, Stethoscope, Calendar, Wallet } from 'lucide-react';
+import { LabTechnician, LabOrder, Patient, UserRole } from '../types';
 import { api } from '../services/api';
 import { tLabel } from '../i18n/labels';
+import { Modal, Button, Input } from '../components/Common';
+import { EXPENSE_PAYMENT_METHODS, getPaymentMethodLabel, PaymentMethod } from '../utils/paymentMethods';
+import { formatDobDDMMYYYY } from '../utils/dateUtils';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   'Pending':     { label: 'Kutilmoqda',    color: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400',   icon: Clock },
@@ -26,7 +29,14 @@ interface Props {
   patients?: Patient[];
   onExpensesChanged?: () => void;
   defaultDoctorName?: string; // DOCTOR roli — yangi buyurtmada o'zi defolt tanlanadi
+  userRole?: UserRole;
+  notify?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
+
+const money = (n: number) => `${Math.round(n || 0).toLocaleString()} UZS`;
+
+/** Texnik ishni qaytargan, narxi bor, lekin unga hali to'lov yozilmagan */
+const isUnpaid = (o: LabOrder) => (o.status === 'Ready' || o.status === 'Delivered') && o.price > 0 && !o.expense;
 
 const emptyForm = {
   patientName: '', doctorName: '', technicianId: '', orderType: '', material: '',
@@ -34,12 +44,24 @@ const emptyForm = {
   clinicianNotes: '', notes: '', status: 'Pending',
 };
 
-export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [], onExpensesChanged, defaultDoctorName }) => {
+export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders, setLabOrders, doctors, patients = [], onExpensesChanged, defaultDoctorName, userRole, notify }) => {
     const { t } = useLanguage();
     const perms = usePerms();
     const canCreate = perms.can('lab', 'orders', 'create');
     const canEdit = perms.can('lab', 'orders', 'edit');
     const canDelete = perms.can('lab', 'orders', 'delete');
+    // Texnikka to'lov — Kassadagi xarajat bilan bir xil ruxsat. Laborant ruxsatlar jadvalida
+    // yo'q (hammasi ochiq bo'lib chiqadi), o'ziga to'lov yozmasligi uchun alohida yopiladi.
+    const isTechnician = userRole === UserRole.LAB_TECHNICIAN;
+    const canPay = !isTechnician && perms.can('finance', 'expenses', 'create');
+    const canUnpay = !isTechnician && perms.can('finance', 'expenses', 'delete');
+
+  // Texnikka to'lov oynasi. afterDeliver — "Topshirish"dan keyin ochilgan (u holda "Keyinroq" tugmasi)
+  const [payFor, setPayFor]       = useState<{ order: LabOrder; afterDeliver: boolean } | null>(null);
+  const [payMethod, setPayMethod] = useState<PaymentMethod>('Cash');
+  const [payAmount, setPayAmount] = useState('');
+  const [payError, setPayError]   = useState('');
+  const [paying, setPaying]       = useState(false);
 
   const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -95,6 +117,42 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
     setError(''); setShowModal(true);
   };
 
+  // Server qaytargan buyurtma ro'yxatdagisining o'rniga (to'lov holati ham shu bilan yangilanadi)
+  const replaceOrder = (saved: LabOrder) => setLabOrders(labOrders.map(o => o.id === saved.id ? { ...o, ...saved } : o));
+
+  const openPay = (order: LabOrder, afterDeliver: boolean) => {
+    setPayFor({ order, afterDeliver });
+    setPayMethod('Cash');
+    setPayAmount(order.price ? String(order.price) : '');
+    setPayError('');
+  };
+  // Endi xarajat o'zi yozilmaydi — "Topshirildi"dan keyin texnikka to'langanmi, so'raladi (keyinroq ham mumkin)
+  const askPaymentAfterDeliver = (order: LabOrder) => {
+    if (canPay && order.price > 0 && !order.expense) openPay(order, true);
+  };
+
+  const submitPay = async () => {
+    if (!payFor || paying) return;
+    const amount = Number(payAmount);
+    if (!(amount > 0)) { setPayError(t('lab.pay.amountInvalid')); return; }
+    setPaying(true); setPayError('');
+    try {
+      replaceOrder(await api.labOrders.pay(payFor.order.id, { method: payMethod, amount }));
+      setPayFor(null);
+      notify?.('success', t('lab.pay.done'));
+      onExpensesChanged?.();
+    } catch (e: any) { setPayError(e?.message || t('common.error')); }
+    finally { setPaying(false); }
+  };
+
+  const handleUnpay = async (order: LabOrder) => {
+    if (!confirm(t('lab.unpayConfirm'))) return;
+    try {
+      replaceOrder(await api.labOrders.unpay(order.id));
+      onExpensesChanged?.();
+    } catch (e: any) { notify?.('error', e?.message || t('common.error')); }
+  };
+
   const handleSave = useCallback(async () => {
     if (!form.patientName.trim() || !form.technicianId || !form.orderType || !form.deadline) {
       setError("Bemor ismi, texnik, buyurtma turi va muddatini to'ldiring");
@@ -106,8 +164,10 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
       const payload = { ...form, technicianName: tech ? `${tech.lastName} ${tech.firstName}` : '', clinicId };
       if (editingOrder) {
         const updated = await api.labOrders.update(editingOrder.id, payload);
-        setLabOrders(labOrders.map(o => o.id === editingOrder.id ? { ...o, ...updated } : o));
-        onExpensesChanged?.();
+        const merged = { ...editingOrder, ...updated };
+        setLabOrders(labOrders.map(o => o.id === editingOrder.id ? merged : o));
+        // Narx o'zgarsa ham yozilgan to'lov o'zgarmaydi — Kassani yangilash shart emas
+        if (merged.status === 'Delivered' && editingOrder.status !== 'Delivered') askPaymentAfterDeliver(merged);
       } else {
         const created = await api.labOrders.create(payload);
         setLabOrders([created, ...labOrders]);
@@ -120,19 +180,20 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
   const handleStatusChange = async (order: LabOrder, newStatus: string) => {
     try {
       const updated = await api.labOrders.update(order.id, { status: newStatus });
-      setLabOrders(labOrders.map(o => o.id === order.id ? { ...o, ...updated } : o));
-      // "Delivered" ga o'tganda backend Laboratoriya xarajatini yozadi/o'chiradi
-      onExpensesChanged?.();
-    } catch {}
+      const merged = { ...order, ...updated };
+      setLabOrders(labOrders.map(o => o.id === order.id ? merged : o));
+      if (newStatus === 'Delivered') askPaymentAfterDeliver(merged);
+    } catch (e: any) { notify?.('error', e?.message || t('common.error')); }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Bu buyurtmani o\'chirishni tasdiqlaysizmi?')) return;
+  const handleDelete = async (order: LabOrder) => {
+    // To'langan bo'lsa xarajat Kassada qoladi — buni oldindan aytamiz
+    if (!confirm(order.expense ? t('lab.deleteConfirmPaid') : t('lab.deleteConfirm'))) return;
     try {
-      await api.labOrders.delete(id);
-      setLabOrders(labOrders.filter(o => o.id !== id));
-      onExpensesChanged?.();
-    } catch {}
+      await api.labOrders.delete(order.id);
+      setLabOrders(labOrders.filter(o => o.id !== order.id));
+      if (order.expense) onExpensesChanged?.();
+    } catch (e: any) { notify?.('error', e?.message || t('common.error')); }
   };
 
   const isOverdue = (o: LabOrder) => ['Pending','In-Progress'].includes(o.status) && o.deadline < new Date().toISOString().split('T')[0];
@@ -233,6 +294,32 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                     </div>
                     {order.material && <div className="mt-1 text-xs text-gray-500 dark:text-gray-500">{t('auto.Material')}: {tLabel(t, order.material)}{order.toothNumbers ? ` · ${t('auto.Tishlar')}: ${order.toothNumbers}` : ''}</div>}
                     {order.clinicianNotes && <div className="mt-1 text-xs text-gray-500 italic">"{order.clinicianNotes}"</div>}
+                    {(order.price > 0 || order.expense) && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                        <span className="font-semibold text-gray-900 dark:text-white tabular-nums">{money(order.price)}</span>
+                        {order.expense ? (
+                          <span
+                            title={`${formatDobDDMMYYYY(order.expense.date)} · ${money(order.expense.amount)}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800 whitespace-nowrap"
+                          >
+                            {t('lab.paid')}{order.expense.method ? ` · ${tLabel(t, getPaymentMethodLabel(order.expense.method))}` : ''}
+                            {canUnpay && (
+                              <button type="button" onClick={() => handleUnpay(order)} title={t('lab.unpay')} aria-label={t('lab.unpay')} className="ml-0.5 -mr-1 p-0.5 rounded-full hover:bg-green-100 dark:hover:bg-green-900/40">
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </span>
+                        ) : isUnpaid(order) && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800 whitespace-nowrap">{t('lab.unpaid')}</span>
+                        )}
+                        {/* Narx yonida — telefonda o'ng tomondagi tugmalar ustuni kengayib, ismlarni siqib qo'ymasin */}
+                        {canPay && isUnpaid(order) && (
+                          <button type="button" onClick={() => openPay(order, false)} className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg font-medium whitespace-nowrap">
+                            <Wallet className="w-3.5 h-3.5" />{t('lab.action.pay')}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {/* Quick status change */}
@@ -246,7 +333,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                       <button onClick={() => handleStatusChange(order, 'Delivered')} className="px-2.5 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">{t('auto.Topshirish')}</button>
                     )}
                     {canEdit && <button onClick={() => openEdit(order)} className="p-1.5 text-gray-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>}
-                    {canDelete && <button onClick={() => handleDelete(order.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>}
+                    {canDelete && <button onClick={() => handleDelete(order)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                 </div>
               </div>
@@ -396,6 +483,56 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
           </div>
         </div>
       )}
+
+      {/* Texnikka to'lov */}
+      <Modal isOpen={!!payFor} onClose={() => setPayFor(null)} title={t('lab.pay.title')}>
+        {payFor && (
+          <div className="space-y-4">
+            {payFor.afterDeliver && (
+              <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 text-sm font-medium text-purple-800 dark:text-purple-200">
+                {t('lab.pay.deliveredQuestion')}
+              </div>
+            )}
+            <div className="text-sm text-gray-600 dark:text-gray-300 space-y-0.5">
+              <p className="font-semibold text-gray-900 dark:text-white">{tLabel(t, payFor.order.orderType)} — {payFor.order.patientName}</p>
+              <p>{t('lab.pay.technician')}: {payFor.order.technicianName}</p>
+            </div>
+            <Input
+              label={t('lab.pay.amount')}
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={payAmount}
+              onChange={e => setPayAmount(e.target.value)}
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('lab.pay.method')}</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {EXPENSE_PAYMENT_METHODS.map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setPayMethod(m)}
+                    className={`h-10 rounded-lg text-sm font-medium border transition-colors ${payMethod === m
+                      ? 'bg-teal-600 border-teal-600 text-white'
+                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                  >
+                    {tLabel(t, getPaymentMethodLabel(m))}
+                  </button>
+                ))}
+              </div>
+              {payMethod === 'Cash' && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{t('lab.pay.cashHint')}</p>}
+            </div>
+            {payError && <p className="text-sm text-red-600 dark:text-red-400">{payError}</p>}
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setPayFor(null)} disabled={paying}>
+                {payFor.afterDeliver ? t('lab.pay.later') : t('common.cancel')}
+              </Button>
+              <Button type="button" onClick={submitPay} disabled={paying}>{paying ? t('common.pleaseWait') : t('lab.pay.submit')}</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

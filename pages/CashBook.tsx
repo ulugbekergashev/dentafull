@@ -31,7 +31,7 @@ import { exportCashBookDay, exportCashBookMonth } from '../utils/cashbookExport'
 import { PAYMENT_METHODS, EXPENSE_PAYMENT_METHODS, INCOMING_PAYMENT_METHODS, getPaymentMethodLabel, reconcileTotal } from '../utils/paymentMethods';
 import { formatDateToISO } from '../utils/dateUtils';
 import { calculateAppointmentTotal } from '../utils/financialCalculations';
-import { buildWaivedTransaction, isAppointmentRecorded, isDebtTransaction } from '../utils/unpaid';
+import { buildWaivedTransaction, isDebtTransaction, findUnbilledVisits, unbilledDue } from '../utils/unpaid';
 import { api } from '../services/api';
 import { tLabel } from '../i18n/labels';
 
@@ -591,8 +591,8 @@ export const CashBook: React.FC<CashBookProps> = ({
     );
 
     const monthData = useMemo(
-        () => buildCashBookMonth(month, transactions, expenses, doctors, closures, movements),
-        [month, transactions, expenses, doctors, closures, movements]
+        () => buildCashBookMonth(month, transactions, expenses, doctors, closures, movements, shiftsPerDay),
+        [month, transactions, expenses, doctors, closures, movements, shiftsPerDay]
     );
 
     const clinicName = currentClinic?.name;
@@ -784,6 +784,18 @@ export const CashBook: React.FC<CashBookProps> = ({
 
     // Kassirning kun oxiridagi asosiy savoli: kimdan pul olinmadi.
     // Ikki manba: qarzga yozilgan to'lovlar va to'lov yozilmagan yakunlangan qabullar.
+    // Ishlari to'lov yoki qarz yozuvi bilan yopilmagan qabullar — Bosh sahifadagi "Olinmagan pul"
+    // bilan bir xil qoida (utils/unpaid findUnbilledVisits). Barcha qabullar birga ko'riladi:
+    // keyingi tashrif uchun to'lov oldingi qabulni yopib qo'ymasligi uchun.
+    const unbilledVisits = useMemo(
+        () => findUnbilledVisits(appointments, transactions, services as any),
+        [appointments, transactions, services]
+    );
+    const dueOfVisit = (a: Appointment) => {
+        const work = unbilledVisits.get(a.id);
+        return work ? unbilledDue(work, services as any) : calculateAppointmentTotal(a.notes || '', services as any);
+    };
+
     const unpaidItems = useMemo(() => {
   const pendingTx = transactions
             .filter(tx => {
@@ -805,13 +817,11 @@ export const CashBook: React.FC<CashBookProps> = ({
                 tx: tx,
             }));
 
+        // Qarzga yozilgan qabul yuqoridagi pendingTx da turadi; qisman to'langan qabuldan faqat qolgan ishlar summasi
         const unpaidAppts = appointments
-            // Kassada yozuv bor bo'lsa (qarz ham) — yuqoridagi pendingTx uni allaqachon
-            // ko'rsatadi; `isAppointmentPaid` faqat 'Paid' ni sanagani uchun qarzga
-            // yozilgan qabul shu ro'yxatga ikkinchi marta tushib ketardi.
-            .filter(a => a && a.date === date && a.status === 'Completed' && !isAppointmentRecorded(a, transactions))
+            .filter(a => a && a.date === date && a.status === 'Completed' && unbilledVisits.has(a.id))
             .map(a => {
-                const { total } = calculateAppointmentTotal(a.notes || '', services as any);
+                const { total } = unbilledDue(unbilledVisits.get(a.id)!, services as any);
                 return {
                     kind: 'appointment' as const,
                     isDebt: false,
@@ -827,7 +837,7 @@ export const CashBook: React.FC<CashBookProps> = ({
             });
 
         return [...pendingTx, ...unpaidAppts];
-    }, [transactions, appointments, services, date]);
+    }, [transactions, appointments, services, date, unbilledVisits]);
 
     const unpaidTotal = unpaidItems.reduce((sum, i) => sum + i.amount, 0);
 
@@ -1597,9 +1607,10 @@ export const CashBook: React.FC<CashBookProps> = ({
                     onClose={() => setWaivingAppt(null)}
                     patientName={waivingAppt.patientName}
                     date={waivingAppt.date}
-                    amount={calculateAppointmentTotal(waivingAppt.notes || '', services as any).total}
+                    amount={dueOfVisit(waivingAppt).total}
                     onConfirm={async reason => {
-                        await onAddTransaction(buildWaivedTransaction(waivingAppt, services as any, reason));
+                        // Bir qismi to'langan qabuldan faqat qolgan ishlar kechiriladi
+                        await onAddTransaction(buildWaivedTransaction(waivingAppt, services as any, reason, dueOfVisit(waivingAppt)));
                     }}
                 />
             )}

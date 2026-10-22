@@ -2541,9 +2541,13 @@ function sanitizeTransactionInput(body: any, partial: boolean): string | null {
     return null;
 }
 
-/** Avans qoldig'iga ta'siri: depozit qo'shadi, 'Balance' to'lovi ayiradi */
+/**
+ * Avans qoldig'iga ta'siri: depozit qo'shadi, 'Balance' to'lovi ayiradi. Avansni tanish —
+ * backend/shared/debtRules.ts (ekranlar va dentalocal bilan bir xil: "avans", " Avans " ham).
+ */
+const { isAdvanceDeposit: isAvansDeposit } = require('./shared/debtRules');
 const balanceContribution = (tx: any): number => {
-    if (tx.service === 'Avans' && tx.status === 'Paid') return Number(tx.amount) || 0;
+    if (isAvansDeposit(tx) && tx.status === 'Paid') return Number(tx.amount) || 0;
     if (tx.type === 'Balance' && tx.status === 'Paid') return -(Number(tx.amount) || 0);
     return 0;
 };
@@ -2734,12 +2738,18 @@ app.put('/api/transactions/:id', authenticateToken, async (req, res) => {
  * Ilgari mijoz ikki so'rov yuborardi (yangi "to'landi" yozuvi + qarzni kamaytirish) va
  * qoldiqni O'ZIDAGI eski summadan hisoblardi: ikki qurilmadan bir vaqtda to'lansa yoki
  * ikkinchi so'rov o'tmasa, to'langan + qolgan summa asl qarzdan oshib ketardi.
- * Bu yerda qarz summasi o'zgarmagan bo'lsagina yoziladi (aks holda 409).
+ * Bu yerda qarz summasi o'zgarmagan bo'lsagina yoziladi (aks holda 409), qisman to'lovning
+ * ikkala yozuvi (qarz kamayishi + "to'landi" yozuvi) va avans o'zgarishi bitta tranzaksiyada.
+ * Hisob — backend/shared/debtRules.ts (dentalocal da ham aynan shu fayl): qo'shimcha chegirma
+ * (`extraDiscount`) berish mumkin, qarz yozilgandagi chegirma yopilgan ulushga qarab bo'linadi.
  * Tashrif kuni (forDate) saqlanadi — to'langan tashrif "to'lov kutilmoqda"ga qaytmaydi.
  */
+const { planDebtPayment } = require('./shared/debtRules');
+
 app.post('/api/transactions/:id/pay', authenticateToken, async (req, res) => {
     try {
-        if (!(await allow(req, res, p => p.flag('money', 'payCreate'), "to'lov qabul qilish"))) return;
+        const perms = await permsOf(req);
+        if (!perms.owner && !perms.flag('money', 'payCreate')) return denyPerm(res, "to'lov qabul qilish");
         if (!(await assertOwnership(req, res, 'transaction', req.params.id))) return;
         const actor = (req as any).user;
         const debt = await prisma.transaction.findUnique({ where: { id: req.params.id } });
@@ -2747,70 +2757,92 @@ app.post('/api/transactions/:id/pay', authenticateToken, async (req, res) => {
         if (debt.status === 'Paid') return res.status(400).json({ error: "Bu qarz allaqachon to'langan" });
 
         const amount = Number(req.body?.amount);
-        if (!isFinite(amount) || amount <= 0) return res.status(400).json({ error: "To'lov summasi noto'g'ri" });
-        const paid = Math.min(amount, debt.amount);
+        const extraDiscount = Math.max(0, Number(req.body?.extraDiscount) || 0);
+        if (!isFinite(amount) || amount < 0) return res.status(400).json({ error: "To'lov summasi noto'g'ri" });
+        // Oyna ochilgandan beri qarz boshqa joyda o'zgargan bo'lsa — eski summa bilan yozilmasin
+        if (req.body?.prevAmount !== undefined && Math.abs(Number(req.body.prevAmount) - debt.amount) > 0.5) {
+            return res.status(409).json({ error: "Bu qarz hozirgina boshqa joyda o'zgardi. Sahifani yangilab, qayta urinib ko'ring." });
+        }
+        if (extraDiscount > 0 && !perms.owner) {
+            const max = perms.limit('money', 'discount');
+            if (extraDiscount / Math.max(1, debt.amount) * 100 > max + 0.5) {
+                return denyPerm(res, max > 0 ? `chegirma ${max}% dan oshmasin` : 'chegirma berish');
+            }
+        }
         const method = String(req.body?.method || 'Cash');
         const date = normalizeTxDate(req.body?.date) || todayTashkent();
+        const plan = planDebtPayment(debt, { paid: amount, extraDiscount, method, today: date });
+        if (!plan) return res.status(400).json({ error: "To'lov summasi noto'g'ri" });
+
         const visitDay = debt.forDate || String(debt.date).slice(0, 10);
+        // Yangi to'lov bilan bir xil ruxsatlar (allowPaymentCreate): pulsiz yopish — "bepul deb yopish",
+        // o'tgan kunga yozish — faqat ruxsati borlarga (tashrif kunining o'ziga yozish mumkin)
+        if (!perms.owner) {
+            if (plan.paid <= 0 && !perms.flag('money', 'waive')) return denyPerm(res, 'bepul deb yopish');
+            if (date < todayTashkent() && date !== visitDay && !perms.flag('money', 'backdate')) {
+                return denyPerm(res, "o'tgan sanaga to'lov yozish");
+            }
+        }
         const receivedBy = {
             receivedById: actor?.clinicId ? (actor?.id || actor?.receptionistId || null) : null,
             receivedByName: actor?.name || null,
         };
+        const paidRow: any = plan.full
+            ? { ...debt, ...plan.update }
+            : { ...plan.create, patientId: debt.patientId, service: plan.create.service };
+        const balanceChange = balanceContribution(paidRow) - (plan.full ? balanceContribution(debt) : 0);
 
         // Avansdan to'lash — hisobda yetarli bo'lsa
-        if (method === 'Balance' && debt.patientId) {
+        if (balanceChange < 0 && debt.patientId) {
             const patient = await prisma.patient.findUnique({ where: { id: debt.patientId }, select: { balance: true } });
-            if (paid > (patient?.balance || 0) + 0.5) {
+            if (-balanceChange > (patient?.balance || 0) + 0.5) {
                 return res.status(400).json({ error: `Bemor hisobidagi avans yetarli emas: ${Math.round(patient?.balance || 0).toLocaleString('ru-RU')} so'm bor` });
             }
         }
 
         // Faqat qarz hali shu summada va to'lanmagan bo'lsa (boshqa qurilma o'zgartirmagan bo'lsa)
         const guard = { id: debt.id, amount: debt.amount, status: { not: 'Paid' } };
-        const full = paid >= debt.amount - 0.5;
-        let paidTx: any;
-        let remaining: any = null;
-        try {
-            if (full) {
-                paidTx = await prisma.transaction.update({
-                    where: guard,
-                    data: { status: 'Paid', type: method, date, forDate: visitDay, createdAt: new Date(), ...receivedBy },
-                });
-            } else {
-                remaining = await prisma.transaction.update({ where: guard, data: { amount: { decrement: paid } } });
-                paidTx = await prisma.transaction.create({
+        const steps: any[] = plan.full
+            ? [prisma.transaction.update({
+                where: guard,
+                data: { ...plan.update, forDate: visitDay, createdAt: new Date(), ...receivedBy },
+            })]
+            : [
+                prisma.transaction.update({ where: guard, data: plan.update }),
+                prisma.transaction.create({
                     data: {
                         patientId: debt.patientId, patientName: debt.patientName,
                         doctorId: debt.doctorId, doctorName: debt.doctorName,
                         clinicId: debt.clinicId, branchId: debt.branchId,
-                        amount: paid, status: 'Paid', type: method,
-                        service: `${debt.service} (Qarzdorlik yopildi)`,
-                        date, forDate: visitDay,
-                        // Chegirma asl qarz yozuvida qoladi — bu yerda takrorlansa ikki marta sanalardi
-                        discountPercent: 0, discountAmount: 0, isDebt: false,
+                        ...plan.create,
+                        forDate: visitDay, isDebt: false,
                         ...receivedBy,
                     },
-                });
-            }
+                }),
+            ];
+        if (balanceChange !== 0 && debt.patientId) {
+            steps.push(prisma.patient.update({ where: { id: debt.patientId }, data: { balance: { increment: balanceChange } } }));
+        }
+
+        let results: any[];
+        try {
+            results = await prisma.$transaction(steps);
         } catch (e: any) {
             if (e?.code === 'P2025') {
                 return res.status(409).json({ error: "Bu qarz hozirgina boshqa joyda o'zgardi. Sahifani yangilab, qayta urinib ko'ring." });
             }
             throw e;
         }
+        const paidTx = plan.full ? results[0] : results[1];
+        const remaining = plan.full ? null : results[0];
 
-        if (paidTx.patientId) {
-            const change = balanceContribution(paidTx) - (full ? balanceContribution(debt) : 0);
-            if (change !== 0) {
-                await prisma.patient.update({ where: { id: paidTx.patientId }, data: { balance: { increment: change } } })
-                    .catch((err: any) => console.error('Failed to update patient balance:', err));
-            }
-        }
-        if (full) await notif.resolve(notif.TYPES.DEBT_CREATED, debt.id);
+        if (plan.full) await notif.resolve(notif.TYPES.DEBT_CREATED, debt.id);
 
         await writeCashAudit({
-            clinicId: debt.clinicId, date, action: full ? 'Update' : 'Create', entityType: 'Transaction', entityId: paidTx.id,
-            summary: `${debt.patientName}: qarz to'landi ${Math.round(paid).toLocaleString('ru-RU')} so'm${full ? '' : ` (qoldi ${Math.round(remaining.amount).toLocaleString('ru-RU')})`}`,
+            clinicId: debt.clinicId, date, action: plan.full ? 'Update' : 'Create', entityType: 'Transaction', entityId: paidTx.id,
+            summary: `${debt.patientName}: qarz to'landi ${Math.round(plan.paid).toLocaleString('ru-RU')} so'm`
+                + (extraDiscount > 0 ? `, chegirma ${Math.round(Math.min(extraDiscount, debt.amount)).toLocaleString('ru-RU')}` : '')
+                + (plan.full ? '' : ` (qoldi ${Math.round(plan.remaining).toLocaleString('ru-RU')})`),
             user: actor,
         });
 
@@ -2831,9 +2863,8 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
         // Reverse balance contribution
         // Reverse balance: only for Avans deposits and Balance-type payments
         if (transaction.patientId) {
-            let contribution = 0;
-            if (transaction.service === 'Avans' && transaction.status === 'Paid') contribution = transaction.amount;
-            else if (transaction.type === 'Balance' && transaction.status === 'Paid') contribution = -transaction.amount;
+            // Yaratishdagi bilan bir xil qoida — aks holda "avans" yozuvi o'chirilganda qaytmasdi
+            const contribution = balanceContribution(transaction);
 
             if (contribution !== 0) {
                 await prisma.patient.update({
@@ -3480,13 +3511,10 @@ app.post('/api/admin/recalculate-balances', authenticateToken, async (req, res) 
                 where: { patientId: patient.id }
             });
 
+            // Yozuv yaratish/o'chirishdagi bilan bir xil qoida (balanceContribution)
             let correctBalance = 0;
             for (const tx of transactions) {
-                if (tx.service === 'Avans' && tx.status === 'Paid') {
-                    correctBalance += tx.amount;
-                } else if (tx.type === 'Balance' && tx.status === 'Paid') {
-                    correctBalance -= tx.amount;
-                }
+                correctBalance += balanceContribution(tx);
             }
 
             await prisma.patient.update({
@@ -3504,6 +3532,16 @@ app.post('/api/admin/recalculate-balances', authenticateToken, async (req, res) 
 });
 
 // --- Doctors ---
+/**
+ * Xodim yozuvi parolsiz. Ilgari ro'yxat parol xeshi (hali kirmagan xodimda esa ochiq parol) bilan
+ * klinikaning har qanday xodimiga qaytardi. dentalocal da ham shunday (publicStaff, 2026-10-22).
+ */
+function publicStaff<T>(row: T): T {
+    if (!row || typeof row !== 'object') return row;
+    const { password, ...rest } = row as any;
+    return rest as T;
+}
+
 app.get('/api/doctors', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
@@ -3517,7 +3555,7 @@ app.get('/api/doctors', authenticateToken, async (req, res) => {
                 status: { not: 'Deleted' }
             }
         });
-        res.json(doctors);
+        res.json(doctors.map(publicStaff));
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch doctors' });
     }
@@ -3589,7 +3627,7 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
 
         const newDoctor = await prisma.doctor.create({ data });
         dhp.enqueueSafe(clinicId, 'Practitioner', newDoctor.id);
-        res.json(newDoctor);
+        res.json(publicStaff(newDoctor));
     } catch (error: any) {
         console.error('Doctor creation error:', error);
         if (error.code === 'P2002') {
@@ -3654,7 +3692,7 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
             data: updateData
         });
         dhp.enqueueSafe(doctor.clinicId, 'Practitioner', doctor.id);
-        res.json(doctor);
+        res.json(publicStaff(doctor));
     } catch (error: any) {
         console.error('Doctor update error:', error);
         if (error.code === 'P2002') {
@@ -3799,7 +3837,7 @@ app.get('/api/receptionists', authenticateToken, async (req, res) => {
                 status: { not: 'Deleted' }
             }
         });
-        res.json(receptionists);
+        res.json(receptionists.map(publicStaff));
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch receptionists' });
     }
@@ -3832,7 +3870,7 @@ app.post('/api/receptionists', authenticateToken, async (req, res) => {
         };
 
         const newReceptionist = await prisma.receptionist.create({ data });
-        res.json(newReceptionist);
+        res.json(publicStaff(newReceptionist));
     } catch (error: any) {
         console.error('Receptionist creation error:', error);
         if (error.code === 'P2002') {
@@ -3862,7 +3900,7 @@ app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
             where: { id: req.params.id },
             data: updateData
         });
-        res.json(receptionist);
+        res.json(publicStaff(receptionist));
     } catch (error: any) {
         console.error('Receptionist update error:', error);
         if (error.code === 'P2002') {
@@ -3899,7 +3937,7 @@ app.get('/api/lab-technicians', authenticateToken, async (req: any, res: any) =>
             where: { clinicId: clinicId as string, status: { not: 'Deleted' } },
             orderBy: { lastName: 'asc' }
         });
-        res.json(technicians);
+        res.json(technicians.map(publicStaff));
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to fetch lab technicians' });
     }
@@ -3923,7 +3961,7 @@ app.post('/api/lab-technicians', authenticateToken, async (req: any, res: any) =
             data.password = await bcrypt.hash(password, salt);
         }
         const technician = await (prisma as any).labTechnician.create({ data });
-        res.json(technician);
+        res.json(publicStaff(technician));
     } catch (error: any) {
         res.status(500).json({ error: error.message || 'Failed to create lab technician' });
     }
@@ -3952,7 +3990,7 @@ app.put('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any
             data.password = await bcrypt.hash(password, salt);
         }
         const technician = await (prisma as any).labTechnician.update({ where: { id: req.params.id }, data });
-        res.json(technician);
+        res.json(publicStaff(technician));
     } catch (error: any) {
         res.status(500).json({ error: error.message || 'Failed to update lab technician' });
     }
@@ -3976,6 +4014,27 @@ app.delete('/api/lab-technicians/:id', authenticateToken, async (req: any, res: 
 // --- Lab Orders ---
 // ============================================================
 
+const LAB_STATUSES = ['Pending', 'In-Progress', 'Ready', 'Delivered', 'Cancelled'];
+// Texnikka to'lov usullari — Kassadagi xarajat usullari bilan bir xil (Avans, Sug'urta emas)
+const LAB_EXPENSE_METHODS = ['Cash', 'Card', 'Click', 'Transfer'];
+// Ro'yxatda "To'langan" ko'rinishi uchun bog'langan xarajat. Ilgari "Topshirildi"da
+// avtomatik yozilgan xarajatlar ham shu bog'lam orqali to'langan bo'lib ko'rinadi.
+const LAB_ORDER_INCLUDE = { expense: { select: { id: true, amount: true, method: true, date: true } } };
+
+const labText = (value: unknown, max = 500): string | null => {
+    const s = typeof value === 'string' ? value.trim() : '';
+    return s ? s.slice(0, max) : null;
+};
+const isIsoDay = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/** :id bo'yicha buyurtma, klinika egaligi tekshirilgan. Topilmasa javob yuboriladi va null qaytadi */
+async function loadLabOrder(req: any, res: any) {
+    if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return null;
+    const order = await prisma.labOrder.findUnique({ where: { id: req.params.id } });
+    if (!order) res.status(404).json({ error: 'Buyurtma topilmadi' });
+    return order;
+}
+
 app.get('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
     try {
         const clinicId = getScopedClinicId(req);
@@ -3985,12 +4044,14 @@ app.get('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
         if (user?.role === 'LAB_TECHNICIAN' && user?.technicianId) {
             where.technicianId = user.technicianId;
         }
-        const orders = await (prisma as any).labOrder.findMany({
+        const orders = await prisma.labOrder.findMany({
             where,
-            orderBy: { orderedAt: 'desc' }
+            orderBy: { orderedAt: 'desc' },
+            include: LAB_ORDER_INCLUDE,
         });
         res.json(orders);
     } catch (error: any) {
+        console.error('Lab orders fetch error:', error);
         res.status(500).json({ error: 'Failed to fetch lab orders' });
     }
 });
@@ -4002,13 +4063,20 @@ app.post('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
         if (!patientName || !technicianId || !clinicId || !orderType || !deadline) {
             return res.status(400).json({ error: 'Majburiy maydonlar to\'ldirilmagan' });
         }
+        // Texnik shu klinikaniki bo'lishi shart (boshqa klinika texnigiga buyurtma yozilmasin)
+        const scopedClinicId = getScopedClinicId(req) || clinicId;
+        const technician = await (prisma as any).labTechnician.findFirst({
+            where: { id: String(technicianId), clinicId: scopedClinicId },
+            select: { firstName: true, lastName: true },
+        });
+        if (!technician) return res.status(400).json({ error: 'Texnik topilmadi' });
         const order = await (prisma as any).labOrder.create({
             data: {
                 patientName,
                 doctorName: doctorName || '',
-                technicianId,
-                technicianName: technicianName || '',
-                clinicId,
+                technicianId: String(technicianId),
+                technicianName: technicianName || `${technician.lastName || ''} ${technician.firstName || ''}`.trim(),
+                clinicId: scopedClinicId,
                 orderType,
                 material: material || null,
                 toothNumbers: toothNumbers || null,
@@ -4018,7 +4086,8 @@ app.post('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
                 priority: priority || 'Normal',
                 clinicianNotes: clinicianNotes || null,
                 status: 'Pending'
-            }
+            },
+            include: LAB_ORDER_INCLUDE,
         });
 
         res.json(order);
@@ -4028,81 +4097,180 @@ app.post('/api/lab-orders', authenticateToken, async (req: any, res: any) => {
     }
 });
 
-// Lab buyurtma "Delivered" bo'lganda avtomatik Laboratoriya xarajatini sinxronlaydi:
-// yetkazilgan + narx>0 → expense yaratiladi/yangilanadi; aks holda bog'langan expense o'chiriladi.
-const syncLabOrderExpense = async (order: any) => {
-    try {
-        const existing = await prisma.expense.findUnique({ where: { labOrderId: order.id } });
-        if (order.status === 'Delivered' && (order.price || 0) > 0) {
-            const title = `Lab: ${order.patientName} — ${order.orderType}`;
-            const date = (order.deliveredAt ? new Date(order.deliveredAt) : new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Tashkent' });
-            if (existing) {
-                if (existing.amount !== order.price || existing.title !== title) {
-                    await prisma.expense.update({
-                        where: { id: existing.id },
-                        data: { amount: order.price, title }
-                    });
-                }
-            } else {
-                await prisma.expense.create({
-                    data: {
-                        date,
-                        amount: order.price,
-                        category: 'Lab',
-                        title,
-                        clinicId: order.clinicId,
-                        labOrderId: order.id,
-                    }
-                });
-            }
-        } else if (existing) {
-            await prisma.expense.delete({ where: { id: existing.id } });
-        }
-    } catch (err: any) {
-        console.error('Lab expense sync error:', err);
+/**
+ * PUT da o'zgartirsa bo'ladigan maydonlar — faqat so'rovda kelganlari.
+ * Ilgari req.body to'liq yozilardi: clinicId yoki deliveredAt ham o'zgarib ketishi mumkin edi.
+ */
+async function labOrderUpdateData(b: any, current: { clinicId: string; technicianId: string; status: string; deadline: string }): Promise<{ error: string } | { data: Record<string, any> }> {
+    const data: Record<string, any> = {};
+    if (b.patientName !== undefined) {
+        const v = labText(b.patientName, 200);
+        if (!v) return { error: 'Bemor tanlanmagan' };
+        data.patientName = v;
     }
-};
+    if (b.doctorName !== undefined) data.doctorName = labText(b.doctorName, 200) || '';
+    // Texnik shu klinikaniki bo'lishi shart, ismi bazadan olinadi. O'chirilgan texnikka
+    // yangi ish berilmaydi, lekin unga avval berilgan buyurtma tahrirlanaveradi.
+    if (b.technicianId !== undefined) {
+        const tech = b.technicianId
+            ? await prisma.labTechnician.findFirst({ where: { id: String(b.technicianId), clinicId: current.clinicId } })
+            : null;
+        const changed = String(b.technicianId || '') !== current.technicianId;
+        if (changed && (!tech || tech.status === 'Deleted')) return { error: 'Texnik tanlanmagan' };
+        if (tech) {
+            data.technicianId = tech.id;
+            data.technicianName = `${tech.lastName} ${tech.firstName}`.trim();
+        }
+    }
+    if (b.orderType !== undefined) {
+        const v = labText(b.orderType, 100);
+        if (!v) return { error: 'Ish turi tanlanmagan' };
+        data.orderType = v;
+    }
+    if (b.material !== undefined) data.material = labText(b.material, 100);
+    if (b.toothNumbers !== undefined) data.toothNumbers = labText(b.toothNumbers, 100);
+    if (b.notes !== undefined) data.notes = labText(b.notes);
+    if (b.clinicianNotes !== undefined) data.clinicianNotes = labText(b.clinicianNotes, 1000);
+    if (b.technicianNotes !== undefined) data.technicianNotes = labText(b.technicianNotes, 1000);
+    // Eski yozuvdagi muddat o'zgarmasa tekshirilmaydi — tahrir boshqa maydon uchun to'xtab qolmasin
+    if (b.deadline !== undefined && b.deadline !== current.deadline) {
+        if (!isIsoDay(b.deadline)) return { error: "Muddat noto'g'ri" };
+        data.deadline = b.deadline;
+    }
+    // Narx texnikka to'langandan keyin o'zgarsa ham to'lov (xarajat) o'zgarmaydi — pul allaqachon berilgan
+    if (b.price !== undefined) data.price = Math.max(0, parseFloat(b.price) || 0);
+    if (b.priority !== undefined) data.priority = b.priority === 'Urgent' ? 'Urgent' : 'Normal';
+    if (b.status !== undefined) {
+        if (!LAB_STATUSES.includes(b.status)) return { error: "Noto'g'ri holat" };
+        data.status = b.status;
+        // Topshirilgan sana faqat holat o'zgarganda — tahrirda qayta saqlansa siljimaydi
+        if (b.status === 'Delivered' && current.status !== 'Delivered') data.deliveredAt = new Date();
+        if (b.status !== 'Delivered' && current.status === 'Delivered') data.deliveredAt = null;
+    }
+    return { data };
+}
 
 app.put('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
     try {
         if (!(await allow(req, res, p => p.can('lab', 'orders', 'edit'), "buyurtmani o'zgartirish"))) return;
-        if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return;
-        const updateData: any = { ...req.body };
-        // If status is being set to 'Delivered', set deliveredAt
-        if (updateData.status === 'Delivered' && !updateData.deliveredAt) {
-            updateData.deliveredAt = new Date();
-        }
-        const order = await (prisma as any).labOrder.update({
-            where: { id: req.params.id },
-            data: updateData
-        });
-        await syncLabOrderExpense(order);
+        const current = await loadLabOrder(req, res);
+        if (!current) return;
+        const parsed = await labOrderUpdateData(req.body || {}, current);
+        if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+        const { data } = parsed;
+        const order = await prisma.labOrder.update({ where: { id: current.id }, data, include: LAB_ORDER_INCLUDE });
 
         // Ish tayyor bo'ldi — buyurtma bergan shifokor bemorni chaqira oladi.
         // Texnik statusni o'zi qo'ygani uchun unga xabar ketmaydi.
-        if (updateData.status === 'Ready') {
+        if (data.status === 'Ready') {
             await notif.labOrderReady(order);
         }
         // Bemorga topshirildi — qo'ng'iroqdagi ish yopiladi
-        if (updateData.status === 'Delivered' || updateData.status === 'Cancelled') {
+        if (data.status === 'Delivered' || data.status === 'Cancelled') {
             await notif.resolve(notif.TYPES.LAB_ORDER_READY, order.id);
         }
 
         res.json(order);
     } catch (error: any) {
-        res.status(500).json({ error: error.message || 'Failed to update lab order' });
+        console.error('Lab order update error:', error);
+        res.status(500).json({ error: 'Buyurtmani yangilashda xatolik' });
     }
 });
 
 app.delete('/api/lab-orders/:id', authenticateToken, async (req: any, res: any) => {
     try {
         if (!(await allow(req, res, p => p.can('lab', 'orders', 'delete'), "buyurtmani o'chirish"))) return;
-        if (!(await assertOwnership(req, res, 'labOrder', req.params.id))) return;
-        await prisma.expense.deleteMany({ where: { labOrderId: req.params.id } });
-        await (prisma as any).labOrder.delete({ where: { id: req.params.id } });
+        const current = await loadLabOrder(req, res);
+        if (!current) return;
+        // Texnikka to'langan bo'lsa pul haqiqatan chiqib ketgan — xarajat Kassada qoladi,
+        // faqat buyurtmaga bog'lanishi uziladi
+        await prisma.$transaction([
+            prisma.expense.updateMany({ where: { labOrderId: current.id }, data: { labOrderId: null } }),
+            prisma.labOrder.delete({ where: { id: current.id } }),
+        ]);
         res.json({ success: true });
     } catch (error: any) {
-        res.status(500).json({ error: error.message || 'Failed to delete lab order' });
+        console.error('Lab order delete error:', error);
+        res.status(500).json({ error: "Buyurtmani o'chirishda xatolik" });
+    }
+});
+
+// Laborant ruxsatlar jadvalida yo'q (permsOf uni cheklamaydi) — o'z ishiga o'zi to'lov yozmasin
+const denyLabTechnicianMoney = (req: any, res: any, what: string): boolean => {
+    if (req.user?.role !== 'LAB_TECHNICIAN') return false;
+    denyPerm(res, what);
+    return true;
+};
+
+// Texnikka to'lov — alohida amal: usuli so'raladi, Laboratoriya xarajati bo'lib Kassaga tushadi
+// (naqd bo'lsa bugungi yashikdan chiqadi). Ilgari "Topshirildi"da usulsiz xarajat jimgina yozilardi.
+app.post('/api/lab-orders/:id/pay', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (denyLabTechnicianMoney(req, res, "xarajat qo'shish")) return;
+        if (!(await allow(req, res, p => p.can('finance', 'expenses', 'create'), "xarajat qo'shish"))) return;
+        const current = await loadLabOrder(req, res);
+        if (!current) return;
+        if (current.status === 'Cancelled') return res.status(400).json({ error: "Bekor qilingan buyurtma uchun to'lov yozilmaydi" });
+        const b = req.body || {};
+        if (!LAB_EXPENSE_METHODS.includes(b.method)) return res.status(400).json({ error: "To'lov usuli tanlanmagan" });
+        const amount = b.amount !== undefined && b.amount !== null && b.amount !== '' ? parseFloat(b.amount) : current.price;
+        if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Summa noto'g'ri" });
+        // Bitta buyurtmaga bitta to'lov (Expense.labOrderId yagona)
+        if (await prisma.expense.findUnique({ where: { labOrderId: current.id } })) {
+            return res.status(409).json({ error: "Bu buyurtma uchun to'lov allaqachon yozilgan" });
+        }
+
+        const expense = await prisma.expense.create({
+            data: {
+                date: todayTashkent(),
+                amount,
+                category: 'Lab',
+                // Sarlavha foydalanuvchi tilida keladi; kelmasa — o'zbekcha
+                title: labText(b.title, 200) || `Laboratoriya: ${current.patientName} — ${current.orderType}`,
+                method: b.method,
+                note: current.technicianName ? `Texnik: ${current.technicianName}` : null,
+                clinicId: current.clinicId,
+                branchId: await resolveBranchId(req, current.clinicId),
+                labOrderId: current.id,
+            },
+        });
+        await writeCashAudit({
+            clinicId: expense.clinicId, date: expense.date, action: 'Create', entityType: 'Expense', entityId: expense.id,
+            summary: `Xarajat: ${expense.title} - ${Math.round(expense.amount)} (${expense.method})`,
+            user: req.user,
+        });
+
+        const order = await prisma.labOrder.findUnique({ where: { id: current.id }, include: LAB_ORDER_INCLUDE });
+        res.json(order);
+    } catch (error: any) {
+        // Ikki oynadan bir vaqtda bosilsa — ikkinchisi yagonalik chekloviga uriladi
+        if (error?.code === 'P2002') return res.status(409).json({ error: "Bu buyurtma uchun to'lov allaqachon yozilgan" });
+        console.error('Lab order pay error:', error);
+        res.status(500).json({ error: "To'lovni saqlashda xatolik" });
+    }
+});
+
+// Adashib yozilgan to'lovni bekor qilish — xarajat o'chiriladi (Kassada xarajatni o'chirish bilan bir xil ruxsat)
+app.delete('/api/lab-orders/:id/pay', authenticateToken, async (req: any, res: any) => {
+    try {
+        if (denyLabTechnicianMoney(req, res, "xarajatni o'chirish")) return;
+        if (!(await allow(req, res, p => p.can('finance', 'expenses', 'delete'), "xarajatni o'chirish"))) return;
+        const current = await loadLabOrder(req, res);
+        if (!current) return;
+        const expense = await prisma.expense.findUnique({ where: { labOrderId: current.id } });
+        if (expense) {
+            await prisma.expense.delete({ where: { id: expense.id } });
+            await writeCashAudit({
+                clinicId: expense.clinicId, date: expense.date, action: 'Delete', entityType: 'Expense', entityId: expense.id,
+                summary: `Xarajat "${expense.title}" - ${Math.round(expense.amount)} o'chirildi`,
+                user: req.user,
+            });
+        }
+        const order = await prisma.labOrder.findUnique({ where: { id: current.id }, include: LAB_ORDER_INCLUDE });
+        res.json(order);
+    } catch (error: any) {
+        console.error('Lab order unpay error:', error);
+        res.status(500).json({ error: "To'lovni bekor qilishda xatolik" });
     }
 });
 
@@ -5208,6 +5376,32 @@ app.post('/api/admin/lead-api-key', authenticateToken, requireRole('SUPER_ADMIN'
         res.json({ apiKey, createdAt, endpoint: `${PUBLIC_API_BASE_URL}/api/public/leads` });
     } catch (error) {
         res.status(500).json({ error: 'Failed to create platform lead API key' });
+    }
+});
+
+// ─── Klinikani dentalocal (kompyuterdagi nusxa) ga ko'chirish ────────────────
+// Klinikaning butun bazasi bitta faylda (backend/dentalocalExport.ts). Faylda bemorlar va
+// xodimlarning parol xeshlari bor — faqat platforma egasi yuklab oladi.
+const { buildClinicExport, exportFileName } = require('./dentalocalExport');
+
+app.get('/api/admin/clinics/:id/dentalocal-export', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const data = await buildClinicExport(prisma, String(req.params.id));
+        const zlib = require('zlib');
+        const file: Buffer = zlib.gzipSync(Buffer.from(JSON.stringify(data)));
+        const actor = (req as any).user;
+        console.log(`[dentalocal-export] ${data.source.clinicName} (${data.source.clinicId}): ${Math.round(file.length / 1024)} KB, ${data.checks.counts.Patient} bemor — ${actor?.name || actor?.id || 'super admin'}`);
+        res.set({
+            'Content-Type': 'application/gzip',
+            'Content-Disposition': `attachment; filename="${exportFileName(data.source.clinicName, todayTashkent())}"`,
+            'Content-Length': String(file.length),
+            'Cache-Control': 'no-store',
+        });
+        res.send(file);
+    } catch (error: any) {
+        if (error?.message === 'Klinika topilmadi') return res.status(404).json({ error: 'Klinika topilmadi' });
+        console.error('dentalocal export error:', error?.message || error);
+        res.status(500).json({ error: "Ko'chirish faylini tayyorlashda xatolik" });
     }
 });
 
@@ -6897,7 +7091,8 @@ app.post('/api/admin/facebook/disconnect', authenticateToken, requireRole('SUPER
 });
 
 // --- Facebook Leads Webhook ---
-const FB_WEBHOOK_VERIFY_TOKEN = process.env.FB_WEBHOOK_VERIFY_TOKEN || 'denta_leads_secret';
+// Kalit faqat Railway sozlamasidan: koddagi standart qiymat ochiq repoda turgan edi
+const FB_WEBHOOK_VERIFY_TOKEN = process.env.FB_WEBHOOK_VERIFY_TOKEN || '';
 
 // 1. Webhook Verification (GET)
 app.get('/api/facebook/webhook', (req, res) => {
@@ -6905,7 +7100,7 @@ app.get('/api/facebook/webhook', (req, res) => {
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === FB_WEBHOOK_VERIFY_TOKEN) {
+    if (mode === 'subscribe' && FB_WEBHOOK_VERIFY_TOKEN && token === FB_WEBHOOK_VERIFY_TOKEN) {
         console.log('✅ FB Webhook verified');
         res.status(200).send(challenge);
     } else {
