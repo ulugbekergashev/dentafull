@@ -17,6 +17,7 @@
  * AI/DMED/to'lov kalitlari, Telegram/SMS loginlari) bu yerdayoq olib tashlanadi.
  */
 import { buildDebtors } from './shared/debtRules';
+import { patientTransferChecks, PatientChecks } from './shared/transferChecks';
 
 export const EXPORT_FORMAT = 'dentacrm-clinic-export';
 export const EXPORT_VERSION = 1;
@@ -60,6 +61,11 @@ export interface ClinicExport {
         /** Bemor id → qarz (ochiq yozuvlar + faol bo'lib to'lash qoldig'i) */
         patientDebts: Record<string, number>;
         totalDebt: number;
+        /**
+         * Bemor id → qarz, to'langan, avans, qabullar soni (backend/shared/transferChecks.ts) —
+         * dentalocal yuklab bo'lgach o'zi yozganidan qayta hisoblab, shu bilan solishtiradi
+         */
+        patients: PatientChecks;
     };
 }
 
@@ -144,6 +150,7 @@ export async function buildClinicExport(prisma: any, clinicId: string): Promise<
             counts: Object.fromEntries(EXPORT_TABLES.map(t => [t, tables[t].length])),
             patientDebts,
             totalDebt: debtors.reduce((sum, r) => sum + r.total, 0),
+            patients: patientTransferChecks({ patients: Patient, transactions: Transaction, plans: InstallmentPlan, appointments: Appointment }),
         },
     };
 }

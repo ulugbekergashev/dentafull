@@ -41,6 +41,17 @@ test('bemorlar qarzi — umumiy qoida bo\'yicha (dentalocal shu bilan solishtira
     assert.equal(data.checks.totalDebt, 1870000);
 });
 
+test('bemor bo\'yicha to\'liq tekshiruv: qarz, to\'langan, avans, qabullar', async () => {
+    const data = await buildClinicExport(fakePrisma, 'cloud-clinic-1');
+    // p1: to'langan 100k + 50k (qarzning yopilgan qismi) + avans 100k + avansdan 20k
+    assert.deepEqual(data.checks.patients.p1, { debt: 150000, paid: 270000, balance: 100000, appointments: 1 });
+    assert.deepEqual(data.checks.patients.p4, { debt: 1600000, paid: 500000, balance: 0, appointments: 1 });
+    // Qarzi yo'q bemor ham ro'yxatda (0 lar bilan) — dentalocal hammasini solishtiradi
+    assert.deepEqual(data.checks.patients.p3, { debt: 0, paid: 0, balance: 0, appointments: 0 });
+    // Eski dentalocal o'rnatishlari uchun qarz alohida ham turadi
+    assert.equal(data.checks.patientDebts.p1, 150000);
+});
+
 test('topilmagan klinika — xato', async () => {
     await assert.rejects(() => buildClinicExport(fakePrisma, 'yoq'), /Klinika topilmadi/);
 });
