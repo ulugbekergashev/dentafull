@@ -13,6 +13,7 @@
 
 import { createHash } from 'crypto';
 import type { Diag } from '../diag';
+import { BOT_CONFLICT_REASON } from '../diag';
 import type { Messenger } from './flow';
 import type { Identity, SupportUserRow } from './identity';
 import type { SupportLang } from './productMap';
@@ -20,6 +21,8 @@ import type { SettingsStore } from './settings';
 import { ddmmyyyy, tashkentHour, todayTashkent } from './text';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Bot tokeni to'qnashuvi (409) shuncha vaqt yangilanmasa — tugagan hisoblanadi */
+export const CONFLICT_ONGOING_MS = 30 * 60 * 1000;
 const EXPIRY_MARKS = [7, 3, 1, 0, -1];
 const FAILED_SPIKE = 5;
 /** Yangi klinikaga necha kundan keyin va necha kungacha eslatiladi */
@@ -101,7 +104,15 @@ export const createProactive = (deps: ProactiveDeps) => {
         // 2. Klinika boti ishlamayapti
         if (c.botToken) {
             const ev = await diag.latest(c.id, ['bot_up', 'bot_down']);
-            if (ev?.kind === 'bot_down' && Date.now() - new Date(ev.lastAt).getTime() < DAY_MS) {
+            const age = ev ? Date.now() - new Date(ev.lastAt).getTime() : Infinity;
+            // 409 deploy paytida ham chiqadi: yangi server ishga tushgach (bot_up) eskisi hali bir necha
+            // soniya ishlab, o'zining bot_down'ini KEYIN yozadi — oxirgi hodisa bot_down bo'lib qolaveradi,
+            // bot esa ishlab turadi. Haqiqiy to'qnashuv har qayta urinishda yangilanib turadi, shuning uchun
+            // 409 faqat so'nggi daqiqalarda yangilangan bo'lsa ogohlantiriladi. Boshqa sabablar (token
+            // noto'g'ri) o'zi tuzalmaydi — ular kun bo'yi ogohlantiriladi.
+            const stillBroken = ev?.kind === 'bot_down'
+                && age < (ev.message === BOT_CONFLICT_REASON ? CONFLICT_ONGOING_MS : DAY_MS);
+            if (stillBroken) {
                 alerts.push({
                     key: `botdown:${c.id}:${today}`,
                     text: lang => lang === 'ru'

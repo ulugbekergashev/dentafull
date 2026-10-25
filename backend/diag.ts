@@ -62,11 +62,14 @@ const rowOf = (e: DiagInput) => ({
     lastAt: new Date(),
 });
 
+/** 409: shu token bilan boshqa joyda ham getUpdates ishlayapti */
+export const BOT_CONFLICT_REASON = 'Bot boshqa joyda ham ishga tushirilgan (shu token ikki joyda ishlatilmoqda)';
+
 /** Telegram xatosini mijozga aytsa bo'ladigan sababga aylantiradi */
 export const botFailureReason = (err: any): string => {
     const code = err?.response?.error_code ?? err?.code;
     if (code === 401) return "Bot tokeni noto'g'ri yoki bekor qilingan";
-    if (code === 409) return 'Bot boshqa joyda ham ishga tushirilgan (shu token ikki joyda ishlatilmoqda)';
+    if (code === 409) return BOT_CONFLICT_REASON;
     return cut(err?.response?.description || err?.message || String(err), 200);
 };
 
