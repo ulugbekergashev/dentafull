@@ -69,6 +69,15 @@ const FitChart: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     );
 };
 
+/**
+ * Tish sxemasi ko'rinadimi — shu kompyuterda eslab qolinadi. Ba'zi klinikalar tishni
+ * bemor kartasidagi tish formulasida belgilaydi va bu yerda sxema faqat joy egallaydi.
+ */
+const TEETH_CHART_KEY = 'dentalflow_proc_teeth_chart';
+const readTeethChartShown = (): boolean => {
+    try { return localStorage.getItem(TEETH_CHART_KEY) !== 'hidden'; } catch { return true; }
+};
+
 interface AddProcedureModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -120,6 +129,11 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     // Ishlatilgan materiallar: protsedura bilan birga tanlanadi (ombordan hali ayirilmaydi)
     const [matQueue, setMatQueue] = useState<PendingMaterial[]>([]);
     const showMaterials = !!onAddMaterials && inventoryItems.length > 0;
+    const [teethShown, setTeethShown] = useState(readTeethChartShown);
+    const showTeethChart = (shown: boolean) => {
+        setTeethShown(shown);
+        try { localStorage.setItem(TEETH_CHART_KEY, shown ? 'shown' : 'hidden'); } catch { /* saqlanmasa ham ishlaydi */ }
+    };
 
     const toggleTooth = (tooth: number) => {
         setSelectedTeeth(prev => (prev.includes(tooth) ? prev.filter(n => n !== tooth) : [...prev, tooth].sort((a, b) => a - b)));
@@ -151,12 +165,8 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     const isOnce = (serviceId: number) => multiTeeth && priceModes[serviceId] === 'once';
     const itemsToAdd = selectedServiceIds.reduce((sum, id) => sum + (isOnce(id) ? 1 : teethForItems.length), 0);
 
-    const addToQueue = () => {
-        if (selectedServiceIds.length === 0) {
-            alert(t('patients.details.alerts.selectServiceReq'));
-            return;
-        }
-
+    /** Hozir belgilangan tishlar × xizmatlar — ro'yxatga tushadigan qatorlar */
+    const selectionItems = (): Omit<ProcedureItem, 'id'>[] => {
         const chosen = selectedServiceIds
             .map(id => services.find(s => s.id === id))
             .filter((s): s is Service => !!s);
@@ -186,7 +196,16 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                 });
             }
         }
+        return newItems;
+    };
 
+    const addToQueue = () => {
+        if (selectedServiceIds.length === 0) {
+            alert(t('patients.details.alerts.selectServiceReq'));
+            return;
+        }
+
+        const newItems = selectionItems();
         setQueue(prev => [...prev, ...newItems]);
 
         // Xizmatlar tozalanadi, tishlar esa qoladi — xuddi shu tishlarga
@@ -204,17 +223,20 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     };
 
     const handleSaveAll = () => {
-        if (queue.length === 0 && matQueue.length === 0) {
+        // Belgilangan, lekin "Ro'yxatga qo'shish" bosilmagan xizmatlar ham saqlanadi —
+        // shifokor ikki marta bosib o'tirmasin
+        const items = [...queue, ...(selectedServiceIds.length > 0 ? selectionItems() : [])];
+        if (items.length === 0 && matQueue.length === 0) {
             alert(t('patients.details.alerts.listEmpty'));
             return;
         }
 
-        if (queue.length > 0) {
+        if (items.length > 0) {
             if (onAddProcedures) {
-                onAddProcedures(queue);
+                onAddProcedures(items);
             } else {
                 // Fallback for legacy
-                queue.forEach(p => onAddProcedure(p));
+                items.forEach(p => onAddProcedure(p));
             }
         }
         if (matQueue.length > 0) onAddMaterials?.(matQueue);
@@ -271,16 +293,20 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title={t('patients.details.modals.addProcedureTitle')} className="max-w-6xl lg:max-w-[1400px] 2xl:max-w-[1680px]">
+        <Modal isOpen={isOpen} onClose={handleClose} title={t('patients.details.modals.addProcedureTitle')} className={teethShown ? 'max-w-6xl lg:max-w-[1400px] 2xl:max-w-[1680px]' : 'max-w-2xl'}>
             {/* Balandlik oynaga sig'adi (oyna 90vh, sarlavha va chetlar ~7.5rem) — oynaning o'zi aylanmaydi.
                 Ilgari 80vh edi: past ekranda oyna ham, ichidagi ikki blok ham alohida aylanib, uchta
                 ingichka aylantirish chizig'i chiqardi. Endi kompyuterda bitta — o'ng ustunda. */}
             <div className="flex flex-col lg:flex-row gap-6 min-h-[60vh] lg:h-[calc(90vh-7.5rem)]" data-tour="proc-modal">
 
-                {/* Left Side: Teeth Chart */}
+                {/* Left Side: Teeth Chart (yashirilgan bo'lsa — o'ng ustun tepasida bitta qator) */}
+                {teethShown && (
                 <div className="lg:w-3/5 bg-gray-50 dark:bg-gray-800 rounded-xl p-2 sm:p-4 overflow-hidden lg:min-h-[400px]" data-tour="proc-teeth">
-                    <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2">
-                        1. {t('patients.details.modals.stepSelectTooth')}
+                    <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 sticky top-0 bg-gray-50 dark:bg-gray-800 z-10 py-2 flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate">1. {t('patients.details.modals.stepSelectTooth')}</span>
+                        <button type="button" onClick={() => showTeethChart(false)} className="shrink-0 normal-case text-xs font-semibold text-primary-600 hover:underline dark:text-primary-400">
+                            {t('patients.details.modals.hideTeeth')}
+                        </button>
                     </h4>
                     <FitChart>
                         <TeethChart
@@ -308,17 +334,29 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                         </p>
                     </div>
                 </div>
+                )}
 
                 {/* Right Side: Actions & Queue */}
-                <div className="lg:w-2/5 flex flex-col h-auto lg:h-full min-h-0">
+                <div className={`${teethShown ? 'lg:w-2/5' : 'w-full'} flex flex-col h-auto lg:h-full min-h-0`}>
 
                   {/* Bitta aylanadigan qism: xizmat tanlash + ro'yxat. Tugmalar pastda doim ko'rinib turadi. */}
                   <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pr-2 space-y-4">
 
+                    {!teethShown && (
+                        <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800" data-tour="proc-teeth">
+                            <span className="min-w-0 truncate text-sm text-gray-600 dark:text-gray-300">
+                                {t('patients.details.modals.selectedTooth')} <span className="font-semibold text-gray-900 dark:text-white">{teethLabel}</span>
+                            </span>
+                            <button type="button" onClick={() => showTeethChart(true)} className="shrink-0 text-sm font-semibold text-primary-600 hover:underline dark:text-primary-400">
+                                {t('patients.details.modals.showTeeth')}
+                            </button>
+                        </div>
+                    )}
+
                     {/* Input Area */}
                     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm">
                         <h4 className="text-xs sm:text-sm font-bold text-gray-500 uppercase mb-4 flex items-center justify-between gap-3">
-                            <span className="min-w-0 truncate">2. {t('patients.details.modals.stepAddService')} ({teethLabel})</span>
+                            <span className="min-w-0 truncate">{teethShown ? '2. ' : ''}{t('patients.details.modals.stepAddService')} ({teethLabel})</span>
                             {selectedTeeth.length > 0 && <button onClick={() => setSelectedTeeth([])} className="text-xs text-primary-500 hover:underline shrink-0">{t('patients.details.modals.switchToCommon')}</button>}
                         </h4>
 
@@ -508,7 +546,7 @@ export const AddProcedureModal: React.FC<AddProcedureModalProps> = ({
                         <Button variant="secondary" onClick={handleClose} className="flex-1">
                             {t('common.cancel')}
                         </Button>
-                        <Button onClick={handleSaveAll} className="flex-[2]" disabled={queue.length === 0 && matQueue.length === 0} data-tour="proc-save">
+                        <Button onClick={handleSaveAll} className="flex-[2]" disabled={queue.length === 0 && matQueue.length === 0 && selectedServiceIds.length === 0} data-tour="proc-save">
                             <ArrowRight className="w-4 h-4 mr-2" /> {t('patients.details.modals.saveAndFinish')}
                         </Button>
                     </div>

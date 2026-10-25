@@ -4,7 +4,33 @@ import { Button, Card, Badge } from '../components/Common';
 import { Transaction, Service, ServiceCategory, VisitRequirements, InventoryItem, PendingMaterial } from '../types';
 import { AddProcedureModal } from './AddProcedureModal';
 import { MaterialList, MaterialPicker, mergeMaterials } from './MaterialPicker';
+import { DateField } from './DateField';
 import { useLanguage } from '../context/LanguageContext';
+import { formatDateToISO } from '../utils/dateUtils';
+
+/** "Davolash davom etadi" tayyor tugmalari: 3 kun, 1 hafta, 2 hafta */
+const TREATMENT_CHIP_DAYS = [3, 7, 14];
+/** Davolash davomi va nazorat uchun eng uzoq muddat (kun) */
+const TREATMENT_MAX_DAYS = 365;
+const CHECKUP_MAX_DAYS = 1095;
+
+/** Protsedurasiz yopilgan qabul — bemor kartasi tarixida shunday ko'rinadi (bazadagi matn o'zbekcha qoladi) */
+const FREE_VISIT_ITEM: ProcedureItem = { id: 'free-visit', serviceId: 0, serviceName: "Ko'rik (bepul)", price: 0 };
+
+/** Bugundan N kun keyingi sana (YYYY-MM-DD); N bo'lmasa — bo'sh */
+const dateAfterDays = (days: number | null): string => {
+    if (!days) return '';
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return formatDateToISO(d);
+};
+/** Bugundan tanlangan sanagacha necha kun */
+const daysUntil = (iso: string): number => {
+    const [y, m, d] = iso.split('-').map(Number);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((new Date(y, m - 1, d).getTime() - today.getTime()) / 86400000);
+};
 
 interface ProcedureItem {
     id: string;
@@ -51,6 +77,8 @@ interface VisitWorkflowProps {
     onUploadPhoto?: () => void;
     /** Talab bajarilmasa ham sabab yozib yakunlash (klinika egasi) */
     canSkipRequirements?: boolean;
+    /** Bemorning bugun yopilmagan qabuli bor — protsedurasiz (bepul ko'rik) yakunlash shundagina chiqadi */
+    hasOpenVisitToday?: boolean;
 }
 
 export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
@@ -68,6 +96,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     materialsDone = false,
     onUploadPhoto,
     canSkipRequirements = false,
+    hasOpenVisitToday = false,
 }) => {
     const { t } = useLanguage();
     const [procedures, setProcedures] = useState<ProcedureItem[]>(initialProcedures);
@@ -120,14 +149,28 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     const typeTreatment = (value: string) => {
         const clean = value.replace(/\D/g, '').slice(0, 3);
         setTreatmentCustom(clean);
-        setTreatmentDays(parseDays(clean, 365));
+        setTreatmentDays(parseDays(clean, TREATMENT_MAX_DAYS));
     };
     const chooseCheckup = (days: number | null) => { setCheckupTouched(true); setCheckupCustom(''); setCheckupDays(days); };
     const typeCheckup = (value: string) => {
         const clean = value.replace(/\D/g, '').slice(0, 4);
         setCheckupTouched(true);
         setCheckupCustom(clean);
-        setCheckupDays(parseDays(clean, 1095));
+        setCheckupDays(parseDays(clean, CHECKUP_MAX_DAYS));
+    };
+    // Kun sanash o'rniga aniq sana ham tanlanadi (klinika so'rovi: "shifokor o'zi yozsin").
+    // Tugma yoki kun tanlansa — shu maydonda o'sha sana ko'rinadi. Tugmaga to'g'ri kelmagan
+    // kunlar "boshqa [ ] kun"da ham yoziladi, oylik nazorat esa o'z tugmasi bilan chiqadi.
+    const pickTreatmentDate = (iso: string) => {
+        const n = iso ? daysUntil(iso) : 0;
+        setTreatmentDays(n >= 1 ? Math.min(n, TREATMENT_MAX_DAYS) : null);
+        setTreatmentCustom(n >= 1 && !TREATMENT_CHIP_DAYS.includes(n) ? String(n) : '');
+    };
+    const pickCheckupDate = (iso: string) => {
+        const n = iso ? daysUntil(iso) : 0;
+        setCheckupTouched(true);
+        setCheckupDays(n >= 1 ? Math.min(n, CHECKUP_MAX_DAYS) : null);
+        setCheckupCustom(n >= 1 && n % 30 !== 0 ? String(n) : '');
     };
     // Xizmat 1 oyni taklif qilgan bo'lsa, u ham tugma bo'lib ko'rinsin (faqat to'liq oy bo'lsa)
     const checkupMonths = Array.from(new Set([3, 6, 12, ...(checkupDays && checkupDays % 30 === 0 ? [checkupDays / 30] : [])])).sort((a, b) => a - b);
@@ -186,16 +229,15 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
     useEffect(() => { if (!blocked) { setSkipOpen(false); setSkipReason(''); } }, [blocked]);
 
     const handleCompleteVisit = async () => {
-        if (procedures.length === 0) {
-            alert(t('patients.details.procedures.addProcedureReq'));
-            return;
-        }
         const skip = blocked ? { missing, reason: skipReason.trim() } : undefined;
         if (skip && (!canSkipRequirements || skip.reason.length < 3)) return;
+        // Bemor shunchaki ko'rikka/maslahatga kelgan (klinika so'rovi): protsedura yo'q, pul yo'q.
+        // Tarixda bitta 0 so'mlik qator qoladi — qabul "nima bo'lgan" degan savolsiz yopiladi.
+        const items = procedures.length > 0 ? procedures : [FREE_VISIT_ITEM];
 
         setIsSubmitting(true);
         try {
-            await onCompleteVisit(procedures, total, { nextVisits, materials, skip });
+            await onCompleteVisit(items, total, { nextVisits, materials, skip });
         } catch (error) {
             console.error("Error completing visit:", error);
         } finally {
@@ -282,9 +324,11 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                     </div>
                 )}
 
-                {/* Total and Complete Button */}
-                {procedures.length > 0 && (
-                    <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+                {/* Total and Complete Button — protsedura bo'lmasa ham, bemor bugun kelgan bo'lsa:
+                    bepul ko'rik shu yerda yopiladi. Bugun qabuli yo'q bemorda tasodifan qabul yaratilmasin. */}
+                {(procedures.length > 0 || hasOpenVisitToday) && (
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+                        {procedures.length > 0 && (
                         <div className="flex justify-between items-center">
                             <span className="text-lg font-medium text-gray-700 dark:text-gray-300">
                                 {t('patients.details.procedures.total')}
@@ -293,14 +337,15 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                 {total.toLocaleString()} UZS
                             </span>
                         </div>
+                        )}
                         {/* Keyingi tashrif — ikki qator: davolash davomi (kunlar) / nazorat ko'rigi (oylar) */}
                         <div className="space-y-2" data-tour="visit-next">
                             <div className="flex flex-col sm:flex-row sm:items-start gap-2">
                                 <span className="sm:w-40 shrink-0 sm:pt-1.5 text-sm text-gray-600 dark:text-gray-300">{t('patients.details.recall.treatment')}</span>
                               <div className="flex flex-1 min-w-0 flex-wrap items-center gap-2">
-                                {[{ days: 3, label: `3 ${t('patients.details.recall.days')}` }, { days: 7, label: `1 ${t('patients.details.recall.week')}` }, { days: 14, label: `2 ${t('patients.details.recall.week')}` }].map(o => (
-                                    <button key={o.days} type="button" onClick={() => toggleTreatment(o.days)} aria-pressed={treatmentDays === o.days} className={chipCls(treatmentDays === o.days)}>
-                                        {o.label}
+                                {TREATMENT_CHIP_DAYS.map(days => (
+                                    <button key={days} type="button" onClick={() => toggleTreatment(days)} aria-pressed={treatmentDays === days} className={chipCls(treatmentDays === days)}>
+                                        {days % 7 === 0 ? `${days / 7} ${t('patients.details.recall.week')}` : `${days} ${t('patients.details.recall.days')}`}
                                     </button>
                                 ))}
                                 <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
@@ -315,6 +360,14 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                     />
                                     {t('patients.details.recall.days')}
                                 </label>
+                                <DateField
+                                    compact
+                                    className="w-[8.5rem]"
+                                    value={dateAfterDays(treatmentDays)}
+                                    onChange={pickTreatmentDate}
+                                    min={dateAfterDays(1)}
+                                    max={dateAfterDays(TREATMENT_MAX_DAYS)}
+                                />
                               </div>
                             </div>
                             <div className="flex flex-col sm:flex-row sm:items-start gap-2">
@@ -337,6 +390,14 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                     />
                                     {t('patients.details.recall.days')}
                                 </label>
+                                <DateField
+                                    compact
+                                    className="w-[8.5rem]"
+                                    value={dateAfterDays(checkupDays)}
+                                    onChange={pickCheckupDate}
+                                    min={dateAfterDays(1)}
+                                    max={dateAfterDays(CHECKUP_MAX_DAYS)}
+                                />
                                 <button
                                     type="button"
                                     onClick={() => chooseCheckup(null)}
@@ -399,11 +460,14 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                             <>
                                 <Button
                                     onClick={handleCompleteVisit}
+                                    variant={procedures.length > 0 ? 'primary' : 'secondary'}
                                     className="w-full"
                                     disabled={isSubmitting || blocked}
                                     data-tour="visit-complete"
                                 >
-                                    {isSubmitting ? t('patients.details.procedures.saving') : t('patients.details.procedures.completeVisit')}
+                                    {isSubmitting
+                                        ? t('patients.details.procedures.saving')
+                                        : procedures.length > 0 ? t('patients.details.procedures.completeVisit') : t('patients.details.procedures.completeFree')}
                                 </Button>
                                 {blocked && (
                                     <p className="text-xs text-center text-gray-500 dark:text-gray-400">
@@ -415,7 +479,7 @@ export const VisitWorkflow: React.FC<VisitWorkflowProps> = ({
                                 )}
                             </>
                         )}
-                    </div>
+                </div>
                 )}
             </Card>
 

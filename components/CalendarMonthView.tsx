@@ -8,6 +8,7 @@ import { formatDateToISO } from '../utils/dateUtils';
  * Kalendarning "Oy" ko'rinishi (Google Calendar'dagidek): butun oy bir ekranda,
  * har kunda birinchi qabullar va "+N yana". Kun raqami yoki "+N" bosilsa —
  * o'sha kunning soatli ko'rinishi ochiladi; bo'sh joy bosilsa — yangi qabul.
+ * Qabulni sichqoncha bilan boshqa kunga sudrab qo'yish mumkin (vaqti va shifokori o'zgarmaydi).
  */
 
 const VISIBLE = 3;
@@ -23,10 +24,17 @@ interface CalendarMonthViewProps {
     onOpenAppointment: (appt: Appointment) => void;
     /** Bo'sh joy bosilganda yangi qabul (ruxsat bo'lmasa berilmaydi) */
     onCreate?: (key: string) => void;
+    /** Qabulni boshqa kunga sudrab ko'chirish mumkinmi (ruxsat va holatga qarab) */
+    canMove?: (appt: Appointment) => boolean;
+    onMove?: (appt: Appointment, key: string) => void;
 }
 
-export const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({ month, appointments, doctors, isPrivate, onOpenDay, onOpenAppointment, onCreate }) => {
+export const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({ month, appointments, doctors, isPrivate, onOpenDay, onOpenAppointment, onCreate, canMove, onMove }) => {
     const { t, language } = useLanguage();
+    // Sudralayotgan qabul va ustida turgan kun — o'sha kun katagi ajratib ko'rsatiladi
+    const [dragged, setDragged] = React.useState<Appointment | null>(null);
+    const [overKey, setOverKey] = React.useState<string | null>(null);
+    const endDrag = () => { setDragged(null); setOverKey(null); };
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
     // Hafta dushanbadan boshlanadi; oy qancha hafta egallasa, shuncha qator (4–6)
     const start = new Date(first);
@@ -64,11 +72,19 @@ export const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({ month, app
                     const isToday = key === todayKey;
                     const list = byDay[key] || [];
                     const hidden = list.length - VISIBLE;
+                    const dropHere = !!dragged && overKey === key && key !== dragged.date;
                     return (
                         <div
                             key={key}
                             onClick={() => onCreate?.(key)}
-                            className={`border-r border-b border-gray-100 dark:border-gray-700 p-1.5 flex flex-col gap-0.5 min-w-0 [&:nth-child(7n)]:border-r-0 ${inMonth ? '' : 'bg-gray-50/70 dark:bg-gray-900/40'} ${onCreate ? 'cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10' : ''}`}
+                            onDragOver={dragged ? e => { e.preventDefault(); if (overKey !== key) setOverKey(key); } : undefined}
+                            onDrop={dragged ? e => {
+                                e.preventDefault();
+                                const appt = dragged;
+                                endDrag();
+                                if (key !== appt.date) onMove?.(appt, key);
+                            } : undefined}
+                            className={`border-r border-b border-gray-100 dark:border-gray-700 p-1.5 flex flex-col gap-0.5 min-w-0 [&:nth-child(7n)]:border-r-0 ${dropHere ? 'bg-primary-50 ring-2 ring-inset ring-primary-400 dark:bg-primary-900/20' : inMonth ? '' : 'bg-gray-50/70 dark:bg-gray-900/40'} ${onCreate ? 'cursor-pointer hover:bg-primary-50/30 dark:hover:bg-primary-900/10' : ''}`}
                         >
                             <button
                                 type="button"
@@ -86,13 +102,21 @@ export const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({ month, app
                                 const busy = !!isPrivate?.(a);
                                 const faded = !busy && a.status === 'No-Show';
                                 const label = busy ? t('calendar.busy') : a.patientName;
+                                const movable = !busy && !!onMove && !!canMove?.(a);
                                 return (
                                     <button
                                         key={a.id}
                                         type="button"
+                                        draggable={movable}
+                                        onDragStart={movable ? e => {
+                                            e.dataTransfer.effectAllowed = 'move';
+                                            e.dataTransfer.setData('text/plain', a.id);
+                                            setDragged(a);
+                                        } : undefined}
+                                        onDragEnd={movable ? endDrag : undefined}
                                         onClick={e => { e.stopPropagation(); if (busy) onOpenDay(key); else onOpenAppointment(a); }}
                                         title={`${a.time} · ${label} · ${a.doctorName}`}
-                                        className={`w-full flex items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] leading-tight hover:bg-gray-100 dark:hover:bg-gray-700 ${faded ? 'opacity-50 line-through' : ''}`}
+                                        className={`w-full flex items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] leading-tight hover:bg-gray-100 dark:hover:bg-gray-700 ${faded ? 'opacity-50 line-through' : ''} ${dragged?.id === a.id ? 'opacity-40' : ''}`}
                                     >
                                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: colorOf(a) }} />
                                         <span className="tabular-nums text-gray-500 dark:text-gray-400 shrink-0">{a.time}</span>

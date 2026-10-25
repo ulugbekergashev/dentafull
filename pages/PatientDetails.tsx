@@ -1449,6 +1449,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         materialsDone={materialsDoneToday}
                         onUploadPhoto={perms.can('patients', 'photos', 'create') ? () => setIsVisitPhotoOpen(true) : undefined}
                         canSkipRequirements={perms.owner}
+                        hasOpenVisitToday={appointments.some(a => a.patientId === patient.id && a.date === formatDateToISO(new Date())
+                           && (a.status === 'Pending' || a.status === 'Confirmed' || a.status === 'Checked-In'))}
                      />
 
                      {/* Kasallik tarixi: oddiy matn maydoni. Tayyor ro'yxat (14 ta chip)

@@ -273,13 +273,15 @@ interface DateFieldProps {
     required?: boolean;
     className?: string;
     helperText?: string;
+    /** Pastroq maydon (32px) — kichik tugmalar qatorida turganda */
+    compact?: boolean;
 }
 
 /**
  * Sana maydoni: 23.09.2026 ko'rinishida yoziladi yoki oylik kalendardan tanlanadi.
  * Qiymat tashqarida odatdagidek "YYYY-MM-DD" bo'lib qoladi.
  */
-export const DateField: React.FC<DateFieldProps> = ({ value: rawValue, onChange, label, counts, min, max, required, className = 'w-full', helperText }) => {
+export const DateField: React.FC<DateFieldProps> = ({ value: rawValue, onChange, label, counts, min, max, required, className = 'w-full', helperText, compact = false }) => {
     const { t } = useLanguage();
     // Qiymat matn bo'lmasa (masalan xato bilan hodisa obyekti kelsa) sahifa yiqilmasin
     const value = typeof rawValue === 'string' ? rawValue : '';
@@ -320,12 +322,12 @@ export const DateField: React.FC<DateFieldProps> = ({ value: rawValue, onChange,
                     onBlur={handleBlur}
                     onClick={() => setOpen(true)}
                     required={required}
-                    className="flex h-10 w-full rounded-lg border border-gray-300 bg-transparent pl-3 pr-10 py-2 text-sm tabular-nums placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:border-gray-700 dark:text-white"
+                    className={`flex ${compact ? 'h-8 py-1' : 'h-10 py-2'} w-full rounded-lg border border-gray-300 bg-transparent pl-3 pr-10 text-sm tabular-nums placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:border-gray-700 dark:text-white`}
                 />
                 <button
                     type="button"
                     onClick={() => setOpen(o => !o)}
-                    className="absolute right-1 top-1 h-8 w-8 flex items-center justify-center rounded-md text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className={`absolute right-1 ${compact ? 'top-0' : 'top-1'} h-8 w-8 flex items-center justify-center rounded-md text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700`}
                     aria-label={t('datefield.openCalendar')}
                 >
                     <CalendarIcon className="w-4 h-4" />

@@ -327,7 +327,9 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
         if (mode !== 'now' && (!TIME_RE.test(time) || !targetDate)) { setError(t('booking.pickTime')); return; }
         if (blocked) { setError(blocked); return; }
         if (!doctor) return;
-        if (sameTimeNote && !window.confirm(`${sameTimeNote}\n\n${t('booking.bookAnyway')}`)) return;
+        // Shifokorning boshqa qabuli bilan ustma-ust — aynan shu soatda bo'lsa ham, qisman bo'lsa ham so'raladi
+        const clashNote = sameTimeNote || (overlaps ? t('booking.overlap') : null);
+        if (clashNote && !window.confirm(`${clashNote}\n\n${t('booking.bookAnyway')}`)) return;
         const doctorName = `Dr. ${doctor.lastName}`;
         const apptTime = mode === 'now' ? nowStr : time;
         const dur = Number(duration) || 30;
@@ -697,20 +699,21 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                     <p className="text-sm text-gray-500 dark:text-gray-400">{t('booking.noSlots')}</p>
                                 ) : (
                                     <div className="grid grid-cols-4 gap-1.5">
+                                        {/* Band vaqt ham tanlanadi (klinika so'rovi): shifokor to'la bo'lsa ham bemor
+                                            ko'rinib ketishga yoziladi — ostida ogohlantirish chiqadi, saqlashda so'raladi */}
                                         {visibleSlots.map(s => {
                                             const sel = s.time === time;
                                             return (
                                                 <button
                                                     key={s.time}
                                                     type="button"
-                                                    disabled={s.busy}
                                                     onClick={() => { setTime(s.time); setError(null); }}
                                                     aria-pressed={sel}
                                                     data-tour={sel ? 'bk-time-ok' : undefined}
                                                     className={`h-9 rounded-lg text-[13px] font-bold tabular-nums transition-colors ${sel
                                                         ? 'bg-primary text-white border-2 border-primary-600'
                                                         : s.busy
-                                                            ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-400 dark:text-gray-500 line-through border border-gray-100 dark:border-gray-800 cursor-not-allowed'
+                                                            ? 'bg-gray-50 dark:bg-gray-800/60 text-gray-400 dark:text-gray-500 line-through border border-gray-100 dark:border-gray-800 hover:border-amber-400'
                                                             : 'border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 hover:border-primary-400'}`}
                                                 >
                                                     {s.time}

@@ -51,6 +51,9 @@ const BTN = {
 } as const;
 /** Eski menyudagi tugma — foydalanuvchilarda hali turgan bo'lishi mumkin */
 const LEGACY_REPORT_BTN = '📊 Kunlik hisobot';
+/** Qabulga yozilishda "shifokor muhim emas" — callback_data dagi shifokor o'rnida */
+const ANY_DOCTOR = 'any';
+const ANY_DOCTOR_LABEL = 'Istalgan shifokor';
 
 class BotManager {
     private bots: Map<string, Telegraf> = new Map(); // token -> Telegraf
@@ -569,7 +572,10 @@ class BotManager {
                 }
 
                 const buttons = doctors.map(d => ([{ text: `👨‍⚕️ Dr. ${d.firstName} ${d.lastName}`, callback_data: `bdc_${d.id}` }]));
-                
+                // Bemor ko'pincha qaysi shifokorga borishini bilmaydi ("ko'rikka boraman") —
+                // vaqtni tanlaydi, bot shu vaqtda bo'sh shifokorga yozadi (klinika so'rovi)
+                if (doctors.length > 1) buttons.unshift([{ text: `🔀 ${ANY_DOCTOR_LABEL}`, callback_data: `bdc_${ANY_DOCTOR}` }]);
+
                 const text = "🩺 Qaysi shifokor qabuliga yozilmoqchisiz?";
                 const opts = { reply_markup: { inline_keyboard: buttons } };
                 
@@ -607,54 +613,56 @@ class BotManager {
                 });
             });
 
+            /**
+             * Shifokorning shu kundagi bo'sh vaqtlari (30 daqiqa qadam). Bekor qilingan va
+             * "Kelmadi" qabul vaqtni band qilmaydi; bugun bo'lsa — o'tib ketgan vaqtlar chiqmaydi.
+             */
+            const freeSlotsOf = async (doctor: any, dateStr: string): Promise<string[]> => {
+                const appointments = await prisma.appointment.findMany({
+                    where: { doctorId: doctor.id, date: dateStr, status: { notIn: ['Cancelled', 'No-Show'] } }
+                });
+                const startHour = doctor.startHour ?? doctor.clinic?.startHour ?? 8;
+                const endHour = doctor.endHour ?? doctor.clinic?.endHour ?? 20;
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const currentMins = now.getHours() * 60 + now.getMinutes();
+                const slots: string[] = [];
+                for (let h = startHour; h < endHour; h++) {
+                    for (const m of [0, 30]) {
+                        const slotStartMins = h * 60 + m;
+                        if (dateStr === todayStr && slotStartMins <= currentMins) continue;
+                        const busy = appointments.some(appt => {
+                            const [ah, am] = appt.time.split(':').map(Number);
+                            const apptStartMins = ah * 60 + am;
+                            return slotStartMins >= apptStartMins && slotStartMins < apptStartMins + (appt.duration || 30);
+                        });
+                        if (!busy) slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                    }
+                }
+                return slots;
+            };
+            /** "Istalgan shifokor": bemorning klinikasidagi faol shifokorlar */
+            const clinicDoctorsFor = async (chatId: string) => {
+                const patient = await prisma.patient.findFirst({ where: { telegramChatId: chatId, clinic: { botToken: token } } });
+                if (!patient) return [];
+                return prisma.doctor.findMany({ where: { clinicId: patient.clinicId, status: 'Active' }, include: { clinic: true } });
+            };
+
             bot.action(/^bdt_([^_]+)_(.+)$/, async (ctx) => {
                 const doctorId = ctx.match[1];
                 const dateStr = ctx.match[2];
-                
-                const doctor = await prisma.doctor.findUnique({ where: { id: doctorId }, include: { clinic: true } });
-                if (!doctor) return ctx.answerCbQuery("Shifokor topilmadi");
 
-                // Bekor qilingan va "Kelmadi" qabul shifokor vaqtini band qilmaydi
-                const appointments = await prisma.appointment.findMany({
-                    where: { doctorId, date: dateStr, status: { notIn: ['Cancelled', 'No-Show'] } }
-                });
-
-                const startHour = (doctor as any).startHour ?? doctor.clinic.startHour ?? 8;
-                const endHour = (doctor as any).endHour ?? doctor.clinic.endHour ?? 20;
-                
-                const availableSlots: string[] = [];
-                for(let h = startHour; h < endHour; h++) {
-                    for(let m of [0, 30]) {
-                        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-                        const slotStartMins = h * 60 + m;
-                        
-                        let isOverlap = false;
-                        for(const appt of appointments) {
-                            const [ah, am] = appt.time.split(':').map(Number);
-                            const apptStartMins = ah * 60 + am;
-                            const apptEndMins = apptStartMins + (appt.duration || 30);
-                            
-                            if (slotStartMins >= apptStartMins && slotStartMins < apptEndMins) {
-                                isOverlap = true;
-                                break;
-                            }
-                        }
-                        
-                        const today = new Date();
-                        const yyyy = today.getFullYear();
-                        const mm = String(today.getMonth() + 1).padStart(2, '0');
-                        const dd = String(today.getDate()).padStart(2, '0');
-                        if (dateStr === `${yyyy}-${mm}-${dd}`) {
-                            const currentMins = today.getHours() * 60 + today.getMinutes();
-                            if (slotStartMins <= currentMins) {
-                                isOverlap = true;
-                            }
-                        }
-
-                        if (!isOverlap) {
-                            availableSlots.push(timeStr);
-                        }
-                    }
+                let availableSlots: string[];
+                if (doctorId === ANY_DOCTOR) {
+                    // Kamida bitta shifokor bo'sh bo'lgan vaqtlar
+                    const doctors = ctx.chat ? await clinicDoctorsFor(String(ctx.chat.id)) : [];
+                    if (doctors.length === 0) return ctx.answerCbQuery("Shifokor topilmadi");
+                    const all = await Promise.all(doctors.map(d => freeSlotsOf(d, dateStr)));
+                    availableSlots = Array.from(new Set(all.flat())).sort();
+                } else {
+                    const doctor = await prisma.doctor.findUnique({ where: { id: doctorId }, include: { clinic: true } });
+                    if (!doctor) return ctx.answerCbQuery("Shifokor topilmadi");
+                    availableSlots = await freeSlotsOf(doctor, dateStr);
                 }
 
                 if (availableSlots.length === 0) {
@@ -690,29 +698,23 @@ class BotManager {
                 
                 if (!patient) return ctx.answerCbQuery("Siz tizimda topilmadingiz.");
 
-                const doctor = await prisma.doctor.findUnique({ where: { id: doctorId } });
-                if (!doctor) return ctx.answerCbQuery("Shifokor topilmadi.");
-
-                const overlapping = await prisma.appointment.findMany({
-                    where: { doctorId, date: dateStr, status: { notIn: ['Cancelled', 'No-Show'] } }
-                });
-                
-                const [h, m] = timeStr.split(':').map(Number);
-                const slotStartMins = h * 60 + m;
-                let isOverlap = false;
-                for(const appt of overlapping) {
-                    const [ah, am] = appt.time.split(':').map(Number);
-                    const apptStartMins = ah * 60 + am;
-                    const apptEndMins = apptStartMins + (appt.duration || 30);
-                    if (slotStartMins >= apptStartMins && slotStartMins < apptEndMins) {
-                        isOverlap = true;
-                        break;
-                    }
+                // Vaqt hali bo'shligi qayta tekshiriladi: tugmalar chiqqandan beri kimdir yozilgan bo'lishi mumkin.
+                // "Istalgan shifokor" — shu vaqtda bo'sh shifokorlardan o'sha kuni eng kam bandi tanlanadi.
+                const candidates = doctorId === ANY_DOCTOR
+                    ? await clinicDoctorsFor(chatId)
+                    : await prisma.doctor.findMany({ where: { id: doctorId }, include: { clinic: true } });
+                if (candidates.length === 0) return ctx.answerCbQuery("Shifokor topilmadi.");
+                const free: { doctor: (typeof candidates)[number]; load: number }[] = [];
+                for (const d of candidates) {
+                    const slots = await freeSlotsOf(d, dateStr);
+                    if (!slots.includes(timeStr)) continue;
+                    const load = await prisma.appointment.count({ where: { doctorId: d.id, date: dateStr, status: { notIn: ['Cancelled', 'No-Show'] } } });
+                    free.push({ doctor: d, load });
                 }
-                
-                if (isOverlap) {
+                if (free.length === 0) {
                     return ctx.editMessageText("❌ Kechirasiz, bu vaqt allaqachon band qilindi. Boshqa vaqt tanlang.");
                 }
+                const doctor = free.sort((a, b) => a.load - b.load)[0].doctor;
 
                 const clinic = patient.clinic as any;
                 const prepaymentEnabled = clinic?.prepaymentEnabled ?? false;
