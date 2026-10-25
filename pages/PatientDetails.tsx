@@ -672,6 +672,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
    // Chap panel va Umumiy tab uchun hisoblangan qiymatlar
    const patientAge = calcAge(patient.dob);
+   /** Odam yoshi 0–120 oralig'ida — undan tashqarisi sanani yozishdagi xato (masalan 1222-yil) */
+   const MAX_HUMAN_AGE = 120;
+   const dobLooksValid = patientAge !== null && patientAge !== undefined && patientAge >= 0 && patientAge <= MAX_HUMAN_AGE;
    const patientBalance = patient.balance || 0;
    const balanceLabel = patientBalance > 0
       ? t('patients.details.balanceAdvance')
@@ -1265,9 +1268,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         <h2 className="text-lg font-bold text-gray-900 dark:text-white leading-tight break-words">{patient.firstName} {patient.lastName}</h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
                            {patient.gender === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}
-                           {patientAge !== null && patientAge !== undefined && <> · {patientAge} {t('patients.details.age')}</>}
-                           {patient.dob && <span className="text-gray-400"> ({formatDobDDMMYYYY(patient.dob)})</span>}
+                           {dobLooksValid && <> · {patientAge} {t('patients.details.age')}</>}
+                           {dobLooksValid && <span className="text-gray-400"> · {formatDobDDMMYYYY(patient.dob)}</span>}
                         </p>
+                        {/* "803 yosh (22.11.1222)" — sana xato kiritilgan; bema'ni yosh o'rniga tuzatishga undaymiz */}
+                        {patient.dob && !dobLooksValid && (
+                           <button
+                              type="button"
+                              onClick={canEditCard ? handleEditOpen : undefined}
+                              className={`inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 ${canEditCard ? 'hover:underline' : 'cursor-default'}`}
+                           >
+                              <AlertTriangle className="h-3 w-3" /> {t('patients.details.dobInvalid')}
+                           </button>
+                        )}
                         <div className="flex flex-wrap items-center gap-1.5">
                            <Badge status={patient.status} />
                            {healthAlerts.length > 0 && (
@@ -1284,61 +1297,71 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                      </div>
                   </div>
 
-                  {/* Raqamlar: qutisiz, qator-qator */}
-                  <dl className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-1.5 text-sm">
-                     <div className="flex items-center justify-between gap-3">
-                        <dt className="text-gray-500 dark:text-gray-400">{balanceLabel}</dt>
-                        <dd className={`font-bold tabular-nums ${balanceText}`}>{Math.abs(patientBalance).toLocaleString()} UZS</dd>
+                  {/* Hisob: alohida tasma — kartada birinchi qaraladigan raqam */}
+                  <div className="mt-5 space-y-1.5">
+                     <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3.5 py-2.5 dark:bg-gray-900/50">
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{balanceLabel}</span>
+                        <span className={`text-base font-bold tabular-nums ${balanceText}`}>{Math.abs(patientBalance).toLocaleString()} <span className="text-xs font-semibold opacity-70">UZS</span></span>
                      </div>
                      {canViewPayments && debtInfo.total > 0 && (
-                        <div className="flex items-center justify-between gap-3">
-                           <dt className="text-gray-500 dark:text-gray-400">{t('patients.details.balanceDebt')}</dt>
-                           <dd className="font-bold tabular-nums text-red-600 dark:text-red-400">{debtInfo.total.toLocaleString()} UZS</dd>
+                        <div className="flex items-center justify-between gap-3 rounded-xl bg-red-50 px-3.5 py-2.5 dark:bg-red-950/30">
+                           <span className="text-xs font-medium text-red-700 dark:text-red-300">{t('patients.details.balanceDebt')}</span>
+                           <span className="text-base font-bold tabular-nums text-red-600 dark:text-red-400">{debtInfo.total.toLocaleString()} <span className="text-xs font-semibold opacity-70">UZS</span></span>
                         </div>
                      )}
-                     <div className="flex items-center justify-between gap-3">
-                        <dt className="text-gray-500 dark:text-gray-400">{t('patients.details.stats.lastVisit')}</dt>
-                        <dd className="text-gray-900 dark:text-white tabular-nums">{lastVisitLabel}</dd>
-                     </div>
-                     {nextAppointment && (
-                        <div className="flex items-center justify-between gap-3">
-                           <dt className="text-gray-500 dark:text-gray-400">{t('patients.details.stats.nextAppointment')}</dt>
-                           <dd>
-                              <button type="button" onClick={() => setActiveTab('appointments')} className="font-semibold tabular-nums text-primary-600 hover:underline dark:text-primary-400">
+                  </div>
+
+                  {/* Tashriflar — bitta vaqt chizig'ida: o'tgani → keyingi qabul → davolash davomi / nazorat.
+                      Ilgari alohida qatorlar edi; ikkita nazorat bo'lsa yorliq bo'linib, tugmalar sochilib ketardi. */}
+                  <div className="mt-5">
+                     <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('patients.details.stats.visits')}</p>
+                     <ol className="relative space-y-3 before:absolute before:left-[5px] before:top-2 before:bottom-2 before:w-px before:bg-gray-200 dark:before:bg-gray-700">
+                        <li className="relative pl-6">
+                           <span className="absolute left-0 top-1 h-[11px] w-[11px] rounded-full bg-gray-300 ring-4 ring-white dark:bg-gray-600 dark:ring-gray-800" />
+                           <p className="text-xs text-gray-500 dark:text-gray-400">{t('patients.details.stats.lastVisit')}</p>
+                           <p className={`text-sm tabular-nums ${patient.lastVisit && patient.lastVisit !== 'Never' ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{lastVisitLabel}</p>
+                        </li>
+                        {nextAppointment && (
+                           <li className="relative pl-6">
+                              <span className="absolute left-0 top-1 h-[11px] w-[11px] rounded-full bg-primary-500 ring-4 ring-white dark:ring-gray-800">
+                                 <span className="absolute inset-0 rounded-full bg-primary-500 opacity-60 animate-ping" />
+                              </span>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{t('patients.details.stats.nextAppointment')}</p>
+                              <button type="button" onClick={() => setActiveTab('appointments')} className="text-sm font-semibold tabular-nums text-primary-600 hover:underline dark:text-primary-400">
                                  {formatDobDDMMYYYY(nextAppointment.date)} · {nextAppointment.time}
                               </button>
-                           </dd>
-                        </div>
-                     )}
-                     {/* Keyingi tashrif: tor panelda yorliq bilan sana bir qatorga sig'maydi (ikkita bo'lsa
-                         yorliq bo'linib, tugmalar sochilib ketardi) — sarlavha alohida, har biri o'z qatorida */}
-                     {activeRecalls.length > 0 && (
-                        <div className="pt-1">
-                           <dt className="flex items-center gap-1 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                              <CalendarClock className="w-3.5 h-3.5 shrink-0" /> {t('patients.details.recall.title')}
-                           </dt>
-                           <dd className="mt-1 space-y-1.5 pl-[1.125rem]">
-                              {activeRecalls.map(activeRecall => (
-                                 <div key={activeRecall.id}>
-                                    <div className="flex items-baseline justify-between gap-2">
-                                       <span className="font-semibold tabular-nums text-sky-700 dark:text-sky-300" title={activeRecall.reason || undefined}>
-                                          {formatDobDDMMYYYY(activeRecall.dueDate)}
-                                       </span>
-                                       <span className="min-w-0 truncate text-xs text-gray-500 dark:text-gray-400">{activeRecall.kind === 'treatment' ? t('patients.details.recall.kindTreatment') : t('patients.details.recall.kindCheckup')}</span>
-                                    </div>
-                                    {activeRecall.status !== 'booked' && (
-                                       <div className="flex items-center gap-1 whitespace-nowrap text-xs">
-                                          {canBook && <><button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-sky-700 hover:underline dark:text-sky-300">{t('patients.details.recall.book')}</button>
-                                          <span className="text-gray-300 dark:text-gray-600">·</span></>}
-                                          <button type="button" onClick={() => cancelRecall(activeRecall.id)} className="text-gray-500 hover:text-red-600">{t('patients.details.recall.cancel')}</button>
-                                       </div>
-                                    )}
+                           </li>
+                        )}
+                        {activeRecalls.map(activeRecall => {
+                           const kind = activeRecall.kind === 'treatment' ? t('patients.details.recall.kindTreatment') : t('patients.details.recall.kindCheckup');
+                           const booked = activeRecall.status === 'booked';
+                           return (
+                              <li key={activeRecall.id} className="group relative flex items-center gap-2 pl-6">
+                                 <span className={`absolute left-0 top-1 h-[11px] w-[11px] rounded-full border-2 ring-4 ring-white dark:ring-gray-800 ${booked ? 'border-emerald-500 bg-emerald-500' : 'border-sky-500 bg-white dark:bg-gray-800'}`} />
+                                 <div className="min-w-0 flex-1" title={activeRecall.reason || undefined}>
+                                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">{kind.charAt(0).toUpperCase() + kind.slice(1)}</p>
+                                    <p className="text-sm font-semibold tabular-nums text-sky-700 dark:text-sky-300">
+                                       {formatDobDDMMYYYY(activeRecall.dueDate)}
+                                       {booked && <span className="ml-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">{recallStatusLabel.booked}</span>}
+                                    </p>
                                  </div>
-                              ))}
-                           </dd>
-                        </div>
-                     )}
-                  </dl>
+                                 {!booked && (
+                                    <div className="flex shrink-0 items-center gap-0.5">
+                                       {canBook && (
+                                          <button type="button" onClick={() => openApptModal(activeRecall.dueDate)} title={t('patients.details.recall.book')} aria-label={t('patients.details.recall.book')} className="flex h-7 w-7 items-center justify-center rounded-lg text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-900/30 transition-colors">
+                                             <CalendarPlus className="h-4 w-4" />
+                                          </button>
+                                       )}
+                                       <button type="button" onClick={() => cancelRecall(activeRecall.id)} title={t('patients.details.recall.cancel')} aria-label={t('patients.details.recall.cancel')} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 transition-colors">
+                                          <X className="h-4 w-4" />
+                                       </button>
+                                    </div>
+                                 )}
+                              </li>
+                           );
+                        })}
+                     </ol>
+                  </div>
 
                   {/* Kontaktlar */}
                   <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-2 text-sm">
@@ -1374,7 +1397,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            <CalendarPlus className="w-4 h-4 mr-2" /> {t('patients.details.newAppointment')}
                         </Button>
                      )}
-                     <div className="mt-2 flex gap-1 [&>button]:flex-1">
+                     <div className="mt-2 flex overflow-hidden rounded-xl border border-gray-200 divide-x divide-gray-200 dark:border-gray-700 dark:divide-gray-700 [&>button]:flex-1">
                         {[
                            ...(canEditCard ? [{ icon: Edit, label: t('patients.details.editProfile'), onClick: handleEditOpen }] : []),
                            { icon: CalendarClock, label: t('patients.details.recall.schedule'), onClick: openRecallModal },
@@ -1397,7 +1420,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               onClick={action.onClick}
                               title={action.label}
                               aria-label={action.label}
-                              className="flex items-center justify-center rounded-lg py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700/60 dark:hover:text-white transition-colors"
+                              className="flex items-center justify-center py-2.5 text-gray-500 hover:bg-gray-50 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-white transition-colors"
                            >
                               <action.icon className="w-4 h-4" />
                            </button>
