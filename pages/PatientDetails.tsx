@@ -23,11 +23,20 @@ import { INCOMING_PAYMENT_METHODS, getPaymentMethodLabel } from '../utils/paymen
 import { tLabel } from '../i18n/labels';
 import { PaymentPart, balanceUsed, buildPaymentRecords, splitError } from '../utils/paymentSplit';
 import { PaymentSplitRows } from '../components/PaymentSplitRows';
-import { DateField } from '../components/DateField';
+import { DateField, monthName } from '../components/DateField';
 import { WaiveAppointmentModal } from '../components/WaiveAppointmentModal';
 import { usePerms } from '../context/PermissionsContext';
 import { maskPhone } from '../utils/accessControl';
 import { printPatientCard } from '../utils/printPatientCard';
+
+/** Chap kartadagi rejadagi tashriflar: kalendar varag'i va oy nomining rangi */
+const VISIT_TONES = {
+   appointment: { leaf: 'border-primary-200 bg-primary-50 dark:border-primary-500/30 dark:bg-primary-500/10', month: 'text-primary-600 dark:text-primary-400' },
+   treatment: { leaf: 'border-sky-200 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/10', month: 'text-sky-600 dark:text-sky-400' },
+   checkup: { leaf: 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10', month: 'text-emerald-600 dark:text-emerald-400' },
+};
+/** Shuncha kungacha "N kundan keyin", undan keyin "N oydan keyin" */
+const DAYS_BEFORE_MONTHS = 60;
 
 import { ReceiptModal } from '../components/ReceiptModal';
 
@@ -73,7 +82,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 }) => {
    const { patientId: patientIdParam } = useParams<{ patientId: string }>();
    const patientId = patientIdProp || patientIdParam || null;
-   const { t } = useLanguage();
+   const { t, language } = useLanguage();
    // Tashrif holati bosh sahifa va kalendardagi bilan bir xil (utils/visitStatus):
    // bemor hozir kabinetda bo'lsa, kartada ham "Kabinetda" ko'rinadi
    const visitToday = formatDateToISO(new Date());
@@ -676,9 +685,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
    const MAX_HUMAN_AGE = 120;
    const dobLooksValid = patientAge !== null && patientAge !== undefined && patientAge >= 0 && patientAge <= MAX_HUMAN_AGE;
    const patientBalance = patient.balance || 0;
+   // Kartada yonma-yon ustunda turadi — qisqa yorliq ("Hisob — qarz yo'q" sig'masdi)
    const balanceLabel = patientBalance > 0
       ? t('patients.details.balanceAdvance')
-      : patientBalance < 0 ? t('patients.details.balanceDebt') : t('patients.details.balanceSettled');
+      : patientBalance < 0 ? t('patients.details.balanceDebt') : t('patients.details.balanceShort');
    const balanceText = patientBalance > 0
       ? 'text-emerald-600 dark:text-emerald-400'
       : patientBalance < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white';
@@ -707,6 +717,45 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       reminded: t('patients.details.recall.status.reminded'),
       booked: t('patients.details.recall.status.booked'),
    };
+
+   // Chap karta: qarz bo'lsa — qarz (Moliya qoidasi), bo'lmasa hisob (avans / 0)
+   const showDebt = canViewPayments && debtInfo.total > 0;
+   const hasVisited = !!patient.lastVisit && patient.lastVisit !== 'Never';
+   /** "Bugun", "Ertaga", "12 kundan keyin", "6 oydan keyin" — sanani o'qimasdan ham tushunarli */
+   const relativeDay = (iso: string): string => {
+      const [y, m, d] = iso.split('-').map(Number);
+      const now = new Date();
+      const days = Math.round((new Date(y, m - 1, d).getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86400000);
+      if (days <= 0) return days === 0 ? t('datefield.today') : formatDobDDMMYYYY(iso);
+      if (days === 1) return t('calendar.tomorrow');
+      const withYear = y !== now.getFullYear() ? ` · ${y}` : '';
+      if (days < DAYS_BEFORE_MONTHS) return t('patients.details.inDays').replace('{n}', String(days)) + withYear;
+      return t('patients.details.inMonths').replace('{n}', String(Math.round(days / 30))) + withYear;
+   };
+   const upcomingVisits: { key: string; date: string; title: string; sub: string; tone: keyof typeof VISIT_TONES; hint?: string; booked?: boolean; recall?: Recall; onOpen?: () => void }[] = [
+      ...(nextAppointment ? [{
+         key: `appt-${nextAppointment.id}`,
+         date: nextAppointment.date,
+         title: t('patients.details.stats.nextAppointment'),
+         sub: `${relativeDay(nextAppointment.date)} · ${nextAppointment.time}`,
+         tone: 'appointment' as const,
+         onOpen: () => setActiveTab('appointments'),
+      }] : []),
+      ...activeRecalls.map(r => {
+         const kind = r.kind === 'treatment' ? t('patients.details.recall.kindTreatment') : t('patients.details.recall.kindCheckup');
+         const booked = r.status === 'booked';
+         return {
+            key: `recall-${r.id}`,
+            date: r.dueDate,
+            title: kind.charAt(0).toUpperCase() + kind.slice(1),
+            sub: booked ? recallStatusLabel.booked : relativeDay(r.dueDate),
+            tone: (r.kind === 'treatment' ? 'treatment' : 'checkup') as keyof typeof VISIT_TONES,
+            hint: r.reason || undefined,
+            booked,
+            recall: r,
+         };
+      }),
+   ];
    /** Bugundan N oy keyingi sana, mahalliy vaqt bo'yicha (YYYY-MM-DD) */
    const addMonthsStr = (months: number) => {
       const d = new Date();
@@ -1241,18 +1290,18 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             {/* Chap panel: bemor haqida umumiy ma'lumot. Kompyuterda scroll paytida joyida turadi */}
             <aside className="lg:sticky lg:top-32">
                <Card className="p-5">
-                  {/* Kim: avatar, ism, yosh, holat. Anamnez bo'lsa — kichik belgi, matni Umumiy tabda */}
-                  <div className="flex items-center gap-4">
-                     <div className="relative group flex-shrink-0">
-                        <div className="w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900 ring-4 ring-primary-50 dark:ring-primary-900/40 overflow-hidden flex items-center justify-center text-xl font-bold">
+                  {/* Kim: avatar, ism, holat. Holat — o'ng burchakda, ism ostida yosh; xato sana yoki anamnez bo'lsa — kichik belgi */}
+                  <div className="flex items-start gap-3.5">
+                     <div className="relative group shrink-0">
+                        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-primary-600 text-lg font-semibold tracking-wide text-white ring-1 ring-inset ring-white/10 shadow-sm">
                            {patient.avatarUrl ? (
-                              <img src={patient.avatarUrl} alt={patient.firstName} className="w-full h-full object-cover" />
+                              <img src={patient.avatarUrl} alt={patient.firstName} className="h-full w-full object-cover" />
                            ) : (
-                              <span className="text-primary-600 dark:text-primary-200">{patient.firstName?.[0]}{patient.lastName?.[0]}</span>
+                              <span>{patient.firstName?.[0]}{patient.lastName?.[0]}</span>
                            )}
                         </div>
-                        {canEditCard && <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                           <Edit className="w-5 h-5" />
+                        {canEditCard && <label className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-2xl bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                           <Edit className="h-5 w-5" />
                            <input
                               type="file"
                               className="hidden"
@@ -1264,95 +1313,90 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            />
                         </label>}
                      </div>
-                     <div className="min-w-0 space-y-1">
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white leading-tight break-words">{patient.firstName} {patient.lastName}</h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                     <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                           <h2 className="min-w-0 break-words text-[17px] font-semibold leading-snug tracking-tight text-gray-900 dark:text-white">{patient.firstName} {patient.lastName}</h2>
+                           <span className="shrink-0 pt-0.5"><Badge status={patient.status} /></span>
+                        </div>
+                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
                            {patient.gender === 'Male' ? t('patients.modal.male') : t('patients.modal.female')}
                            {dobLooksValid && <> · {patientAge} {t('patients.details.age')}</>}
-                           {dobLooksValid && <span className="text-gray-400"> · {formatDobDDMMYYYY(patient.dob)}</span>}
                         </p>
-                        {/* "803 yosh (22.11.1222)" — sana xato kiritilgan; bema'ni yosh o'rniga tuzatishga undaymiz */}
-                        {patient.dob && !dobLooksValid && (
-                           <button
-                              type="button"
-                              onClick={canEditCard ? handleEditOpen : undefined}
-                              className={`inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 ${canEditCard ? 'hover:underline' : 'cursor-default'}`}
-                           >
-                              <AlertTriangle className="h-3 w-3" /> {t('patients.details.dobInvalid')}
-                           </button>
+                        {dobLooksValid && <p className="text-xs tabular-nums text-gray-400 dark:text-gray-500">{formatDobDDMMYYYY(patient.dob)}</p>}
+                        {((patient.dob && !dobLooksValid) || healthAlerts.length > 0) && (
+                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                              {/* "803 yosh (22.11.1222)" — sana xato kiritilgan; bema'ni yosh o'rniga tuzatishga undaymiz */}
+                              {patient.dob && !dobLooksValid && (
+                                 <button
+                                    type="button"
+                                    onClick={canEditCard ? handleEditOpen : undefined}
+                                    className={`inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 ${canEditCard ? 'hover:bg-amber-200 dark:hover:bg-amber-900/60' : 'cursor-default'}`}
+                                 >
+                                    <AlertTriangle className="h-3 w-3" /> {t('patients.details.dobInvalid')}
+                                 </button>
+                              )}
+                              {healthAlerts.length > 0 && (
+                                 <button
+                                    type="button"
+                                    onClick={() => setActiveTab('overview')}
+                                    title={healthAlerts.join(', ')}
+                                    className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                                 >
+                                    <AlertTriangle className="h-3 w-3" /> {t('patients.details.anamnesisChip')}
+                                 </button>
+                              )}
+                           </div>
                         )}
-                        <div className="flex flex-wrap items-center gap-1.5">
-                           <Badge status={patient.status} />
-                           {healthAlerts.length > 0 && (
-                              <button
-                                 type="button"
-                                 onClick={() => setActiveTab('overview')}
-                                 title={healthAlerts.join(', ')}
-                                 className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
-                              >
-                                 <AlertTriangle className="w-3 h-3" /> {t('patients.details.anamnesisChip')}
-                              </button>
-                           )}
-                        </div>
                      </div>
                   </div>
 
-                  {/* Hisob: alohida tasma — kartada birinchi qaraladigan raqam */}
-                  <div className="mt-5 space-y-1.5">
-                     <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3.5 py-2.5 dark:bg-gray-900/50">
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{balanceLabel}</span>
-                        <span className={`text-base font-bold tabular-nums ${balanceText}`}>{Math.abs(patientBalance).toLocaleString()} <span className="text-xs font-semibold opacity-70">UZS</span></span>
+                  {/* Ikki asosiy raqam yonma-yon: pul va oxirgi tashrif. Qarz bo'lsa — qarz (Moliya bilan bir xil
+                      qoida); ilgari hisobdagi minus va qarz ikki qatorda bir xil summani takrorlardi */}
+                  <div className="mt-5 grid grid-cols-2 divide-x divide-gray-100 rounded-xl border border-gray-100 dark:divide-gray-700/70 dark:border-gray-700/70">
+                     <div className="min-w-0 px-3.5 py-3">
+                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{showDebt ? t('patients.details.balanceDebt') : balanceLabel}</p>
+                        <p className={`mt-1 truncate text-lg font-bold leading-tight tabular-nums ${showDebt ? 'text-red-600 dark:text-red-400' : balanceText}`}>
+                           {(showDebt ? debtInfo.total : Math.abs(patientBalance)).toLocaleString()} <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">UZS</span>
+                        </p>
+                        {showDebt && patientBalance > 0 && (
+                           <p className="mt-0.5 truncate text-[11px] font-medium text-emerald-600 dark:text-emerald-400">{t('patients.details.balanceAdvance')}: {patientBalance.toLocaleString()}</p>
+                        )}
                      </div>
-                     {canViewPayments && debtInfo.total > 0 && (
-                        <div className="flex items-center justify-between gap-3 rounded-xl bg-red-50 px-3.5 py-2.5 dark:bg-red-950/30">
-                           <span className="text-xs font-medium text-red-700 dark:text-red-300">{t('patients.details.balanceDebt')}</span>
-                           <span className="text-base font-bold tabular-nums text-red-600 dark:text-red-400">{debtInfo.total.toLocaleString()} <span className="text-xs font-semibold opacity-70">UZS</span></span>
-                        </div>
-                     )}
+                     <div className="min-w-0 px-3.5 py-3">
+                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{t('patients.details.stats.lastVisit')}</p>
+                        <p className={`mt-1 leading-tight tabular-nums ${hasVisited ? 'truncate text-lg font-bold text-gray-900 dark:text-white' : 'text-sm text-gray-400 dark:text-gray-500'}`}>{lastVisitLabel}</p>
+                     </div>
                   </div>
 
-                  {/* Tashriflar — bitta vaqt chizig'ida: o'tgani → keyingi qabul → davolash davomi / nazorat.
-                      Ilgari alohida qatorlar edi; ikkita nazorat bo'lsa yorliq bo'linib, tugmalar sochilib ketardi. */}
-                  <div className="mt-5">
-                     <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('patients.details.stats.visits')}</p>
-                     <ol className="relative space-y-3 before:absolute before:left-[5px] before:top-2 before:bottom-2 before:w-px before:bg-gray-200 dark:before:bg-gray-700">
-                        <li className="relative pl-6">
-                           <span className="absolute left-0 top-1 h-[11px] w-[11px] rounded-full bg-gray-300 ring-4 ring-white dark:bg-gray-600 dark:ring-gray-800" />
-                           <p className="text-xs text-gray-500 dark:text-gray-400">{t('patients.details.stats.lastVisit')}</p>
-                           <p className={`text-sm tabular-nums ${patient.lastVisit && patient.lastVisit !== 'Never' ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{lastVisitLabel}</p>
-                        </li>
-                        {nextAppointment && (
-                           <li className="relative pl-6">
-                              <span className="absolute left-0 top-1 h-[11px] w-[11px] rounded-full bg-primary-500 ring-4 ring-white dark:ring-gray-800">
-                                 <span className="absolute inset-0 rounded-full bg-primary-500 opacity-60 animate-ping" />
-                              </span>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">{t('patients.details.stats.nextAppointment')}</p>
-                              <button type="button" onClick={() => setActiveTab('appointments')} className="text-sm font-semibold tabular-nums text-primary-600 hover:underline dark:text-primary-400">
-                                 {formatDobDDMMYYYY(nextAppointment.date)} · {nextAppointment.time}
-                              </button>
-                           </li>
-                        )}
-                        {activeRecalls.map(activeRecall => {
-                           const kind = activeRecall.kind === 'treatment' ? t('patients.details.recall.kindTreatment') : t('patients.details.recall.kindCheckup');
-                           const booked = activeRecall.status === 'booked';
+                  {/* Rejadagi tashriflar: kalendar varag'i (oy + kun), nomi va "Ertaga · 09:00" / "17 kundan keyin" */}
+                  {upcomingVisits.length > 0 && (
+                     <ul className="mt-3 space-y-0.5">
+                        {upcomingVisits.map(item => {
+                           const [y, m, d] = item.date.split('-').map(Number);
+                           const leaf = new Date(y, m - 1, d);
+                           const tone = VISIT_TONES[item.tone];
                            return (
-                              <li key={activeRecall.id} className="group relative flex items-center gap-2 pl-6">
-                                 <span className={`absolute left-0 top-1 h-[11px] w-[11px] rounded-full border-2 ring-4 ring-white dark:ring-gray-800 ${booked ? 'border-emerald-500 bg-emerald-500' : 'border-sky-500 bg-white dark:bg-gray-800'}`} />
-                                 <div className="min-w-0 flex-1" title={activeRecall.reason || undefined}>
-                                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">{kind.charAt(0).toUpperCase() + kind.slice(1)}</p>
-                                    <p className="text-sm font-semibold tabular-nums text-sky-700 dark:text-sky-300">
-                                       {formatDobDDMMYYYY(activeRecall.dueDate)}
-                                       {booked && <span className="ml-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">{recallStatusLabel.booked}</span>}
-                                    </p>
+                              <li key={item.key} className="group -mx-1.5 flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/30" title={item.hint}>
+                                 <div className={`flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-md border ${tone.leaf}`}>
+                                    <span className={`text-[8px] font-bold uppercase leading-none tracking-wider ${tone.month}`}>{monthName(leaf, language).slice(0, 3)}</span>
+                                    <span className="mt-0.5 text-sm font-bold leading-none tabular-nums text-gray-900 dark:text-white">{d}</span>
                                  </div>
-                                 {!booked && (
-                                    <div className="flex shrink-0 items-center gap-0.5">
+                                 <div className="min-w-0 flex-1">
+                                    {item.onOpen ? (
+                                       <button type="button" onClick={item.onOpen} className="block max-w-full truncate text-left text-[13px] font-medium leading-tight text-gray-900 hover:underline dark:text-white">{item.title}</button>
+                                    ) : (
+                                       <p className="truncate text-[13px] font-medium leading-tight text-gray-900 dark:text-white">{item.title}</p>
+                                    )}
+                                    <p className={`truncate text-[11px] leading-tight ${item.booked ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>{item.sub}</p>
+                                 </div>
+                                 {item.recall && !item.booked && (
+                                    <div className="flex shrink-0 items-center opacity-60 transition-opacity group-hover:opacity-100">
                                        {canBook && (
-                                          <button type="button" onClick={() => openApptModal(activeRecall.dueDate)} title={t('patients.details.recall.book')} aria-label={t('patients.details.recall.book')} className="flex h-7 w-7 items-center justify-center rounded-lg text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-900/30 transition-colors">
-                                             <CalendarPlus className="h-4 w-4" />
+                                          <button type="button" onClick={() => openApptModal(item.date)} title={t('patients.details.recall.book')} aria-label={t('patients.details.recall.book')} className="flex h-6 w-6 items-center justify-center rounded-md text-gray-500 hover:bg-primary-50 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-primary-900/30 dark:hover:text-primary-300 transition-colors">
+                                             <CalendarPlus className="h-3.5 w-3.5" />
                                           </button>
                                        )}
-                                       <button type="button" onClick={() => cancelRecall(activeRecall.id)} title={t('patients.details.recall.cancel')} aria-label={t('patients.details.recall.cancel')} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 transition-colors">
+                                       <button type="button" onClick={() => cancelRecall(item.recall!.id)} title={t('patients.details.recall.cancel')} aria-label={t('patients.details.recall.cancel')} className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 transition-colors">
                                           <X className="h-4 w-4" />
                                        </button>
                                     </div>
@@ -1360,8 +1404,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               </li>
                            );
                         })}
-                     </ol>
-                  </div>
+                     </ul>
+                  )}
 
                   {/* Kontaktlar */}
                   <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-2 text-sm">
