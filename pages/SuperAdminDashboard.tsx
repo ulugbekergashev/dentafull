@@ -6,13 +6,15 @@ import { Clinic, SubscriptionPlan, LeadApiKeyInfo } from '../types';
 import { BarChart3, StickyNote, Building2, Users, CreditCard, TrendingUp, Plus, Lock, ShieldCheck, Ban, CheckCircle, Calendar, ArrowRight, Save, Clock, Phone, MapPin, Inbox, Trash2, Facebook, Copy, Check, Send, Link2, KeyRound, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, BellRing, PhoneCall, Infinity as InfinityIcon, Repeat, Download } from 'lucide-react';
 
 // Reklama formalaridan (/lifetime, /monthly) kelgan lidlar kartada rang bilan ajralib turadi.
-// source: "ad-lifetime" yoki "ad-monthly", oxirida ixtiyoriy "-<utm_campaign>".
+// source: "ad-lifetime" yoki "ad-monthly", ruscha sahifadan (/lifetime-ru, /monthly-ru) "ad-ru-lifetime", "ad-ru-monthly",
+// oxirida ixtiyoriy "-<utm_campaign>". Ruscha sahifadan kelgan lidda "RU" belgisi — rus tilida gaplashiladi.
 const getAdLeadPlan = (source?: string | null) => {
-   const m = source?.match(/^ad-(lifetime|monthly)(?:-(.+))?$/);
+   const m = source?.match(/^ad-(?:(ru)-)?(lifetime|monthly)(?:-(.+))?$/);
    if (!m) return null;
-   return m[1] === 'lifetime'
-      ? { label: 'LIFETIME', campaign: m[2], Icon: InfinityIcon, border: 'border-l-4 border-l-amber-400', badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' }
-      : { label: 'OYLIK', campaign: m[2], Icon: Repeat, border: 'border-l-4 border-l-sky-500', badge: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' };
+   const common = { russian: m[1] === 'ru', campaign: m[3] };
+   return m[2] === 'lifetime'
+      ? { ...common, label: 'LIFETIME', Icon: InfinityIcon, border: 'border-l-4 border-l-amber-400', badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' }
+      : { ...common, label: 'OYLIK', Icon: Repeat, border: 'border-l-4 border-l-sky-500', badge: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' };
 };
 
 // Takror ariza yangi karta ochadi; server har bir kartaga `duplicateOf` — shu raqamdan
@@ -1895,6 +1897,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                     {plan && (
                                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-extrabold tracking-wide ${plan.badge}`}>
                                           <plan.Icon className="w-3.5 h-3.5" /> {plan.label}
+                                       </span>
+                                    )}
+                                    {plan?.russian && (
+                                       <span
+                                          title="Ruscha sahifadan ariza qoldirgan"
+                                          className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-extrabold tracking-wide bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+                                       >
+                                          RU
                                        </span>
                                     )}
                                     {earlier > 0 && (

@@ -1,4 +1,3 @@
-import { useLanguage } from '../context/LanguageContext';
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { API_URL } from '../services/api';
@@ -6,12 +5,14 @@ import { getMetaTrack, initMetaPixel, MetaTrack, trackMetaCustomEvent, trackMeta
 import { readSentLead, rememberSentLead } from '../utils/sentLead';
 import { Logo } from '../components/Logo';
 import { AudienceBadge, Field, inputClass, SuccessView } from './ad-lead-components/AdLeadParts';
+import { AD_LEAD_TEXT, AdLang } from './ad-lead-components/adLeadText';
 import './ad-lead-components/ad-lead.css';
 
 export type AdPlan = 'lifetime' | 'monthly';
 
 interface AdLeadPageProps {
   plan: AdPlan;
+  lang: AdLang;
 }
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -23,16 +24,7 @@ type Status = 'idle' | 'loading' | 'success' | 'error';
 // tushuntiramiz" kabi gaplarni ko'rib, buni kredit deb o'ylab ariza qoldirishardi.
 // "Dastur" so'zining o'zi ham ikki ma'noli (kredit dasturi), shuning uchun "kompyuter dasturi".
 // Sarlavha qisqa: "klinika uchun"ni nishon va "Klinika nomi" maydoni aytib turibdi.
-// Qisqa — telefonda logotip bilan bir qatorga sig'adi
-const AUDIENCE_BADGE = 'Stomatologlar uchun';
-// "Bepul ko'rsatib beramiz" forma sarlavhasida — bu yerda takrorlanmaydi
-const SUB = 'Tish kartasi, qabullar va kassa — bitta dasturda.';
-// "—" oldida bo'linmas probel: tire yolg'iz o'zi keyingi qatorga tushib qolmasin
-const LEAD = 'Kompyuter dasturi —';
-const COPY: Record<AdPlan, { lead: string; offer: string; sub: string }> = {
-  lifetime: { lead: LEAD, offer: "bir marta to'lang, umrbod foydalaning", sub: SUB },
-  monthly: { lead: LEAD, offer: 'qulay oylik obuna', sub: SUB },
-};
+// Matnning o'zi (o'zbekcha va ruscha) ad-lead-components/adLeadText.ts da.
 
 type FieldName = 'name' | 'clinic' | 'phone';
 const FIELD_ORDER: FieldName[] = ['name', 'clinic', 'phone'];
@@ -49,19 +41,21 @@ const formatPhone = (d: string) => {
   return `+998${parts.length ? ' ' + parts.join(' ') : ' '}`;
 };
 
-/** Manba: ad-lifetime yoki ad-monthly, havolada utm_campaign bo'lsa oxiriga qo'shiladi */
-const buildSource = (plan: AdPlan) => {
+/**
+ * Manba: ad-lifetime yoki ad-monthly (ruscha /lifetime-ru, /monthly-ru sahifalarida ad-ru-lifetime,
+ * ad-ru-monthly — sotuvchi qaysi tilda gaplashishni biladi), havolada utm_campaign bo'lsa oxiriga qo'shiladi.
+ * SuperAdminDashboard.tsx dagi getAdLeadPlan shu ko'rinishni o'qiydi.
+ */
+const buildSource = (plan: AdPlan, lang: AdLang) => {
   const campaign = new URLSearchParams(window.location.search).get('utm_campaign');
-  const base = `ad-${plan}`;
+  const base = lang === 'ru' ? `ad-ru-${plan}` : `ad-${plan}`;
   return (campaign ? `${base}-${campaign.replace(/[^\w-]/g, '')}` : base).slice(0, 40);
 };
 
 const OUR_PHONE = '+998 90 824 29 92';
 
-export default function AdLeadPage({ plan }: AdLeadPageProps) {
-  const { t } = useLanguage();
-
-  const copy = COPY[plan];
+export default function AdLeadPage({ plan, lang }: AdLeadPageProps) {
+  const text = AD_LEAD_TEXT[lang];
   const [sentBefore] = useState(readSentLead);
   const [name, setName] = useState(sentBefore?.name ?? '');
   const [clinic, setClinic] = useState('');
@@ -87,6 +81,16 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       trackMetaCustomEvent('CrmContact');
     }
   }, []);
+
+  // Brauzer sahifa tilini to'g'ri bilsin (ruscha sahifaga "tarjima qilaymi?" deb so'ramasin)
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.lang;
+    root.lang = text.htmlLang;
+    return () => {
+      root.lang = previous;
+    };
+  }, [text.htmlLang]);
 
   const startOver = () => {
     setName('');
@@ -121,7 +125,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
           name: name.trim(),
           clinicName: clinic.trim(),
           phone: `+998${digits}`,
-          source: buildSource(plan),
+          source: buildSource(plan, lang),
           track: track.current,
         }),
       });
@@ -152,13 +156,13 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
 
   const form = (
     <form onSubmit={submit} className="space-y-3 sm:space-y-4" noValidate>
-      <Field id="ad-name" label={t('auto.Ismingiz')} delay={260} error={errors.name ? 'Ismingizni yozing' : null}>
+      <Field id="ad-name" label={text.nameLabel} delay={260} error={errors.name ? text.nameError : null}>
         <input
           id="ad-name"
           type="text"
           required
           autoComplete="name"
-          placeholder="Masalan: Aziz"
+          placeholder={text.namePlaceholder}
           aria-invalid={!!errors.name}
           value={name}
           onChange={(e) => {
@@ -169,13 +173,13 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
         />
       </Field>
 
-      <Field id="ad-clinic" label={t('auto.Klinika nomi')} delay={310} error={errors.clinic ? 'Klinikangiz nomini yozing' : null}>
+      <Field id="ad-clinic" label={text.clinicLabel} delay={310} error={errors.clinic ? text.clinicError : null}>
         <input
           id="ad-clinic"
           type="text"
           required
           autoComplete="organization"
-          placeholder="Masalan: Tabassum Dent"
+          placeholder={text.clinicPlaceholder}
           aria-invalid={!!errors.clinic}
           value={clinic}
           onChange={(e) => {
@@ -188,9 +192,9 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
 
       <Field
         id="ad-phone"
-        label={t('auto.Telefon raqamingiz')}
+        label={text.phoneLabel}
         delay={360}
-        error={errors.phone ? "Raqamni to'liq kiriting: +998 va 9 ta raqam" : null}
+        error={errors.phone ? text.phoneError : null}
       >
         <input
           id="ad-phone"
@@ -211,7 +215,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       {status === 'error' && (
         <p className="flex items-start gap-2 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-sm text-rose-700">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          Yuborib bo'lmadi. Qaytadan urinib ko'ring yoki {OUR_PHONE} raqamiga qo'ng'iroq qiling.
+          {text.sendFailed(OUR_PHONE)}
         </p>
       )}
 
@@ -231,11 +235,11 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
         >
           {status === 'loading' ? (
             <>
-              <Loader2 className="w-5 h-5 animate-spin" /> {t('auto.Yuborilmoqda...')}
+              <Loader2 className="w-5 h-5 animate-spin" /> {text.sending}
             </>
           ) : (
             <>
-              Qo'ng'iroq qilishingizni kutaman
+              {text.submit}
               {/* Tor telefonda strelka yozuvni chetga siqib qo'ymasin */}
               <ArrowRight className="hidden min-[380px]:block w-5 h-5 shrink-0 transition-transform group-hover:translate-x-1" />
             </>
@@ -244,7 +248,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
       </div>
 
       <p className="pt-1 text-center text-[13px] text-slate-500">
-        Yoki o'zingiz qo'ng'iroq qiling:{' '}
+        {text.callYourself}{' '}
         <a href={`tel:${OUR_PHONE.replace(/\s/g, '')}`} className="font-semibold text-slate-900 whitespace-nowrap tabular-nums hover:text-primary-600">
           {OUR_PHONE}
         </a>
@@ -263,7 +267,7 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
         <header className={`al-rise flex items-center justify-between gap-3 pt-5 sm:pt-7 ${column}`}>
           <Logo size="md" forceLight />
           {/* 320px li eski telefonda logotip yoniga sig'maydi */}
-          <AudienceBadge text={AUDIENCE_BADGE} className="hidden min-[360px]:inline-flex" />
+          <AudienceBadge text={text.badge} className="hidden min-[360px]:inline-flex" />
         </header>
 
         <main
@@ -273,22 +277,22 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
           <section className={`al-rise ${column}`} style={{ animationDelay: '60ms' }}>
             {/* "Kompyuter dasturi —" doim alohida qatorda, taklif uning ostida (marker har qator ostida) */}
             <h1 className="text-[28px] min-[375px]:text-[30px] sm:text-[44px] lg:text-[48px] font-extrabold leading-[1.08] tracking-[-0.025em] text-slate-900">
-              <span className="block">{copy.lead}</span>
+              <span className="block">{text.lead}</span>
               <span className="block [text-wrap:balance]">
-                <span className="al-mark">{copy.offer}</span>
+                <span className="al-mark">{text.offer[plan]}</span>
               </span>
             </h1>
             <p className="mt-3 sm:mt-5 max-w-md text-[15px] sm:text-lg leading-relaxed text-slate-600 [text-wrap:pretty]">
-              {copy.sub}
-              <span className="sm:hidden"> Bepul ko'rsatib beramiz.</span>
+              {text.sub}
+              <span className="sm:hidden">{text.subMobileTail}</span>
             </p>
           </section>
 
           <section className={`al-rise al-card p-4 sm:p-7 lg:p-8 ${column} lg:max-w-[440px] lg:justify-self-end`} style={{ animationDelay: '160ms' }}>
             {status === 'success' ? (
               <SuccessView
-                title={isRepeat ? `Arizangiz bizda bor${name.trim() ? `, ${name.trim()}` : ''}` : `Rahmat, ${name.trim()}!`}
-                lead={isRepeat ? 'Qayta qoldirish shart emas —' : t('auto.Arizangiz qabul qilindi. Tez orada')}
+                text={text}
+                name={name.trim()}
                 phone={formatPhone(digits)}
                 isRepeat={isRepeat}
                 ourPhone={OUR_PHONE}
@@ -298,8 +302,8 @@ export default function AdLeadPage({ plan }: AdLeadPageProps) {
               <>
                 {/* Telefonda bu gap sarlavha ostida turadi — joy tejaladi, tugma birinchi ekranda qoladi */}
                 <div className="hidden sm:block mb-5">
-                  <h2 className="text-xl font-bold tracking-tight text-slate-900">Bepul ko'rsatib beramiz</h2>
-                  <p className="mt-1 text-sm text-slate-500 [text-wrap:pretty]">Raqamingizni qoldiring — mutaxassisimiz o'zi qo'ng'iroq qiladi.</p>
+                  <h2 className="text-xl font-bold tracking-tight text-slate-900">{text.formTitle}</h2>
+                  <p className="mt-1 text-sm text-slate-500 [text-wrap:pretty]">{text.formHint}</p>
                 </div>
                 {form}
               </>

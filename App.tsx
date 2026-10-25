@@ -19,9 +19,14 @@ import { SignIn } from './pages/SignIn';
 // Landing faqat tizimga kirmagan mehmonga kerak — alohida chunk sifatida
 // yuklanadi, shunda CRM foydalanuvchisi marketing sahifasi kodini tortmaydi.
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
-// Reklamadan keladigan qisqa forma sahifalari (/lifetime, /monthly)
+// Reklamadan keladigan qisqa forma sahifalari: /lifetime, /monthly va ruschasi /lifetime-ru, /monthly-ru
 const AdLeadPage = React.lazy(() => import('./pages/AdLeadPage'));
-const AD_LEAD_PATHS = { '/lifetime': 'lifetime', '/monthly': 'monthly' } as const;
+const AD_LEAD_PATHS = {
+  '/lifetime': { plan: 'lifetime', lang: 'uz' },
+  '/monthly': { plan: 'monthly', lang: 'uz' },
+  '/lifetime-ru': { plan: 'lifetime', lang: 'ru' },
+  '/monthly-ru': { plan: 'monthly', lang: 'ru' },
+} as const;
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { SalesDashboard } from './pages/SalesDashboard';
 import { Staff } from './pages/Staff';
@@ -1407,11 +1412,11 @@ const AppContent: React.FC = () => {
 
   // --- Main Render ---
   // Reklama formasi tizimga kirgan-kirmaganidan qat'i nazar ochiladi
-  const adPlan = AD_LEAD_PATHS[location.pathname.replace(/\/+$/, '') as keyof typeof AD_LEAD_PATHS];
-  if (adPlan) {
+  const adPage = AD_LEAD_PATHS[location.pathname.replace(/\/+$/, '') as keyof typeof AD_LEAD_PATHS];
+  if (adPage) {
     return (
       <React.Suspense fallback={null}>
-        <AdLeadPage plan={adPlan} />
+        <AdLeadPage plan={adPage.plan} lang={adPage.lang} />
       </React.Suspense>
     );
   }
