@@ -1310,26 +1310,34 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                            </dd>
                         </div>
                      )}
-                     {activeRecalls.map((activeRecall, i) => (
-                        <div key={activeRecall.id} className="flex items-start justify-between gap-3">
-                           <dt className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                              {i === 0 && <><CalendarClock className="w-3.5 h-3.5" /> {t('patients.details.recall.title')}</>}
+                     {/* Keyingi tashrif: tor panelda yorliq bilan sana bir qatorga sig'maydi (ikkita bo'lsa
+                         yorliq bo'linib, tugmalar sochilib ketardi) — sarlavha alohida, har biri o'z qatorida */}
+                     {activeRecalls.length > 0 && (
+                        <div className="pt-1">
+                           <dt className="flex items-center gap-1 whitespace-nowrap text-gray-500 dark:text-gray-400">
+                              <CalendarClock className="w-3.5 h-3.5 shrink-0" /> {t('patients.details.recall.title')}
                            </dt>
-                           <dd className="text-right">
-                              <span className="font-semibold tabular-nums text-sky-700 dark:text-sky-300" title={activeRecall.reason || undefined}>
-                                 {formatDobDDMMYYYY(activeRecall.dueDate)}
-                              </span>
-                              <span className="block text-[11px] text-gray-500 dark:text-gray-400">{activeRecall.kind === 'treatment' ? t('patients.details.recall.kindTreatment') : t('patients.details.recall.kindCheckup')}</span>
-                              {activeRecall.status !== 'booked' && (
-                                 <span className="block text-xs">
-                                    {canBook && <><button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-sky-700 hover:underline dark:text-sky-300">{t('patients.details.recall.book')}</button>
-                                    <span className="mx-1 text-gray-300">·</span></>}
-                                    <button type="button" onClick={() => cancelRecall(activeRecall.id)} className="text-gray-500 hover:text-red-600">{t('patients.details.recall.cancel')}</button>
-                                 </span>
-                              )}
+                           <dd className="mt-1 space-y-1.5 pl-[1.125rem]">
+                              {activeRecalls.map(activeRecall => (
+                                 <div key={activeRecall.id}>
+                                    <div className="flex items-baseline justify-between gap-2">
+                                       <span className="font-semibold tabular-nums text-sky-700 dark:text-sky-300" title={activeRecall.reason || undefined}>
+                                          {formatDobDDMMYYYY(activeRecall.dueDate)}
+                                       </span>
+                                       <span className="min-w-0 truncate text-xs text-gray-500 dark:text-gray-400">{activeRecall.kind === 'treatment' ? t('patients.details.recall.kindTreatment') : t('patients.details.recall.kindCheckup')}</span>
+                                    </div>
+                                    {activeRecall.status !== 'booked' && (
+                                       <div className="flex items-center gap-1 whitespace-nowrap text-xs">
+                                          {canBook && <><button type="button" onClick={() => openApptModal(activeRecall.dueDate)} className="text-sky-700 hover:underline dark:text-sky-300">{t('patients.details.recall.book')}</button>
+                                          <span className="text-gray-300 dark:text-gray-600">·</span></>}
+                                          <button type="button" onClick={() => cancelRecall(activeRecall.id)} className="text-gray-500 hover:text-red-600">{t('patients.details.recall.cancel')}</button>
+                                       </div>
+                                    )}
+                                 </div>
+                              ))}
                            </dd>
                         </div>
-                     ))}
+                     )}
                   </dl>
 
                   {/* Kontaktlar */}
