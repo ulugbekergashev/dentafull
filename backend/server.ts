@@ -1640,7 +1640,10 @@ app.post('/api/auth/login', async (req, res) => {
                     clinicName: clinic.name,
                     botUsername: clinic.botToken ? (await botManager.getBotUsername(clinic.id)) : null
                 };
-            } else {
+            } else if (!clinic) {
+                // Login klinikaniki bo'lsa-yu parol xato bo'lsa — xodimlar qidirilmaydi. Ilgari shu login
+                // bilan o'chirilgan shifokor bo'lsa, klinika rahbari "Shifokor bloklangan" deb adashardi
+                // (2026-10-31, demoklinikaadmin). Endi oxirida "Login yoki parol noto'g'ri" chiqadi.
                 // Check for doctor
                 const doctor = await prisma.doctor.findUnique({
                     where: { username: cleanUsername },
@@ -3542,6 +3545,18 @@ function publicStaff<T>(row: T): T {
     return rest as T;
 }
 
+/**
+ * Kirishda avval klinika logini tekshiriladi — xodimga klinikaning logini berilsa, u hech qachon
+ * o'zi bo'lib kira olmaydi, rahbar esa "Shifokor bloklangan" kabi chalkash xabar ko'radi.
+ * Shuning uchun klinika logini xodimlar uchun ham band hisoblanadi.
+ */
+async function isClinicLogin(username: unknown): Promise<boolean> {
+    if (typeof username !== 'string' || !username.trim()) return false;
+    const clinic = await prisma.clinic.findUnique({ where: { username: username.trim() }, select: { id: true } });
+    return !!clinic;
+}
+const LOGIN_TAKEN = 'Bu login (username) allaqachon band.';
+
 app.get('/api/doctors', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
@@ -3593,6 +3608,7 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
         }
 
         if (username) {
+            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
             const existing = await prisma.doctor.findUnique({ where: { username } });
             if (existing) {
                 return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
@@ -3643,6 +3659,7 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
         if (!(await assertOwnership(req, res, 'doctor', req.params.id))) return;
         const { username } = req.body;
         if (username) {
+            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
             const existing = await prisma.doctor.findUnique({ where: { username } });
             if (existing && existing.id !== req.params.id) {
                 return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
@@ -3853,6 +3870,7 @@ app.post('/api/receptionists', authenticateToken, async (req, res) => {
         }
 
         if (username) {
+            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
             const existing = await prisma.receptionist.findUnique({ where: { username } });
             if (existing) {
                 return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
@@ -3886,6 +3904,7 @@ app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
         if (!(await assertOwnership(req, res, 'receptionist', req.params.id))) return;
         const { username } = req.body;
         if (username) {
+            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
             const existing = await prisma.receptionist.findUnique({ where: { username } });
             if (existing && existing.id !== req.params.id) {
                 return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
@@ -3951,6 +3970,7 @@ app.post('/api/lab-technicians', authenticateToken, async (req: any, res: any) =
             return res.status(400).json({ error: 'Barcha maydonlar to\'ldirilishi shart' });
         }
         if (username) {
+            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
             const existing = await (prisma as any).labTechnician.findUnique({ where: { username } });
             if (existing) return res.status(400).json({ error: 'Bu login allaqachon band.' });
         }
@@ -3973,6 +3993,7 @@ app.put('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any
         if (!(await assertOwnership(req, res, 'labTechnician', req.params.id))) return;
         const { firstName, lastName, specialty, phone, status, username, password } = req.body;
         if (username) {
+            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
             const existing = await (prisma as any).labTechnician.findUnique({ where: { username } });
             if (existing && existing.id !== req.params.id) {
                 return res.status(400).json({ error: 'Bu login allaqachon band.' });
