@@ -14,6 +14,7 @@ import { tPlanFeature } from '../i18n/labels';
 import { UserRole, Doctor, Clinic, SubscriptionPlan, Service, ServiceCategory, LeadApiKeyInfo, Branch, DhpStatus, VisitRequirements } from '../types';
 import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, MessageSquare, Building2, Plus, Activity, RefreshCw, KeyRound, Copy, Eye, EyeOff, Link2, ChevronDown, Sparkles, AlertTriangle, CreditCard, Plug, MapPin, SlidersHorizontal, History } from 'lucide-react';
 import { AuditLogPanel } from '../components/AuditLogPanel';
+import { LabOptionsCard } from '../components/LabOptionsCard';
 import { api, API_URL, isDemoMode } from '../services/api';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -1255,6 +1256,7 @@ export const Settings: React.FC<SettingsProps> = ({
                               </table>
                            </div>
                         </Card>
+                        {currentClinic?.id && <LabOptionsCard clinicId={currentClinic.id} canEdit={canEditService} />}
                      </div>
                   </div>
                )}

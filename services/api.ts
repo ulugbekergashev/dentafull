@@ -3,6 +3,7 @@ import { addDaysISO, applyCallChange } from '../utils/desk';
 import { formatDateToISO } from '../utils/dateUtils';
 import { DEMO_SEED_VERSION } from './demoSeed';
 import { applyClinicPaymentMethods } from '../utils/paymentMethods';
+import type { LabOptions } from '../utils/labOptions';
 
 // Demo: kassa yopilishlari va harakatlari (inkassatsiya, qaytarish, kassaga solish) boshqa demo
 // ma'lumoti kabi shu kun davomida brauzerda saqlanadi; ertasi kuni demo yangidan boshlanadi
@@ -1478,6 +1479,17 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+    },
+    /** Laboratoriya buyurtmasi ro'yxatlari (buyurtma turi, material) — klinika o'zi tuzadi */
+    labOptions: {
+        get: (clinicId: string) =>
+            fetchJson<LabOptions>(`/lab-options?clinicId=${encodeURIComponent(clinicId)}`),
+        save: (clinicId: string, options: LabOptions) =>
+            fetchJson<LabOptions>(`/lab-options?clinicId=${encodeURIComponent(clinicId)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(options),
+            }),
     },
     /**
      * Qabulni yakunlash talablari: qaysi xizmatda rasm yoki material majburiy.

@@ -8,6 +8,7 @@ import { tLabel } from '../i18n/labels';
 import { Modal, Button, Input } from '../components/Common';
 import { EXPENSE_PAYMENT_METHODS, getPaymentMethodLabel, PaymentMethod } from '../utils/paymentMethods';
 import { formatDobDDMMYYYY } from '../utils/dateUtils';
+import { DEFAULT_MATERIALS, DEFAULT_ORDER_TYPES, LabOptions, labChoices } from '../utils/labOptions';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   'Pending':     { label: 'Kutilmoqda',    color: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400',   icon: Clock },
@@ -17,8 +18,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   'Cancelled':   { label: 'Bekor qilindi', color: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400',             icon: X },
 };
 
-const ORDER_TYPES = ['Koronka', 'Ko\'chma protez', 'Qo\'zg\'almas protez', 'Veneer', 'Implant ustama', 'Breket', 'Kappaterapiya', 'Reteyner', 'Boshqa'];
-const MATERIALS   = ['Metallkeramika', 'Zirkoniya', 'E-max (Litiy disilkat)', 'Akrilik', 'Metal', 'Kompozit', 'Boshqa'];
 
 interface Props {
   clinicId: string;
@@ -71,6 +70,15 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
   const [form, setForm]               = useState({ ...emptyForm });
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
+  // Buyurtma turi va material — klinika Sozlamalarda tuzgan ro'yxat (tegmagan bo'lsa standart).
+  // Oyna har ochilganda yangilanadi: Sozlamalarda o'zgartirilgani sahifani yangilamasdan ko'rinsin
+  const [labLists, setLabLists]       = useState<LabOptions>({ orderTypes: null, materials: null });
+  useEffect(() => {
+    if (!clinicId) return;
+    let alive = true;
+    api.labOptions.get(clinicId).then(o => { if (alive) setLabLists(o); }).catch(() => { /* standart ro'yxat qoladi */ });
+    return () => { alive = false; };
+  }, [clinicId, showModal]);
 
   // Patient autocomplete state
   const [patientSearch, setPatientSearch] = useState('');
@@ -428,14 +436,14 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Buyurtma turi *')}</label>
                   <select value={form.orderType} onChange={e => setForm(f => ({...f, orderType: e.target.value}))} className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                     <option value="">{t('auto.— Tanlang —')}</option>
-                    {ORDER_TYPES.map(type => <option key={type} value={type}>{tLabel(t, type)}</option>)}
+                    {labChoices(labLists.orderTypes ?? DEFAULT_ORDER_TYPES, form.orderType).map(type => <option key={type} value={type}>{tLabel(t, type)}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('auto.Material')}</label>
                   <select value={form.material} onChange={e => setForm(f => ({...f, material: e.target.value}))} className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                     <option value="">{t('auto.— Tanlang —')}</option>
-                    {MATERIALS.map(mat => <option key={mat} value={mat}>{tLabel(t, mat)}</option>)}
+                    {labChoices(labLists.materials ?? DEFAULT_MATERIALS, form.material).map(mat => <option key={mat} value={mat}>{tLabel(t, mat)}</option>)}
                   </select>
                 </div>
                 <div>

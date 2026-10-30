@@ -4639,6 +4639,75 @@ app.put('/api/visit-requirements/:serviceId', authenticateToken, async (req, res
     }
 });
 
+// ─── Laboratoriya ro'yxatlari ────────────────────────────────────────────────
+//
+// "Yangi buyurtma" oynasidagi "Buyurtma turi" va "Material" ro'yxatlarini klinika
+// o'zi tuzadi va tartiblaydi (Sozlamalar → Xizmatlar va narxlar). Migratsiyasiz:
+// PlatformSetting'da har klinikaga bitta qator. null — klinika tegmagan, ilova
+// o'zining standart ro'yxatini ko'rsatadi.
+const LAB_LIST_MAX_ITEMS = 50;
+const LAB_ITEM_MAX_LEN = 60;
+const labOptionsKey = (clinicId: string) => `labopts:${clinicId}`;
+type LabOptions = { orderTypes: string[] | null; materials: string[] | null };
+
+/** Bo'sh, takroriy (katta-kichik harfdan qat'i nazar) va juda uzun nomlar tashlanadi */
+const cleanLabList = (v: unknown): string[] | null => {
+    if (!Array.isArray(v)) return null;
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const item of v) {
+        if (typeof item !== 'string') continue;
+        const name = item.replace(/\s+/g, ' ').trim().slice(0, LAB_ITEM_MAX_LEN);
+        const k = name.toLowerCase();
+        if (!name || seen.has(k)) continue;
+        seen.add(k);
+        out.push(name);
+        if (out.length >= LAB_LIST_MAX_ITEMS) break;
+    }
+    return out.length > 0 ? out : null;
+};
+
+const parseLabOptions = (raw: string | null | undefined): LabOptions => {
+    try {
+        const v = raw ? JSON.parse(raw) : {};
+        return { orderTypes: cleanLabList(v?.orderTypes), materials: cleanLabList(v?.materials) };
+    } catch {
+        return { orderTypes: null, materials: null };
+    }
+};
+
+app.get('/api/lab-options', authenticateToken, async (req, res) => {
+    try {
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const row = await prisma.platformSetting.findUnique({ where: { key: labOptionsKey(clinicId) } });
+        res.json(parseLabOptions(row?.value));
+    } catch (error: any) {
+        console.error("Laboratoriya ro'yxatlarini o'qishda xatolik:", error?.message || error);
+        res.status(500).json({ error: "Ro'yxatlarni o'qib bo'lmadi" });
+    }
+});
+
+app.put('/api/lab-options', authenticateToken, async (req, res) => {
+    try {
+        if (!(await allow(req, res, p => p.can('settings', 'services', 'edit'), "laboratoriya ro'yxatlarini sozlash"))) return;
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const next: LabOptions = { orderTypes: cleanLabList(req.body?.orderTypes), materials: cleanLabList(req.body?.materials) };
+        const key = labOptionsKey(clinicId);
+        const value = JSON.stringify(next);
+        await prisma.platformSetting.upsert({
+            where: { key },
+            update: { value, updatedAt: new Date() },
+            create: { key, value },
+        });
+        res.json(next);
+    } catch (error: any) {
+        console.error("Laboratoriya ro'yxatlarini saqlashda xatolik:", error?.message || error);
+        res.status(500).json({ error: "Ro'yxatlarni saqlab bo'lmadi" });
+    }
+});
+
 // ─── Bosh sahifa: qo'ng'iroq natijalari ──────────────────────────────────────
 //
 // "Qo'ng'iroq qilish kerak" ro'yxatidagi qatorga resepshn natija yozadi. Qabul,
