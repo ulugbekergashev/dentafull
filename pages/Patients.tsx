@@ -145,8 +145,12 @@ export const Patients: React.FC<PatientsProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
 
+  const livePatients = useMemo(() => patients.filter(p => p.status !== 'Archived'), [patients]);
   const filteredPatients = useMemo(() => {
     return patients.filter((p) => {
+      // O'chirilgan bemor arxivda qoladi — faqat "Arxivlangan" filtrida ko'rinadi.
+      // Ilgari "Hammasi"da ham chiqib, klinika "o'chirgan bemorim qaytib keldi" derdi
+      if (p.status === 'Archived' && filterStatus !== 'archived') return false;
       const matchesSearch =
         p.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -210,6 +214,7 @@ export const Patients: React.FC<PatientsProps> = ({
 
   // Stats
   const stats = useMemo(() => {
+    const patients = livePatients;
     const total = patients.length;
 
     const sevenDaysAgo = new Date();
@@ -221,9 +226,9 @@ export const Patients: React.FC<PatientsProps> = ({
     const waiting = patients.filter(p => waitingIds.has(p.id)).length;
 
     return { total, newPatients, debtors, waiting };
-  }, [patients, appointments, transactions, debtorIds, waitingIds]);
+  }, [livePatients, debtorIds, waitingIds]);
 
-  const unassignedCount = patients.filter((p) => !p.doctorId).length;
+  const unassignedCount = livePatients.filter((p) => !p.doctorId).length;
 
   const branchNameOf = (p: Patient): string | null =>
     p.branchId ? (branches.find((b) => b.id === p.branchId)?.name || null) : null;

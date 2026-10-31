@@ -226,7 +226,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
 
     const q = query.trim();
     const results = useMemo(
-        () => (open && q.length >= 2 && !patientId && !newMode ? searchPatients(patients, q, 5) : []),
+        () => (open && q.length >= 2 && !patientId && !newMode ? searchPatients(patients.filter(p => p.status !== 'Archived'), q, 5) : []),
         [open, patients, q, patientId, newMode]
     );
     const similar = useMemo(() => (newMode ? findSimilarPatients(patients, newForm, 3) : []), [newMode, patients, newForm]);

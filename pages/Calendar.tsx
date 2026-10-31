@@ -262,7 +262,7 @@ export const Calendar: React.FC<CalendarProps> = ({
     // Izoh o'tmaydi: tugagan qabulda u "Bajarilgan ishlar … narx" bo'ladi.
     const copy = copySource;
     setFormData({
-      patientId: copy ? copy.patientId : patients.length > 0 ? patients[0].id : '',
+      patientId: copy ? copy.patientId : patients.find(p => p.status !== 'Archived')?.id || '',
       // Defolt shifokor: berilgan → nusxa olingan qabulniki → filtrda bitta shifokor tanlangan
       // bo'lsa, o'sha → kirgan shifokor (DOCTOR roli) → birinchi shifokor
       doctorId: initialDoctorId || copy?.doctorId || (selectedDoctorIds?.length === 1 ? selectedDoctorIds[0] : '') || (userRole === UserRole.DOCTOR && doctorId ? doctorId : '') || (doctors.length > 0 ? doctors[0].id : ''),
@@ -1609,7 +1609,7 @@ export const Calendar: React.FC<CalendarProps> = ({
             <div className="flex-1">
               <SearchableSelect
                 label={t('calendar.patient')}
-                options={patients.map(p => ({ value: p.id, label: `${p.lastName} ${p.firstName}` }))}
+                options={patients.filter(p => p.status !== 'Archived' || p.id === formData.patientId).map(p => ({ value: p.id, label: `${p.lastName} ${p.firstName}` }))}
                 value={formData.patientId}
                 onChange={(val) => setFormData({ ...formData, patientId: val })}
               />

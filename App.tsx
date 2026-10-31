@@ -213,11 +213,11 @@ const AppContent: React.FC = () => {
     if (!searchBarTerm.trim() || searchBarTerm.length < 2) return { patients: [], doctors: [] };
 
     const term = searchBarTerm.toLowerCase();
-    const filteredPatients = patients.filter(p =>
+    const filteredPatients = patients.filter(p => p.status !== 'Archived' && (
       p.firstName.toLowerCase().includes(term) ||
       p.lastName.toLowerCase().includes(term) ||
       p.phone.includes(term)
-    ).slice(0, 5);
+    )).slice(0, 5);
 
     const filteredDoctors = doctors.filter(d =>
       d.firstName.toLowerCase().includes(term) ||
@@ -240,6 +240,11 @@ const AppContent: React.FC = () => {
   const scopedPatients = useMemo(
     () => branchScoped ? patients.filter(p => p.branchId === activeBranchId) : patients,
     [patients, branchScoped, activeBranchId]);
+  // "O'chirilgan" bemor bazada arxivda qoladi (tarixi va to'lovlari yo'qolmasin). Bemor tanlanadigan
+  // joylarda (qabul, kalendar, navbat, laboratoriya, qidiruv) u chiqmasin — ilgari sahifa
+  // yangilanganda "o'chirgan bemorim qaytib keldi" bo'lardi. Moliya, bosh sahifa (qarz qatorlari)
+  // va bemor kartasi to'liq ro'yxatni oladi.
+  const activePatients = useMemo(() => scopedPatients.filter(p => p.status !== 'Archived'), [scopedPatients]);
   const scopedAppointments = useMemo(
     () => branchScoped ? appointments.filter(a => a.branchId === activeBranchId) : appointments,
     [appointments, branchScoped, activeBranchId]);
@@ -2267,7 +2272,7 @@ const AppContent: React.FC = () => {
                 <Route path="/queue" element={
                   <OnlineQueue
                     doctors={scopedDoctors}
-                    patients={scopedPatients}
+                    patients={activePatients}
                     appointments={scopedAppointments}
                     clinicId={clinicId}
                     userRole={userRole}
@@ -2287,7 +2292,7 @@ const AppContent: React.FC = () => {
                     labOrders={labOrders}
                     setLabOrders={setLabOrders}
                     doctors={doctors}
-                    patients={patients}
+                    patients={patients.filter(p => p.status !== 'Archived')}
                     onExpensesChanged={refreshExpenses}
                     userRole={userRole}
                     notify={addToast}
