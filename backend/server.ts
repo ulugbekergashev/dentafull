@@ -3557,6 +3557,36 @@ async function isClinicLogin(username: unknown): Promise<boolean> {
 }
 const LOGIN_TAKEN = 'Bu login (username) allaqachon band.';
 
+/**
+ * Loginlar hamma klinikalar va hamma xodim turlari uchun bitta: kirishda klinika, shifokor, resepshn,
+ * laborant ketma-ket tekshiriladi. Login faqat o'chirilgan xodimda qolgan bo'lsa — u bo'shatiladi
+ * (o'chirilgan xodim baribir kira olmaydi): login "login#id" ga o'zgaradi, tarixda ko'rinib turadi.
+ * Klinika (2026-11-01): "yana bir texnik qo'shmoqchiman, login band deb qo'shmayapti".
+ */
+type StaffLoginModel = 'doctor' | 'receptionist' | 'labTechnician';
+const STAFF_LOGIN_MODELS: StaffLoginModel[] = ['doctor', 'receptionist', 'labTechnician'];
+async function isLoginFree(username: string, self?: { model: StaffLoginModel; id: string }, release = true): Promise<boolean> {
+    const login = username.trim();
+    if (!login || await isClinicLogin(login)) return false;
+    for (const model of STAFF_LOGIN_MODELS) {
+        const holder = await (prisma as any)[model].findUnique({ where: { username: login } });
+        if (!holder || (self && self.model === model && holder.id === self.id)) continue;
+        if (holder.status !== 'Deleted') return false;
+        if (release) await (prisma as any)[model].update({ where: { id: holder.id }, data: { username: `${login}#${holder.id}` } });
+    }
+    return true;
+}
+/** "Bu login band. Bo'sh variant: texnik2" — xodim qo'shayotgan odam taxmin qilib o'tirmasin */
+const LOGIN_SUGGEST_MAX = 30;
+async function loginTakenMessage(username: string): Promise<string> {
+    const base = username.trim().replace(/\d+$/, '') || username.trim();
+    for (let n = 2; n <= LOGIN_SUGGEST_MAX; n++) {
+        const candidate = `${base}${n}`;
+        if (await isLoginFree(candidate, undefined, false)) return `Bu login band. Bo'sh variant: ${candidate}`;
+    }
+    return LOGIN_TAKEN;
+}
+
 app.get('/api/doctors', authenticateToken, async (req, res) => {
     try {
         const clinicId = getScopedClinicId(req);
@@ -3607,12 +3637,8 @@ app.post('/api/doctors', authenticateToken, async (req, res) => {
             });
         }
 
-        if (username) {
-            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
-            const existing = await prisma.doctor.findUnique({ where: { username } });
-            if (existing) {
-                return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
-            }
+        if (username && !(await isLoginFree(username, undefined))) {
+            return res.status(400).json({ error: await loginTakenMessage(username) });
         }
 
         let passwordData = password;
@@ -3658,12 +3684,8 @@ app.put('/api/doctors/:id', authenticateToken, async (req, res) => {
         if (!(await allow(req, res, p => p.can('doctors', 'list', 'edit'), "xodimni tahrirlash"))) return;
         if (!(await assertOwnership(req, res, 'doctor', req.params.id))) return;
         const { username } = req.body;
-        if (username) {
-            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
-            const existing = await prisma.doctor.findUnique({ where: { username } });
-            if (existing && existing.id !== req.params.id) {
-                return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
-            }
+        if (username && !(await isLoginFree(username, { model: 'doctor', id: req.params.id }))) {
+            return res.status(400).json({ error: await loginTakenMessage(username) });
         }
         // Sanitize body to only include valid Doctor fields
         const { firstName, lastName, specialty, phone, email, status, password, percentage, salaryType, fixedSalary, secondaryPhone, color, clinicId, startHour, endHour, birthDate, gender, pinfl, argosId, specialtyCode } = req.body;
@@ -3869,12 +3891,8 @@ app.post('/api/receptionists', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Barcha maydonlar to\'ldirilishi shart' });
         }
 
-        if (username) {
-            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
-            const existing = await prisma.receptionist.findUnique({ where: { username } });
-            if (existing) {
-                return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
-            }
+        if (username && !(await isLoginFree(username, undefined))) {
+            return res.status(400).json({ error: await loginTakenMessage(username) });
         }
 
         let passwordData = password;
@@ -3903,12 +3921,8 @@ app.put('/api/receptionists/:id', authenticateToken, async (req, res) => {
         if (!(await allow(req, res, p => p.can('doctors', 'list', 'edit'), "xodimni tahrirlash"))) return;
         if (!(await assertOwnership(req, res, 'receptionist', req.params.id))) return;
         const { username } = req.body;
-        if (username) {
-            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
-            const existing = await prisma.receptionist.findUnique({ where: { username } });
-            if (existing && existing.id !== req.params.id) {
-                return res.status(400).json({ error: 'Bu login (username) allaqachon band.' });
-            }
+        if (username && !(await isLoginFree(username, { model: 'receptionist', id: req.params.id }))) {
+            return res.status(400).json({ error: await loginTakenMessage(username) });
         }
         const updateData = { ...req.body };
         if (updateData.password) {
@@ -3969,10 +3983,8 @@ app.post('/api/lab-technicians', authenticateToken, async (req: any, res: any) =
         if (!firstName || !lastName || !phone || !clinicId) {
             return res.status(400).json({ error: 'Barcha maydonlar to\'ldirilishi shart' });
         }
-        if (username) {
-            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
-            const existing = await (prisma as any).labTechnician.findUnique({ where: { username } });
-            if (existing) return res.status(400).json({ error: 'Bu login allaqachon band.' });
+        if (username && !(await isLoginFree(username, undefined))) {
+            return res.status(400).json({ error: await loginTakenMessage(username) });
         }
         const data: any = { firstName, lastName, specialty: specialty || 'Umumiy', phone, clinicId, status: 'Active' };
         if (username) data.username = username;
@@ -3992,12 +4004,8 @@ app.put('/api/lab-technicians/:id', authenticateToken, async (req: any, res: any
         if (!(await allow(req, res, p => p.can('doctors', 'list', 'edit'), "xodimni tahrirlash"))) return;
         if (!(await assertOwnership(req, res, 'labTechnician', req.params.id))) return;
         const { firstName, lastName, specialty, phone, status, username, password } = req.body;
-        if (username) {
-            if (await isClinicLogin(username)) return res.status(400).json({ error: LOGIN_TAKEN });
-            const existing = await (prisma as any).labTechnician.findUnique({ where: { username } });
-            if (existing && existing.id !== req.params.id) {
-                return res.status(400).json({ error: 'Bu login allaqachon band.' });
-            }
+        if (username && !(await isLoginFree(username, { model: 'labTechnician', id: req.params.id }))) {
+            return res.status(400).json({ error: await loginTakenMessage(username) });
         }
         const data: any = {};
         if (firstName !== undefined) data.firstName = firstName;
