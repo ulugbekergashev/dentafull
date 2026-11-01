@@ -424,7 +424,7 @@ const uz = {
   pricing: {
     badge: "Shaffof tariflar",
     title: "Klinikangiz hajmiga mos to'lov",
-    sub: "Yashirin to'lovlar yo'q. Barcha imkoniyatlar har bir tarifda — farq faqat shifokor hisoblari sonida.",
+    sub: "Yashirin to'lovlar yo'q. Barcha imkoniyatlar har bir tarifda — farq faqat shifokor hisoblari sonida. Resepshn va texnik har bir tarifda cheklovsiz.",
     monthly: "Oylik to'lov",
     annual: "Yillik to'lov",
     saveBadge: "-20%",
@@ -449,7 +449,7 @@ const uz = {
       "Tizimni o'rnatib berish va o'qitish",
     ],
     plans: [
-      { key: "individual", name: "Individual", desc: "Yakka tartibda ishlaydigan shifokorlar uchun." },
+      { key: "individual", name: "Individual", desc: "Yakka ishlaydigan shifokor uchun — yordamchi resepshn va texnik ham qo'shiladi." },
       { key: "start",      name: "Start",      desc: "Kichik va o'rta klinikalar uchun." },
       { key: "pro",        name: "Pro",        desc: "Ko'p shifokorli klinikalar uchun." },
     ],
@@ -985,7 +985,7 @@ const ru: LandingCopy = {
   pricing: {
     badge: "Прозрачные тарифы",
     title: "Оплата под размер вашей клиники",
-    sub: "Скрытых платежей нет. Все возможности входят в каждый тариф — отличается только число учётных записей врачей.",
+    sub: "Скрытых платежей нет. Все возможности входят в каждый тариф — отличается только число учётных записей врачей. Ресепшен и техник — в любом тарифе без ограничений.",
     monthly: "Помесячно",
     annual: "На год",
     saveBadge: "-20%",
@@ -1010,7 +1010,7 @@ const ru: LandingCopy = {
       "Внедрение системы и обучение",
     ],
     plans: [
-      { key: "individual", name: "Individual", desc: "Для врачей, работающих самостоятельно." },
+      { key: "individual", name: "Individual", desc: "Для врача, работающего самостоятельно, — можно добавить ресепшен и техника." },
       { key: "start",      name: "Start",      desc: "Для небольших и средних клиник." },
       { key: "pro",        name: "Pro",        desc: "Для клиник с несколькими врачами." },
     ],

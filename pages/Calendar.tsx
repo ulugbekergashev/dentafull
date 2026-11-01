@@ -729,19 +729,8 @@ export const Calendar: React.FC<CalendarProps> = ({
       if (isIndividualPlan && doctors.length === 0) {
         // Auto-create doctor logic
         try {
-          // Use admin name or default
-          const adminNameParts = currentClinic?.adminName?.split(' ') || ['Admin'];
-          const firstName = adminNameParts[0];
-          const lastName = adminNameParts.slice(1).join(' ') || 'Doctor';
-
-          const newDoctor = await api.doctors.create({
-            firstName,
-            lastName,
-            specialty: 'Stomatolog',
-            phone: currentClinic?.phone || '',
-            status: 'Active',
-            clinicId: currentClinic?.id || ''
-          });
+          // Server yaratadi — resepshn birinchi bo'lib yozsa ham ishlaydi
+          const newDoctor = await api.doctors.ensureSolo(currentClinic?.id || '');
 
           finalDoctorId = newDoctor.id;
           finalDoctorName = `Dr. ${newDoctor.lastName}`;

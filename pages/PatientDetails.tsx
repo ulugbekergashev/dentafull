@@ -1133,19 +1133,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             const isIndividualPlan = currentClinic?.planId === 'individual';
             if (isIndividualPlan) {
                try {
-                  console.log("Auto-creating doctor for individual plan...");
-                  const adminNameParts = currentClinic?.adminName?.split(' ') || ['Admin'];
-                  const firstName = adminNameParts[0];
-                  const lastName = adminNameParts.slice(1).join(' ') || 'Doctor';
-
-                  const newDoctor = await api.doctors.create({
-                     firstName,
-                     lastName,
-                     specialty: 'Stomatolog',
-                     phone: currentClinic?.phone || '',
-                     status: 'Active',
-                     clinicId: currentClinic?.id || ''
-                  });
+                  // Server yaratadi — resepshn birinchi bo'lib yozsa ham ishlaydi
+                  const newDoctor = await api.doctors.ensureSolo(currentClinic?.id || '');
 
                   finalDoctorId = newDoctor.id;
                   finalDoctorName = `Dr. ${newDoctor.lastName}`;

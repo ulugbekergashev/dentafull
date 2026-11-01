@@ -766,6 +766,21 @@ export const api = {
                 body: JSON.stringify(data),
             });
         },
+        /** Individual tarif: shifokor yo'q bo'lsa server egasining ismi bilan yaratadi, bor bo'lsa o'shani qaytaradi */
+        ensureSolo: (clinicId: string) => {
+            if (isDemoMode()) {
+                if (DEMO_DOCTORS.length > 0) return Promise.resolve(DEMO_DOCTORS[0]);
+                const newDoc = { id: `demo-doctor-${Date.now()}`, firstName: 'Admin', lastName: 'Doctor', specialty: 'Stomatolog', phone: '', status: 'Active', clinicId } as Doctor;
+                DEMO_DOCTORS.push(newDoc);
+                saveDemoData();
+                return Promise.resolve(newDoc);
+            }
+            return fetchJson<Doctor>('/doctors/solo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clinicId }),
+            });
+        },
         update: (id: string, data: Partial<Doctor>) => {
             if (isDemoMode()) {
                 const index = DEMO_DOCTORS.findIndex(d => d.id === id);

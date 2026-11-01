@@ -3606,6 +3606,51 @@ app.get('/api/doctors', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * Individual tarif: klinikada shifokor yo'q bo'lsa, birinchi qabul/tashrif yozilganda
+ * shifokor profilini server o'zi yaratadi (egasining ismi bilan). Ilgari buni brauzer
+ * xodim qo'shish ruxsati bilan qilardi — birinchi bo'lib resepshn yozsa, ruxsat yetmay qolardi.
+ * Takror chaqirilsa, bor shifokorni qaytaradi.
+ */
+const SOLO_PLAN_ID = 'individual';
+const soloDoctorLocks = new Map<string, Promise<any>>();
+async function ensureSoloDoctor(clinicId: string) {
+    const existing = await prisma.doctor.findFirst({ where: { clinicId, status: { not: 'Deleted' } }, orderBy: { id: 'asc' } });
+    if (existing) return existing;
+    const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { adminName: true, phone: true } });
+    const parts = String(clinic?.adminName || '').trim().split(/\s+/).filter(Boolean);
+    return prisma.doctor.create({
+        data: {
+            clinicId,
+            firstName: parts[0] || 'Admin',
+            lastName: parts.slice(1).join(' ') || 'Doctor',
+            specialty: 'Stomatolog',
+            phone: clinic?.phone || '',
+            status: 'Active',
+        },
+    });
+}
+
+app.post('/api/doctors/solo', authenticateToken, async (req, res) => {
+    try {
+        if (!(await allow(req, res, p => p.can('calendar', 'appts', 'create') || p.menu('patients'), 'qabul yozish'))) return;
+        const clinicId = getScopedClinicId(req);
+        if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+        const clinic = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { planId: true } });
+        if (!clinic) return res.status(404).json({ error: 'Klinika topilmadi' });
+        if (clinic.planId !== SOLO_PLAN_ID) {
+            return res.status(400).json({ error: "Shifokorni Xodimlar bo'limida qo'shing." });
+        }
+        // Bir vaqtda ikki so'rov kelsa ham bitta shifokor yaratilsin
+        const pending = soloDoctorLocks.get(clinicId) || ensureSoloDoctor(clinicId).finally(() => soloDoctorLocks.delete(clinicId));
+        soloDoctorLocks.set(clinicId, pending);
+        res.json(publicStaff(await pending));
+    } catch (error: any) {
+        console.error('Individual shifokorni yaratishda xatolik:', error?.message || error);
+        res.status(500).json({ error: "Shifokor profilini yaratib bo'lmadi" });
+    }
+});
+
 app.post('/api/doctors', authenticateToken, async (req, res) => {
     try {
         if (!(await allow(req, res, p => p.can('doctors', 'list', 'create'), "xodim qo'shish"))) return;
