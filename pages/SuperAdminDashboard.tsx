@@ -33,6 +33,7 @@ import { tLabel, tPlanFeature } from '../i18n/labels';
 // Yordam boti paneli faqat superadmin "support" bo'limini ochganda yuklanadi —
 // sotuvchi va boshqa bo'limlar uning kodini umuman olmaydi.
 const SupportPanel = React.lazy(() => import('../components/superadmin/SupportPanel'));
+const DevTasksPanel = React.lazy(() => import('../components/superadmin/DevTasksPanel'));
 
 // Kunlik yangi klinikalar diagrammasi (oxirgi 12 oy)
 const UZ_MONTHS_SHORT = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
@@ -211,7 +212,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
    // brauzerning "orqaga" tugmasi ishlaydi va bo'limga havola yuborsa
    // bo'ladi.
    const [searchParams, setSearchParams] = useSearchParams();
-   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads', 'leadStats', 'calendar', 'support'] as const;
+   const TABS = ['overview', 'clinics', 'plans', 'blocked', 'sales', 'leads', 'leadStats', 'calendar', 'support', 'tasks'] as const;
    type TabId = typeof TABS[number];
 
    const fallbackTab: TabId = salesAgentMode ? 'clinics' : 'overview';
@@ -2127,6 +2128,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                </div>
             );
          })()}
+
+         {/* --- Vazifalar: sotuvchi yozadi, superadmin ko'radi --- */}
+         {activeTab === 'tasks' && (
+            <React.Suspense fallback={<div className="py-14 text-center text-sm text-gray-500 dark:text-gray-400">{t('auto.Yuklanmoqda...')}</div>}>
+               <DevTasksPanel isAdmin={!salesAgentMode} />
+            </React.Suspense>
+         )}
 
          {/* --- Yordam boti (faqat superadmin) --- */}
          {activeTab === 'support' && !salesAgentMode && (

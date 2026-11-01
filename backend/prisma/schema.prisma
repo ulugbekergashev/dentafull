@@ -1127,3 +1127,19 @@ model SubscriptionPayment {
 
   @@index([clinicId, createdAt])
 }
+
+/// Sotuvchilar yozgan vazifalar (superadmin ko'radi): Denta7 yoki DentaLocal uchun
+model DevTask {
+  id         String   @id @default(uuid())
+  product    String   // 'denta7' | 'dentalocal'
+  text       String
+  clinicName String?
+  photos     String   @default("[]") // JSON: Cloudinary manzillari
+  status     String   @default("New") // 'New' | 'InProgress' | 'Done'
+  authorId   String?  // SalesAgent.id (superadmin yozsa bo'sh)
+  authorName String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+
+  @@index([product, createdAt])
+}

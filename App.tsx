@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import {
   LayoutDashboard, Users, Calendar as CalendarIcon,
   DollarSign, Settings as SettingsIcon, Menu, X, Moon, Sun, LogOut,
-  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap, LifeBuoy, KeyRound
+  Building2, Shield, Activity, RefreshCw, AlertTriangle, Loader2, Package, Search, UserCheck, Plus, Edit, Trash2, ListOrdered, FlaskConical, MessageSquare, Wallet, Sparkles, TrendingUp, CreditCard, Target, IdCard, BarChart3, GraduationCap, LifeBuoy, KeyRound, ClipboardList
 } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
 import { AiOverlay } from './components/AiOverlay';
@@ -94,6 +94,8 @@ const SUPER_ADMIN_NAVIGATION = [
   { id: 'leadStats', labelKey: 'nav.leadStats', icon: BarChart3, to: '/admin?tab=leadStats', roles: [UserRole.SUPER_ADMIN] },
   // Yordam boti: mijozlar murojaatlari, bilim bazasi, sozlamalar, qaydlar
   { id: 'support', labelKey: 'nav.support', icon: LifeBuoy, to: '/admin?tab=support', roles: [UserRole.SUPER_ADMIN] },
+  // Sotuvchilar yozgan vazifalar (Denta7 / DentaLocal)
+  { id: 'tasks', labelKey: 'nav.devTasks', icon: ClipboardList, to: '/admin?tab=tasks', roles: [UserRole.SUPER_ADMIN] },
 ];
 
 const SALES_NAVIGATION = [
@@ -102,6 +104,7 @@ const SALES_NAVIGATION = [
   { id: 'blocked', labelKey: 'superAdmin.tabs.blocked', icon: Shield, to: '/sales?tab=blocked', roles: [UserRole.SALES_AGENT] },
   { id: 'leads', labelKey: 'nav.leads', icon: MessageSquare, to: '/sales?tab=leads', roles: [UserRole.SALES_AGENT] },
   { id: 'calendar', labelKey: 'nav.calendar', icon: CalendarIcon, to: '/sales?tab=calendar', roles: [UserRole.SALES_AGENT] },
+  { id: 'tasks', labelKey: 'nav.devTasks', icon: ClipboardList, to: '/sales?tab=tasks', roles: [UserRole.SALES_AGENT] },
 ];
 
 // Helper: get page label key from path

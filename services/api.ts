@@ -3,6 +3,7 @@ import { addDaysISO, applyCallChange } from '../utils/desk';
 import { formatDateToISO } from '../utils/dateUtils';
 import { DEMO_SEED_VERSION } from './demoSeed';
 import { applyClinicPaymentMethods } from '../utils/paymentMethods';
+import type { DevTask, DevTaskStatus, NewDevTask } from '../utils/devTasks';
 import type { LabOptions } from '../utils/labOptions';
 
 // Demo: kassa yopilishlari va harakatlari (inkassatsiya, qaytarish, kassaga solish) boshqa demo
@@ -1493,6 +1494,26 @@ export const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
             });
+        },
+    },
+    /** Sotuvchilar vazifalari (Denta7 / DentaLocal) — superadmin ko'radi */
+    devTasks: {
+        list: () => fetchJson<DevTask[]>('/dev-tasks'),
+        create: (task: NewDevTask) => fetchJson<DevTask>('/dev-tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(task),
+        }),
+        setStatus: (id: string, status: DevTaskStatus) => fetchJson<DevTask>(`/dev-tasks/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+        }),
+        remove: (id: string) => fetchJson<{ success: true }>(`/dev-tasks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+        uploadPhoto: (file: File) => {
+            const formData = new FormData();
+            formData.append('photo', file);
+            return fetchJson<{ url: string }>('/dev-tasks/photo', { method: 'POST', body: formData });
         },
     },
     /** Laboratoriya buyurtmasi ro'yxatlari (buyurtma turi, material) — klinika o'zi tuzadi */

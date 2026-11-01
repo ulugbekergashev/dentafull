@@ -8367,6 +8367,127 @@ app.post('/api/test/send-doctor-schedules', authenticateToken, async (req, res) 
     }
 });
 // ============================================
+// ─── Sotuvchilar vazifalari (superadmin uchun) ───────────────────────────────
+// Sotuvchi klinikalardan eshitgan so'rov/xatoni yozadi: matn va rasmlar.
+// Ikki mahsulotga ajratiladi — Denta7 (bulut) va DentaLocal (oflayn).
+// Superadmin hammasini ko'radi va holatini o'zgartiradi; sotuvchi faqat o'zinikini.
+const DEV_TASK_PRODUCTS = ['denta7', 'dentalocal'];
+const DEV_TASK_STATUSES = ['New', 'InProgress', 'Done'];
+const DEV_TASK_TEXT_MAX = 4000;
+const DEV_TASK_CLINIC_MAX = 120;
+const DEV_TASK_PHOTOS_MAX = 6;
+const DEV_TASK_PHOTO_BYTES = 8 * 1024 * 1024;
+const DEV_TASK_PHOTO_URL = /^https:\/\/res\.cloudinary\.com\/[^\s"'<>]{1,400}$/;
+
+const devTaskPhotoUpload = multer({
+    storage: new CloudinaryStorage({
+        cloudinary,
+        params: async () => ({
+            folder: 'denta7/dev-tasks',
+            allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+            public_id: `${Date.now()}-${Math.round(Math.random() * 1E9)}`,
+        }),
+    }),
+    limits: { fileSize: DEV_TASK_PHOTO_BYTES },
+});
+
+const parseDevTaskPhotos = (raw: unknown): string[] => {
+    try {
+        const list = JSON.parse(String(raw || '[]'));
+        return Array.isArray(list) ? list.filter((u: unknown) => typeof u === 'string') : [];
+    } catch { return []; }
+};
+const devTaskOut = (row: any) => ({ ...row, photos: parseDevTaskPhotos(row.photos) });
+const isDevTaskOwner = (user: any, row: any) => user?.role === 'SALES_AGENT' && !!row.authorId && row.authorId === user.salesAgentId;
+
+app.post('/api/dev-tasks/photo', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), (req, res) => {
+    devTaskPhotoUpload.single('photo')(req, res, (err: any) => {
+        if (err) {
+            const tooBig = err?.code === 'LIMIT_FILE_SIZE';
+            console.error('Vazifa rasmini yuklashda xatolik:', err?.message || err);
+            return res.status(400).json({ error: tooBig ? 'Rasm juda katta (8 MB dan oshmasin)' : "Rasmni yuklab bo'lmadi" });
+        }
+        const url = (req as any).file?.path;
+        if (!url) return res.status(400).json({ error: 'Rasm tanlanmagan' });
+        res.json({ url });
+    });
+});
+
+app.get('/api/dev-tasks', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
+    try {
+        const user = (req as any).user;
+        const where: any = {};
+        if (user.role === 'SALES_AGENT') where.authorId = user.salesAgentId || '__none__';
+        const rows = await (prisma as any).devTask.findMany({ where, orderBy: { createdAt: 'desc' }, take: 500 });
+        res.json(rows.map(devTaskOut));
+    } catch (error: any) {
+        console.error('Vazifalarni o\'qishda xatolik:', error?.message || error);
+        res.status(500).json({ error: "Vazifalarni yuklab bo'lmadi" });
+    }
+});
+
+app.post('/api/dev-tasks', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
+    try {
+        const user = (req as any).user;
+        const { product, text, clinicName, photos } = req.body || {};
+        if (!DEV_TASK_PRODUCTS.includes(product)) return res.status(400).json({ error: 'Mahsulotni tanlang: Denta7 yoki DentaLocal' });
+        const body = String(text || '').trim();
+        if (!body) return res.status(400).json({ error: 'Vazifa matnini yozing' });
+        if (body.length > DEV_TASK_TEXT_MAX) return res.status(400).json({ error: `Matn ${DEV_TASK_TEXT_MAX} belgidan oshmasin` });
+        const clinic = String(clinicName || '').trim().slice(0, DEV_TASK_CLINIC_MAX) || null;
+        const list = Array.isArray(photos) ? photos : [];
+        if (list.length > DEV_TASK_PHOTOS_MAX) return res.status(400).json({ error: `Ko'pi bilan ${DEV_TASK_PHOTOS_MAX} ta rasm` });
+        if (!list.every((u: unknown) => typeof u === 'string' && DEV_TASK_PHOTO_URL.test(u))) {
+            return res.status(400).json({ error: "Rasm manzili noto'g'ri" });
+        }
+        const row = await (prisma as any).devTask.create({
+            data: {
+                product,
+                text: body,
+                clinicName: clinic,
+                photos: JSON.stringify(list),
+                authorId: user.role === 'SALES_AGENT' ? (user.salesAgentId || null) : null,
+                authorName: String(user.name || (user.role === 'SUPER_ADMIN' ? 'Superadmin' : 'Sotuvchi')).slice(0, 120),
+            },
+        });
+        res.json(devTaskOut(row));
+    } catch (error: any) {
+        console.error('Vazifa yaratishda xatolik:', error?.message || error);
+        res.status(500).json({ error: "Vazifani saqlab bo'lmadi" });
+    }
+});
+
+app.put('/api/dev-tasks/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+    try {
+        const { status } = req.body || {};
+        if (!DEV_TASK_STATUSES.includes(status)) return res.status(400).json({ error: "Holat noto'g'ri" });
+        const exists = await (prisma as any).devTask.findUnique({ where: { id: req.params.id } });
+        if (!exists) return res.status(404).json({ error: 'Vazifa topilmadi' });
+        const row = await (prisma as any).devTask.update({ where: { id: req.params.id }, data: { status, updatedAt: new Date() } });
+        res.json(devTaskOut(row));
+    } catch (error: any) {
+        console.error('Vazifa holatini o\'zgartirishda xatolik:', error?.message || error);
+        res.status(500).json({ error: "Holatni o'zgartirib bo'lmadi" });
+    }
+});
+
+app.delete('/api/dev-tasks/:id', authenticateToken, requireRole('SUPER_ADMIN', 'SALES_AGENT'), async (req, res) => {
+    try {
+        const user = (req as any).user;
+        const row = await (prisma as any).devTask.findUnique({ where: { id: req.params.id } });
+        if (!row) return res.status(404).json({ error: 'Vazifa topilmadi' });
+        // Sotuvchi faqat o'zi yozgan va hali ishga olinmagan vazifani o'chira oladi
+        if (user.role !== 'SUPER_ADMIN' && !(isDevTaskOwner(user, row) && row.status === 'New')) {
+            return res.status(403).json({ error: "Bu vazifani o'chirib bo'lmaydi" });
+        }
+        await (prisma as any).devTask.delete({ where: { id: row.id } });
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Vazifani o\'chirishda xatolik:', error?.message || error);
+        res.status(500).json({ error: "Vazifani o'chirib bo'lmadi" });
+    }
+});
+
 // SALES AGENT & SUPER ADMIN ENDPOINTS
 // ============================================
 
@@ -9892,6 +10013,21 @@ async function runStartupMigrations() {
             "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     `);
+    await migrationStep('DevTask table', `
+        CREATE TABLE IF NOT EXISTS "DevTask" (
+            "id"         TEXT NOT NULL PRIMARY KEY,
+            "product"    TEXT NOT NULL,
+            "text"       TEXT NOT NULL,
+            "clinicName" TEXT,
+            "photos"     TEXT NOT NULL DEFAULT '[]',
+            "status"     TEXT NOT NULL DEFAULT 'New',
+            "authorId"   TEXT,
+            "authorName" TEXT NOT NULL,
+            "createdAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt"  TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    await migrationStep('DevTask product index', `CREATE INDEX IF NOT EXISTS "DevTask_product_createdAt_idx" ON "DevTask" ("product", "createdAt")`);
     await migrationStep('DemoRequest table', `
         CREATE TABLE IF NOT EXISTS "DemoRequest" (
             "id"           TEXT NOT NULL PRIMARY KEY,
