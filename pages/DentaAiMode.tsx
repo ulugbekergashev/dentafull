@@ -6,6 +6,7 @@ import {
   ThumbsUp, ThumbsDown, Check, X, History, Send, Trash2, Mic, MicOff,
 } from 'lucide-react';
 import { API_URL, isDemoMode } from '../services/api';
+import { readAuthToken } from '../services/authStore';
 import { demoAiRequest, demoAiStream } from '../services/demoAi';
 import { UserRole } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -105,12 +106,7 @@ interface ConversationRow {
 // ─── API ─────────────────────────────────────────────────────────────────────
 
 function authToken(): string | null {
-  try {
-    const raw = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
-    return raw ? JSON.parse(raw)?.token ?? null : null;
-  } catch {
-    return null;
-  }
+  return readAuthToken();
 }
 
 function authHeaders(): Record<string, string> {

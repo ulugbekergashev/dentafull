@@ -5,6 +5,7 @@ import { DEMO_SEED_VERSION } from './demoSeed';
 import { applyClinicPaymentMethods } from '../utils/paymentMethods';
 import type { DevTask, DevTaskStatus, NewDevTask } from '../utils/devTasks';
 import type { LabOptions } from '../utils/labOptions';
+import { clearAuth, readAuthRaw, readAuthToken, updateAuthToken } from './authStore';
 
 // Demo: kassa yopilishlari va harakatlari (inkassatsiya, qaytarish, kassaga solish) boshqa demo
 // ma'lumoti kabi shu kun davomida brauzerda saqlanadi; ertasi kuni demo yangidan boshlanadi
@@ -80,7 +81,7 @@ console.log('🔌 API Configuration:', {
 
 export const isDemoMode = () => {
     try {
-        const stored = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+        const stored = readAuthRaw();
         if (stored) {
             const parsed = JSON.parse(stored);
             return parsed.isDemo === true;
@@ -175,16 +176,9 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
         ...(options.headers || {}),
     };
 
-    const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
-    if (storedAuth) {
-        try {
-            const { token } = JSON.parse(storedAuth);
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-        } catch (e) {
-            // Ignore parse error
-        }
+    const token = readAuthToken();
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
     if (activeBranchId) {
         headers['X-Branch-Id'] = activeBranchId;
@@ -198,20 +192,8 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
     // Backend tokenni yangilagan bo'lsa (muddati yaqinlashgan), uni jimgina saqlaymiz.
     // Foydalanuvchi faol ekan, sessiyasi hech qachon tugamaydi.
     const refreshedToken = response.headers.get('X-Refreshed-Token');
-    if (refreshedToken) {
-        try {
-            // Sessiya qaysi omborda saqlangan bo'lsa, o'shanisini yangilaymiz
-            const store = sessionStorage.getItem('dentalflow_auth') ? sessionStorage : localStorage;
-            const raw = store.getItem('dentalflow_auth');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                parsed.token = refreshedToken;
-                store.setItem('dentalflow_auth', JSON.stringify(parsed));
-            }
-        } catch (e) {
-            // Saqlab bo'lmasa ham muammo yo'q — eski token muddati tugaguncha ishlaydi
-        }
-    }
+    // Sessiya qaysi joyda saqlangan bo'lsa, o'shanisi yangilanadi (services/authStore.ts)
+    if (refreshedToken) updateAuthToken(refreshedToken);
 
     // 401 — token yo'q/yaroqsiz. 403 esa ikki xil bo'lishi mumkin: rol yetarli emas
     // (sessiya joyida) yoki eski backend token uchun 403 qaytargan. Ikkinchisida ham
@@ -223,8 +205,7 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
     }
 
     if (isSessionExpired) {
-        localStorage.removeItem('dentalflow_auth');
-        sessionStorage.removeItem('dentalflow_auth');
+        clearAuth();
         window.dispatchEvent(new Event('auth:unauthorized'));
         // We throw an error to stop execution, but the event listener in App.tsx will handle the redirect/UI update
         throw new Error('Session expired');
@@ -988,7 +969,7 @@ export const api = {
         dentalocalExport: async (id: string): Promise<Blob> => {
             if (isDemoMode()) throw new Error(DEMO_UNAVAILABLE);
             let token = '';
-            try { token = JSON.parse(sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth') || '{}').token || ''; } catch { /* token yo'q */ }
+            token = readAuthToken() || '';
             const response = await fetch(`${API_URL}/admin/clinics/${encodeURIComponent(id)}/dentalocal-export`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });

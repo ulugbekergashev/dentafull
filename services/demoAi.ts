@@ -1,6 +1,7 @@
 import { Appointment } from '../types';
 import { formatDateToISO } from '../utils/dateUtils';
 import { buildUnpaidRows } from '../utils/unpaid';
+import { readAuth } from './authStore';
 import { DEMO_APPOINTMENTS, DEMO_DOCTORS, DEMO_EXPENSES, DEMO_INVENTORY, DEMO_LEADS, DEMO_PATIENTS, DEMO_SERVICES, DEMO_TRANSACTIONS, ensureDemoData } from './demoData';
 
 /**
@@ -67,8 +68,7 @@ const doctorName = (id?: string) => {
 
 function currentRole(): string {
     try {
-        const raw = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
-        return (raw && JSON.parse(raw).role) || 'CLINIC_ADMIN';
+        return readAuth<{ role?: string }>()?.role || 'CLINIC_ADMIN';
     } catch {
         return 'CLINIC_ADMIN';
     }

@@ -1,4 +1,5 @@
 import { API_URL, isDemoMode } from './api';
+import { clearAuth, readAuthToken, updateAuthToken } from './authStore';
 
 // ─── Yordam boti: superadmin so'rovlari ──────────────────────────────────────
 // services/api.ts ga tegilmagan: u yerdagi fetchJson eksport qilinmaydi, shuning
@@ -11,7 +12,6 @@ import { API_URL, isDemoMode } from './api';
 // Javoblar shu yerda tartibga solinadi (massiv bo'lmasa — bo'sh massiv, son
 // bo'lmasa — 0): ekran kutilmagan shakldagi javobdan oq sahifaga aylanmasligi kerak.
 
-const AUTH_KEY = 'dentalflow_auth';
 
 // ─── Tiplar ──────────────────────────────────────────────────────────────────
 
@@ -206,32 +206,11 @@ export const isSupportApiError = (err: unknown): err is SupportApiError =>
 
 // ─── So'rov ──────────────────────────────────────────────────────────────────
 
-const authStore = (): Storage => (sessionStorage.getItem(AUTH_KEY) ? sessionStorage : localStorage);
-
-function readToken(): string | null {
-    try {
-        const raw = authStore().getItem(AUTH_KEY);
-        const token = raw ? JSON.parse(raw)?.token : null;
-        return typeof token === 'string' && token ? token : null;
-    } catch {
-        return null;
-    }
-}
-
-function saveRefreshedToken(token: string): void {
-    try {
-        const store = authStore();
-        const raw = store.getItem(AUTH_KEY);
-        if (!raw) return;
-        store.setItem(AUTH_KEY, JSON.stringify({ ...JSON.parse(raw), token }));
-    } catch {
-        // Saqlab bo'lmasa ham eski token muddati tugaguncha ishlaydi
-    }
-}
+const readToken = readAuthToken;
+const saveRefreshedToken = updateAuthToken;
 
 function expireSession(): void {
-    localStorage.removeItem(AUTH_KEY);
-    sessionStorage.removeItem(AUTH_KEY);
+    clearAuth();
     window.dispatchEvent(new Event('auth:unauthorized'));
 }
 

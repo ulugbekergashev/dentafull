@@ -1,6 +1,7 @@
 import { Patient, Appointment, Transaction, Expense, Doctor, Receptionist, Service, Clinic, SubscriptionPlan, InventoryItem, InventoryLog, ServiceCategory, PatientDiagnosis, Lead, InstallmentPlan, LabTechnician, LabOrder, MessageTemplate, AutomationRule, MessageLog, TriggerDescriptor, SegmentFieldDescriptor, Recall, FlowLog, TicketLog, AuditLogEntry, AuditLogQuery } from '../types';
 import { formatDateToISO } from '../utils/dateUtils';
 import { advanceDemoDay, buildDemoSeed, DEMO_SEED_VERSION, DemoDayState } from './demoSeed';
+import { readAuth } from './authStore';
 
 /**
  * Demo rejim ma'lumotlari. Demo butunlay brauzerda ishlaydi: services/api.ts dagi demo
@@ -28,8 +29,7 @@ export const loadDemoData = () => {
 /** Demo sessiya ochiqmi — api.ts dagi isDemoMode bilan bir xil (aylanma import bo'lmasin) */
 const demoSessionActive = (): boolean => {
     try {
-        const raw = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
-        return !!raw && JSON.parse(raw).isDemo === true;
+        return readAuth<{ isDemo?: unknown }>()?.isDemo === true;
     } catch {
         return false;
     }

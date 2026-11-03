@@ -9,6 +9,7 @@ import { InstallmentsTab } from '../components/InstallmentsTab';
 import { RegionDistrictSelect } from '../components/RegionDistrictSelect';
 import { ToothStatus, Patient, Appointment, Transaction, Doctor, Service, ICD10Code, PatientDiagnosis, Clinic, SubscriptionPlan, InventoryLog, InventoryItem, ServiceCategory, UserRole, Recall, PaymentMethod, PatientPhoto, VisitRequirements, PendingMaterial, InstallmentPlan } from '../types';
 import { api } from '../services/api';
+import { readAuthToken } from '../services/authStore';
 import { diagnosisTemplates } from './diagnosisTemplates';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDobDDMMYYYY, calcAge, formatDateToISO } from '../utils/dateUtils';
@@ -311,11 +312,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
 
    useEffect(() => {
-      const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
-      if (storedAuth) {
+      const storedToken = readAuthToken();
+      if (storedToken) {
          try {
-            const { token } = JSON.parse(storedAuth);
-            setToken(token);
+            setToken(storedToken);
          } catch (e) {
             console.error('Failed to parse auth token');
          }

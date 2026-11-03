@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_URL, DEMO_UNAVAILABLE, isDemoMode } from '../services/api';
+import { readAuthToken } from '../services/authStore';
 
 // ─── Ovozli kiritish ──────────────────────────────────────────────────────────
 //
@@ -149,12 +150,7 @@ export const voiceSupported = (): boolean =>
     !!nativeRecognition() || !!(navigator.mediaDevices?.getUserMedia);
 
 function authToken(): string | null {
-    try {
-        const raw = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
-        return raw ? JSON.parse(raw)?.token ?? null : null;
-    } catch {
-        return null;
-    }
+    return readAuthToken();
 }
 
 export function useVoiceInput({ lang, onResult }: Options) {

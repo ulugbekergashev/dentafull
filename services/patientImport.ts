@@ -5,6 +5,7 @@
  */
 import * as XLSX from 'xlsx';
 import { API_URL, DEMO_UNAVAILABLE, getActiveBranchId, isDemoMode } from './api';
+import { clearAuth, readAuthToken, updateAuthToken } from './authStore';
 import {
     Cell, ChunkResult, ImportProblem, ImportRow, ImportTotals, MAX_FILE_ROWS, RunOptions, SheetData,
     excelSerialToISO, isoToLocal, runChunks,
@@ -16,7 +17,6 @@ export const IMPORT_CHUNK_SIZE = 500;
 const REQUEST_TIMEOUT_MS = 60000;
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
 const MAX_FILE_COLUMNS = 200;
-const AUTH_STORAGE_KEY = 'dentalflow_auth';
 const MAX_COLUMN_WIDTH = 40;
 const MAX_SHEET_NAME = 31;
 
@@ -33,15 +33,9 @@ async function postImport(rows: ImportRow[], dryRun: boolean): Promise<ChunkResu
     // Demo butunlay brauzerda ishlaydi — so'rov production API'ga "demo-token" bilan ketmasin
     if (isDemoMode()) throw new Error(DEMO_UNAVAILABLE);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const storedAuth = sessionStorage.getItem(AUTH_STORAGE_KEY) || localStorage.getItem(AUTH_STORAGE_KEY);
-    if (storedAuth) {
-        try {
-            const { token } = JSON.parse(storedAuth);
-            if (token) headers.Authorization = `Bearer ${token}`;
-        } catch {
-            // Buzilgan yozuv — tokensiz so'rov 401 oladi va sessiya pastda yopiladi
-        }
-    }
+    // Yozuv yo'q yoki buzilgan bo'lsa — tokensiz so'rov 401 oladi va sessiya pastda yopiladi
+    const token = readAuthToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
     const branchId = getActiveBranchId();
     if (branchId) headers['X-Branch-Id'] = branchId;
 
@@ -60,21 +54,12 @@ async function postImport(rows: ImportRow[], dryRun: boolean): Promise<ChunkResu
     }
 
     const refreshedToken = response.headers.get('X-Refreshed-Token');
-    if (refreshedToken) {
-        try {
-            const store = sessionStorage.getItem(AUTH_STORAGE_KEY) ? sessionStorage : localStorage;
-            const raw = store.getItem(AUTH_STORAGE_KEY);
-            if (raw) store.setItem(AUTH_STORAGE_KEY, JSON.stringify({ ...JSON.parse(raw), token: refreshedToken }));
-        } catch {
-            // Saqlab bo'lmasa ham muammo yo'q — eski token muddati tugaguncha ishlaydi
-        }
-    }
+    if (refreshedToken) updateAuthToken(refreshedToken);
 
     const data = await response.json().catch(() => ({}));
     const tokenRejected = response.status === 403 && typeof data?.error === 'string' && data.error.includes('Token yaroqsiz');
     if (response.status === 401 || tokenRejected) {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        clearAuth();
         window.dispatchEvent(new Event('auth:unauthorized'));
         throw new Error('Session expired');
     }

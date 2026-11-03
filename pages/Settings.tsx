@@ -16,6 +16,7 @@ import { User, DollarSign, Users, Edit, Trash2, CheckCircle, Bot, Phone, Message
 import { AuditLogPanel } from '../components/AuditLogPanel';
 import { LabOptionsCard } from '../components/LabOptionsCard';
 import { api, API_URL, isDemoMode } from '../services/api';
+import { readAuthRaw } from '../services/authStore';
 import { usePerms } from '../context/PermissionsContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -461,7 +462,7 @@ export const Settings: React.FC<SettingsProps> = ({
          // Demo'da bot yo'q: token soxta, serverga so'rov yuborilmaydi
          if (currentClinic?.id && currentClinic?.botToken && !isDemoMode()) {
             try {
-               const authData = localStorage.getItem('dentalflow_auth');
+               const authData = readAuthRaw();
                if (!authData) {
                   console.error('No auth data found');
                   return;

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { API_URL, isDemoMode } from '../services/api';
+import { readAuthToken } from '../services/authStore';
 import { UserRole } from '../types';
 
 // ─── Tiplар ─────────────────────────────────────────────────────────────────
@@ -65,15 +66,7 @@ const DEMO_INSIGHTS = [
 // ─── Helper: API so'rov ──────────────────────────────────────────────────────
 
 function getAuthToken(): string | null {
-  try {
-    const raw =
-      sessionStorage.getItem('dentalflow_auth') ||
-      localStorage.getItem('dentalflow_auth');
-    if (!raw) return null;
-    return JSON.parse(raw)?.token || null;
-  } catch {
-    return null;
-  }
+  return readAuthToken();
 }
 
 async function apiPost<T>(path: string, body: object): Promise<T> {

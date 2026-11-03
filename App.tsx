@@ -48,6 +48,7 @@ import { readGuideParam, stripGuideParam, stashPendingGuide, takePendingGuide } 
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import type { CashCloseInput } from './services/api';
+import { clearAuth, readAuthRaw } from './services/authStore';
 import { makePermChecker } from './utils/permissions';
 import { PermissionsProvider } from './context/PermissionsContext';
 import type { GuideContext } from './components/guide/guides';
@@ -284,7 +285,7 @@ const AppContent: React.FC = () => {
 
   // Check for stored session on mount
   useEffect(() => {
-    const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+    const storedAuth = readAuthRaw();
     if (storedAuth) {
       try {
         const { role, name, clinicId: storedClinicId, doctorId: storedDoctorId, receptionistId: storedReceptionistId, technicianId: storedTechnicianId } = JSON.parse(storedAuth);
@@ -309,8 +310,7 @@ const AppContent: React.FC = () => {
         }
       } catch (e) {
         console.error('Failed to parse stored auth', e);
-        localStorage.removeItem('dentalflow_auth');
-        sessionStorage.removeItem('dentalflow_auth');
+        clearAuth();
       }
     }
 
@@ -328,7 +328,7 @@ const AppContent: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+        const storedAuth = readAuthRaw();
         const isDemo = storedAuth ? JSON.parse(storedAuth).isDemo : false;
 
         if (isDemo && clinicId === 'demo-clinic-1') {
@@ -499,8 +499,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('dentalflow_auth');
-    sessionStorage.removeItem('dentalflow_auth');
+    clearAuth();
     setIsAuthenticated(false);
     setUserRole(UserRole.CLINIC_ADMIN);
     setUserName('');
@@ -514,7 +513,7 @@ const AppContent: React.FC = () => {
     // Sessiya allaqachon tozalangan bo'lsa qayta urinish befoyda — tokensiz so'rov
     // yana 401 beradi va foydalanuvchi xato ekranida qamalib qoladi. To'g'ridan-to'g'ri
     // login sahifasiga chiqaramiz.
-    const storedAuth = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+    const storedAuth = readAuthRaw();
     if (!storedAuth) {
       handleLogout();
       return;
@@ -596,7 +595,7 @@ const AppContent: React.FC = () => {
 
       let activeClinicId = clinicId;
       if (!activeClinicId) {
-        const stored = sessionStorage.getItem('dentalflow_auth') || localStorage.getItem('dentalflow_auth');
+        const stored = readAuthRaw();
         if (stored) {
           const parsed = JSON.parse(stored);
           if (parsed.clinicId) activeClinicId = parsed.clinicId;

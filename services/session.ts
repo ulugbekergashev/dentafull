@@ -5,7 +5,7 @@
  * so'rovlar (yordam havolasi, parolni almashtirish, xatolik haqida xabar) shu yordamchidan
  * foydalanadi: token qayerda turishini uch joyda takrorlamaslik uchun.
  */
-const AUTH_KEY = 'dentalflow_auth';
+import { readAuth } from './authStore';
 
 export interface Session {
     /** Kirgan foydalanuvchining tokeni; kirilmagan bo'lsa — null */
@@ -17,18 +17,13 @@ export interface Session {
 const NO_SESSION: Session = { token: null, isDemo: false };
 
 export function readSession(): Session {
-    try {
-        const raw = sessionStorage.getItem(AUTH_KEY) || localStorage.getItem(AUTH_KEY);
-        if (!raw) return NO_SESSION;
-        const parsed = JSON.parse(raw);
-        return {
-            token: typeof parsed?.token === 'string' && parsed.token ? parsed.token : null,
-            isDemo: parsed?.isDemo === true,
-        };
-    } catch {
-        // Xotira yopiq (shaxsiy rejim) yoki yozuv buzilgan — kirilmagan deb hisoblanadi
-        return NO_SESSION;
-    }
+    // Xotira yopiq (shaxsiy rejim) yoki yozuv buzilgan bo'lsa — kirilmagan deb hisoblanadi
+    const parsed = readAuth<{ token?: unknown; isDemo?: unknown }>();
+    if (!parsed) return NO_SESSION;
+    return {
+        token: typeof parsed.token === 'string' && parsed.token ? parsed.token : null,
+        isDemo: parsed.isDemo === true,
+    };
 }
 
 export function jsonHeaders(token?: string | null): Record<string, string> {

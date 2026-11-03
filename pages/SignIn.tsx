@@ -3,6 +3,7 @@ import { Button, Input, Card } from '../components/Common';
 import { UserRole } from '../types';
 import { AlertCircle, Lock, User, Eye, EyeOff, Send } from 'lucide-react';
 import { api } from '../services/api';
+import { saveAuth } from '../services/authStore';
 import { getSupportInfo, openSupport } from '../services/support';
 import { useLanguage } from '../context/LanguageContext';
 import { LogoMark } from '../components/Logo';
@@ -43,8 +44,9 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
           token: response.token
         };
 
-        // Har doim eslab qolinadi (localStorage)
-        localStorage.setItem('dentalflow_auth', JSON.stringify(authData));
+        // Har doim eslab qolinadi. Brauzer xotirasi to'lgan yoki yopiq bo'lsa ham kirish
+        // o'tadi: saveAuth joy bo'shatadi yoki zaxira joyga saqlaydi (services/authStore.ts)
+        saveAuth(authData);
 
         onLogin(response.role as UserRole, response.name, response.clinicId, response.doctorId);
       } else {
