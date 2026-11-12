@@ -112,7 +112,7 @@ export const SupportArticlesTab: React.FC = () => {
                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap gap-3">
                     <div className="relative flex-1 min-w-[200px]">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                        <input
+                        <input autoComplete="off"
                             type="search"
                             value={search}
                             onChange={event => setSearch(event.target.value)}

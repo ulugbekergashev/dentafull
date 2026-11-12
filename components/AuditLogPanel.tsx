@@ -172,7 +172,7 @@ export const AuditLogPanel: React.FC<{ clinicId: string; doctors: Doctor[]; bran
                 </select>
                 <label className="relative flex-1 min-w-[180px]">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
+                    <input autoComplete="off"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder={t('audit.search')}

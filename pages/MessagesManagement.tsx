@@ -1214,7 +1214,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         {showRecipients && (
                                             <div className="border-t border-gray-100 dark:border-gray-800">
                                                 <div className="px-4 py-2 flex flex-wrap items-center gap-2">
-                                                    <input
+                                                    <input autoComplete="off"
                                                         type="text"
                                                         value={recipientSearch}
                                                         onChange={e => setRecipientSearch(e.target.value)}
@@ -1411,7 +1411,7 @@ export const MessagesManagement: React.FC<MessagesManagementProps> = ({
                                         </p>
                                         <div className="flex flex-wrap gap-2">
                                             {manualChannel !== 'telegram' && (
-                                                <input
+                                                <input autoComplete="off"
                                                     type="tel"
                                                     placeholder="+998 90 123 45 67"
                                                     value={testPhone}

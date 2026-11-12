@@ -423,7 +423,7 @@ export const Leads: React.FC<LeadsProps> = ({
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                     <div className="relative flex-1 sm:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
+                        <input autoComplete="off"
                             type="text"
                             placeholder={t('leads.search')}
                             value={searchTerm}
@@ -602,7 +602,7 @@ export const Leads: React.FC<LeadsProps> = ({
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
                                     {t('leads.addLeadModal.phone')} *
                                 </label>
-                                <input
+                                <input autoComplete="off"
                                     type="tel"
                                     required
                                     value={formData.phone}

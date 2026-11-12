@@ -64,7 +64,7 @@ export const PatientQuickSearch: React.FC<PatientQuickSearchProps> = ({ patients
         <div ref={boxRef} className="relative">
             <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm focus-within:ring-2 focus-within:ring-primary-500/30">
                 <Search className="w-3.5 h-3.5 text-gray-400 ml-2.5 shrink-0" />
-                <input
+                <input autoComplete="off"
                     value={query}
                     onChange={e => { setQuery(e.target.value); setOpen(true); }}
                     onFocus={() => setOpen(true)}

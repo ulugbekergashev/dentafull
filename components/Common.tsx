@@ -146,7 +146,11 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   containerClassName?: string;
 }
 
-export const Input: React.FC<InputProps> = ({ label, error, helperText, className = '', containerClassName = 'w-full', ...props }) => {
+export const Input: React.FC<InputProps> = ({ label, error, helperText, className = '', containerClassName = 'w-full', autoComplete, ...props }) => {
+  // Brauzer avval yozilgan telefon/sana/ismlarni taklif qilib, ro'yxatdagi birinchisini
+  // o'zi qo'yib yuborardi (klinika shikoyati). Shu sabab avtoto'ldirish odatda o'chiq;
+  // parol maydonlari va o'zi aniq so'ragan maydonlar bundan mustasno.
+  const autoCompleteValue = autoComplete ?? (props.type === 'password' ? undefined : 'off');
   const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
     props.onClick?.(e);
   };
@@ -166,6 +170,7 @@ export const Input: React.FC<InputProps> = ({ label, error, helperText, classNam
       <input
         className={`flex h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-white ${props.type === 'date' ? 'cursor-pointer' : ''} ${className} ${error ? 'border-red-500 focus:ring-red-500' : ''}`}
         {...props}
+        autoComplete={autoCompleteValue}
         onClick={handleClick}
         onWheel={handleWheel}
       />
@@ -247,7 +252,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value
       {isOpen && (
         <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 max-h-60 flex flex-col pt-2 mb-2">
           <div className="px-2 pb-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-            <input
+            <input autoComplete="off"
               type="text"
               className="w-full rounded-lg border border-gray-300 bg-transparent px-3 py-1.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:text-white"
               placeholder="Qidirish..."

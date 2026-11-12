@@ -179,7 +179,7 @@ export const DateJumpInput: React.FC<{ onSubmit: (iso: string) => void }> = ({ o
 
     return (
         <form onSubmit={submit} className="mb-2">
-            <input
+            <input autoComplete="off"
                 type="text"
                 inputMode="numeric"
                 autoFocus={autoFocus}
@@ -313,7 +313,7 @@ export const DateField: React.FC<DateFieldProps> = ({ value: rawValue, onChange,
         <div className={className}>
             {label && <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>}
             <div ref={anchorRef} className="relative">
-                <input
+                <input autoComplete="off"
                     type="text"
                     inputMode="numeric"
                     value={text}

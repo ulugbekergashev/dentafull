@@ -490,10 +490,10 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                     <button type="button" onClick={clearPatient} aria-label={t('common.cancel')} className="p-1 rounded-md text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <input value={newForm.lastName} onChange={e => setNewForm(f => ({ ...f, lastName: e.target.value }))} placeholder={t('auto.Familiya *')} aria-label={t('auto.Familiya *')} className="h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm dark:text-white" />
-                                    <input value={newForm.firstName} onChange={e => setNewForm(f => ({ ...f, firstName: e.target.value }))} placeholder={t('auto.Ism *')} aria-label={t('auto.Ism *')} className="h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm dark:text-white" />
+                                    <input autoComplete="off" value={newForm.lastName} onChange={e => setNewForm(f => ({ ...f, lastName: e.target.value }))} placeholder={t('auto.Familiya *')} aria-label={t('auto.Familiya *')} className="h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm dark:text-white" />
+                                    <input autoComplete="off" value={newForm.firstName} onChange={e => setNewForm(f => ({ ...f, firstName: e.target.value }))} placeholder={t('auto.Ism *')} aria-label={t('auto.Ism *')} className="h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm dark:text-white" />
                                 </div>
-                                <input value={newForm.phone} onChange={e => setNewForm(f => ({ ...f, phone: e.target.value }))} placeholder={`${t('auto.Telefon')} *`} aria-label={t('auto.Telefon')} inputMode="tel" className="h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm dark:text-white" />
+                                <input autoComplete="off" value={newForm.phone} onChange={e => setNewForm(f => ({ ...f, phone: e.target.value }))} placeholder={`${t('auto.Telefon')} *`} aria-label={t('auto.Telefon')} inputMode="tel" className="h-10 px-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm dark:text-white" />
                                 <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
                                     <DateField label={t("auto.Tug'ilgan sana")} value={newForm.dob} onChange={dob => setNewForm(f => ({ ...f, dob }))} max={today} className="w-full" />
                                     <div className="flex h-10 rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden" role="radiogroup" aria-label={t('auto.Jinsi')}>
@@ -533,7 +533,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                                 <div className="flex items-center gap-2">
                                     <label className="flex-1 min-w-0 flex items-center gap-2.5 h-11 px-3.5 rounded-xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus-within:border-primary-400">
                                         <Search className="w-4 h-4 text-gray-400 shrink-0" />
-                                        <input
+                                        <input autoComplete="off"
                                             value={query}
                                             onChange={e => setQuery(e.target.value)}
                                             placeholder={t('booking.searchPlaceholder')}
@@ -760,7 +760,7 @@ export const BookingPanel: React.FC<BookingPanelProps> = ({
                             <input type="number" min={5} step={5} value={duration} onChange={e => setDuration(Number(e.target.value))} aria-label={t('booking.duration')} className="w-full h-11 px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white tabular-nums" />
                         </div>
                     </div>
-                    <input
+                    <input autoComplete="off"
                         value={notes}
                         onChange={e => setNotes(e.target.value)}
                         placeholder={t('booking.notes')}

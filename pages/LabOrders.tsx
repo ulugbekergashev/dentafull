@@ -248,7 +248,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('auto.Bemor yoki texnik...')} className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          <input autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder={t('auto.Bemor yoki texnik...')} className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
         </div>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
           <option value="all">{t('auto.Barcha holat')}</option>
@@ -378,7 +378,7 @@ export const LabOrders: React.FC<Props> = ({ clinicId, labTechnicians, labOrders
                         >✕</button>
                       </div>
                     ) : (
-                      <input
+                      <input autoComplete="off"
                         value={patientSearch}
                         onChange={e => {
                           setPatientSearch(e.target.value);

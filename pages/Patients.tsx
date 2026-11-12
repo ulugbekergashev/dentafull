@@ -462,7 +462,7 @@ export const Patients: React.FC<PatientsProps> = ({
         <div data-tour="pat-search" className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <input
+            <input autoComplete="off"
               type="text"
               placeholder={t('patients.search.placeholder')}
               className="pl-9 h-9 w-full rounded-md border border-gray-300 bg-transparent text-sm focus:ring-2 focus:ring-primary-500 dark:border-gray-700 dark:text-white"

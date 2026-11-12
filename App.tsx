@@ -1751,6 +1751,7 @@ const AppContent: React.FC = () => {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                 <input
                   type="text"
+                  autoComplete="off"
                   placeholder={t('header.search')}
                   value={searchBarTerm}
                   onChange={(e) => setSearchBarTerm(e.target.value)}
