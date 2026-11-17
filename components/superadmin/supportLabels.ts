@@ -14,6 +14,7 @@ export const TICKET_STATUSES = ['open', 'waiting_operator', 'human', 'resolved',
 
 export const DIAG_KINDS = [
     'bot_down', 'bot_up', 'bot_error', 'login_failed', 'automation_skip', 'client_error', 'server_error',
+    'session_rejected', 'session_end',
 ] as const;
 
 /** Bilim bazasi bo'limlari (backend/support/kbTypes.ts dagi `module`) */
@@ -94,6 +95,8 @@ const DIAG_TONE: Record<string, PillTone> = {
     automation_skip: 'amber',
     client_error: 'red',
     server_error: 'red',
+    session_rejected: 'amber',
+    session_end: 'amber',
 };
 
 /**
@@ -161,6 +164,8 @@ export function useSupportLabels() {
         automation_skip: t('auto.Avtomatik xabar yuborilmadi'),
         client_error: t('auto.Ilovada xato'),
         server_error: t('auto.Serverda xato'),
+        session_rejected: t('auto.Server sessiyani rad etdi'),
+        session_end: t('auto.Ilova tizimdan chiqarib yubordi'),
     };
 
     // Qoralama taqdiri. Server qiymatlari shartnomada sanab o'tilmagan —

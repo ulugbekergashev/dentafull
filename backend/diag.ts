@@ -19,7 +19,7 @@ import { createHash, randomUUID } from 'crypto';
 
 export interface DiagInput {
     clinicId?: string | null;
-    /** bot_down | bot_up | bot_error | login_failed | automation_skip | client_error | server_error */
+    /** bot_down | bot_up | bot_error | login_failed | automation_skip | client_error | server_error | session_rejected | session_end */
     kind: string;
     /** Nima haqida: qoida id, login, sahifa manzili */
     subject?: string | null;

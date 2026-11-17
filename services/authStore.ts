@@ -64,13 +64,46 @@ export function readAuthRaw(): string | null {
     return memoryAuth || safeGet(sessionStorage) || safeGet(localStorage);
 }
 
+/**
+ * Oxirgi ma'lum kim va qachon kirgani — sessiya yopilganda hisobotga (services/sessionReport.ts).
+ * Token yo'qolgan bo'lsa ham qaysi klinika ekanini aytib berish uchun xotirada turadi.
+ */
+let lastIdentity: { clinicId?: string; role?: string; savedAt?: number } = {};
+
+const rememberIdentity = (data: Record<string, any>, savedAt?: number): void => {
+    lastIdentity = {
+        clinicId: typeof data.clinicId === 'string' ? data.clinicId : lastIdentity.clinicId,
+        role: typeof data.role === 'string' ? data.role : lastIdentity.role,
+        savedAt: savedAt ?? lastIdentity.savedAt,
+    };
+};
+
+/** Kirish yozuvi hozir qayerda turibdi */
+export function authPlace(): AuthPlace | 'none' {
+    if (memoryAuth) return 'memory';
+    if (safeGet(sessionStorage)) return 'session';
+    if (safeGet(localStorage)) return 'local';
+    return 'none';
+}
+
+/** Hisobot uchun: oxirgi ma'lum klinika, rol va kirishdan beri necha soniya o'tgani */
+export function authDiagnostics(): { clinicId: string | null; role: string | null; secSinceLogin: number | null } {
+    return {
+        clinicId: lastIdentity.clinicId || null,
+        role: lastIdentity.role || null,
+        secSinceLogin: lastIdentity.savedAt ? Math.round((Date.now() - lastIdentity.savedAt) / 1000) : null,
+    };
+}
+
 /** Saqlangan kirish yozuvi obyekt ko'rinishida; yo'q yoki buzilgan bo'lsa — null */
 export function readAuth<T = Record<string, any>>(): T | null {
     const raw = readAuthRaw();
     if (!raw) return null;
     try {
         const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed as T : null;
+        if (!parsed || typeof parsed !== 'object') return null;
+        rememberIdentity(parsed);
+        return parsed as T;
     } catch {
         return null;
     }
@@ -86,6 +119,7 @@ export function readAuthToken(): string | null {
 export function saveAuth(data: Record<string, unknown>): AuthPlace {
     const value = JSON.stringify(data);
     clearAuth();
+    rememberIdentity(data, Date.now());
     if (trySet(localStorage, value)) return 'local';
     if (freeLocalSpace() > 0 && trySet(localStorage, value)) return 'local';
     if (trySet(sessionStorage, value)) return 'session';

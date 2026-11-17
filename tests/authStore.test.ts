@@ -86,3 +86,23 @@ test('buzilgan yozuv — kirilmagan deb hisoblanadi', () => {
     assert.equal(readAuth(), null);
     assert.equal(readAuthToken(), null);
 });
+
+test('hisobot uchun: kirish yozuvi qayerda turgani va oxirgi ma\'lum klinika', async () => {
+    const { authPlace, authDiagnostics } = await import('../services/authStore');
+    assert.equal(authPlace(), 'none');
+    g.localStorage = new FakeStorage(10);
+    saveAuth(auth);
+    assert.equal(authPlace(), 'session');
+    const d = authDiagnostics();
+    assert.equal(d.clinicId, 'c1');
+    assert.equal(d.role, 'CLINIC_ADMIN');
+    assert.ok(d.secSinceLogin !== null && d.secSinceLogin >= 0 && d.secSinceLogin < 5);
+});
+
+test('token yo\'qolsa ham oxirgi ma\'lum klinika hisobotda qoladi', async () => {
+    const { authDiagnostics, authPlace } = await import('../services/authStore');
+    saveAuth(auth);
+    clearAuth();
+    assert.equal(authPlace(), 'none');
+    assert.equal(authDiagnostics().clinicId, 'c1');
+});

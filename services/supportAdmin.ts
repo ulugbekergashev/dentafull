@@ -21,7 +21,8 @@ export type SupportCategorySetting = 'rule' | 'auto' | 'draft';
 export type SupportTicketStatus = 'open' | 'waiting_operator' | 'human' | 'resolved' | 'closed';
 export type SupportDiagKind =
     | 'bot_down' | 'bot_up' | 'bot_error' | 'login_failed'
-    | 'automation_skip' | 'client_error' | 'server_error';
+    | 'automation_skip' | 'client_error' | 'server_error'
+    | 'session_rejected' | 'session_end';
 
 export interface SupportStats {
     tickets: number;

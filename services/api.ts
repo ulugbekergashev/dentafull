@@ -6,6 +6,7 @@ import { applyClinicPaymentMethods } from '../utils/paymentMethods';
 import type { DevTask, DevTaskStatus, NewDevTask } from '../utils/devTasks';
 import type { LabOptions } from '../utils/labOptions';
 import { clearAuth, readAuthRaw, readAuthToken, updateAuthToken } from './authStore';
+import { reportSessionEnd } from './sessionReport';
 
 // Demo: kassa yopilishlari va harakatlari (inkassatsiya, qaytarish, kassaga solish) boshqa demo
 // ma'lumoti kabi shu kun davomida brauzerda saqlanadi; ertasi kuni demo yangidan boshlanadi
@@ -205,6 +206,9 @@ async function fetchJson<T>(url: string, options: RequestInit = {}): Promise<T> 
     }
 
     if (isSessionExpired) {
+        // Nega chiqarilgani serverga yoziladi (DiagEvent 'session_end') — tozalashdan OLDIN,
+        // aks holda kirish yozuvi qayerda turgani ko'rinmay qoladi
+        reportSessionEnd(API_URL, { reason: token ? 'rejected' : 'no_token', status: response.status, path: url, token });
         clearAuth();
         window.dispatchEvent(new Event('auth:unauthorized'));
         // We throw an error to stop execution, but the event listener in App.tsx will handle the redirect/UI update

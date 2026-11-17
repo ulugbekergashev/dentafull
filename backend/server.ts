@@ -251,6 +251,37 @@ app.get('/', (req, res) => {
 });
 
 
+// ─── "Tizimdan chiqarib yubordi" hodisalari ──────────────────────────────────
+// Mijoz "kiraman-u, darrov chiqarib yuboradi" desa, sababini ko'rish uchun (2026-11-17,
+// jamoliddin_dentist PWA'da 4 daqiqa ichida 14 marta kirgan). 401 ilovani login sahifasiga
+// qaytaradi, shuning uchun har birining sababi DiagEvent'ga yoziladi: kind 'session_rejected'
+// (server ko'rgani) va 'session_end' (ilova yuborgan hisobot, /api/session-ended).
+// Bemor ma'lumoti yozilmaydi: faqat sabab, so'rov yo'li (id'larsiz), rol, brauzer turi.
+const SESSION_DIAG_EVERY_MS = 60 * 1000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** So'rov yo'li id'larsiz: /api/patients/3f2a…/visits → /api/patients/:id/visits */
+const routeShape = (url: string): string => String(url || '').split('?')[0]
+    .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id')
+    .replace(/\/\d+(?=\/|$)/g, '/:n')
+    .slice(0, 120);
+const noteSessionRejected = (req: any, reason: 'no_token' | 'expired' | 'invalid', token?: string) => {
+    try {
+        // Muddati o'tgan tokenning imzosi tekshirilgan — klinikasiga ishonsa bo'ladi.
+        // Imzosi xato tokenning ichidagiga ishonib bo'lmaydi: umumiy qatorga yoziladi.
+        const claims: any = reason === 'expired' && token ? jwt.decode(token) : null;
+        const clinicId = typeof claims?.clinicId === 'string' && UUID_RE.test(claims.clinicId) ? claims.clinicId : null;
+        const path = routeShape(req.originalUrl);
+        if (!diagDue(`session-rejected:${reason}:${clinicId}:${path}`, SESSION_DIAG_EVERY_MS)) return;
+        const text = { no_token: "So'rov tokensiz keldi", expired: "Tokenning muddati o'tgan", invalid: "Token imzosi xato (boshqa server yoki buzilgan)" }[reason];
+        void diag.recordDaily({
+            clinicId,
+            kind: 'session_rejected',
+            subject: reason,
+            message: `${text}: ${req.method} ${path}`,
+            meta: { role: claims?.role || null, ua: String(req.headers['user-agent'] || '').slice(0, 200) },
+        });
+    } catch { /* qayd — ikkilamchi */ }
+};
 
 const authenticateToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers['authorization'];
@@ -258,12 +289,14 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
     const isDev = process.env.NODE_ENV === 'development';
 
     if (!token) {
+        noteSessionRejected(req, 'no_token');
         return res.status(401).json({ error: 'Token topilmadi (Unauthorized)' });
     }
 
     jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
         if (err) {
             if (isDev) console.log('❌ Token verification failed:', err.message);
+            noteSessionRejected(req, err?.name === 'TokenExpiredError' ? 'expired' : 'invalid', token);
             // 401 (403 emas): token muddati tugagan yoki yaroqsiz — bu autentifikatsiya
             // muammosi, ruxsat muammosi emas. Frontend 401'da sessiyani tozalab,
             // login sahifasiga qaytaradi. 403 faqat rol tekshiruvi uchun qoladi.
@@ -294,6 +327,57 @@ const authenticateToken = (req: express.Request, res: express.Response, next: ex
         runWithActor(user, () => next());
     });
 };
+
+// Ilova sessiyani yopishdan oldin yuboradigan hisobot (services/sessionReport.ts).
+// Token ixtiyoriy va muddati o'tgan bo'lishi mumkin: imzosi to'g'ri bo'lsa — klinika aniq.
+// Token umuman bo'lmasa ilova oxirgi ma'lum klinika id'sini yuboradi — u tekshirilmagan
+// deb belgilanadi. Hech qachon xato qaytarmaydi.
+const SESSION_END_REASONS = ['no_token', 'rejected', 'weak_storage'];
+const SESSION_END_PLACES = ['local', 'session', 'memory', 'none'];
+const SESSION_END_MAX_PER_MINUTE = 120;
+let sessionEndWindow = { minute: 0, count: 0 };
+app.post('/api/session-ended', (req: any, res: any) => {
+    res.status(204).end();
+    try {
+        const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+        if (!diagDue(`session-end:${ip}`, 3000)) return;
+        const minute = Math.floor(Date.now() / 60000);
+        sessionEndWindow = sessionEndWindow.minute === minute ? { minute, count: sessionEndWindow.count + 1 } : { minute, count: 1 };
+        if (sessionEndWindow.count > SESSION_END_MAX_PER_MINUTE) return;
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        let claims: any = null;
+        try {
+            const token = String(req.headers['authorization'] || '').split(' ')[1];
+            if (token) claims = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+        } catch { /* imzosi xato token — klinikasiga ishonilmaydi */ }
+        const verified = typeof claims?.clinicId === 'string' && UUID_RE.test(claims.clinicId);
+        const hint = typeof b.clinicId === 'string' && UUID_RE.test(b.clinicId) ? b.clinicId : null;
+        const reason = SESSION_END_REASONS.includes(b.reason) ? b.reason : 'rejected';
+        const num = (v: any) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
+        // Har hisobot alohida qator: tafsilotlar (PWA, token qayerda edi) har safar boshqacha bo'lishi mumkin
+        void diag.record({
+            clinicId: verified ? claims.clinicId : hint,
+            kind: 'session_end',
+            subject: reason,
+            message: ({
+                no_token: "Ilova so'rovni tokensiz yubordi va tizimdan chiqardi",
+                rejected: 'Server tokenni rad etdi, ilova tizimdan chiqardi',
+                weak_storage: "Kirish ma'lumoti brauzerga doimiy saqlanmadi: sahifa yangilansa yana login so'raladi",
+            } as Record<string, string>)[reason],
+            meta: {
+                verified,
+                role: (verified ? claims.role : null) || (typeof b.role === 'string' ? b.role.slice(0, 30) : null),
+                status: num(b.status),
+                path: routeShape(String(b.path || '')),
+                place: SESSION_END_PLACES.includes(b.place) ? b.place : null,
+                standalone: b.standalone === true,
+                secSinceLogin: num(b.secSinceLogin),
+                build: typeof b.build === 'string' ? b.build.slice(0, 40) : null,
+                ua: String(req.headers['user-agent'] || '').slice(0, 200),
+            },
+        });
+    } catch { /* qayd — ikkilamchi */ }
+});
 
 // ─── Xavfsizlik yordamchilari (multi-tenant izolyatsiya) ──────────────────────
 // Klinikaga bog'liq endpointlar uchun "samarali clinicId"ni aniqlaydi.

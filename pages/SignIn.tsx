@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Button, Input, Card } from '../components/Common';
 import { UserRole } from '../types';
 import { AlertCircle, Lock, User, Eye, EyeOff, Send } from 'lucide-react';
-import { api } from '../services/api';
+import { api, API_URL } from '../services/api';
 import { saveAuth } from '../services/authStore';
+import { reportSessionEnd } from '../services/sessionReport';
 import { getSupportInfo, openSupport } from '../services/support';
 import { useLanguage } from '../context/LanguageContext';
 import { LogoMark } from '../components/Logo';
@@ -46,7 +47,9 @@ export const SignIn: React.FC<SignInProps> = ({ onLogin }) => {
 
         // Har doim eslab qolinadi. Brauzer xotirasi to'lgan yoki yopiq bo'lsa ham kirish
         // o'tadi: saveAuth joy bo'shatadi yoki zaxira joyga saqlaydi (services/authStore.ts)
-        saveAuth(authData);
+        const place = saveAuth(authData);
+        // Doimiy xotiraga sig'madi — sahifa qayta yuklansa sessiya yo'qoladi: serverga yoziladi
+        if (place !== 'local') reportSessionEnd(API_URL, { reason: 'weak_storage', status: 0, path: '/login', token: response.token || null });
 
         onLogin(response.role as UserRole, response.name, response.clinicId, response.doctorId);
       } else {
