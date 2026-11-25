@@ -1123,9 +1123,51 @@ model SubscriptionPayment {
   receiptFileId String?
   approvedBy    String?
   note          String?
+  /// Tashqi to'lov id'si ("payme:<id>") — bitta to'lov muddatni ikki marta uzaytirmasligi uchun
+  externalId    String?  @unique
   createdAt     DateTime @default(now())
 
   @@index([clinicId, createdAt])
+}
+
+/// Payme orqali obuna to'lovi uchun buyurtma: klinika "To'lash"ni bosganda
+/// summa shu yerda qotiriladi, Payme to'lovdan oldin aynan shu summani tekshiradi.
+/// Jadval backend/payme/schema.ts orqali yaratiladi.
+model PaymeOrder {
+  id        String    @id @default(uuid())
+  clinicId  String
+  months    Int
+  /// Tiyinda (so'm × 100)
+  amount    Float
+  /// new — to'lanmagan · pending — Payme tranzaksiyasi ochiq · paid — to'langan
+  status    String    @default("new")
+  createdBy String?
+  createdAt DateTime  @default(now())
+  paidAt    DateTime?
+
+  @@index([clinicId, createdAt])
+}
+
+/// Payme Merchant API tranzaksiyasi. Vaqtlar millisekundda (Payme shunday kutadi).
+model PaymeTransaction {
+  id          String   @id @default(uuid())
+  /// Payme bergan tranzaksiya id'si
+  paymeId     String   @unique
+  orderId     String
+  clinicId    String
+  /// Tiyinda
+  amount      Float
+  /// 1 — yaratilgan · 2 — o'tkazilgan · -1 — o'tkazilmasdan bekor · -2 — o'tkazilgandan keyin bekor
+  state       Int
+  reason      Int?
+  paymeTime   Float
+  createTime  Float
+  performTime Float    @default(0)
+  cancelTime  Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+  @@index([paymeTime])
 }
 
 /// Sotuvchilar yozgan vazifalar (superadmin ko'radi): Denta7 yoki DentaLocal uchun

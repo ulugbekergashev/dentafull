@@ -99,6 +99,12 @@ export const createSupport = (deps: SupportDeps) => {
 
         /** Bot yoqilganmi (token bor) */
         configured: (): boolean => !!token,
+
+        /** Operator chatiga oddiy xabar (masalan, Payme to'lovi). Chat ulanmagan bo'lsa jim */
+        async notifyOperator(html: string): Promise<void> {
+            const chat = await settings.operatorChat();
+            if (chat) await messenger.send(chat, html, { html: true });
+        },
         botUsername: (): string | null => bot?.username() || null,
 
         /**

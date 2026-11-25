@@ -52,7 +52,8 @@
         "ownerPhone.ts",
         "passwordChange.ts",
         "patientImport.ts",
-        "support/*.ts"
+        "support/*.ts",
+        "payme/*.ts"
     ],
     "exclude": [
         "node_modules",

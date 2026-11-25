@@ -138,9 +138,10 @@ function createModel(initial = []) {
 function createFakeDb(seed = {}) {
   const models = {};
   return new Proxy({}, {
-    get(_t, name) {
+    get(_t, name, receiver) {
       if (typeof name !== 'string' || name === 'then') return undefined;
-      if (name === '$transaction') return async (arg) => (typeof arg === 'function' ? arg(this) : Promise.all(arg));
+      // Interaktiv tranzaksiya: callback bazaning o'zini oladi (ilgari ishlov beruvchi obyekt berilardi)
+      if (name === '$transaction') return async (arg) => (typeof arg === 'function' ? arg(receiver) : Promise.all(arg));
       if (!models[name]) models[name] = createModel(seed[name]);
       return models[name];
     },

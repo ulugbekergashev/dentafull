@@ -2215,6 +2215,22 @@ export const api = {
         unpay: (id: string) =>
             fetchJson<LabOrder>(`/lab-orders/${id}/pay`, { method: 'DELETE' }),
     },
+    // Obunani Payme orqali to'lash (backend/payme). quote null — onlayn to'lov yoqilmagan
+    payme: {
+        quote: () =>
+            fetchJson<{ success: boolean; data: PaymeQuote | null }>('/payme/quote').then(r => r.data),
+        createOrder: (months: number, returnUrl: string, lang: 'uz' | 'ru') =>
+            fetchJson<{ success: boolean; data: { orderId: string; months: number; amount: number; url: string } }>('/payme/orders', {
+                method: 'POST',
+                body: JSON.stringify({ months, returnUrl, lang }),
+            }).then(r => r.data),
+    },
     // Expose base URL for building direct URLs (e.g., TTS proxy)
     API_BASE_URL: API_URL.replace(/\/api$/, ''),
 };
+
+export interface PaymeQuote {
+    /** Oylik narx, so'mda */
+    monthly: number;
+    options: { months: number; amount: number }[];
+}

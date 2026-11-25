@@ -176,4 +176,14 @@ export const SUPPORT_MIGRATIONS: MigrationSql[] = [
         )`,
     },
     index('SubscriptionPayment', ['clinicId', 'createdAt']),
+    // Onlayn to'lov (Payme) id'si: bitta to'lov muddatni faqat bir marta uzaytiradi.
+    // Eski yozuvlarda NULL — noyoblik NULL'larga taalluqli emas.
+    {
+        label: 'SubscriptionPayment.externalId',
+        sql: `ALTER TABLE "SubscriptionPayment" ADD COLUMN IF NOT EXISTS "externalId" TEXT`,
+    },
+    {
+        label: 'SubscriptionPayment unique (externalId)',
+        sql: `CREATE UNIQUE INDEX IF NOT EXISTS "SubscriptionPayment_externalId_key" ON "SubscriptionPayment" ("externalId")`,
+    },
 ];

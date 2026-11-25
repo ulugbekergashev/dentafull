@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Modal, Button } from './Common';
 import { Users, CreditCard, Send } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { openSupport, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from '../services/support';
+import { PaymePayPanel } from './PaymePayPanel';
 
 interface UpgradePlanModalProps {
    isOpen: boolean;
@@ -14,13 +15,15 @@ interface UpgradePlanModalProps {
    reason?: 'doctorLimit' | 'plan';
 }
 
-// Tarifni yangilash oynasi: yordam botiga yozish (to'lov cheki ham shu yerga yuboriladi) va telefon.
-// Ilgari Sozlamalar ichida edi va sarlavhasi qo'shtirnoq ichida yozilgani uchun
-// ekranda "{t('settings.services.upgrade')}" degan xom matn chiqib turardi.
+// Tarif oynasi: Payme orqali shu yerning o'zida to'lash (yoqilgan bo'lsa), yordam botiga
+// yozish (tarifni o'zgartirish, chek yuborish) va telefon.
+// Shifokor chekloviga yetilganda to'lov paneli chiqmaydi — u yerda gap tarifni almashtirishda.
 export const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({ isOpen, onClose, reason = 'plan' }) => {
    const { t } = useLanguage();
    const limitReached = reason === 'doctorLimit';
    const Icon = limitReached ? Users : CreditCard;
+   const [canPayOnline, setCanPayOnline] = useState(false);
+   const showPayme = !limitReached && canPayOnline;
 
    return (
       <Modal isOpen={isOpen} onClose={onClose} title={t('settings.services.upgrade')}>
@@ -29,13 +32,22 @@ export const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({ isOpen, onCl
                <Icon className="w-6 h-6 text-indigo-600" />
             </div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white">{limitReached ? t('auto.Cheklovlarni olib tashlang!') : t("auto.Tarifni o'zgartirish")}</h3>
+
+            {!limitReached && isOpen && (
+               <div className={showPayme ? 'pb-2' : 'hidden'}>
+                  <PaymePayPanel onAvailable={setCanPayOnline} />
+               </div>
+            )}
+
             <p className="text-gray-500 dark:text-gray-400 px-4">
                {limitReached
                   ? t("auto.Sizning tarifingizda yangi shifokor qo'shib bo'lmaydi. Tarifni o'zgartirish uchun Telegram orqali yozing.")
-                  : t("auto.Tarifni yangilash yoki o'zgartirish uchun Telegram orqali yozing — to'lov chekini ham shu yerga yuborasiz.")}
+                  : showPayme
+                     ? t("auto.Yoki Telegram orqali yozing — chekni ham shu yerga yuborasiz.")
+                     : t("auto.Tarifni yangilash yoki o'zgartirish uchun Telegram orqali yozing — to'lov chekini ham shu yerga yuborasiz.")}
             </p>
-            {/* Asosiy amal: yordam boti (xodim tizimga kirgan — bot qaysi klinika yozayotganini o'zi biladi) */}
-            <Button data-support="upgrade" className="w-full" onClick={() => { void openSupport(); }}>
+            {/* Yordam boti (xodim tizimga kirgan — bot qaysi klinika yozayotganini o'zi biladi) */}
+            <Button data-support="upgrade" variant={showPayme ? 'secondary' : 'primary'} className="w-full" onClick={() => { void openSupport(); }}>
                <Send className="w-4 h-4 mr-2" />
                {t('auto.Telegram orqali yozish')}
             </Button>

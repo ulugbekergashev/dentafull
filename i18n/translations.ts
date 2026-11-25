@@ -2892,6 +2892,15 @@ export const translations = {
     'guide.sms.auto.title': "Avtomatik yuborish",
     'guide.sms.auto.desc': "Endi shu bo'limda qoida yarating: qaysi shablon, qachon (masalan, qabuldan 2 soat oldin) va kimga.",
 
+    // Obunani Payme orqali to'lash (components/PaymePayPanel.tsx)
+    "auto.Payme orqali to'lash": "Payme orqali to'lash",
+    "auto.Necha oyga to'laysiz?": "Necha oyga to'laysiz?",
+    "auto.so'm": "so'm",
+    "auto.Uzcard yoki Humo karta bilan. To'lovdan keyin muddat o'zi uzayadi.": "Uzcard yoki Humo karta bilan. To'lovdan keyin muddat o'zi uzayadi.",
+    "auto.To'lov sahifasi ochilmoqda...": "To'lov sahifasi ochilmoqda...",
+    "auto.To'lovni boshlab bo'lmadi": "To'lovni boshlab bo'lmadi",
+    "auto.Yoki Telegram orqali yozing — chekni ham shu yerga yuborasiz.": "Yoki Telegram orqali yozing — chekni ham shu yerga yuborasiz.",
+    "auto.Davom ettirish uchun obunani to'lang:": "Davom ettirish uchun obunani to'lang:",
     // Yordam (Telegram'dagi yordam boti): sarlavha, kirish sahifasi, tarif oynalari
     'auto.Yordam': 'Yordam',
     'auto.Telegram orqali yordam': 'Telegram orqali yordam',
@@ -5784,6 +5793,15 @@ export const translations = {
     'guide.sms.auto.title': "Автоотправка",
     'guide.sms.auto.desc': "Теперь создайте здесь правило: какой шаблон, когда (например, за 2 часа до приёма) и кому.",
 
+    // Оплата подписки через Payme (components/PaymePayPanel.tsx)
+    "auto.Payme orqali to'lash": 'Оплатить через Payme',
+    "auto.Necha oyga to'laysiz?": 'На сколько месяцев оплатить?',
+    "auto.so'm": 'сум',
+    "auto.Uzcard yoki Humo karta bilan. To'lovdan keyin muddat o'zi uzayadi.": 'Картой Uzcard или Humo. После оплаты срок продлится автоматически.',
+    "auto.To'lov sahifasi ochilmoqda...": 'Открываем страницу оплаты...',
+    "auto.To'lovni boshlab bo'lmadi": 'Не удалось начать оплату',
+    "auto.Yoki Telegram orqali yozing — chekni ham shu yerga yuborasiz.": 'Или напишите в Telegram — туда же отправите чек.',
+    "auto.Davom ettirish uchun obunani to'lang:": 'Чтобы продолжить, оплатите подписку:',
     // Помощь (бот поддержки в Telegram): шапка, страница входа, окна тарифа
     'auto.Yordam': 'Помощь',
     'auto.Telegram orqali yordam': 'Помощь в Telegram',

@@ -240,7 +240,11 @@ app.use(cors(corsOptions));
 const PATIENT_IMPORT_PATH = '/api/patients/import';
 const jsonBody = express.json();
 const jsonBodyLarge = express.json({ limit: '2mb' });
-app.use((req, res, next) => (req.path === PATIENT_IMPORT_PATH ? next() : jsonBody(req, res, next)));
+// /api/payme — Payme serveri "text/json" yuboradi va buzilgan JSON'ga ham JSON-RPC
+// xatosi bilan javob kutadi: tanani payme/routes.ts o'zi o'qiydi.
+// Express yo'llari katta-kichik harf va oxirgi "/" ga qaramaydi — bu tekshiruv ham shunday.
+const PAYME_RPC_PATH = /^\/api\/payme\/?$/i;
+app.use((req, res, next) => (req.path === PATIENT_IMPORT_PATH || PAYME_RPC_PATH.test(req.path) ? next() : jsonBody(req, res, next)));
 // Tashqi lid manbalari ko'pincha oddiy forma (x-www-form-urlencoded) yuboradi —
 // JSON'dan tashqari uni ham qabul qilamiz.
 app.use(express.urlencoded({ extended: true }));
@@ -9862,6 +9866,28 @@ registerSupportRoutes(app, {
     },
 });
 
+// ─── Payme: obunani saytning o'zida to'lash (backend/payme) ─────────────────
+// PAYME_MERCHANT_ID va PAYME_KEY qo'yilmaguncha o'chiq: ilova "To'lash" tugmasini
+// ko'rsatmaydi, /api/payme esa "ruxsat yo'q" deb javob beradi.
+const { readPaymeConfig, createPaymeOrders } = require('./payme/orders');
+const { createPaymeMerchant } = require('./payme/merchant');
+const { registerPaymeRoutes } = require('./payme/routes');
+const paymeConfig = readPaymeConfig();
+const paymeMerchant = createPaymeMerchant({
+    db: prisma,
+    getConfig: () => paymeConfig,
+    extend: (clinicId: string, months: number, info: any) => support.billing.extend(clinicId, months, info),
+    notify: (text: string) => support.notifyOperator(text),
+});
+registerPaymeRoutes(app, {
+    merchant: paymeMerchant,
+    orders: createPaymeOrders(prisma, () => paymeConfig),
+    authenticateToken,
+});
+if (paymeConfig) {
+    console.log(`💳 Payme yoqilgan${paymeConfig.test ? ' (sinov muhiti)' : ''}${paymeConfig.fiscal ? '' : " — MXIK kodi yo'q, chekda soliq ma'lumoti bo'lmaydi"}`);
+}
+
 // Oldindan ogohlantirish (obuna tugashi, bot o'chgani, ketmagan xabarlar) —
 // har soatda; ish soatlaridan tashqarida o'zi jim turadi (support/proactive.ts).
 cron.schedule('5 * * * *', () => {
@@ -9935,6 +9961,7 @@ const migrationStep = async (label: string, sql: string): Promise<boolean> => {
 };
 
 const { SUPPORT_MIGRATIONS } = require('./support/schema');
+const { PAYME_MIGRATIONS } = require('./payme/schema');
 
 const columnExists = async (table: string, column: string): Promise<boolean> => {
     try {
@@ -10371,6 +10398,9 @@ async function runStartupMigrations() {
     // server ishlayveradi: bu modullar xatoni yutadi (diag.ts, support/).
     for (const step of SUPPORT_MIGRATIONS) await migrationStep(step.label, step.sql);
 
+    // --- Payme buyurtma va tranzaksiyalari (backend/payme/schema.ts) — yangi jadvallar ---
+    for (const step of PAYME_MIGRATIONS) await migrationStep(step.label, step.sql);
+
     console.log('✅ Startup migrations applied');
 }
 
@@ -10390,6 +10420,8 @@ const CRITICAL_COLUMNS: ReadonlyArray<{ table: string; column: string; type: str
     { table: 'Service', column: 'onePrice', type: 'BOOLEAN NOT NULL DEFAULT false' },
     { table: 'Clinic', column: 'dailyReportEnabled', type: 'BOOLEAN NOT NULL DEFAULT true' },
     { table: 'Clinic', column: 'dailyReportTime', type: "TEXT NOT NULL DEFAULT '22:00'" },
+    // Prisma SubscriptionPayment'ni o'qiganda bu ustunni ham so'raydi: yo'q bo'lsa obuna to'lovlari ishlamaydi
+    { table: 'SubscriptionPayment', column: 'externalId', type: 'TEXT' },
 ];
 
 async function verifyCriticalSchema(): Promise<boolean> {
