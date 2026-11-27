@@ -7,6 +7,9 @@
 //   PAYME_MERCHANT_ID   kassa ID'si (Payme Business → kassa → dasturchilar uchun)
 //   PAYME_KEY           kassa kaliti (sinov paytida — TEST_KEY)
 //   PAYME_TEST=1        to'lov sahifasi test.paycom.uz (sinov muhiti) bo'ladi
+//   PAYME_TEST_CLINICS  sinov paytida tugma FAQAT shu klinikalarda chiqadi (id'lar, vergul bilan).
+//                       Bo'sh bo'lsa sinov rejimida hech kimda chiqmaydi — aks holda klinikalar
+//                       sinov kartasi bilan "to'lab" obunani tekinga uzaytirib olardi.
 //   PAYME_IKPU_CODE     xizmatning MXIK kodi (tasnif.soliq.uz)
 //   PAYME_PACKAGE_CODE  MXIK kodiga bog'langan o'lchov birligi kodi
 //   PAYME_VAT_PERCENT   QQS foizi (QQS to'lovchi bo'lmasangiz 0)
@@ -33,6 +36,8 @@ export interface PaymeConfig {
     merchantId: string;
     key: string;
     test: boolean;
+    /** Sinov rejimida to'lay oladigan klinikalar */
+    testClinics: string[];
     /** null — soliq ma'lumoti to'liq emas, chekka qo'shilmaydi */
     fiscal: PaymeFiscal | null;
 }
@@ -52,7 +57,8 @@ export const readPaymeConfig = (env: Record<string, string | undefined> = proces
         ? { ikpu, packageCode, vatPercent, title: clean(env.PAYME_ITEM_TITLE) || DEFAULT_ITEM_TITLE }
         : null;
 
-    return { merchantId, key, test: clean(env.PAYME_TEST) === '1', fiscal };
+    const testClinics = clean(env.PAYME_TEST_CLINICS).split(',').map(s => s.trim()).filter(Boolean);
+    return { merchantId, key, test: clean(env.PAYME_TEST) === '1', testClinics, fiscal };
 };
 
 /** Foydalanuvchiga ko'rsatiladigan xato (matni o'zbekcha, ilovada shu ko'rinadi) */
@@ -62,10 +68,15 @@ export class PaymeOrderError extends Error {
     }
 }
 
+/** Shu klinika onlayn to'lay oladimi: sinov rejimida faqat ro'yxatdagilar */
+export const canPayOnline = (config: PaymeConfig, clinicId: string): boolean =>
+    !config.test || config.testClinics.includes(clinicId);
+
 /** Klinikaning oylik narxi tiyinda. null — narx belgilanmagan */
-const monthlyTiyin = async (db: any, clinic: any): Promise<number | null> => {
+const monthlyTiyin = async (db: any, clinic: any, test: boolean): Promise<number | null> => {
     let price = clinic.customPrice;
-    if (price == null) {
+    // Sinovda bepul (0) sinov klinikasi ham to'lay olishi uchun tarif narxi olinadi
+    if (price == null || (test && Number(price) <= 0)) {
         const plan = await db.subscriptionPlan.findUnique({ where: { id: clinic.planId } }).catch(() => null);
         price = plan?.price ?? null;
     }
@@ -100,9 +111,10 @@ export interface PaymeQuote {
 export const createPaymeOrders = (db: any, getConfig: () => PaymeConfig | null) => ({
     /** Ilovadagi tanlov: necha oyga qancha (so'mda). null — onlayn to'lab bo'lmaydi */
     async quote(clinicId: string): Promise<PaymeQuote | null> {
-        if (!getConfig()) return null;
+        const config = getConfig();
+        if (!config || !canPayOnline(config, clinicId)) return null;
         const clinic = await loadClinic(db, clinicId);
-        const tiyin = await monthlyTiyin(db, clinic);
+        const tiyin = await monthlyTiyin(db, clinic, config.test);
         if (tiyin === null) return null;
         return {
             monthly: tiyin / 100,
@@ -112,12 +124,12 @@ export const createPaymeOrders = (db: any, getConfig: () => PaymeConfig | null) 
 
     async create(input: { clinicId: string; months: number; createdBy?: string | null; returnUrl?: string | null; lang?: 'uz' | 'ru' }) {
         const config = getConfig();
-        if (!config) throw new PaymeOrderError("Payme orqali to'lov hali yoqilmagan", 503);
+        if (!config || !canPayOnline(config, input.clinicId)) throw new PaymeOrderError("Payme orqali to'lov hali yoqilmagan", 503);
         const months = Number(input.months);
         if (!PAYME_MONTHS.includes(months)) throw new PaymeOrderError("Muddat noto'g'ri");
 
         const clinic = await loadClinic(db, input.clinicId);
-        const tiyin = await monthlyTiyin(db, clinic);
+        const tiyin = await monthlyTiyin(db, clinic, config.test);
         if (tiyin === null) throw new PaymeOrderError("Tarif narxi belgilanmagan — biz bilan bog'laning");
 
         // Tugmani qayta-qayta bosib (yoki skript bilan) bazani keraksiz buyurtmalar bilan to'ldirmaslik uchun

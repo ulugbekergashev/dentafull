@@ -338,6 +338,28 @@ runTests({
     assert.ok((await env.orders.create({ clinicId: 'c1', months: 1 })).orderId);
   },
 
+  async 'sinov rejimida faqat ro\'yxatdagi klinika to\'lay oladi'() {
+    // Ro'yxat bo'sh — sinov rejimida hech kim (aks holda sinov kartasi bilan tekin obuna)
+    const none = setup({ env: { PAYME_TEST: '1' } });
+    assert.strictEqual(await none.orders.quote('c1'), null);
+    await assert.rejects(none.orders.create({ clinicId: 'c1', months: 1 }), /yoqilmagan/);
+
+    const env = setup({ env: { PAYME_TEST: '1', PAYME_TEST_CLINICS: ' c9, c1 ' } });
+    await env.db.clinic.create({ data: { id: 'c2', name: 'Boshqa', status: 'Active', planId: 'p1', customPrice: null } });
+    assert.strictEqual(await env.orders.quote('c2'), null);
+    await assert.rejects(env.orders.create({ clinicId: 'c2', months: 1 }), /yoqilmagan/);
+    // Sinov klinikasi bepul (0) bo'lsa ham tarif narxi bilan to'laydi
+    await env.db.clinic.update({ where: { id: 'c1' }, data: { customPrice: 0 } });
+    assert.strictEqual((await env.orders.quote('c1')).monthly, 300000);
+    assert.ok((await env.orders.create({ clinicId: 'c1', months: 1 })).url.startsWith('https://test.paycom.uz/'));
+
+    // Haqiqiy rejimda ro'yxat ahamiyatsiz, bepul klinika esa to'lamaydi
+    const prod = setup({ env: { PAYME_TEST_CLINICS: 'c9' } });
+    assert.strictEqual((await prod.orders.quote('c1')).monthly, 300000);
+    await prod.db.clinic.update({ where: { id: 'c1' }, data: { customPrice: 0 } });
+    assert.strictEqual(await prod.orders.quote('c1'), null);
+  },
+
   async 'sinov muhiti havolasi va sozlamalar'() {
     assert.strictEqual(readPaymeConfig({ PAYME_MERCHANT_ID: 'm' }), null);
     const test = readPaymeConfig({ PAYME_MERCHANT_ID: 'm', PAYME_KEY: 'k', PAYME_TEST: '1', ...FISCAL_ENV });
