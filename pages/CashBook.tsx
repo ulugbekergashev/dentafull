@@ -14,6 +14,8 @@ import {
     EXPENSE_CATEGORY_LABELS, CASH_MOVEMENT_LABELS,
 } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
+import { ExpenseTitleSuggestions } from '../components/ExpenseTitleSuggestions';
+import type { ExpenseSuggestion } from '../utils/expenseSuggestions';
 import {
     buildCashBookDay,
     buildCashBookMonth,
@@ -38,6 +40,7 @@ import { tLabel } from '../i18n/labels';
 // Kassada kundalik chiqimlar yoziladi. Oylik va shifokor ulushi ataylab yo'q —
 // ular oyda bir marta, murakkab hisob-kitob bilan Hisobot tabida rasmiylashtiriladi.
 const KASSA_EXPENSE_CATEGORIES: ExpenseCategory[] = ['Other', 'Inventory', 'Lab', 'Rent', 'Utilities'];
+const EXPENSE_AMOUNT_INPUT_ID = 'cashbook-expense-amount';
 
 export interface CashCloseArgs {
     date: string;
@@ -878,6 +881,21 @@ export const CashBook: React.FC<CashBookProps> = ({
         setIsExpenseOpen(true);
     };
 
+    /** Avval yozilgan nom tanlandi: nom, kategoriya, oxirgi summa qo'yiladi; summa belgilanadi — yozsa almashadi */
+    const pickExpenseSuggestion = (s: ExpenseSuggestion) => {
+        setExpenseForm(f => ({
+            ...f,
+            title: s.title,
+            category: KASSA_EXPENSE_CATEGORIES.includes(s.category) ? s.category : f.category,
+            amount: s.amount > 0 ? String(s.amount) : f.amount,
+        }));
+        requestAnimationFrame(() => {
+            const el = document.getElementById(EXPENSE_AMOUNT_INPUT_ID) as HTMLInputElement | null;
+            el?.focus();
+            el?.select();
+        });
+    };
+
     const expenseAmount = Number(expenseForm.amount);
     const canSaveExpense = expenseForm.title.trim() !== '' && isFinite(expenseAmount) && expenseAmount > 0;
 
@@ -1658,7 +1676,16 @@ export const CashBook: React.FC<CashBookProps> = ({
                         autoFocus
                     />
 
+                    <ExpenseTitleSuggestions
+                        expenses={expenses}
+                        categories={KASSA_EXPENSE_CATEGORIES}
+                        clinicId={clinicId}
+                        query={expenseForm.title}
+                        onPick={pickExpenseSuggestion}
+                    />
+
                     <Input
+                        id={EXPENSE_AMOUNT_INPUT_ID}
                         label={t(`auto.Summa (UZS) *`)}
                         type="number"
                         value={expenseForm.amount}
